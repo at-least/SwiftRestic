@@ -585,7 +585,7 @@ struct MenuBarStatusTests {
         let planID = UUID()
         let runs = [run(.failed, minutesAgo: 60, planID: planID), run(.succeeded, minutesAgo: 10, planID: planID)]
         let since = OverviewMetrics.problemWindowStart(from: .now)
-        #expect(OverviewMetrics.problemCount(runs: runs, since: since) == 1)
+        #expect(OverviewMetrics.problems(in: runs, since: since).count == 1)
         #expect(face(runs) == .idle)
     }
 
@@ -736,6 +736,56 @@ struct MenuBarStatusTests {
         #expect(ScheduleHold.onBattery.summary(now: now, calendar: calendar) == "Backups paused on battery power")
         #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups paused on a metered network")
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
+    }
+
+    @Test("the tray's leading lines keep their order: missing, hold, problem, Protection when flat, and the running lines only where no headline stands")
+    func trayLineOrder() {
+        let runID = UUID()
+        let running = [MenuBarStatus.RunningLine(id: "documents", text: "Documents — 40%")]
+
+        #expect(
+            MenuBarStatus.trayLines(
+                missing: "restic is missing — backups are on hold",
+                holdSummary: "Backups paused until 3:40 PM",
+                problemLine: "Documents failed 2 hours ago",
+                problemID: runID,
+                labeledProtection: nil,
+                headline: nil,
+                running: running
+            ) == [
+                .status("restic is missing — backups are on hold"),
+                .status("Backups paused until 3:40 PM"),
+                .problem(text: "Documents failed 2 hours ago", runID: runID),
+                .status("Documents — 40%"),
+            ]
+        )
+
+        // The headline replaces the running lines, never joins them.
+        #expect(
+            MenuBarStatus.trayLines(
+                missing: nil,
+                holdSummary: nil,
+                problemLine: nil,
+                problemID: nil,
+                labeledProtection: nil,
+                headline: "Next: Documents — in an hour",
+                running: running
+            ) == [.status("Next: Documents — in an hour")]
+        )
+
+        // With no submenu to carry it, the named Protection line joins the
+        // status lines: after the problem sentence, before the headline.
+        #expect(
+            MenuBarStatus.trayLines(
+                missing: nil,
+                holdSummary: nil,
+                problemLine: nil,
+                problemID: nil,
+                labeledProtection: "Home NAS — 2 of 2 plans protected",
+                headline: "No backups scheduled",
+                running: running
+            ) == [.status("Home NAS — 2 of 2 plans protected"), .status("No backups scheduled")]
+        )
     }
 
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")

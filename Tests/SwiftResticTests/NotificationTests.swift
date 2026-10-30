@@ -160,6 +160,27 @@ struct NotificationTests {
         #expect(bare.summary == "Cleanup failed: NAS — locked", "summary was \(bare.summary)")
     }
 
+    @Test("a skipped run's reason and a stop reach the channel's summary line")
+    func skippedAndCancelledSummaries() {
+        #expect(
+            NotificationEvent(
+                stage: .skipped, planName: "Documents", repositoryName: "NAS", kind: .backup,
+                errorMessage: "“Archive SSD” is not connected."
+            ).summary
+                == "Backup skipped: Documents (NAS) — “Archive SSD” is not connected."
+        )
+        // The reason suffix is the skip alone: without one the sentence
+        // ends at the subject.
+        #expect(
+            NotificationEvent(stage: .skipped, planName: "Documents", repositoryName: "NAS", kind: .backup).summary
+                == "Backup skipped: Documents (NAS)"
+        )
+        #expect(
+            NotificationEvent(stage: .cancelled, planName: "Documents", repositoryName: "NAS", kind: .backup).summary
+                == "Backup cancelled: Documents (NAS)"
+        )
+    }
+
     @MainActor
     @Test("only a backup's success says how much data it added")
     func onlyABackupSaysDataAdded() {

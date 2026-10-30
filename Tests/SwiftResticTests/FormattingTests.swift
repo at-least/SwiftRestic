@@ -287,6 +287,7 @@ struct FormattingTests {
             "a sentence that starts with restic is still a sentence"
         )
         #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")
+        #expect(Format.firstSentence("無法讀取儲存庫。請再試一次") == "無法讀取儲存庫", "a CJK full stop is a boundary")
         #expect(Format.firstSentence("  padded  ") == "padded", "whitespace is trimmed")
         #expect(Format.firstSentence("") == "", "empty in, empty out")
     }

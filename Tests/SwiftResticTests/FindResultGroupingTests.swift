@@ -56,6 +56,17 @@ struct FindResultGroupingTests {
         #expect(rows.map(\.count) == [3], "the Documents plan's three, not all five")
     }
 
+    @Test("times all unknown, the row stays at the first holder — restic answers newest first")
+    func unknownTimesKeepTheFirstHolder() throws {
+        let rows = FindResultGrouping.rows(
+            [try result("s9", ["/d/notes.txt"]), try result("s4", ["/d/notes.txt"])],
+            times: [:],
+            chain: { _ in "Documents" }
+        )
+        #expect(rows.map(\.snapshotID) == ["s9"])
+        #expect(rows.map(\.count) == [2])
+    }
+
     @Test("the index engine's rows are newest first by their newest version, ties keeping the search's order")
     func indexRowsOrder() {
         let old = IndexVersion(id: "old", time: Date(timeIntervalSince1970: 1_000))

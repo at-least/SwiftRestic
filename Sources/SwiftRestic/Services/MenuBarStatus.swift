@@ -407,4 +407,40 @@ enum MenuBarStatus {
         guard activity.phase == .backingUp else { return activity.phase.displayName }
         return Format.percent(progress?.fraction ?? 0)
     }
+
+    /// One leading line of the tray's menu, before the repository rows.
+    enum TrayLine: Equatable {
+        /// Greyed status text.
+        case status(String)
+        /// The problem sentence — the menu's one line that goes somewhere
+        /// (Show in Activity), so it carries the run it names.
+        case problem(text: String, runID: UUID)
+    }
+
+    /// The tray's leading lines, in the order a menu open reads them:
+    /// restic missing, the hold, the problem sentence, the named Protection
+    /// line when no submenu carries it, then the idle headline or the running
+    /// lines (which replace it). Pure, so the order is pinned by tests;
+    /// `TrayStatusItem` renders.
+    static func trayLines(
+        missing: String?,
+        holdSummary: String?,
+        problemLine: String?,
+        problemID: UUID?,
+        labeledProtection: String?,
+        headline: String?,
+        running: [RunningLine]
+    ) -> [TrayLine] {
+        var lines: [TrayLine] = []
+        // While backups are held, that nothing is being backed up is the
+        // news, so the hold leads — above the problem line. A missing restic
+        // holds them too, and no pause lifts that one.
+        if let missing { lines.append(.status(missing)) }
+        if let holdSummary { lines.append(.status(holdSummary)) }
+        if let problemLine, let problemID { lines.append(.problem(text: problemLine, runID: problemID)) }
+        if let labeledProtection { lines.append(.status(labeledProtection)) }
+        if let headline { lines.append(.status(headline)) }
+        else { lines += running.map { .status($0.text) } }
+        return lines
+    }
 }

@@ -207,6 +207,10 @@ struct SkippedRunTests {
         healthchecks.kind = .healthchecks
         healthchecks.url = "https://hc-ping.com/abc-123"
         let alive = AppModel.notificationEvent(for: run, repositoryName: "Home NAS")
+        #expect(
+            alive.summary
+                == "Backup skipped: Documents (Home NAS) — “Archive SSD” is not connected; the other folders were backed up."
+        )
         #expect(try #require(NotificationPayload.request(for: healthchecks, event: alive)).url.absoluteString
             == "https://hc-ping.com/abc-123")
         let skipped = AppModel.notificationEvent(for: nothing, repositoryName: "Home NAS")

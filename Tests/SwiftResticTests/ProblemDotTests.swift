@@ -214,10 +214,10 @@ struct ProblemDotTests {
 
         model.markActivitySeen()
         #expect(model.activityBadgeCount(now: .now) == 0)
-        #expect(OverviewMetrics.problemCount(
-            runs: model.configuration.runs,
+        #expect(OverviewMetrics.problems(
+            in: model.configuration.runs,
             since: OverviewMetrics.problemWindowStart(from: .now)
-        ) == 1)
+        ).count == 1)
 
         model.configuration.runs.insert(record(.completedWithErrors, finishedAt: .now.addingTimeInterval(1)), at: 0)
         #expect(model.activityBadgeCount(now: .now) == 1)

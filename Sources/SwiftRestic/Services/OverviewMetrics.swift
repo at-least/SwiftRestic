@@ -112,13 +112,6 @@ enum OverviewMetrics {
         now.addingTimeInterval(-7 * 86_400)
     }
 
-    /// Failures and completed-with-errors runs in the window — the set the
-    /// Recent problems card lists; the sidebar's badge counts the part of it
-    /// Activity has not shown (`AppModel.activityBadgeCount`).
-    static func problemCount(runs: [RunRecord], since: Date) -> Int {
-        problems(in: runs, since: since).count
-    }
-
     /// Failures and completed-with-errors runs that finished inside the
     /// window — the one definition of "recent problem". The sidebar's badge
     /// counts its unseen part and the Recent problems card lists it, healed

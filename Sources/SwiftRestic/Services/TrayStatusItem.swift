@@ -141,35 +141,23 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
 
         let hasNoRepositories = model.configuration.repositories.isEmpty
         let hold = model.scheduleHold
-        // While backups are held, that nothing is being backed up is the
-        // news, so the hold leads — above the problem line. A missing restic
-        // holds them too, and no pause lifts that one.
-        if let missing = MenuBarStatus.resticMissingLine(model.resticAbsence) {
-            menu.addItem(disabledItem(missing))
-        }
-        if let hold {
-            menu.addItem(disabledItem(hold.summary()))
-        }
         // The failure line leads, unless nothing is set up yet and
         // an old failure from a since-removed repository would talk over the
         // setup question — the same yield MenuBarStatus defines. The subject
         // names the repository, so a failure from one repository cannot read
         // as another's.
         var newsTheTopLineRepeats: Set<String> = []
-        if let problem = MenuBarStatus.problemLine(
+        var problemLine: String?
+        var problemRunID: UUID?
+        if let line = MenuBarStatus.problemLine(
             runs: model.configuration.runs,
             hasNoRepositories: hasNoRepositories,
             plans: model.configuration.plans,
             repositories: model.configuration.repositories
         ), let run = MenuBarStatus.newestStandingProblem(runs: model.configuration.runs) {
             newsTheTopLineRepeats = newsLineRepeating(run)
-            // The one status line that goes somewhere: the run it names,
-            // in Activity — the plan card's Show in Activity route.
-            let item = NSMenuItem(title: problem, action: #selector(showProblem(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = run.id.uuidString
-            item.toolTip = "Show this run in Activity"
-            menu.addItem(item)
+            problemLine = line
+            problemRunID = run.id
         }
         var problems: [UUID: RunRecord] = [:]
         for plan in model.configuration.plans {
@@ -185,11 +173,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             protection: { model.protectionSummary(repositoryID: $0, now: .now) }
         )
         let showsSubmenus = MenuBarStatus.showsGroupsAsSubmenus(groups)
-        // With no submenu to carry it, the one Protection line joins the
-        // status lines, named.
-        if !showsSubmenus, let line = groups.first?.labeledProtection {
-            menu.addItem(disabledItem(line))
-        }
         var lines = MenuBarStatus.runningLines(
             plans: model.configuration.plans,
             repositories: model.configuration.repositories,
@@ -203,21 +186,38 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         if let restore = MenuBarStatus.restoreLine(progress: model.restoreActivity) {
             lines.append(restore)
         }
-        if let headline = MenuBarStatus.headline(
-            activity: model.activity,
-            maintenance: model.maintenance,
-            isRestoring: model.isRestoring,
-            hasNoRepositories: hasNoRepositories,
-            hold: hold,
-            resticAbsence: model.resticAbsence,
-            plans: model.configuration.plans,
-            repositories: model.configuration.repositories,
-            nextRun: model.nextScheduledRun
+        for line in MenuBarStatus.trayLines(
+            missing: MenuBarStatus.resticMissingLine(model.resticAbsence),
+            holdSummary: hold?.summary(),
+            problemLine: problemLine,
+            problemID: problemRunID,
+            // With no submenu to carry it, the one Protection line joins the
+            // status lines, named.
+            labeledProtection: showsSubmenus ? nil : groups.first?.labeledProtection,
+            headline: MenuBarStatus.headline(
+                activity: model.activity,
+                maintenance: model.maintenance,
+                isRestoring: model.isRestoring,
+                hasNoRepositories: hasNoRepositories,
+                hold: hold,
+                resticAbsence: model.resticAbsence,
+                plans: model.configuration.plans,
+                repositories: model.configuration.repositories,
+                nextRun: model.nextScheduledRun
+            ),
+            running: lines
         ) {
-            menu.addItem(disabledItem(headline))
-        } else {
-            for line in lines {
-                menu.addItem(disabledItem(line.text))
+            switch line {
+            case .status(let text):
+                menu.addItem(disabledItem(text))
+            case .problem(let text, let runID):
+                // The one status line that goes somewhere: the run it names,
+                // in Activity — the plan card's Show in Activity route.
+                let item = NSMenuItem(title: text, action: #selector(showProblem(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = runID.uuidString
+                item.toolTip = "Show this run in Activity"
+                menu.addItem(item)
             }
         }
 

@@ -436,25 +436,31 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`ExcludeRule.defaults`, where each is said and grouped).
     static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
 
+    /// The patterns of `rules` whose category `categories` holds, in the
+    /// rules' order.
+    private static func patterns(of rules: [ExcludeRule], in categories: some Collection<ExcludeCategory>) -> [String] {
+        rules.filter { categories.contains($0.category) }.map(\.pattern)
+    }
+
     /// The defaults of `categories`, in the defaults' order.
     static func defaultExcludes(in categories: Set<ExcludeCategory>) -> [String] {
-        ExcludeRule.defaults.filter { categories.contains($0.category) }.map(\.pattern)
+        patterns(of: ExcludeRule.defaults, in: categories)
     }
 
     /// What developer tools rebuild: the patterns of `ExcludeRule.developer`,
     /// of which each ticked group of the developer switch adds its own to
     /// a plan's list (`developerExcludes(groups:)`).
-    static let developerExcludes = ExcludeRule.developer.map(\.pattern)
+    static let developerExcludes = developerExcludes(groups: ExcludeCategory.developerGroups)
 
     /// The files `--exclude-if-present` is passed for `groups`
     /// (`ExcludeRule.developerMarkers`).
     static func developerMarkers(for groups: [ExcludeCategory]) -> [String] {
-        ExcludeRule.developerMarkers.filter { groups.contains($0.category) }.map(\.pattern)
+        patterns(of: ExcludeRule.developerMarkers, in: groups)
     }
 
     /// The developer rules of `groups`, in the list's order.
     static func developerExcludes(groups: [ExcludeCategory]) -> [String] {
-        ExcludeRule.developer.filter { groups.contains($0.category) }.map(\.pattern)
+        patterns(of: ExcludeRule.developer, in: groups)
     }
 
     /// One developer group's checkbox.

@@ -662,10 +662,10 @@ struct OverviewMetricsTests {
         warned.outcome = .completedWithErrors
         var old = run(plan: "Docs", at: "2026-08-01 01:00:00", added: 0)
         old.outcome = .failed
-        #expect(OverviewMetrics.problemCount(
-            runs: [failed, warned, old],
+        #expect(OverviewMetrics.problems(
+            in: [failed, warned, old],
             since: utcDate("2026-09-01 00:00:00")
-        ) == 2)
+        ).count == 2)
     }
 
     @Test("a repository's problems are the week's problems that ran against it, of every kind")
@@ -705,7 +705,7 @@ struct OverviewMetricsTests {
         // not eight days old. A start-time basis would drop it, and the
         // tray's line counts it — the two must agree on an overnight run
         // that failed at dawn.
-        #expect(OverviewMetrics.problemCount(runs: [overnight], since: since) == 1)
+        #expect(OverviewMetrics.problems(in: [overnight], since: since).count == 1)
     }
 }
 

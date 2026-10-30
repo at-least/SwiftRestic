@@ -289,7 +289,7 @@ enum RunRecordPresentation {
             guard let verdict = run.detailText else { return run.outcome.displayName }
             let first = Format.firstSentence(verdict)
             return first.hasSuffix(".") ? String(first.dropLast()) : first
-        default:
+        case .prune:
             return run.outcome.displayName
         }
     }
@@ -438,7 +438,7 @@ enum RunRecordPresentation {
         case .check, .forget, .rewrite:
             // A check's verdict, or what Apply Retention Now removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
-        default:
+        case .prune:
             break
         }
         if let code = run.exitCode, let text = exitCodeText(code) {
