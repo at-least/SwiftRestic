@@ -11,6 +11,68 @@ struct PlanDetailView: View {
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
+    /// What the page offers from the index: the rebuildable folders and the
+    /// skipped paths earlier backups still hold. Read here, on the page's
+    /// stack, which is always on screen: a `.task` on a view whose body is
+    /// empty never runs (seen in the app: the card's read never started
+    /// while it had nothing to show).
+    @State private var indexOffers = IndexOffers()
+
+    private struct IndexOffers {
+        /// The plan the offers were read for: the view stays when the
+        /// sidebar moves to another plan.
+        var planID: UUID?
+        var rebuildable: [RebuildableFolder] = []
+        var rebuildableFailure: String?
+        var inEarlierBackups: [EarlierBackupItem] = []
+    }
+
+    /// What the offers depend on: a new listing or index generation — a
+    /// backup landed, or the index read more — and the plan's own answers.
+    private struct OffersKey: Hashable {
+        var planID: UUID
+        var listedAt: Date?
+        var indexGeneration: UInt64?
+        var excludePatterns: [String]
+        var kept: [String]
+    }
+
+    private func offersKey(_ plan: BackupPlan) -> OffersKey {
+        OffersKey(
+            planID: plan.id,
+            listedAt: plan.repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) },
+            indexGeneration: plan.repositoryID.flatMap { model.indexTakenGeneration[$0] },
+            excludePatterns: plan.excludePatterns,
+            kept: plan.keptRebuildableFolders
+        )
+    }
+
+    /// Reads the offers, and again every `FilesTree.recheckInterval` while
+    /// the index is still reading backups: no signal says when it finishes
+    /// (seen in the app: a fresh index read both backups seconds after the
+    /// page's one read, which found nothing indexed yet).
+    private func readOffers(_ plan: BackupPlan) async {
+        guard let repositoryID = plan.repositoryID else { return }
+        while !Task.isCancelled {
+            // Asked before the offers: a completion between the two costs
+            // one more round, never a missed one.
+            let isComplete = await model.indexIsComplete(repositoryID: repositoryID)
+            var offers = IndexOffers(planID: plan.id)
+            do {
+                offers.rebuildable = try await model.rebuildableFolders(planID: plan.id)
+            } catch {
+                offers.rebuildableFailure = error.localizedDescription
+            }
+            // A failed read offers nothing: the index's failure is the card's
+            // above and the Files tab's to say, and this line is only an offer.
+            offers.inEarlierBackups = (try? await model.itemsInEarlierBackups(planID: plan.id)) ?? []
+            guard !Task.isCancelled else { return }
+            indexOffers = offers
+            if isComplete { return }
+            try? await Task.sleep(for: FilesTree.recheckInterval)
+        }
+    }
+
     var body: some View {
         Group {
             if let plan {
@@ -244,8 +306,11 @@ struct PlanDetailView: View {
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             scheduleCard(plan)
             excludingCard(plan)
-            RebuildableFoldersCard(plan: plan)
+            if indexOffers.planID == plan.id {
+                RebuildableFoldersCard(plan: plan, folders: indexOffers.rebuildable, failure: indexOffers.rebuildableFailure)
+            }
         }
+        .task(id: offersKey(plan)) { await readOffers(plan) }
         .detailPane()
     }
 
@@ -501,7 +566,9 @@ struct PlanDetailView: View {
                         }
                     }
                 }
-                EarlierBackupsLine(plan: plan)
+                if indexOffers.planID == plan.id, !indexOffers.inEarlierBackups.isEmpty {
+                    EarlierBackupsLine(plan: plan, items: indexOffers.inEarlierBackups)
+                }
             }
         } accessory: {
             Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
@@ -513,49 +580,28 @@ struct PlanDetailView: View {
 
 /// The folders the plan's newest backup holds that the tools which made
 /// them make again (`RebuildableFolder`), each with Exclude and Keep — read
-/// from the index after each backup, never from the disk. Absent while there
-/// is nothing to offer.
+/// from the index after each backup, never from the disk, by the page.
+/// Shows nothing while there is nothing to offer.
 private struct RebuildableFoldersCard: View {
     @Environment(AppModel.self) private var model
     let plan: BackupPlan
+    let folders: [RebuildableFolder]
+    let failure: String?
 
-    @State private var folders: [RebuildableFolder] = []
-    @State private var failure: String?
     @State private var showsAll = false
 
     /// Rows shown before Show All.
     private static let shownRows = 5
 
-    /// What the offer depends on: a new listing or index generation — a
-    /// backup landed, or the index read more — and the plan's own answers.
-    private struct ReadKey: Hashable {
-        var listedAt: Date?
-        var indexGeneration: UInt64?
-        var excludePatterns: [String]
-        var kept: [String]
-    }
-
-    private var readKey: ReadKey {
-        ReadKey(
-            listedAt: plan.repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) },
-            indexGeneration: plan.repositoryID.flatMap { model.indexTakenGeneration[$0] },
-            excludePatterns: plan.excludePatterns,
-            kept: plan.keptRebuildableFolders
-        )
-    }
-
     var body: some View {
-        Group {
-            if let failure {
-                Card("Rebuildable Folders") {
-                    WarningLine(text: "SwiftRestic couldn’t look for them in this plan’s backups. \(Format.firstSentence(failure))")
-                        .help(failure)
-                }
-            } else if !folders.isEmpty {
-                card
+        if let failure {
+            Card("Rebuildable Folders") {
+                WarningLine(text: "SwiftRestic couldn’t look for them in this plan’s backups. \(Format.firstSentence(failure))")
+                    .help(failure)
             }
+        } else if !folders.isEmpty {
+            card
         }
-        .task(id: readKey) { await read() }
     }
 
     private var card: some View {
@@ -616,18 +662,5 @@ private struct RebuildableFoldersCard: View {
         if parent == plan.resolvedPath { return "In \(model.label(of: plan))" }
         if let below = ResticPath.relative(parent, below: plan.resolvedPath) { return "In \(model.label(of: plan))/\(below)" }
         return "In " + (parent as NSString).abbreviatingWithTildeInPath
-    }
-
-    private func read() async {
-        do {
-            let found = try await model.rebuildableFolders(planID: plan.id)
-            guard !Task.isCancelled else { return }
-            folders = found
-            failure = nil
-        } catch {
-            guard !Task.isCancelled else { return }
-            folders = []
-            failure = error.localizedDescription
-        }
     }
 }

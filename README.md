@@ -1185,7 +1185,9 @@ plan cannot fire mid-capture.
 - `SWIFTRESTIC_CAPTURE_SHEET` opens a sheet: `diff`, Activity's compare sheet
   (with pane `activity`); `retention`, the plan editor on its Retention tab;
   `adopt`/`adoptRetention`, the first adoptable group's adopt sheet (with
-  pane `orphanGroup`, the latter on its Retention tab).
+  pane `orphanGroup`, the latter on its Retention tab); `removeFromEarlierBackups`,
+  the plan page's Remove from Earlier Backups sheet (with pane `plan`, once
+  the line beside it shows).
 - `SWIFTRESTIC_CAPTURE_FIND` runs a search on arrival in the first
   repository (with pane `find`).
 - `SWIFTRESTIC_APPEARANCE` (`light`/`dark`) pins the appearance.

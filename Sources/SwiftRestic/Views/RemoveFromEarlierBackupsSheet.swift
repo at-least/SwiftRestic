@@ -1,51 +1,35 @@
 import SwiftUI
 
 /// The Excluding card's line for the paths the plan skips by name that its
-/// earlier backups still hold, with the way to remove them — absent while
-/// there are none. Read from the index, so it costs no restic run.
+/// earlier backups still hold (read from the index by the plan page), with
+/// the way to remove them.
 struct EarlierBackupsLine: View {
     @Environment(AppModel.self) private var model
     let plan: BackupPlan
+    let items: [EarlierBackupItem]
 
-    @State private var items: [EarlierBackupItem] = []
     @State private var isConfirming = false
 
-    private struct ReadKey: Hashable {
-        var listedAt: Date?
-        var indexGeneration: UInt64?
-        var excludePatterns: [String]
-    }
-
-    private var readKey: ReadKey {
-        ReadKey(
-            listedAt: plan.repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) },
-            indexGeneration: plan.repositoryID.flatMap { model.indexTakenGeneration[$0] },
-            excludePatterns: plan.excludePatterns
-        )
-    }
-
     var body: some View {
-        Group {
-            if !items.isEmpty {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(items.count == 1
-                        ? "Earlier backups still hold an item this plan now skips."
-                        : "Earlier backups still hold \(Format.count(items.count)) items this plan now skips.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button("Remove from Earlier Backups…") { isConfirming = true }
-                        .controlSize(.small)
-                }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(items.count == 1
+                ? "Earlier backups still hold an item this plan now skips."
+                : "Earlier backups still hold \(Format.count(items.count)) items this plan now skips.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Remove from Earlier Backups…") { isConfirming = true }
+                .controlSize(.small)
+        }
+        #if DEBUG
+        // Debug-only: lets a capture run open the sheet.
+        .onAppear {
+            if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "removeFromEarlierBackups" {
+                isConfirming = true
             }
         }
-        .task(id: readKey) {
-            // A failed read offers nothing: the index's failure is the Files
-            // tab's to say, and this line is only an offer.
-            guard let found = try? await model.itemsInEarlierBackups(planID: plan.id), !Task.isCancelled else { return }
-            items = found
-        }
+        #endif
         .sheet(isPresented: $isConfirming) {
             RemoveFromEarlierBackupsSheet(planID: plan.id, items: items)
                 .environment(model)
@@ -143,9 +127,10 @@ struct RemoveFromEarlierBackupsSheet: View {
     /// When the space comes back: the repository's next scheduled cleanup,
     /// or the one the user runs.
     private func cleanupSentence(_ plan: BackupPlan) -> String {
+        let their = items.count == 1 ? "Its" : "Their"
         guard let repository = model.repository(id: plan.repositoryID),
               let next = repository.maintenance.nextDate(for: .prune, addedAt: repository.createdAt)
-        else { return "Their space is freed when you next clean up the repository." }
-        return "Their space is freed at the next cleanup, \(Format.timestamp(max(next, .now)))."
+        else { return "\(their) space is freed when you next clean up the repository." }
+        return "\(their) space is freed at the next cleanup, \(Format.timestamp(max(next, .now)))."
     }
 }
