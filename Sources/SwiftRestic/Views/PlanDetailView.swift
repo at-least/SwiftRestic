@@ -11,22 +11,13 @@ struct PlanDetailView: View {
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
-    /// What the page offers from the index: the rebuildable folders and the
-    /// skipped paths earlier backups still hold. Read here, on the page's
-    /// stack, which is always on screen: a `.task` on a view whose body is
-    /// empty never runs (seen in the app: the card's read never started
-    /// while it had nothing to show).
-    @State private var indexOffers = IndexOffers()
-
-    private struct IndexOffers {
-        /// The plan the offers were read for: the view stays when the
-        /// sidebar moves to another plan.
-        var planID: UUID?
-        var rebuildable: [RebuildableFolder] = []
-        var rebuildableFailure: String?
-        var inEarlierBackups: [EarlierBackupItem] = []
-        var inEarlierBackupsFailure: String?
-    }
+    /// What the page offers from the index (`PlanIndexOffers`). Read here,
+    /// on the page's stack, which is always on screen: a `.task` on a view
+    /// whose body is empty never runs (seen in the app: the card's read
+    /// never started while it had nothing to show). Nil until the first
+    /// round; it names its plan, since the view stays when the sidebar
+    /// moves to another plan.
+    @State private var indexOffers: PlanIndexOffers?
 
     /// What the offers depend on: a new listing or index generation — a
     /// backup landed, or the index read more — and the plan's own answers.
@@ -46,34 +37,6 @@ struct PlanDetailView: View {
             excludePatterns: plan.excludePatterns,
             kept: plan.keptRebuildableFolders
         )
-    }
-
-    /// Reads the offers, and again every `FilesTree.recheckInterval` while
-    /// the index is still reading backups: no signal says when it finishes
-    /// (seen in the app: a fresh index read both backups seconds after the
-    /// page's one read, which found nothing indexed yet).
-    private func readOffers(_ plan: BackupPlan) async {
-        guard let repositoryID = plan.repositoryID else { return }
-        while !Task.isCancelled {
-            // Asked before the offers: a completion between the two costs
-            // one more round, never a missed one.
-            let isComplete = await model.indexIsComplete(repositoryID: repositoryID)
-            var offers = IndexOffers(planID: plan.id)
-            do {
-                offers.rebuildable = try await model.rebuildableFolders(planID: plan.id)
-            } catch {
-                offers.rebuildableFailure = error.localizedDescription
-            }
-            do {
-                offers.inEarlierBackups = try await model.itemsInEarlierBackups(planID: plan.id)
-            } catch {
-                offers.inEarlierBackupsFailure = error.localizedDescription
-            }
-            guard !Task.isCancelled else { return }
-            indexOffers = offers
-            if isComplete { return }
-            try? await Task.sleep(for: FilesTree.recheckInterval)
-        }
     }
 
     var body: some View {
@@ -309,11 +272,13 @@ struct PlanDetailView: View {
             SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
             scheduleCard(plan)
             excludingCard(plan)
-            if indexOffers.planID == plan.id {
-                RebuildableFoldersCard(plan: plan, folders: indexOffers.rebuildable, failure: indexOffers.rebuildableFailure)
+            if let offers = indexOffers, offers.planID == plan.id {
+                RebuildableFoldersCard(plan: plan, folders: offers.rebuildable, failure: offers.rebuildableFailure)
             }
         }
-        .task(id: offersKey(plan)) { await readOffers(plan) }
+        .task(id: offersKey(plan)) {
+            await PlanIndexOffers.keepReading(planID: plan.id, model: model) { indexOffers = $0 }
+        }
         .detailPane()
     }
 
@@ -569,12 +534,12 @@ struct PlanDetailView: View {
                         }
                     }
                 }
-                if indexOffers.planID == plan.id {
-                    if let failure = indexOffers.inEarlierBackupsFailure {
+                if let offers = indexOffers, offers.planID == plan.id {
+                    if let failure = offers.inEarlierBackupsFailure {
                         WarningLine(text: "SwiftRestic couldn’t check whether earlier backups still hold what this plan skips. \(Format.firstSentence(failure))")
                             .help(failure)
-                    } else if !indexOffers.inEarlierBackups.isEmpty {
-                        EarlierBackupsLine(plan: plan, items: indexOffers.inEarlierBackups)
+                    } else if !offers.inEarlierBackups.isEmpty {
+                        EarlierBackupsLine(plan: plan, items: offers.inEarlierBackups)
                     }
                 }
             }

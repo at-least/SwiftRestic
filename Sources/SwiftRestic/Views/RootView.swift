@@ -368,6 +368,8 @@ struct RootView: View {
         // fresh creator sees, not an existing plan.
         case "newPlan": editingPlan = BackupPlan()
         case "planRetention": editingPlan = model.configuration.plans.first
+        // The first plan's editor on its first tab, Excluding.
+        case "planEditor": editingPlan = model.configuration.plans.first
         default: break
         }
         applyCaptureTab()
