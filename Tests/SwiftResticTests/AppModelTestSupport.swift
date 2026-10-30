@@ -22,6 +22,21 @@ func writeTimeMachinePreferences(_ contents: Any, to file: URL) throws {
     try PropertyListSerialization.data(fromPropertyList: contents, format: .binary, options: 0).write(to: file)
 }
 
+extension AppModel {
+    /// Whether the Mac is kept from idle sleep for running work.
+    var holdsOffSleep: Bool { sleepActivity != nil }
+
+    /// Waits for a plan's in-flight run to finish, if there is one.
+    func waitForRun(planID: UUID) async {
+        await tasks.task(in: .plan(planID))?.value
+    }
+
+    /// Waits for a repository's in-flight upkeep to finish, if there is one.
+    func waitForMaintenance(repositoryID: UUID) async {
+        await tasks.task(in: .maintenance(repositoryID))?.value
+    }
+}
+
 extension BackupPlan {
     /// A plan that leaves nothing out by pattern: no switch's rules, no
     /// marker, no pattern of its own — so a fixture's tree is backed up as

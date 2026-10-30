@@ -184,17 +184,8 @@ struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConv
 
     var description: String { path }
 
-    // Stored as its string, and as an object's key when it keys a
-    // dictionary: the JSON a [String: …] map wrote reads back unchanged.
-    init(from decoder: any Decoder) throws {
-        path = try decoder.singleValueContainer().decode(String.self)
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(path)
-    }
-
+    /// As a dictionary's key: the JSON a [String: …] map wrote reads back
+    /// unchanged.
     var codingKey: any CodingKey { Key(stringValue: path) }
 
     init?<T: CodingKey>(codingKey: T) {

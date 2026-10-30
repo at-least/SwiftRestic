@@ -158,12 +158,11 @@ extension AppModel {
     func runSkippedPlansAfterMount(now: Date = .now) {
         guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
-        var planIDs: [UUID] = []
         // Newest first.
         for run in configuration.runs where run.kind == .backup {
             if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
         }
-        for planID in Scheduler.catchUpAfterMount(
+        let planIDs = Scheduler.catchUpAfterMount(
             plans: configuration.plans,
             newestBackupOutcome: newest,
             running: runningPlanIDs,
@@ -173,9 +172,7 @@ extension AppModel {
                 return !repository.isDriveAway
             },
             now: now
-        ) {
-            planIDs.append(planID)
-        }
+        )
         // Two plans on one drive come back together: one at a time.
         runBackups(planIDs: planIDs, askedByUser: false)
     }

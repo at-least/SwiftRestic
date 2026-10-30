@@ -139,9 +139,6 @@ extension AppModel {
         reconcileSleepAssertion()
     }
 
-    /// Whether the Mac is kept from idle sleep for running work.
-    var holdsOffSleep: Bool { sleepActivity != nil }
-
     /// Holds off idle system sleep while any backup or maintenance job runs,
     /// and lets go when the last one ends — a Mac that idles to sleep
     /// mid-run suspends restic, and a long first backup otherwise never
@@ -159,11 +156,6 @@ extension AppModel {
             ProcessInfo.processInfo.endActivity(token)
             sleepActivity = nil
         }
-    }
-
-    /// Waits for a plan's in-flight run to finish, if there is one.
-    func waitForRun(planID: UUID) async {
-        await tasks.task(in: .plan(planID))?.value
     }
 
     func cancelBackup(planID: UUID) {

@@ -642,6 +642,99 @@ struct IndexCoordinatorGenerationTests {
     }
 }
 
+/// The two read wrappers the app alone takes to the store's folder reads —
+/// `changes` for a Files tab's folder against the backup before, `search`
+/// for a Files tab's search — without restic. Every store-level read below
+/// them is densely tested, but a transcription slip in a wrapper (a swapped
+/// pair of IDs, a dropped limit or chain key) compiles and would only show
+/// as a wrong Files view.
+@Suite("index coordinator read wrappers")
+struct IndexCoordinatorReadWrapperTests {
+    /// Two snapshots of one plan whose children under /data share nothing:
+    /// s1 holds a.txt and dir/ (with dir/x), s2 holds b.txt and x.txt. The
+    /// expected changes follow from the store-level semantics the
+    /// SnapshotIndexFilesTests suites pin: byte-sorted added and removed,
+    /// removedFolders for the removed children that were folders, and
+    /// modified/uncertain only for names both snapshots hold.
+    private func makeScene() async throws -> (CoordinatorScene, IndexCoordinator, UUID) {
+        let scene = try CoordinatorScene("SwiftResticReadWrappers")
+        let client = MockResticClient().onListings([
+            "s1": ["/data": true, "/data/a.txt": false, "/data/dir": true, "/data/dir/x": false],
+            "s2": ["/data": true, "/data/b.txt": false, "/data/x.txt": false],
+        ])
+        await scene.reconcile([
+            try CoordinatorScene.snapshot("s1", 1_000), try CoordinatorScene.snapshot("s2", 2_000),
+        ], 1)
+        await scene.backfill(client)
+        #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
+        return (scene, scene.coordinator, scene.repositoryID)
+    }
+
+    @Test("changes answers added, removed and the removed folders, both ways round, and nil for what it has not read")
+    func changesUnderPath() async throws {
+        let (scene, coordinator, repositoryID) = try await makeScene()
+        defer { scene.remove() }
+        let planA = IndexTestData.planA
+
+        let forward = try await coordinator.changes(
+            underPath: "/data", inChain: planA, from: "s1", to: "s2", repositoryID: repositoryID
+        )
+        #expect(forward?.added == ["/data/b.txt", "/data/x.txt"])
+        #expect(forward?.removed == ["/data/a.txt", "/data/dir"])
+        #expect(forward?.removedFolders == [PathKey("/data/dir")])
+        #expect(forward?.modified.isEmpty == true)
+        #expect(forward?.uncertain.isEmpty == true)
+
+        // The other way round, the sets swap and no removed child was a
+        // folder — the same shape `SnapshotIndexFilesTests.folderChanges`
+        // pins at the store level.
+        let reverse = try await coordinator.changes(
+            underPath: "/data", inChain: planA, from: "s2", to: "s1", repositoryID: repositoryID
+        )
+        #expect(reverse?.added == ["/data/a.txt", "/data/dir"])
+        #expect(reverse?.removed == ["/data/b.txt", "/data/x.txt"])
+        #expect(reverse?.removedFolders.isEmpty == true)
+
+        // Nothing known is not "nothing changed": an unread snapshot and an
+        // unknown chain both answer nil.
+        #expect(
+            try await coordinator.changes(
+                underPath: "/data", inChain: planA, from: "nope", to: "s2", repositoryID: repositoryID
+            ) == nil
+        )
+        #expect(
+            try await coordinator.changes(
+                underPath: "/data", inChain: "swiftrestic-plan-other", from: "s1", to: "s2",
+                repositoryID: repositoryID
+            ) == nil
+        )
+    }
+
+    @Test("search keeps the chain's own hits in name order, cut by the limit, with isInNewest from the chain's newest indexed")
+    func searchWithinChain() async throws {
+        let (scene, coordinator, repositoryID) = try await makeScene()
+        defer { scene.remove() }
+        let planA = IndexTestData.planA
+
+        let hits = try await coordinator.search(
+            matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 5
+        )
+        #expect(hits.map(\.path) == ["/data/a.txt", "/data/b.txt", "/data/x.txt"])
+        // a.txt's newest is s1, while the chain's newest indexed is s2.
+        #expect(hits.map(\.isInNewest) == [false, true, true])
+
+        #expect(
+            try await coordinator.search(matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 1)
+                .map(\.path) == ["/data/a.txt"]
+        )
+        #expect(
+            try await coordinator.search(
+                matching: "txt", inChain: "swiftrestic-plan-other", repositoryID: repositoryID, limit: 5
+            ).isEmpty
+        )
+    }
+}
+
 /// The launch sweep of orphaned index files, without restic: which files it
 /// deletes, and — the half that matters more — which it must never touch.
 @Suite("index orphan sweep")

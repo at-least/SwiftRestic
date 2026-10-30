@@ -848,7 +848,14 @@ private final class StoreRegistry: @unchecked Sendable {
 
     func release(_ repositoryID: UUID) {
         lock.lock()
-        let remaining = (inFlight[repositoryID] ?? 1) - 1
+        // Every release follows a lease that counted itself, so the entry
+        // must exist: falling back would drop the count to zero under a
+        // reader and let a parked reset close the pool early.
+        guard let held = inFlight[repositoryID] else {
+            lock.unlock()
+            preconditionFailure("StoreRegistry.release of \(repositoryID) with no lease in flight")
+        }
+        let remaining = held - 1
         var waiters: [CheckedContinuation<Void, Never>] = []
         if remaining > 0 {
             inFlight[repositoryID] = remaining

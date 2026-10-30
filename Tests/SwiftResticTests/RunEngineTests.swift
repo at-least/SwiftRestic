@@ -1041,6 +1041,61 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords.first?.exitCode == 0)
         #expect(sink.deliveredTranscripts.first?.firstExitCode == 0)
     }
+
+    @Test("a clean prune is delivered succeeded with restic's answer, its lines hopped home, and stamps")
+    func cleanPrune() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient()
+            .onPrune(.success("removed 2 of 3 packs"), rawLines: ["counting packs", "removed 2 of 3 packs"])
+            .onExit("prune", 0)
+        await MaintenanceRunEngine.perform(
+            repository: Repository(),
+            task: .prune,
+            readDataPercentOverride: nil,
+            sink: sink.serving(client)
+        )
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.kind == .prune)
+        #expect(record.outcome == .succeeded)
+        // The tail restic printed is the run's one-line answer, as the check
+        // verdict is for a check.
+        #expect(record.detailText == "removed 2 of 3 packs")
+        // Only prune ran: no check's slice was asked for or advanced.
+        #expect(client.callLog == ["prune"])
+        #expect(client.checkSubsets.isEmpty)
+        #expect(!sink.log.contains("advance-slice"))
+        #expect(client.transcriptBound["prune"] == true)
+        #expect(record.exitCode == 0)
+        // A prune stamps, like a check — unlike a drive-away skip.
+        #expect(sink.log.contains("stamp:prune"))
+        #expect(sink.deliveredTranscripts.count == 1)
+        #expect(sink.log.contains("refresh-scheduled"))
+        // Narration hops home through the sink's line reporter, one entry
+        // per restic line, landing asynchronously.
+        #expect(
+            await eventually(within: 5) { sink.log.filter { $0 == "prune-line" }.count == 2 },
+            "log was \(sink.log)"
+        )
+    }
+
+    @Test("a failed prune is stamped and recorded failed, never unstamped")
+    func failedPrune() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onPrune(.failure(ResticError.commandFailed(exitCode: 11, message: "locked")))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(),
+            task: .prune,
+            readDataPercentOverride: nil,
+            sink: sink.serving(client)
+        )
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .failed)
+        // Stamped whatever happened: unstamped, the scheduler would retry
+        // every minute against a repository that is likely still locked.
+        #expect(sink.log.contains("stamp:prune"))
+        #expect(sink.log.contains("auth-noted"))
+        #expect(sink.deliveredRecords.count == 1)
+    }
 }
 
 /// Apply Retention Now's run: a forget recorded under the plan, with no

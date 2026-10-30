@@ -205,7 +205,8 @@ extension AppModel {
             // them; the configuration's own save writes the deletion back.
             deletePlansWithoutRepository()
         }
-        let loginItem = await Task.detached { LoginItem.state }.value
+        let readLoginItemState = loginItemStateReader
+        let loginItem = await Task.detached { readLoginItemState() }.value
         startsAtLogin = loginItem == .enabled
         loginItemState = loginItem
         await resolveBinary()
@@ -369,12 +370,14 @@ extension AppModel {
     }
 
     private func performSetStartsAtLogin(_ enabled: Bool, generation: Int) async {
+        let readLoginItemState = loginItemStateReader
+        let applyLoginItem = loginItemApplier
         // The daemon's answer, written only while this change is still the
         // newest: a newer click's optimistic value already says what the
         // switch must show, and its own turn will read the daemon after.
         @discardableResult
         func syncFromDaemon() async -> LoginItemState {
-            let state = await Task.detached { LoginItem.state }.value
+            let state = await Task.detached { readLoginItemState() }.value
             if generation == loginItemGeneration {
                 startsAtLogin = state == .enabled
                 loginItemState = state
@@ -391,7 +394,7 @@ extension AppModel {
             return
         }
         do {
-            try await Task.detached { try LoginItem.setEnabled(enabled) }.value
+            try await Task.detached { try applyLoginItem(enabled) }.value
             let state = await syncFromDaemon()
             if enabled, state == .needsApproval {
                 post(Banner(
@@ -412,7 +415,8 @@ extension AppModel {
     }
 
     func refreshLoginItemStatus() async {
-        let state = await Task.detached { LoginItem.state }.value
+        let readLoginItemState = loginItemStateReader
+        let state = await Task.detached { readLoginItemState() }.value
         // A queued or running change owns the switch until it settles — its
         // optimistic value is what the user last asked for, and a status
         // read landing beside it must not stomp that back to daemon-stale.

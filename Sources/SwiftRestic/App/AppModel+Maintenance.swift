@@ -79,12 +79,7 @@ extension AppModel {
                     sink: self
                 )
             }
-            self?.tasks.clear(.maintenance(repositoryID))
-            // Retire the token with the strip, so a late hop from this job
-            // drops — `unwindPlanRun(_:)`'s rule.
-            self?.maintenanceRunTokens[repositoryID] = nil
-            self?.maintenance[repositoryID] = nil
-            self?.reconcileSleepAssertion()
+            self?.unwindMaintenanceRun(repositoryID)
         }, in: .maintenance(repositoryID))
     }
 
@@ -97,12 +92,23 @@ extension AppModel {
         reconcileSleepAssertion()
     }
 
-    func cancelMaintenance(repositoryID: UUID) {
-        tasks.cancel(.maintenance(repositoryID))
+    /// Retires a maintenance job's run — its registry slot, run token and
+    /// strip — however the job ended. Every piece of per-run bookkeeping
+    /// leaves together, `unwindPlanRun(_:)`'s rule, so the copies cannot
+    /// drift. Call only from the job's own task: `clear` while a cancelled
+    /// run is still unwinding would remove its slot, and quit's
+    /// `tasks.drain()` would no longer wait for its record.
+    func unwindMaintenanceRun(_ repositoryID: UUID) {
+        tasks.clear(.maintenance(repositoryID))
+        // The token retires with the strip, so a late hop from this job
+        // drops.
+        maintenanceRunTokens[repositoryID] = nil
+        maintenance[repositoryID] = nil
+        reconcileSleepAssertion()
     }
 
-    func waitForMaintenance(repositoryID: UUID) async {
-        await tasks.task(in: .maintenance(repositoryID))?.value
+    func cancelMaintenance(repositoryID: UUID) {
+        tasks.cancel(.maintenance(repositoryID))
     }
 
     func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {

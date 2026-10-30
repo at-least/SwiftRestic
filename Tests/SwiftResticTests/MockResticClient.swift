@@ -14,6 +14,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var rewriteScript: Result<Int, Error> = .success(0)
     private var rewritePatterns: [[String]] = []
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
+    private var pruneScript: Result<String, Error> = .success("")
+    private var pruneRawLines: [String] = []
     private var snapshotsScript: Result<[Snapshot], Error> = .success([])
     private var statsScript: Result<RepositoryStats, Error> =
         .success(RepositoryStats(totalSize: 0))
@@ -57,6 +59,16 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func onCheck(_ result: Result<ResticSummary?, Error>) -> Self {
         locked { checkScript = result }
+        return self
+    }
+
+    /// `prune`'s answer and the lines its `onRawLine` reports, mirroring
+    /// `onCheck`.
+    func onPrune(_ result: Result<String, Error>, rawLines: [String] = []) -> Self {
+        locked {
+            pruneScript = result
+            pruneRawLines = rawLines
+        }
         return self
     }
 
@@ -214,8 +226,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         onRawLine: (@Sendable (String) -> Void)?
     ) async throws -> String {
         record("prune")
+        let lines = locked { pruneRawLines }
+        for line in lines { onRawLine?(line) }
         transcribe("prune")
-        return ""
+        return try locked { pruneScript }.get()
     }
 
     func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {

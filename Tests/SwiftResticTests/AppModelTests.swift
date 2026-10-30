@@ -1267,6 +1267,18 @@ struct BannerQueueTests {
         }
         #expect(errors.banners.map(\.title) == ["e4", "e3", "e2", "e1"])
     }
+
+    @Test("an error already on screen is not posted again; a changed message is")
+    func errorDeduplicates() {
+        let model = makeModel("SwiftResticBanners")
+        // A repeatable action failing twice must not stack copies that evict
+        // successes — one copy of the same words stays.
+        model.post(Banner(title: "same", message: "one", isError: true))
+        model.post(Banner(title: "same", message: "one", isError: true))
+        #expect(model.banners.map(\.title) == ["same"])
+        model.post(Banner(title: "same", message: "two", isError: true))
+        #expect(model.banners.count == 2)
+    }
 }
 
 /// The snapshot → backup-run join behind the incomplete marks: derived when
@@ -1643,6 +1655,215 @@ struct StartAtLoginSurfaceTests {
     }
 }
 
+/// The Start at Login switch's rule: the click is optimistic, the daemon's
+/// read confirms or corrects it, and a read that began before a newer click
+/// may not snap the switch back. The daemon is fake — `SMAppService` would
+/// answer for Xcode here.
+@Suite("login item switch")
+@MainActor
+struct LoginItemSwitchTests {
+    /// The fake daemon: while holding, every apply blocks until its own
+    /// `release()` — XPC round trips the test parks mid-flight — and each
+    /// read answers the next scripted state, repeating the last past the
+    /// end.
+    final class Script: @unchecked Sendable {
+        private let lock = NSLock()
+        private var applied: [Bool] = []
+        private var states: [LoginItemState]
+        private var next = 0
+        private var holding = false
+        private var releases = 0
+        private var passed = 0
+
+        init(states: [LoginItemState]) {
+            self.states = states
+        }
+
+        func apply(_ enabled: Bool) throws {
+            lock.lock()
+            applied.append(enabled)
+            let hold = holding
+            lock.unlock()
+            guard hold else { return }
+            while true {
+                lock.lock()
+                if releases > passed {
+                    passed += 1
+                    lock.unlock()
+                    return
+                }
+                lock.unlock()
+                usleep(5_000)
+            }
+        }
+
+        func read() -> LoginItemState {
+            lock.lock()
+            defer { lock.unlock() }
+            let answer = states[min(next, states.count - 1)]
+            next += 1
+            return answer
+        }
+
+        var applyCount: Int { lock.lock(); defer { lock.unlock() }; return applied.count }
+        var readCount: Int { lock.lock(); defer { lock.unlock() }; return next }
+        var askedFirstToEnable: Bool { lock.lock(); defer { lock.unlock() }; return applied.first == true }
+
+        func hold() { lock.lock(); holding = true; lock.unlock() }
+
+        /// Lets one parked apply pass.
+        func release() { lock.lock(); releases += 1; lock.unlock() }
+
+        /// Wires the fake daemon into the model's seams. On the main actor:
+        /// the seams are model state.
+        @MainActor
+        func install(in model: AppModel) {
+            let script = self
+            model.loginItemStateReader = { script.read() }
+            model.loginItemApplier = { try script.apply($0) }
+        }
+    }
+
+    /// The model after the click's task has entered the chain (it bumps the
+    /// generation) and the chain has gone idle — every write the chain
+    /// performs has landed.
+    private func awaitSettled(_ model: AppModel, generation: Int) async throws {
+        try #require(await eventually(within: 10) { model.loginItemGeneration >= generation }, "the click never entered the chain")
+        try #require(await eventually(within: 10) { model.loginItemChanges.isIdle }, "the chain never settled")
+    }
+
+    @Test("a click moves the switch at once and the daemon's read confirms it")
+    func optimisticClickThenDaemonConfirm() async throws {
+        let model = makeModel("SwiftResticLoginSwitch")
+        let script = Script(states: [.enabled])
+        script.install(in: model)
+
+        model.requestStartsAtLogin(true)
+        #expect(model.startsAtLogin, "the click is optimistic")
+        try await awaitSettled(model, generation: 1)
+        #expect(model.startsAtLogin)
+        #expect(model.loginItemState == .enabled)
+        #expect(script.applyCount == 1)
+        #expect(script.askedFirstToEnable)
+    }
+
+    @Test("a daemon read that began before a newer click never snaps the switch back")
+    func staleReadDoesNotStomp() async throws {
+        let model = makeModel("SwiftResticLoginSwitchStale")
+        let script = Script(states: [.enabled, .off])
+        script.install(in: model)
+        script.hold()
+
+        model.requestStartsAtLogin(true)
+        try #require(await eventually(within: 10) { script.applyCount == 1 }, "the first apply never started")
+        // The second click lands while the first's turn still runs.
+        model.requestStartsAtLogin(false)
+        #expect(!model.startsAtLogin, "the second click is the optimistic value now")
+
+        // The first turn's read answers what the daemon said before the
+        // second click — enabled. It must drop: a newer click already owns
+        // the switch. The second change's turn is parked at its own applier,
+        // so nothing corrects the value here but the guard.
+        script.release()
+        try #require(await eventually(within: 10) { script.applyCount == 2 }, "the second change never started")
+        #expect(script.readCount == 1, "the parked second change should not have read yet")
+        #expect(!model.startsAtLogin, "a stale daemon read snapped the switch back")
+
+        // Let go, and the second change's own read — the daemon's answer to
+        // it — settles the switch in its words.
+        script.release()
+        try await awaitSettled(model, generation: 2)
+        #expect(!model.startsAtLogin)
+        #expect(model.loginItemState == .off)
+    }
+
+    @Test("a status read landing beside a change in flight leaves the optimistic value alone")
+    func refreshLeavesAnInFlightClickAlone() async throws {
+        let model = makeModel("SwiftResticLoginRefresh")
+        let script = Script(states: [.enabled])
+        script.install(in: model)
+        script.hold()
+
+        model.requestStartsAtLogin(false)
+        try #require(await eventually(within: 10) { script.applyCount == 1 }, "the apply never started")
+        #expect(!model.startsAtLogin)
+
+        // The daemon's stale answer arrives while the chain is busy: it
+        // must not overwrite what the user just asked for.
+        await model.refreshLoginItemStatus()
+        #expect(!model.startsAtLogin, "a status read stomped the in-flight click's optimistic value")
+
+        script.release()
+        try await awaitSettled(model, generation: 1)
+        #expect(model.loginItemState == .enabled)
+    }
+
+    @Test("a change the daemon refuses posts the banner and still applies the daemon's read")
+    func refusedChangeIsSaid() async throws {
+        let model = makeModel("SwiftResticLoginRefused")
+        let script = Script(states: [.off])
+        script.install(in: model)
+        model.loginItemApplier = { _ in throw ResticError.commandFailed(exitCode: 1, message: "daemon refused") }
+
+        await model.setStartsAtLogin(false)
+        #expect(model.banners.map(\.title) == ["Could not change the login item"])
+        #expect(model.startsAtLogin == false)
+        #expect(model.loginItemState == .off)
+    }
+
+    // Not tested here: the enable path's installable-location gate
+    // (`LoginItem.isInInstallableLocation`) reads Bundle.main, which answers
+    // for whatever folder hosts the test runner — faking it would be a
+    // behaviour change of its own, so the gate stays a live check.
+}
+
+/// The scheduled check's data rotation: the next slice is moved on by the
+/// model's sink alone, wrapping at the slice count, and a repository
+/// without a rotation is left alone.
+@Suite("check data rotation")
+@MainActor
+struct CheckDataRotationTests {
+    private func makeRotationModel(with policy: MaintenancePolicy) -> (AppModel, UUID) {
+        let model = makeModel("SwiftResticRotation")
+        var repository = Repository()
+        repository.kind = .local
+        repository.maintenance = policy
+        model.configuration.repositories = [repository]
+        return (model, repository.id)
+    }
+
+    private func slice(of model: AppModel, _ id: UUID) -> Int? {
+        model.repository(id: id)?.maintenance.nextCheckDataSlice
+    }
+
+    @Test("the sink moves the rotation on: 1→2, 12 wraps to 1, a shortened rotation stays in range, and no rotation is untouched")
+    func rotationMovesOn() {
+        let (local, id) = makeRotationModel(with: .forNewRepository(kind: .local))
+        #expect(local.repository(id: id)?.maintenance.checkDataSlices == 12)
+        #expect(slice(of: local, id) == 1)
+        local.advanceCheckDataSlice(repositoryID: id)
+        #expect(slice(of: local, id) == 2)
+
+        // The last slice wraps to the first.
+        local.updateRepository(id) { $0.maintenance.nextCheckDataSlice = 12 }
+        local.advanceCheckDataSlice(repositoryID: id)
+        #expect(slice(of: local, id) == 1)
+
+        // A rotation shortened under a stored slice still answers in range.
+        local.updateRepository(id) {
+            $0.maintenance.checkDataSlices = 4
+            $0.maintenance.nextCheckDataSlice = 9
+        }
+        local.advanceCheckDataSlice(repositoryID: id)
+        #expect(slice(of: local, id) == 2)
+
+        // No slices: nothing to advance, nothing written.
+        let (structure, structureID) = makeRotationModel(with: MaintenancePolicy())
+        structure.advanceCheckDataSlice(repositoryID: structureID)
+        #expect(slice(of: structure, structureID) == 1)
+    }
+}
+
 /// A progress hop still in flight when a run unwinds must not write into the
 /// next run's strip — the run-identity rule `restoreRunToken` gives restores,
 /// pinned here at the seam the engines use.
@@ -1834,6 +2055,27 @@ struct ConfigurationSaveTests {
 
         let saved = try await ConfigStore(directory: root).load().configuration
         #expect(saved.settings.maxRunHistory == 103)
+    }
+
+    @Test("a configuration write that fails is announced, and does not latch the unreadable state")
+    func failedSaveIsAnnounced() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticFailedSave-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.isLoaded = true
+        // The store's own directory read-only, so the atomic write fails —
+        // the restore defer is registered after the removal defer, so LIFO
+        // hands the permissions back before the folder is deleted.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: root.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path) }
+
+        await model.flushSave()
+        #expect(model.banners.map(\.title) == ["Could not save your configuration"])
+        // Only bootstrap's load failure latches the unreadable state: a
+        // failed save leaves the configuration editable and saving armed.
+        #expect(!model.isConfigurationUnreadable)
     }
 }
 

@@ -77,6 +77,86 @@ struct ResticCacheReportTests {
         #expect(model.resticCacheNote == nil)
     }
 
+    @Test("a cleanup with no cache measured does nothing")
+    @MainActor
+    func cleanupWithoutAMeasurementDoesNothing() async {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ResticCacheCleanup-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        await model.cleanupResticCache()
+        #expect(model.resticCache == nil)
+        #expect(model.resticCacheNote == nil)
+        #expect(!model.isWorkingOnResticCache)
+    }
+
+    @Test("a cleanup with no restic found fails and drops the note about a cleanup that did not happen")
+    @MainActor
+    func cleanupWithoutResticFailsAndDropsTheNote() async {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ResticCacheCleanupFail-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        model.resticCacheNote = "Removed 3 folders, 9 MB."
+        model.resticCache = .measured(ResticCacheReport(directory: "/c", count: 3, oldCount: 3, totalBytes: 1_000))
+        await model.cleanupResticCache()
+        guard case .failed = model.resticCache else {
+            Issue.record("expected a failed cleanup, got \(String(describing: model.resticCache))")
+            return
+        }
+        #expect(model.resticCacheNote == nil)
+    }
+
+    @Test("a cleanup removes the old folders, measures again, and the note counts what went")
+    @MainActor
+    func cleanupRemovesAndSaysWhatWent() async throws {
+        // A stub restic: `cache --cleanup` touches a marker beside itself,
+        // and `cache` answers the three-row table before the marker and the
+        // one-fresh-row table after it — 2 folders and their bytes gone.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ResticCacheCleanupRun-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = root.appendingPathComponent("restic")
+        try """
+        #!/bin/sh
+        if [ "$2" = "--cleanup" ]; then
+          touch "$(dirname "$0")/cleaned"
+          exit 0
+        fi
+        if [ -e "$(dirname "$0")/cleaned" ]; then
+          cat "$(dirname "$0")/after.txt"
+        else
+          cat "$(dirname "$0")/before.txt"
+        fi
+        """.write(to: stub, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
+        let after = """
+        Repo ID     Last Used    Old  Size
+        ------------------------------------------
+        0c66271f29   0 days ago       1.000 GiB
+        ------------------------------------------
+        1 cache dirs in /Users/me/Library/Caches/restic
+        """
+        try withSizes.write(to: root.appendingPathComponent("before.txt"), atomically: true, encoding: .utf8)
+        try after.write(to: root.appendingPathComponent("after.txt"), atomically: true, encoding: .utf8)
+
+        let model = AppModel(store: ConfigStore(directory: root.appendingPathComponent("config")), secrets: .inMemory())
+        model.resticSearch = .found(ResticBinary(url: stub), version: "restic 0.19.1")
+        await model.measureResticCache()
+        guard case let .measured(before) = model.resticCache else {
+            Issue.record("the measurement failed: \(String(describing: model.resticCache))")
+            return
+        }
+        #expect(before == ResticCacheReport(
+            directory: "/Users/me/Library/Caches/restic", count: 3, oldCount: 2, totalBytes: 1536 + 2_869_953 + 1_073_741_824
+        ))
+
+        await model.cleanupResticCache()
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("cleaned").path), "the cleanup never ran")
+        #expect(model.resticCache == .measured(ResticCacheReport(
+            directory: "/Users/me/Library/Caches/restic", count: 1, oldCount: 0, totalBytes: 1_073_741_824
+        )))
+        #expect(model.resticCacheNote == "Removed 2 folders, \(Format.bytes(1_536 + 2_869_953)).")
+    }
+
     @Test("restic's binary units convert to bytes; an unknown unit is refused")
     func units() {
         #expect(ResticCacheReport.bytes(value: "512", unit: "B") == 512)

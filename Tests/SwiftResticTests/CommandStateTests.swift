@@ -85,6 +85,60 @@ struct CommandStateTests {
         #expect(!model.isRunning(planID: documents.id))
     }
 
+    @Test("Back Up Now on a plan without a repository posts the banner and starts nothing")
+    func incompletePlanBackUpIsAnswered() {
+        let model = makeModel()
+        let draft = makePlan("Draft", on: nil)
+        model.configuration.plans = [draft]
+
+        model.runBackup(planID: draft.id)
+        #expect(model.banners.map(\.title) == ["Plan is incomplete"])
+        #expect(model.activity.isEmpty)
+    }
+
+    @Test("Remove from Earlier Backups is gated in order: an incomplete plan, then a missing restic, then a busy repository")
+    func removeFromEarlierBackupsGating() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        // A plan pointing at a repository the configuration no longer holds.
+        var orphan = BackupPlan()
+        orphan.repositoryID = UUID()
+        orphan.path = "/tmp/Orphan"
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, orphan]
+
+        // The rewrite has nothing to aim at.
+        #expect(model.removeFromEarlierBackupsBlocker(planID: makePlan("Draft", on: nil).id)
+            == BackupPlan.incompleteConfigurationReason)
+        #expect(model.removeFromEarlierBackupsBlocker(planID: orphan.id)
+            == BackupPlan.incompleteConfigurationReason)
+        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
+
+        // No restic to run it with.
+        model.resticSearch = .searching
+        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
+        // The absence is named before a busy repository: one reason, the
+        // first that stands.
+        model.maintenance[repository.id] = MaintenanceActivity(task: .check)
+        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
+
+        // The repository is held by a backup or upkeep.
+        model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
+        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id)
+            == "The repository is in use by a backup or maintenance job — try again when it finishes.")
+        model.maintenance = [:]
+        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
+    }
+
+    @Test("the retention preview for a plan that is gone throws, never a made-up answer")
+    func previewRetentionOfAMissingPlanThrows() async throws {
+        let model = makeModel()
+        await #expect(throws: ResticError.planMissing) {
+            _ = try await model.previewRetention(planID: UUID())
+        }
+    }
+
     @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
     func backUpAllQueuesBehindAPlansRun() {
         let model = makeModel()

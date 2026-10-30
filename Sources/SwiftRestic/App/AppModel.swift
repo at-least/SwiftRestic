@@ -165,6 +165,13 @@ final class AppModel {
     /// xcodebuild that is Xcode, not the terminal — so a test asserting on
     /// it would pass or fail by machine.
     @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
+    /// The login-item daemon read behind `bootstrap`, `performSetStartsAtLogin`
+    /// and `refreshLoginItemStatus`. Injectable for the same reason the probe
+    /// is: `SMAppService` answers for whatever process macOS holds
+    /// responsible, and a test must not register anything with it.
+    @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
+    /// The register/unregister behind `performSetStartsAtLogin`.
+    @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
     /// Whether the Mac ran on battery at the last scheduler tick — sampled
     /// every tick whether or not the battery setting is on, so the hold's
     /// words are right the moment the setting is switched on, and written
