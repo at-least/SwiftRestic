@@ -213,3 +213,21 @@ extension AppModel {
         case permissionDenied
     }
 }
+
+/// Where a notification's identifier sends a click: a quiet-plan alert's
+/// is `quietPlanNotificationPrefix` and the plan's ID, a run notification's
+/// is the run's ID alone, and anything else — a foreign or stale
+/// identifier — routes nowhere. Kept beside the two writers above, the
+/// only guarantee `AppDelegate.openNotification` reads them by.
+enum NotificationRoute: Equatable {
+    case plan(UUID)
+    case run(UUID)
+
+    static func route(forIdentifier identifier: String) -> NotificationRoute? {
+        let prefix = AppModel.quietPlanNotificationPrefix
+        if identifier.hasPrefix(prefix), let planID = UUID(uuidString: String(identifier.dropFirst(prefix.count))) {
+            return .plan(planID)
+        }
+        return UUID(uuidString: identifier).map { .run($0) }
+    }
+}

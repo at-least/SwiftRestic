@@ -682,3 +682,23 @@ private extension RunRecord {
     }
 }
 
+/// Where a clicked notification's identifier sends the click — the routing
+/// `AppDelegate.openNotification` reads (`NotificationRoute`, written
+/// beside the identifiers' writers).
+@Suite("notification routes")
+struct NotificationRouteTests {
+    @Test("a quiet-plan identifier routes to its plan, a run's to the run, anything else nowhere")
+    func routing() {
+        let planID = UUID()
+        #expect(
+            NotificationRoute.route(forIdentifier: AppModel.quietPlanNotificationPrefix + planID.uuidString)
+                == .plan(planID)
+        )
+        let runID = UUID()
+        #expect(NotificationRoute.route(forIdentifier: runID.uuidString) == .run(runID))
+        // The prefix over something that is not a plan ID is not a run's
+        // identifier either: it routes nowhere, opening no window.
+        #expect(NotificationRoute.route(forIdentifier: AppModel.quietPlanNotificationPrefix + "not-a-uuid") == nil)
+        #expect(NotificationRoute.route(forIdentifier: "restic note") == nil)
+    }
+}

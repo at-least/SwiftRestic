@@ -48,12 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notificationAwaitingWiring = identifier
             return
         }
-        if identifier.hasPrefix(AppModel.quietPlanNotificationPrefix),
-           let planID = UUID(uuidString: String(identifier.dropFirst(AppModel.quietPlanNotificationPrefix.count))) {
+        switch NotificationRoute.route(forIdentifier: identifier) {
+        case let .plan(planID):
             if model.plan(id: planID) != nil { router.selection = .plan(planID) }
-        } else if let runID = UUID(uuidString: identifier) {
+        case let .run(runID):
             router.focusRun(runID)
-        } else {
+        case nil:
             return
         }
         tray?.openMainWindow()

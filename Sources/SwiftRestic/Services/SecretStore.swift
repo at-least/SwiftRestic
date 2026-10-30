@@ -125,7 +125,9 @@ private actor InMemorySecrets {
     func save(_ id: UUID, _ password: String?, _ providerSecret: String?) {
         var entry = storage[id] ?? (nil, nil)
         if let password, !password.isEmpty { entry.password = password }
-        if let providerSecret { entry.providerSecret = providerSecret }
+        // Empty removes, as `KeychainStore.write` does — the double answers
+        // what the Keychain answers.
+        if let providerSecret { entry.providerSecret = providerSecret.isEmpty ? nil : providerSecret }
         storage[id] = entry
     }
 

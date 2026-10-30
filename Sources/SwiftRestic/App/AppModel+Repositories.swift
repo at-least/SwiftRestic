@@ -37,11 +37,7 @@ extension AppModel {
         // The context always applies the stored location and password last, so
         // these entries would silently do nothing. Say so rather than let the
         // user believe a variable is doing work.
-        let overridden = RepositoryContext(
-            repository: repository,
-            password: password ?? "",
-            providerSecret: providerSecret
-        ).overriddenExtraEnvironmentKeys
+        let overridden = RepositoryContext.overriddenExtraEnvironmentKeys(in: repository.extraEnvironment)
         if !overridden.isEmpty {
             let one = overridden.count == 1
             post(Banner(

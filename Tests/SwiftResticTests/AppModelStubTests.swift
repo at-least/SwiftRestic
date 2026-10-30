@@ -1964,6 +1964,8 @@ struct AppModelStubTests {
 
         harness.model.removeFromEarlierBackups(planID: planID, items: [item])
         #expect(harness.model.activity[planID]?.phase == .removingFromEarlierBackups)
+        #expect(harness.model.removalConsequences(for: harness.repository.id)
+            .contains("Items are being removed from earlier backups of “Stub Plan”, which will be cancelled."))
         // The rewrite holds restic's exclusive lock: a backup waits for it.
         #expect(harness.model.lockedRepositories[harness.repository.id]?.contains("removing items from earlier backups") == true)
         await harness.model.waitForRun(planID: planID)
@@ -2105,6 +2107,36 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
         #expect(record.failureMessage == "Cancelled")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("Import Settings stops the backup in flight and records it cancelled")
+    func importSettingsCancelsRunningBackup() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+
+        harness.model.runBackup(planID: harness.plan.id)
+        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+
+        // The file holds the running plan and its repository, so Delete
+        // Plan's bookkeeping and `deletePlansWithoutRepository` both pass it
+        // over: `tasks.cancelSlots()` is the only canceller an import has.
+        var file = AppConfiguration()
+        file.repositories = [harness.repository]
+        file.plans = [harness.plan]
+        harness.model.importSettings(SettingsFile(name: "SwiftRestic Settings.json", configuration: file))
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.outcome == .cancelled)
+        #expect(record.failureMessage == "Cancelled")
+        #expect(harness.model.configuration.repositories == [harness.repository])
+        #expect(harness.model.configuration.plans.count == 1)
+        #expect(harness.model.configuration.plans.first?.id == harness.plan.id)
+        // The cancelled unwind stamps the plan's slot with the run's start,
+        // so the file's unstamped plan does not read as never run.
+        #expect(harness.model.configuration.plans.first?.lastRunAt == record.startedAt)
 
         await harness.model.shutdown()
     }

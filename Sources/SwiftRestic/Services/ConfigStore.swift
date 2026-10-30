@@ -30,21 +30,25 @@ struct AppSettings: Codable, Sendable, Hashable {
     init() {}
 
     init(from decoder: any Decoder) throws {
+        // The property is each field's one default: a literal here would be a
+        // second copy that a fresh install and a file missing the key could
+        // let drift apart.
+        self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        resticPathOverride = c.value(.resticPathOverride, default: "")
-        showMenuBarExtra = c.value(.showMenuBarExtra, default: true)
-        notifyOnSuccess = c.value(.notifyOnSuccess, default: false)
-        notifyOnFailure = c.value(.notifyOnFailure, default: true)
-        staleAlertDays = c.value(.staleAlertDays, default: 7)
-        maxRunHistory = c.value(.maxRunHistory, default: 300)
-        pauseOnBattery = c.value(.pauseOnBattery, default: false)
-        pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: false)
+        resticPathOverride = c.value(.resticPathOverride, default: resticPathOverride)
+        showMenuBarExtra = c.value(.showMenuBarExtra, default: showMenuBarExtra)
+        notifyOnSuccess = c.value(.notifyOnSuccess, default: notifyOnSuccess)
+        notifyOnFailure = c.value(.notifyOnFailure, default: notifyOnFailure)
+        staleAlertDays = c.value(.staleAlertDays, default: staleAlertDays)
+        maxRunHistory = c.value(.maxRunHistory, default: maxRunHistory)
+        pauseOnBattery = c.value(.pauseOnBattery, default: pauseOnBattery)
+        pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: pauseOnMeteredNetwork)
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
-        notificationChannels = c.value(.notificationChannels, default: [])
-        networkShares = c.value(.networkShares, default: [])
-        consoleHistory = c.value(.consoleHistory, default: [])
+        notificationChannels = c.value(.notificationChannels, default: notificationChannels)
+        networkShares = c.value(.networkShares, default: networkShares)
+        consoleHistory = c.value(.consoleHistory, default: consoleHistory)
     }
 }
 
@@ -58,12 +62,17 @@ struct AppConfiguration: Codable, Sendable {
     init() {}
 
     init(from decoder: any Decoder) throws {
+        self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        repositories = c.value(.repositories, default: [])
+        repositories = c.value(.repositories, default: repositories)
+        // The one line that cannot take its property as the fallback: the
+        // file stores `StoredPlan`s, whose decode unfolds older builds'
+        // `sources` into one plan per folder — read as the property's
+        // `[BackupPlan]`, that split would be lost.
         plans = c.value(.plans, default: [StoredPlan]()).flatMap(\.plans)
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
-        runs = RunRecord.fillingProblemStretches(c.value(.runs, default: []))
+        runs = RunRecord.fillingProblemStretches(c.value(.runs, default: runs))
         let stored = c.value(.settings, default: StoredSettings())
         settings = stored.settings
         moveAppWideRateLimits(upload: stored.uploadLimitKiBps, download: stored.downloadLimitKiBps)
@@ -166,10 +175,11 @@ private struct StoredSettings: Decodable {
     init() {}
 
     init(from decoder: any Decoder) throws {
+        self.init()
         settings = try AppSettings(from: decoder)
         let c = try decoder.container(keyedBy: AppWideKeys.self)
-        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
-        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
+        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: uploadLimitKiBps)
+        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: downloadLimitKiBps)
     }
 }
 

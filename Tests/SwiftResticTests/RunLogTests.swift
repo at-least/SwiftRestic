@@ -146,6 +146,43 @@ struct RunLogTests {
         #expect(kept.contains("Restored 1 file, \(Format.bytes(14)); 1 kept as it was"), "log was \(kept)")
     }
 
+    @Test("a check's log carries restic's verdict line; a prune's ends at its own verdict")
+    func renderedCheckAndPruneLogs() {
+        var check = RunRecord(kind: .check, planName: "NAS", startedAt: at(0))
+        check.finishedAt = at(3)
+        check.outcome = .succeeded
+        // What a successful check's run writes (`RunEngines`): restic's own
+        // verdict, carried in the record's detail.
+        check.detailText = "No errors found."
+        let checkText = RunLog.render(
+            record: check,
+            repositoryName: nil,
+            repositoryKind: nil,
+            versions: versions,
+            transcript: RunTranscript.Contents(),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        let lines = checkText.components(separatedBy: "\n")
+        #expect(lines.contains("Started 2026-09-26 07:58:17 +0000"))
+        #expect(lines.contains("Finished 2026-09-26 07:58:20 +0000 after 3s — Succeeded"))
+        #expect(lines.contains("Result: No errors found."), "log was \(checkText)")
+
+        // A prune has no result line of its own: nothing after the footer
+        // speaks for it.
+        var prune = RunRecord(kind: .prune, planName: "NAS", startedAt: at(0))
+        prune.finishedAt = at(30)
+        prune.outcome = .succeeded
+        let pruneText = RunLog.render(
+            record: prune,
+            repositoryName: nil,
+            repositoryKind: nil,
+            versions: versions,
+            transcript: RunTranscript.Contents(),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        #expect(!pruneText.contains("Result:"), "log was \(pruneText)")
+    }
+
     @Test("the store writes, reads, removes and sweeps only <UUID>.log files")
     func storeLifecycle() throws {
         let directory = FileManager.default.temporaryDirectory

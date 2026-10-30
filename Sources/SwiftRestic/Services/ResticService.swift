@@ -26,9 +26,10 @@ struct RepositoryContext: Sendable {
     }
 
     /// Entries in `extraEnvironment` that this context overwrites anyway, so an
-    /// editor screen can tell the user their setting has no effect.
-    var overriddenExtraEnvironmentKeys: [String] {
-        repository.extraEnvironment.keys
+    /// editor screen can tell the user their setting has no effect. Reads the
+    /// extra environment alone — the answer never depends on the secrets.
+    static func overriddenExtraEnvironmentKeys(in extraEnvironment: [String: String]) -> [String] {
+        extraEnvironment.keys
             .filter { ResticRunner.protectedEnvironmentKeys.contains($0) }
             .sorted()
     }

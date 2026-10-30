@@ -511,15 +511,15 @@ struct PasswordPrecedenceTests {
 
     @Test("conflicting extra entries are named so the editor can warn about them")
     func conflictsAreReported() {
-        let overridden = context(extra: [
+        let overridden = RepositoryContext.overriddenExtraEnvironmentKeys(in: [
             "RESTIC_PASSWORD": "x",
             "RESTIC_PASSWORD_COMMAND": "y",
             "RESTIC_HOST": "elsewhere",
             "AWS_ACCESS_KEY_ID": "z",
-        ]).overriddenExtraEnvironmentKeys
+        ])
         #expect(overridden == ["RESTIC_HOST", "RESTIC_PASSWORD", "RESTIC_PASSWORD_COMMAND"])
 
-        #expect(context(extra: ["AWS_ACCESS_KEY_ID": "y"]).overriddenExtraEnvironmentKeys.isEmpty)
+        #expect(RepositoryContext.overriddenExtraEnvironmentKeys(in: ["AWS_ACCESS_KEY_ID": "y"]).isEmpty)
     }
 }
 

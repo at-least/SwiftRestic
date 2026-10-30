@@ -62,12 +62,14 @@ struct RemovalConsequencesTests {
             isRestoring: true,
             runningBackupNames: ["Nightly", "Untitled Plan"],
             applyingRetentionNames: ["Weekly"],
+            removingFromEarlierBackupsNames: ["Docs"],
             isMaintaining: true,
             isConsoleRunning: true
         )
         #expect(sentence.contains("A restore from this repository is running and will be cancelled."))
         #expect(sentence.contains("Backups of “Nightly” and “Untitled Plan” are running and will be cancelled."))
         #expect(sentence.contains("Retention is being applied to “Weekly” and will be cancelled."))
+        #expect(sentence.contains("Items are being removed from earlier backups of “Docs”, which will be cancelled."))
         #expect(sentence.contains("Repository maintenance is running and will be cancelled."))
         #expect(sentence.contains("A console command is running and will be cancelled."))
     }
