@@ -71,9 +71,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     case resticTooOld(path: String, found: String)
     /// `restic version` answered something that names no version.
     case resticVersionUnreadable(path: String)
-    /// A folder stands where a Replace restore of several items would put a
-    /// file. restic fails on it — after taking away the folder's permissions —
-    /// so it is refused before restic runs.
+    /// A folder stands where a Replace restore would put a file — one item
+    /// or several. Left to restic, the folder's contents are lost, or a
+    /// single file is transferred whole and only then cannot replace the
+    /// folder, so the restore is refused before restic runs.
     case folderInTheWay(path: String)
     /// `forget` could not delete every snapshot retention chose: restic's
     /// exit 3, "failed to remove one or more snapshots", one "unable to

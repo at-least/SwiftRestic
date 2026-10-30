@@ -260,7 +260,11 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: Data(result.stdout.utf8))
+        do {
+            return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: Data(result.stdout.utf8))
+        } catch {
+            throw ResticError.malformedOutput(detail: "the size answer could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        }
     }
 
     func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary? {
@@ -357,7 +361,11 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return try ResticMessageDecoder.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
+        do {
+            return try ResticMessageDecoder.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
+        } catch {
+            throw ResticError.malformedOutput(detail: "the snapshot list could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        }
     }
 
     /// Lists the immediate children of `path` inside a snapshot.
@@ -473,7 +481,11 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        return try ResticMessageDecoder.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
+        do {
+            return try ResticMessageDecoder.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
+        } catch {
+            throw ResticError.malformedOutput(detail: "the find results could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        }
     }
 
     /// Compares two snapshots. `+` in the result means present only in `newer`.
@@ -955,6 +967,13 @@ struct ResticService: ResticClient {
             RunTranscript.current?.note("Kept the file already at \(target.path); restic did not run.")
             return Self.keptFileSummary()
         }
+        // As `restoreItems` refuses before its restic runs: a folder at the
+        // landing would otherwise cost the whole transfer and fail only at
+        // the commit, with "Is a directory".
+        if overwrite == .replaceExisting,
+           (try? FileManager.default.attributesOfItem(atPath: target.path)[.type] as? FileAttributeType) == .typeDirectory {
+            throw ResticError.folderInTheWay(path: target.path)
+        }
         // Beside the landing, so the commit is a rename on one volume. What
         // the commit did not take — a failed, cancelled or kept restore's
         // file — goes with the folder.
@@ -1013,13 +1032,16 @@ struct ResticService: ResticClient {
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         let landings = nodes.map { Self.restoredItemURL(for: $0, in: destinationDirectory) }
+        // Two passes: every refusal comes before any landing is created, so
+        // a refused restore leaves the destination as it stood.
         for (node, landing) in zip(nodes, landings) {
-            if node.isDirectory {
-                try FileManager.default.createDirectory(at: landing, withIntermediateDirectories: true)
-            } else if overwrite == .replaceExisting,
-                      (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) == .typeDirectory {
+            guard !node.isDirectory, overwrite == .replaceExisting else { continue }
+            if (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) == .typeDirectory {
                 throw ResticError.folderInTheWay(path: landing.path)
             }
+        }
+        for (node, landing) in zip(nodes, landings) where node.isDirectory {
+            try FileManager.default.createDirectory(at: landing, withIntermediateDirectories: true)
         }
         return try await runRestore(
             context,

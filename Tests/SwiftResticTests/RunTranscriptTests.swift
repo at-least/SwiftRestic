@@ -43,6 +43,25 @@ struct RunTranscriptTests {
         #expect(transcript.contents.firstExitCode == 3)
     }
 
+    @Test("the first exit code survives its entry falling out of the tail ring")
+    func firstExitSurvivesARingOmission() {
+        let transcript = RunTranscript()
+        // Capped commands fill the head past headByteLimit, so everything
+        // after them lives in the tail ring.
+        for _ in 0 ..< 5 {
+            transcript.command(String(repeating: "x", count: 70_000))
+        }
+        transcript.exited(7)
+        // More lines than the ring holds: the exit entry is overwritten away.
+        for index in 0 ..< 250 {
+            transcript.output("line \(index)", message: nil, stream: .stderr)
+        }
+
+        let contents = transcript.contents
+        #expect(contents.firstExitCode == 7)
+        #expect(!contents.entries.contains { if case .exit = $0.kind { true } else { false } })
+    }
+
     @Test("a flood keeps the head, the last 200 lines and an honest omitted count")
     func floodIsCapped() {
         let transcript = RunTranscript()

@@ -426,6 +426,33 @@ struct RawLineStreamingTests {
     }
 }
 
+/// The stdout and stderr text the runner keeps on the result: capped when
+/// `retainFullOutput` is not set — the unbounded streams (backup, restore,
+/// the walks) ride the message callbacks instead — whole when it is.
+@Suite("Retained output cap")
+struct RetainedOutputCapTests {
+    /// 80 lines of 2048 bytes: about 164 KB printed, well past the runner's
+    /// 64 KB cap, with no restic and no bulk fixture.
+    private static let filler = "awk 'BEGIN{for(i=0;i<80;i++)printf \"%2048s\\n\", \"\"}' | tr ' ' 'x'"
+
+    @Test("an unbounded stream is retained capped, and retainFullOutput keeps it whole")
+    func retainedTextIsCapped() async throws {
+        let arguments = ["-c", Self.filler]
+        let capped = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: arguments)
+        )
+        let cappedBytes = capped.stdout.utf8.count
+        #expect(cappedBytes > 60_000 && cappedBytes < 100_000, "retained \(cappedBytes) bytes")
+
+        let whole = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: arguments, retainFullOutput: true)
+        )
+        #expect(whole.stdout.utf8.count > 160_000, "retained \(whole.stdout.utf8.count) bytes")
+    }
+}
+
 @Suite("Password precedence")
 struct PasswordPrecedenceTests {
     private func context(extra: [String: String]) -> RepositoryContext {
@@ -552,6 +579,44 @@ struct StagedFileCommitTests {
         )
         #expect(kept == .keptExisting)
         #expect(try String(contentsOf: taken, encoding: .utf8) == "mine", "the fallback replaced a taken name")
+    }
+
+    @Test("a replacing commit over a standing folder is refused, leaving the folder and the staged file untouched")
+    func replaceCommitOverAFolderIsRefused() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // What a folder standing at the landing makes of rename(2): the
+        // single-file restore's wasted-transfer failure.
+        let target = directory.appendingPathComponent("a.txt")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try Data("kept".utf8).write(to: target.appendingPathComponent("inside.txt"))
+        let staging = directory.appendingPathComponent(".a.txt.1.partial")
+        try Data("new".utf8).write(to: staging)
+
+        do {
+            _ = try ResticService.commitStagedFile(staging, to: target, replacingExisting: true)
+            Issue.record("expected the rename over a folder to fail")
+        } catch let ResticError.stagedFileMoveFailed(path, reason) {
+            #expect(path == target.path)
+            #expect(!reason.isEmpty)
+        }
+        #expect(try String(contentsOf: target.appendingPathComponent("inside.txt"), encoding: .utf8) == "kept")
+        #expect(try String(contentsOf: staging, encoding: .utf8) == "new", "the staged file did not survive for the caller's cleanup")
+    }
+
+    @Test("a replacing commit renames the staged file over the target file")
+    func replaceCommitReplacesTheTarget() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("a.txt")
+        try Data("mine".utf8).write(to: target)
+        let staging = directory.appendingPathComponent(".a.txt.1.partial")
+        try Data("new".utf8).write(to: staging)
+
+        let landed = try ResticService.commitStagedFile(staging, to: target, replacingExisting: true)
+
+        #expect(landed == .committed)
+        #expect(try String(contentsOf: target, encoding: .utf8) == "new")
     }
 }
 

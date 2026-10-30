@@ -321,14 +321,14 @@ enum ResticMessageDecoder {
                 return .unknown(type: probe.messageType)
             }
         } catch {
-            return .malformed(type: probe.messageType, reason: Self.briefDecodingFailure(error))
+            return .malformed(type: probe.messageType, reason: Self.briefFailure(error))
         }
     }
 
-    /// One short line about why a known `message_type` failed to decode —
-    /// enough to name the field and the problem, never the whole dumped
-    /// context, so a run record line stays readable.
-    private static func briefDecodingFailure(_ error: Error) -> String {
+    /// One short line about why decoding failed — enough to name the field
+    /// and the problem, never the whole dumped context, so a run record line
+    /// or an error detail stays readable.
+    static func briefFailure(_ error: Error) -> String {
         guard let decoding = error as? DecodingError else {
             return String(describing: type(of: error))
         }

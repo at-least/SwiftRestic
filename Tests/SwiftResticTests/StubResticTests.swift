@@ -335,6 +335,26 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
+            difftruncated)
+                # A diff one line past the Compare sheet's cap
+                # (SnapshotDiff.changeLimit): the sheet must say it stopped
+                # short and still read the statistics, not render a cut-off
+                # answer as the whole. One awk process prints the changes.
+                trace "difftruncated-arm"
+                case " $* " in
+                    *" snapshots "*)
+                        echo "[]"
+                        ;;
+                    *" diff "*)
+                        awk 'BEGIN{for(i=0;i<20001;i++) printf "{\\"message_type\\":\\"change\\",\\"path\\":\\"/f%d\\",\\"modifier\\":\\"+\\"}\\n", i}'
+                        echo '{"message_type":"statistics","changed_files":20001,"added":{"files":20001,"dirs":0,"bytes":20001000},"removed":{"files":0,"dirs":0,"bytes":0}}'
+                        ;;
+                    *)
+                        echo "{}"
+                        ;;
+                esac
+                exit 0
+                ;;
             lsmalformed)
                 # A full `ls` that exits cleanly but whose third node line does
                 # not decode (a path that is not a string, as a restic newer
@@ -836,6 +856,30 @@ struct StubResticTests {
         }
     }
 
+    @Test("the console's answer joins both streams and names the exit code")
+    func runRawComposesBothStreamsAndTheExitCode() async throws {
+        // An unknown code's bare bracket; stderr under whatever came on
+        // stdout — here nothing, so the fatal line leads.
+        let failed = try makeFixture(mode: "plainfail")
+        defer { cleanUp(failed.root) }
+        let answer = try await failed.service.runRaw(failed.context, arguments: ["list"])
+        #expect(answer.hasPrefix("Fatal: unable to open config file"))
+        #expect(answer.hasSuffix("\n\n[exit 17]"))
+
+        // A known code's description rides inside the bracket.
+        let warned = try makeFixture(mode: "warn")
+        defer { cleanUp(warned.root) }
+        let warnedAnswer = try await warned.service.runRaw(warned.context, arguments: ["backup"])
+        #expect(warnedAnswer.hasSuffix("\n\n[exit 3: Finished, but some data could not be read]"))
+
+        // Both streams, stdout's summary first: the join the console shows.
+        let both = try makeFixture(mode: "tccblocked")
+        defer { cleanUp(both.root) }
+        let joined = try await both.service.runRaw(both.context, arguments: ["backup"])
+        #expect(joined.hasPrefix(#"{"message_type":"summary""#))
+        #expect(joined.contains("open /Users/stub/locked.txt: permission denied"))
+    }
+
     @Test("a backup with undecodable messages is a warning, never a clean run")
     func malformedMessagesSurfaceInTheOutcome() async throws {
         let fixture = try makeFixture(mode: "malformed")
@@ -1034,6 +1078,32 @@ struct StubResticTests {
         #expect(names == ["a.txt"], "left behind: \(names)")
     }
 
+    @Test("a single file's restore refuses a folder at its landing, before restic runs")
+    func singleFileRestoreRefusesAFolderAtTheLanding() async throws {
+        let fixture = try makeFixture(mode: "restorefile")
+        defer { cleanUp(fixture.root) }
+        let destination = fixture.root.appendingPathComponent("restored")
+        let landing = destination.appendingPathComponent("a.txt")
+        try FileManager.default.createDirectory(at: landing, withIntermediateDirectories: true)
+        try "mine".write(to: landing.appendingPathComponent("inside.txt"), atomically: true, encoding: .utf8)
+        let node = SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt", size: 3)
+
+        await #expect(throws: ResticError.folderInTheWay(path: landing.path)) {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: "latest", node: node,
+                destinationDirectory: destination, overwrite: .replaceExisting
+            )
+        }
+
+        // restic never ran for the refused attempt, and the standing folder's
+        // contents and the destination are as they were.
+        let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? ""
+        #expect(!trace.contains("args=[restore"), "trace: \(trace)")
+        #expect(try String(contentsOf: landing.appendingPathComponent("inside.txt"), encoding: .utf8) == "mine")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: destination.path).filter { $0.hasSuffix(".partial") }
+        #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
     @Test("a binary that cannot be spawned reports a launch failure")
     func missingBinarySurfacesLaunchError() async throws {
         let fixture = try makeFixture(mode: "hang")
@@ -1052,6 +1122,31 @@ struct StubResticTests {
                 Issue.record("expected a launch failure, got \(error)")
                 return
             }
+        }
+    }
+
+    @Test("a snapshots, stats or find answer that does not decode is malformedOutput, never a raw DecodingError")
+    func undecodableAnswersSurfaceAsMalformedOutput() async throws {
+        let fixture = try makeFixture(mode: "malformed")
+        defer { cleanUp(fixture.root) }
+
+        await #expect {
+            _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: 5)
+        } throws: { error in
+            guard case let ResticError.malformedOutput(detail) = error else { return false }
+            return detail.hasPrefix("the snapshot list could not be read")
+        }
+        await #expect {
+            _ = try await fixture.service.stats(fixture.context, timeout: 5)
+        } throws: { error in
+            guard case let ResticError.malformedOutput(detail) = error else { return false }
+            return detail.hasPrefix("the size answer could not be read")
+        }
+        await #expect {
+            _ = try await fixture.service.find(fixture.context, patterns: ["/src"])
+        } throws: { error in
+            guard case let ResticError.malformedOutput(detail) = error else { return false }
+            return detail.hasPrefix("the find results could not be read")
         }
     }
 
@@ -1101,6 +1196,27 @@ struct StubResticTests {
         await #expect(throws: ResticError.malformedOutput(detail: "1 diff line did not decode")) {
             _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe")
         }
+    }
+
+    @Test("the index's diff with a line that did not decode fails, never a short stream the index would close runs from")
+    func walkDiffRefusesAGap() async throws {
+        let fixture = try makeFixture(mode: "diffmalformed")
+        defer { cleanUp(fixture.root) }
+        await #expect(throws: ResticError.malformedOutput(detail: "1 change line did not decode")) {
+            try await fixture.service.walkDiff(fixture.context, olderID: "feedface", newerID: "cafebabe") { _ in }
+        }
+    }
+
+    @Test("a diff past the Compare sheet's cap keeps the cap's changes, says it stopped short, and still reads the statistics")
+    func diffTruncatesAtTheChangeLimit() async throws {
+        let fixture = try makeFixture(mode: "difftruncated")
+        defer { cleanUp(fixture.root) }
+
+        let diff = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe")
+
+        #expect(diff.changes.count == SnapshotDiff.changeLimit)
+        #expect(diff.isTruncated)
+        #expect(diff.statistics?.changedFiles == 20_001)
     }
 
     @Test("the reads a click or a refresh runs take no repository lock")

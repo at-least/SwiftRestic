@@ -714,6 +714,53 @@ struct ResticIntegrationTests {
         #expect(snapshots.isEmpty, "the repository exists but is empty; a password failure would have thrown instead")
     }
 
+    @Test("a password change locks the old password out, opens with the new one, and leaves no password file behind")
+    func changePasswordRotatesTheKey() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        try await fixture.service.changePassword(fixture.context, newPassword: "rotated")
+
+        // The old password no longer opens the repository: restic's exit 12.
+        do {
+            _ = try await fixture.service.snapshots(fixture.context)
+            Issue.record("the old password still opened the repository")
+        } catch let ResticError.commandFailed(code, message) {
+            #expect(code == 12)
+            #expect(message.localizedCaseInsensitiveContains("password"))
+        }
+
+        // The rotated one does, on the empty repository it is.
+        var rotated = fixture.context
+        rotated.password = "rotated"
+        let snapshots = try await fixture.service.snapshots(rotated)
+        #expect(snapshots.isEmpty, "the repository exists but is empty; a password failure would have thrown instead")
+
+        // The folder that carried the new password to restic went with the
+        // command.
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path)
+            .filter { $0.hasPrefix("SwiftRestic-Key-") }
+        #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
+    @Test("unlock runs against the real repository, tolerating an unreadable lock file")
+    func unlockRunsOnARealRepository() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+
+        // What a crashed writer leaves: a file in locks/ no key opens. restic
+        // 0.19.1 tolerates it and leaves it alone (probed), so what is pinned
+        // here is the service's command itself running against this restic —
+        // not a removal.
+        let locks = fixture.root.appendingPathComponent("repo/locks")
+        try FileManager.default.createDirectory(at: locks, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: locks.appendingPathComponent(String(repeating: "0", count: 64)))
+
+        try await fixture.service.unlock(fixture.context)
+    }
+
     @Test("an unreadable file yields exit 3 with the file named, and the snapshot still lands")
     func partialBackup() async throws {
         let fixture = try makeFixture()
@@ -1010,6 +1057,10 @@ struct ResticIntegrationTests {
             try await restore([sub, file], folderThere, .replaceExisting)
         }
         #expect(try String(contentsOf: inside, encoding: .utf8) == "mine")
+        // Nothing but the standing folder is here: the refusal comes before
+        // any landing is created, so "sub" was never made.
+        let left = try FileManager.default.contentsOfDirectory(atPath: folderThere.path)
+        #expect(left.map { Array($0.unicodeScalars) } == [Array("a.txt".unicodeScalars)], "left behind: \(left)")
 
         // Under Keep the folder stays and the file counts as kept, as a
         // single file's restore keeps it.
