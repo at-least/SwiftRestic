@@ -523,6 +523,31 @@ struct FilesTreeTests {
         #expect(FilesSearchAnswer.note(isTruncated: true, isComplete: false)
             == "Not every match is shown — narrow the search to see the rest.")
     }
+
+    @Test("a hit's folder line is read from the folder holding the plan's root, deepest holder winning, by bytes")
+    func folderLines() {
+        let documents = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Documents", isDirectory: true)
+        // Computed, not written: tilde abbreviation is against this Mac's home.
+        let tilde = { (path: String) in (path as NSString).abbreviatingWithTildeInPath }
+
+        // Under the root's parent: the part that tells the hits apart.
+        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/reports/a.txt", under: [documents]) == "Documents/reports")
+        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/a.txt", under: [documents]) == "Documents")
+        // The root itself sits at its parent — no shorter line exists.
+        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents", under: [documents]) == tilde("/Users/me"))
+        // Outside every root: the tilde line.
+        #expect(FilesSearchAnswer.folderLine(for: "/Volumes/Elsewhere/x.txt", under: [documents]) == tilde("/Volumes/Elsewhere"))
+
+        // Two roots, one inside the other: the deepest holder wins, so the
+        // prefix they share cannot eat the line.
+        let work = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Documents/Work", isDirectory: true)
+        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/Work/oct/x.txt", under: [documents, work]) == "Work/oct")
+
+        // By bytes (`ResticPath`): an NFC root and an NFD hit are two
+        // spellings, never folded together.
+        let nfc = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Doc\u{e9}", isDirectory: true)
+        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Doce\u{301}/a.txt", under: [nfc]) == tilde("/Users/me/Doce\u{301}"))
+    }
 }
 
 /// What a test's tree asked to read ahead, one list per level.

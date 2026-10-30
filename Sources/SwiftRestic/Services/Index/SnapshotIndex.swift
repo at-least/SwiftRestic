@@ -111,6 +111,19 @@ extension Array where Element == IndexVersion {
         }
         return first
     }
+
+    /// The version a picked ID names, else the newest — the version panes'
+    /// "chosen", a pick of the newest being stored as none.
+    func chosen(_ id: String?) -> IndexVersion? {
+        id.flatMap { id in first { $0.id == id } } ?? first
+    }
+
+    /// The version below `version` in the list — the one it follows, the
+    /// changes' older side. Nil past the oldest.
+    func after(_ version: IndexVersion) -> IndexVersion? {
+        guard let index = firstIndex(where: { $0.id == version.id }), index + 1 < count else { return nil }
+        return self[index + 1]
+    }
 }
 
 extension Array where Element == ContentVersion {
@@ -126,6 +139,19 @@ extension Array where Element == ContentVersion {
             return kept
         }
         return first
+    }
+
+    /// The version a picked ID names, else the newest — `chosen(_:)` on a
+    /// folder's list, by a content version's own ID.
+    func chosen(_ id: String?) -> ContentVersion? {
+        id.flatMap { id in first { $0.id == id } } ?? first
+    }
+
+    /// The version below `version` in the list — the one it follows.
+    /// Nil past the oldest.
+    func after(_ version: ContentVersion) -> ContentVersion? {
+        guard let index = firstIndex(where: { $0.id == version.id }), index + 1 < count else { return nil }
+        return self[index + 1]
     }
 }
 

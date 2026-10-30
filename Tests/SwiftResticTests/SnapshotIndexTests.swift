@@ -569,6 +569,31 @@ struct SnapshotIndexTests {
         #expect([ContentVersion]().preferredVersion(previousID: nil, rememberedID: "b1") == nil)
     }
 
+    @Test("chosen falls back to the newest, after steps one down and stops at the oldest")
+    func chosenAndAfter() {
+        let versions = [version("new"), version("mid"), version("old")]
+        #expect(versions.chosen(nil)?.id == "new")
+        #expect(versions.chosen("ghost")?.id == "new")
+        #expect(versions.chosen("mid")?.id == "mid")
+        #expect([IndexVersion]().chosen(nil) == nil)
+        #expect(versions.after(version("mid"))?.id == "old")
+        #expect(versions.after(version("new"))?.id == "mid")
+        #expect(versions.after(version("old")) == nil)
+
+        // A file's contents, the same two steps by the version's own ID.
+        let contents = [
+            ContentVersion(snapshots: [version("b4"), version("b3")], since: .changed),
+            ContentVersion(snapshots: [version("b2")], since: .uncertain),
+            ContentVersion(snapshots: [version("b1")], since: nil),
+        ]
+        #expect(contents.chosen(nil)?.id == "b4")
+        #expect(contents.chosen("gone")?.id == "b4")
+        #expect(contents.chosen("b2")?.id == "b2")
+        #expect([ContentVersion]().chosen("b1") == nil)
+        #expect(contents.after(contents[0])?.id == "b2")
+        #expect(contents.after(contents[2]) == nil)
+    }
+
     // MARK: - Search
 
     @Test("search finds paths by basename, case-insensitively, prefix-wise")

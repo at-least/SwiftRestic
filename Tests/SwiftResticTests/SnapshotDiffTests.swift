@@ -37,6 +37,18 @@ struct SnapshotDiffTests {
         #expect(ResticDiffChange(path: "/src/gone/", modifier: "-").holder(newer: newer, older: older) == older)
     }
 
+    @Test("a change row's glyph: the category's sign, a modified one's strongest fact")
+    func changeGlyph() {
+        // U+2212 minus for a removal, not a hyphen.
+        let expectations: [(modifier: String, glyph: String)] = [
+            ("+", "+"), ("-", "\u{2212}"), ("M", "M"), ("T", "T"), ("?", "?"),
+            ("MU", "M"), ("TU", "T"), ("U", "U"),
+        ]
+        for (modifier, glyph) in expectations {
+            #expect(ResticDiffChange(path: "/a", modifier: modifier).glyph == glyph, "modifier \(modifier)")
+        }
+    }
+
     @Test("counts by category and remembers the order the IDs were passed in")
     func diffCounts() throws {
         var diff = SnapshotDiff(olderID: "old", newerID: "new")

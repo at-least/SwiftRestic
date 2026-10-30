@@ -79,7 +79,7 @@ struct FilesPaneView: View {
 
     /// The chain's newest backup, from the repository's listing.
     private var chainNewest: Snapshot? {
-        model.snapshots(for: node.repositoryID).first { SnapshotIndex.chainKey(for: $0) == node.chainKey }
+        model.newestSnapshot(inChain: node.chainKey, repositoryID: node.repositoryID)
     }
 
     /// Why the chain's newest backup lacks the item, when that backup's own

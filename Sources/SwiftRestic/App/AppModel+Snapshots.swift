@@ -244,6 +244,13 @@ extension AppModel {
         return snapshots[repositoryID]?.first { $0.tags.contains(tag) }
     }
 
+    /// The listing's newest backup of one chain (`SnapshotIndex.chainKey`):
+    /// the Files views' "the chain's newest backup", the listing's first of
+    /// the chain — the listing is newest first.
+    func newestSnapshot(inChain chainKey: String, repositoryID: UUID) -> Snapshot? {
+        snapshots(for: repositoryID).first { SnapshotIndex.chainKey(for: $0) == chainKey }
+    }
+
     /// `path` as a node of its kind in a backup the index has read — no
     /// restic process; nil when the index has not read that backup, or it
     /// does not hold the path. Name, path and kind only: a restore routes by

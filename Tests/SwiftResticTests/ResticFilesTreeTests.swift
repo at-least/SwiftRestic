@@ -309,4 +309,72 @@ struct ResticFilesTreeTests {
         #expect(try await names("C.*") == ["c.txt"])
         await model.shutdown()
     }
+
+    /// The Files tab's search cap, over the index the app builds: a full
+    /// page of hits is the whole answer, one hit past the cap says it was
+    /// cut — the model's probe of asking one hit past the limit. The
+    /// ceiling itself is pinned store-side (`SnapshotIndexScaleTests.search`).
+    @MainActor
+    @Test("a Files-tab search's full page is not called cut short; one hit past the cap is")
+    func searchTruncationAtTheCap() async throws {
+        try ResticAvailability.binary()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticSearchCap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        let password = "search-cap-test"
+        _ = try await ResticAvailability.service().initializeRepository(RepositoryContext(repository: repository, password: password))
+
+        // Two plans of one repository: one a full page of notes, one a page
+        // and one more. Finder files kept out, so the counts are the writes.
+        func plan(folder named: String, files: Int) throws -> BackupPlan {
+            let folder = root.appendingPathComponent(named)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for index in 1 ... files {
+                try "x".write(to: folder.appendingPathComponent(String(format: "note%03d", index)), atomically: true, encoding: .utf8)
+            }
+            var plan = BackupPlan()
+            plan.repositoryID = repository.id
+            plan.path = folder.path
+            plan.skipNothing()
+            plan.skipsFinderFiles = true
+            plan.schedule.frequency = .manual
+            return plan
+        }
+        let full = try plan(folder: "Full", files: AppModel.indexSearchLimit)
+        let over = try plan(folder: "Over", files: AppModel.indexSearchLimit + 1)
+
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        configuration.plans = [full, over]
+        configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
+        let store = ConfigStore(directory: root.appendingPathComponent("config"))
+        try await store.save(configuration)
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        await model.bootstrap()
+        await model.tasks.drain()
+
+        for plan in [full, over] {
+            model.runBackup(planID: plan.id)
+            await model.waitForRun(planID: plan.id)
+            // The backup's closing refresh lands through the background lane
+            // and the backfill with it: the suite's own wait, by deadline.
+            let deadline = Date.now.addingTimeInterval(60)
+            while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            try #require(await model.indexIsComplete(repositoryID: repository.id), "the index never read \(plan.path)'s backup")
+            let found = try await model.searchIndex(
+                pattern: "note", inChain: ResticService.planTag(plan.id), repositoryID: repository.id
+            )
+            #expect(found.hits.count == AppModel.indexSearchLimit, "\(plan.path) returned \(found.hits.count) hits")
+            #expect(found.isTruncated == (plan.id == over.id), "\(plan.path) read as truncated \(found.isTruncated)")
+        }
+        await model.shutdown()
+    }
 }

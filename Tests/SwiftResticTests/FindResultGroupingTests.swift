@@ -55,4 +55,55 @@ struct FindResultGroupingTests {
         #expect(rows.map(\.snapshotID) == ["d3"])
         #expect(rows.map(\.count) == [3], "the Documents plan's three, not all five")
     }
+
+    @Test("the index engine's rows are newest first by their newest version, ties keeping the search's order")
+    func indexRowsOrder() {
+        let old = IndexVersion(id: "old", time: Date(timeIntervalSince1970: 1_000))
+        let new = IndexVersion(id: "new", time: Date(timeIntervalSince1970: 2_000))
+        let hits = [SearchHit(path: "/d/a.txt", isDirectory: false), SearchHit(path: "/d/b.txt", isDirectory: false)]
+        let built = FindResultGrouping.indexRows(
+            hits: hits,
+            summaries: [
+                PathKey("/d/a.txt"): VersionSummary(count: 2, newest: old),
+                PathKey("/d/b.txt"): VersionSummary(count: 5, newest: new),
+            ]
+        )
+        #expect(built.rows.map(\.snapshotID) == ["new", "old"])
+        #expect(built.dropped == 0)
+
+        // Equal times: the search's own order stands — name, then path —
+        // so equal times never shuffle between searches.
+        let tied = FindResultGrouping.indexRows(
+            hits: hits.reversed(),
+            summaries: [
+                PathKey("/d/a.txt"): VersionSummary(count: 1, newest: new),
+                PathKey("/d/b.txt"): VersionSummary(count: 1, newest: new),
+            ]
+        )
+        #expect(tied.rows.map(\.match.path) == ["/d/b.txt", "/d/a.txt"])
+    }
+
+    @Test("the index engine's rows carry the hit and the summary's facts; a hit without its summary is dropped, not a row")
+    func indexRowsFacts() {
+        let newest = IndexVersion(id: "s9", time: Date(timeIntervalSince1970: 3_000))
+        let folder = SearchHit(path: "/d/Sub", isDirectory: true)
+        let file = SearchHit(path: "/d/a.txt", isDirectory: false)
+        let built = FindResultGrouping.indexRows(
+            hits: [folder, file, SearchHit(path: "/d/gone.txt", isDirectory: false)],
+            summaries: [
+                PathKey("/d/Sub"): VersionSummary(count: 3, newest: newest),
+                PathKey("/d/a.txt"): VersionSummary(count: 7, newest: newest),
+            ]
+        )
+        #expect(built.dropped == 1, "a hit without its summary reads as a truncated list, not silence")
+        #expect(built.rows.count == 2)
+        let byPath = Dictionary(uniqueKeysWithValues: built.rows.map { ($0.match.path, $0) })
+        #expect(byPath["/d/Sub"]?.match.type == .dir)
+        #expect(byPath["/d/a.txt"]?.match.type == .file)
+        #expect(byPath["/d/Sub"]?.count == 3)
+        #expect(byPath["/d/a.txt"]?.count == 7)
+        #expect(built.rows.allSatisfy { $0.snapshotID == "s9" && $0.snapshotTime == newest.time })
+        #expect(byPath["/d/a.txt"]?.hit == file)
+        #expect(byPath["/d/Sub"]?.match.size == nil && byPath["/d/Sub"]?.match.mtime == nil)
+    }
 }

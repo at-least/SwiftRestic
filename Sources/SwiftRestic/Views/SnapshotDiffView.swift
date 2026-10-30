@@ -335,7 +335,7 @@ struct SnapshotDiffView: View {
                     let notRead = change.category == .removed ? unread.reason(for: change.path) : nil
                     let explanation = notRead.map { "Not read by this backup (\($0)) — it may still be on this Mac" } ?? change.explanation
                     HStack(spacing: 8) {
-                        Text(notRead == nil ? glyph(for: change) : "!")
+                        Text(notRead == nil ? change.glyph : "!")
                             .font(.system(.body, design: .monospaced).weight(.semibold))
                             .foregroundStyle(notRead == nil ? color(for: change.category) : Theme.warning)
                             .frame(width: 22, alignment: .center)
@@ -511,15 +511,6 @@ struct SnapshotDiffView: View {
         return sharesDisplayedMinute
             ? "\(when) · \(Format.ago(snapshot.time, now: now)) · \(snapshot.shortID)"
             : "\(when) · \(snapshot.shortID)"
-    }
-
-    private func glyph(for change: ResticDiffChange) -> String {
-        switch change.category {
-        case .added: "+"
-        case .removed: "−"
-        case .modified: change.modifier.contains("T") ? "T" : (change.modifier.contains("?") ? "?" : "M")
-        case .metadataOnly: "U"
-        }
     }
 
     /// The glyph carries the meaning; colour only reinforces it.

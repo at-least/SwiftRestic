@@ -1349,6 +1349,39 @@ struct ListingGenerationTests {
     }
 }
 
+/// "The chain's newest backup" for the Files views, read from the listing
+/// they show: its first backup of the chain, the listing being newest first.
+@Suite("Newest backup of a chain")
+@MainActor
+struct NewestChainSnapshotTests {
+    @Test("the listing's first backup of the chain answers; another chain and another repository have none")
+    func newestOfTheChain() throws {
+        let model = AppModel(
+            store: ConfigStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SwiftResticNewestChain-\(UUID().uuidString)")
+            ),
+            secrets: .inMemory([:])
+        )
+        let repositoryID = UUID()
+        let plan = namedPlan("Docs", repositoryID: repositoryID)
+        let chain = ResticService.planTag(plan.id)
+        let older = try snapshotFixture(
+            id: String(repeating: "a", count: 64), time: "2026-09-25T18:00:00Z", paths: ["/src"],
+            includeShortID: false, hostname: "mac", tags: [chain]
+        )
+        let newer = try snapshotFixture(
+            id: String(repeating: "b", count: 64), time: "2026-09-26T18:00:00Z", paths: ["/src"],
+            includeShortID: false, hostname: "mac", tags: [chain]
+        )
+        model.snapshots[repositoryID] = [newer, older]
+
+        #expect(model.newestSnapshot(inChain: chain, repositoryID: repositoryID)?.id == newer.id)
+        #expect(model.newestSnapshot(inChain: "swiftrestic-plan-\(UUID().uuidString)", repositoryID: repositoryID) == nil)
+        #expect(model.newestSnapshot(inChain: chain, repositoryID: UUID()) == nil)
+    }
+}
+
 /// Saving an editor draft must never erase what the model wrote while the
 /// sheet was open: the run and maintenance stamps are the scheduler's and the
 /// dashboard's ground truth.
@@ -2606,6 +2639,51 @@ struct RestoreBannerTests {
         #expect(silent.title == "Restored “a.txt”")
         #expect(silent.message == "/Users/x/Restored/a.txt")
     }
+
+    @Test("the items banner counts what Keep kept, and each item's own folder when there is no shared one")
+    func itemsRestoreBannerWording() {
+        let landings = [
+            URL(fileURLWithPath: "/Users/x/Restored/Project"),
+            URL(fileURLWithPath: "/Users/x/Restored/notes.txt"),
+        ]
+        let directory = URL(fileURLWithPath: "/Users/x/Restored")
+
+        // Everything already there: restic restored nothing, Keep skipped it all.
+        let kept = AppModel.itemsRestoreBanner(
+            landings: landings, directory: directory,
+            summaries: [summary(restored: nil, skipped: 2), summary(restored: nil, skipped: 1)], policy: .keepExisting
+        )
+        #expect(kept.title == "Kept the existing items")
+        #expect(kept.message == "/Users/x/Restored\nThey were already there, so nothing was restored.")
+        #expect(kept.revealPaths == landings.map(\.path))
+        #expect(!kept.isError)
+
+        // One folder per item — the banner says so instead of naming one.
+        let ownFolders = AppModel.itemsRestoreBanner(
+            landings: landings, directory: nil,
+            summaries: [summary(restored: 1, skipped: nil), summary(restored: 1, skipped: nil)], policy: .keepExisting
+        )
+        #expect(ownFolders.title == "Restored 2 items")
+        #expect(ownFolders.message == "Each item went back to the folder it was backed up from.")
+        #expect(ownFolders.revealPaths == landings.map(\.path))
+
+        // A kept file beside the restored ones.
+        let mixed = AppModel.itemsRestoreBanner(
+            landings: landings, directory: directory,
+            summaries: [summary(restored: 1, skipped: 1), summary(restored: nil, skipped: nil)], policy: .keepExisting
+        )
+        #expect(mixed.title == "Restored 2 items")
+        #expect(mixed.message == "/Users/x/Restored\nKept 1 existing file as it was.")
+
+        // Replace: a skipped file already matched the backup, so nothing is said.
+        let replaced = AppModel.itemsRestoreBanner(
+            landings: [landings[0]], directory: directory,
+            summaries: [summary(restored: nil, skipped: 4)], policy: .replaceExisting
+        )
+        #expect(replaced.title == "Restored 1 item")
+        #expect(replaced.message == "/Users/x/Restored")
+        #expect(replaced.revealPaths == [landings[0].path])
+    }
 }
 
 /// The index answers for the last listing it took. A listing the model
@@ -2641,6 +2719,37 @@ struct IndexCompletenessTests {
         model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 2)
         await model.tasks.drain()
         #expect(await model.indexIsComplete(repositoryID: repositoryID))
+        await model.shutdown()
+    }
+
+    @Test("Rebuild Search Index: the thrown-away store takes the listing again and is complete once more")
+    func rebuildIndexLandsTheListingAgain() async {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticRebuild-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory([:]))
+        // Configured, as the hatch's own path checks: a reconcile of a
+        // repository no longer configured is not counted as taken.
+        let repository = namedRepository("NAS")
+        model.configuration.repositories = [repository]
+        let repositoryID = repository.id
+
+        // The wiring the rebuild rides on: the listing lands, its generation
+        // is taken, the index is complete.
+        model.snapshotsGeneration[repositoryID] = 5
+        model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 5)
+        await model.tasks.drain()
+        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+
+        // The state the hatch exists for: the store thrown away, nothing
+        // applied since — no listing, so not complete.
+        await model.indexCoordinator.resetRepository(repositoryID: repositoryID)
+        #expect(!(await model.indexIsComplete(repositoryID: repositoryID)))
+
+        model.rebuildIndex(repositoryID: repositoryID)
+        await model.tasks.drain()
+        #expect(await model.indexIsComplete(repositoryID: repositoryID), "the rebuilt index never took the listing again")
+        #expect(model.indexTakenGeneration[repositoryID] == 5)
         await model.shutdown()
     }
 }

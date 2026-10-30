@@ -38,7 +38,7 @@ struct FileVersionsView: View {
     @FocusState private var listIsFocused: Bool
 
     private var chosen: ContentVersion? {
-        versions.first { $0.id == chosenID } ?? versions.first
+        versions.chosen(chosenID)
     }
 
     var body: some View {
@@ -103,7 +103,7 @@ struct FileVersionsView: View {
         FileVersionRow(
             version: version,
             detail: detail(of: version),
-            olderDetail: older(than: version).flatMap(detail(of:)),
+            olderDetail: versions.after(version).flatMap(detail(of:)),
             isReadingDetail: isReadingDetails
         )
         // The list's own drag, no gesture on the row (the Restore pane's
@@ -227,14 +227,6 @@ struct FileVersionsView: View {
     /// answered.
     private func detail(of version: ContentVersion) -> SnapshotNode? {
         version.snapshots.first.flatMap { details[$0.id] }
-    }
-
-    /// The version below `version` in the list — the one it follows.
-    private func older(than version: ContentVersion) -> ContentVersion? {
-        guard let index = versions.firstIndex(where: { $0.id == version.id }), index + 1 < versions.count else {
-            return nil
-        }
-        return versions[index + 1]
     }
 
     /// The file as the chosen version's newest backup holds it: the find's

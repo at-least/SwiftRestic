@@ -585,4 +585,22 @@ struct FilesSearchAnswer: Equatable {
         if isTruncated { return searchTruncated }
         return isComplete ? nil : searchStillReading
     }
+
+    /// A hit's second line: the folder holding it, read from the folder
+    /// that holds the plan's root down — /Users/me/Documents/reports under
+    /// a plan of /Users/me/Documents reads "Documents/reports" — so the
+    /// prefix every hit shares cannot eat the part that tells them apart.
+    /// A hit outside every root keeps the tilde-abbreviated path.
+    static func folderLine(for path: String, under roots: [FileNode]) -> String {
+        let parent = ResticPath.parent(of: path)
+        let base = roots
+            .filter { ResticPath.holds($0.path, parent) }
+            .map { ResticPath.parent(of: $0.path) }
+            .max { $0.utf8.count < $1.utf8.count }
+        guard let base, parent != base else {
+            return (parent as NSString).abbreviatingWithTildeInPath
+        }
+        // `holds` passed and `parent` is not `base`: it is inside it.
+        return ResticPath.relative(parent, below: base)!
+    }
 }

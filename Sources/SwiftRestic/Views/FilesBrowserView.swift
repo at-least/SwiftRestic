@@ -79,8 +79,7 @@ struct FilesBrowserView: View {
     /// What the chain's newest backup's own run could not read: an item
     /// that backup lacks for that reason says so.
     private var newestUnread: UnreadItems {
-        model.snapshots(for: roots.repositoryID)
-            .first { SnapshotIndex.chainKey(for: $0) == roots.chainKey }
+        model.newestSnapshot(inChain: roots.chainKey, repositoryID: roots.repositoryID)
             .map { model.unreadItems(inBackup: $0.id) } ?? UnreadItems()
     }
 
@@ -318,7 +317,7 @@ struct FilesBrowserView: View {
                 VStack(spacing: 0) {
                     List(selection: selection) {
                         ForEach(entries) { entry in
-                            FilesSearchRow(entry: entry, folder: folderLine(for: entry.node.path))
+                            FilesSearchRow(entry: entry, folder: FilesSearchAnswer.folderLine(for: entry.node.path, under: rootEntries))
                                 .tag(entry.node)
                         }
                     }
@@ -393,24 +392,6 @@ struct FilesBrowserView: View {
                 return
             }
         }
-    }
-
-    /// A hit's second line: the folder holding it, read from the folder
-    /// that holds the plan's root down — /Users/me/Documents/reports under
-    /// a plan of /Users/me/Documents reads "Documents/reports" — so the
-    /// prefix every hit shares cannot eat the part that tells them apart.
-    /// A hit outside every root keeps the tilde-abbreviated path.
-    private func folderLine(for path: String) -> String {
-        let parent = ResticPath.parent(of: path)
-        let base = rootEntries
-            .filter { ResticPath.holds($0.path, parent) }
-            .map { ResticPath.parent(of: $0.path) }
-            .max { $0.utf8.count < $1.utf8.count }
-        guard let base, parent != base else {
-            return (parent as NSString).abbreviatingWithTildeInPath
-        }
-        // `holds` passed and `parent` is not `base`: it is inside it.
-        return ResticPath.relative(parent, below: base)!
     }
 
     @ViewBuilder
@@ -646,7 +627,7 @@ private struct FilesSearchKey: Equatable {
 struct FilesSearchRow: View {
     let entry: FilesTree.Entry
     /// The folder holding the hit, as the caption line shows it
-    /// (`FilesBrowserView.folderLine`).
+    /// (`FilesSearchAnswer.folderLine`).
     let folder: String
 
     var body: some View {

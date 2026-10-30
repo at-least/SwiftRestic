@@ -44,9 +44,9 @@ struct FindFilesView: View {
     @State private var searchTask: Task<Void, Never>?
     private var isSearching: Bool { searchTask != nil }
     /// True when the index search stopped early — at the hit cap, or (not
-    /// expected, see `searchViaIndex`) a hit that came without its summary.
-    /// The footer says so; a truncated list must not pass for the whole
-    /// answer.
+    /// expected, see `FindResultGrouping.indexRows`) a hit that came
+    /// without its summary. The footer says so; a truncated list must not
+    /// pass for the whole answer.
     @State private var resultsTruncated = false
     /// The toolbar field, focused on arrival — the page exists to answer one
     /// question — and by ⇧⌘F.
@@ -440,12 +440,20 @@ struct FindFilesView: View {
             indexComplete = ready
             do {
                 if ready {
-                    let built = try await searchViaIndex(
+                    // The index engine: one read of the index. A thrown index
+                    // failure propagates to the page's own error message.
+                    let found = try await model.searchIndexWithSummaries(
                         pattern: searchedPattern, repositoryID: searchedRepository
                     )
+                    let built = FindResultGrouping.indexRows(hits: found.hits, summaries: found.summaries)
                     guard !Task.isCancelled else { return }
-                    rows = built.rows
-                    resultsTruncated = built.truncated
+                    rows = built.rows.map {
+                        Row(
+                            match: $0.match, snapshotID: $0.snapshotID, snapshotTime: $0.snapshotTime,
+                            versionsCount: $0.count, hit: $0.hit
+                        )
+                    }
+                    resultsTruncated = built.dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
                 } else {
                     let found = try await model.findFiles(
                         repositoryID: searchedRepository,
@@ -489,56 +497,6 @@ struct FindFilesView: View {
             self.searchedLatestOnly = !ready && searchedLatestOnly
             searchTask = nil
         }
-    }
-
-    /// The index engine: FTS over basenames, each hit read with its summary
-    /// — the path's newest version and version count, not its whole list —
-    /// in one read of the index, so every row names a restorable snapshot.
-    /// Sorted newest-first by that snapshot, matching the restic engine's
-    /// row order.
-    /// Whether the list was cut comes back beside the rows, for the caller
-    /// to set past its cancellation check.
-    private func searchViaIndex(pattern: String, repositoryID: UUID) async throws -> (rows: [Row], truncated: Bool) {
-        // A thrown index failure propagates to the page's own error message.
-        let found = try await model.searchIndexWithSummaries(pattern: pattern, repositoryID: repositoryID)
-        var rows: [Row] = []
-        var dropped = 0
-        for hit in found.hits {
-            guard let summary = found.summaries[PathKey(hit.path)] else {
-                // Not expected: the search keeps only paths an indexed
-                // backup holds, and the summary comes from the same read, so
-                // every hit has one. Counted all the same, so a row that
-                // went missing reads as a truncated list rather than
-                // vanishing silently.
-                dropped += 1
-                continue
-            }
-            let newest = summary.newest
-            let match = FindMatch(
-                path: hit.path,
-                type: hit.isDirectory ? .dir : .file,
-                size: nil,
-                mtime: nil
-            )
-            rows.append(Row(
-                match: match,
-                snapshotID: newest.id,
-                snapshotTime: newest.time,
-                versionsCount: summary.count,
-                hit: hit
-            ))
-        }
-        let truncated = dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
-        // Rows of one snapshot keep the search's order: name, then path,
-        // bytewise — so equal times never shuffle between searches.
-        let sorted = rows.enumerated()
-            .sorted { a, b in
-                let timeA = a.element.snapshotTime ?? .distantPast
-                let timeB = b.element.snapshotTime ?? .distantPast
-                return timeA != timeB ? timeA > timeB : a.offset < b.offset
-            }
-            .map(\.element)
-        return (sorted, truncated)
     }
 
     /// The listing's times for the rows that have none, once it lands: a

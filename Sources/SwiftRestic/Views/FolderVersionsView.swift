@@ -36,14 +36,13 @@ struct FolderVersionsView: View {
     @FocusState private var listIsFocused: Bool
 
     private var chosen: IndexVersion? {
-        versions.first { $0.id == chosenID } ?? versions.first
+        versions.chosen(chosenID)
     }
 
     /// The previous backup that holds the folder — what its
     /// changes count from.
     private var previous: IndexVersion? {
-        guard let chosen, let index = versions.firstIndex(of: chosen), index + 1 < versions.count else { return nil }
-        return versions[index + 1]
+        chosen.flatMap { versions.after($0) }
     }
 
     var body: some View {
@@ -315,7 +314,8 @@ struct FolderVersionsView: View {
             guard !Task.isCancelled else { return }
             nodes = loaded
             loadError = nil
-            selection = selection.filter { id in loaded.contains { $0.id == id } }
+            let listed = Set(loaded.map(\.id))
+            selection = selection.filter { listed.contains($0) }
         } catch {
             guard !Task.isCancelled else { return }
             nodes = []

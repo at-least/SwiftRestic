@@ -225,6 +225,18 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
         let phrase = parts.joined(separator: ", ")
         return phrase.prefix(1).uppercased() + phrase.dropFirst()
     }
+
+    /// The diff row's one-letter sign. A removal's is U+2212, not a hyphen:
+    /// beside the monospaced path the two are easy to confuse by eye, and
+    /// "fixing" it to "-" would be the change.
+    var glyph: String {
+        switch category {
+        case .added: "+"
+        case .removed: "−"
+        case .modified: modifier.contains("T") ? "T" : (modifier.contains("?") ? "?" : "M")
+        case .metadataOnly: "U"
+        }
+    }
 }
 
 /// The closing `message_type: statistics` line of `restic diff --json`.
