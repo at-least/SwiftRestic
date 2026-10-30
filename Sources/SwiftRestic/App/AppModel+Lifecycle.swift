@@ -16,12 +16,18 @@ extension AppModel {
     /// phrasing stay testable at the model level.
     var quitInterruptions: [String] {
         var reasons: [String] = []
-        // Apply Retention Now runs in a plan's slot too, and is not a backup.
+        // Apply Retention Now and Remove from Earlier Backups run in a plan's
+        // slot too, and are not backups.
         let backups = activity.values.filter(\.isBackup).count
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
         }
-        if activity.values.contains(where: { !$0.isBackup }) { reasons.append("Retention is being applied.") }
+        if activity.values.contains(where: { !$0.isBackup && $0.phase != .removingFromEarlierBackups }) {
+            reasons.append("Retention is being applied.")
+        }
+        if activity.values.contains(where: { $0.phase == .removingFromEarlierBackups }) {
+            reasons.append("Items are being removed from earlier backups.")
+        }
         if !maintenance.isEmpty { reasons.append("Repository maintenance is running.") }
         if isRestoring { reasons.append("A restore is running.") }
         if console.isRunning { reasons.append("A console command is running.") }

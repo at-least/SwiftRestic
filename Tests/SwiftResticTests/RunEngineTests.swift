@@ -1068,7 +1068,7 @@ struct RetentionRunEngineTests {
         func noteAuthFailure(_ error: Error, repositoryID: UUID) {
             log.append("auth-noted")
         }
-        func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+        func deliverQuietly(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
             deliveredTranscripts.append(transcript)

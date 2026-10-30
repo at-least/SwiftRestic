@@ -373,8 +373,15 @@ the generator after editing it; the PNGs are checked in.
   `vendor` beside `go.mod`, `target` beside `pom.xml`; the list is
   `RebuildableFolderRule.all`, adapted from asimov's as tmexclude ships
   it): each with *Exclude*, which adds its exact path to *Also skip*, and
-  *Keep*, which keeps backing it up and never offers it again; *Exclude
-  All* takes every one. It reads the index, never the disk. While the plan's newest failed or completed-with-errors
+  *Keep*, which keeps backing it up and stops offering it — the plan
+  editor's Excluding tab lists those under *Kept folders*, each with
+  *Suggest Again*; *Exclude All* takes every one. A folder inside one
+  offered, skipped or excluded is left to it; inside a kept one it is
+  offered on its own. It reads the index, never the disk. A rewritten
+  backup keeps its run: each listing records a snapshot whose `original`
+  names a run's snapshot on that run (`rewrittenSnapshotIDs`), so its
+  incomplete mark and drawer survive — restic's `original` names only the
+  snapshot just before, so the chain is followed listing by listing. While the plan's newest failed or completed-with-errors
   backup stands — no backup succeeded since, a backup skipped whole or
   stopped not ending it — a problem card sits under *Backups*: the outcome,
   how many backups in a row ended that way for the same cause ("3 times in

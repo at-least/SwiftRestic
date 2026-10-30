@@ -411,7 +411,7 @@ struct SnapshotIndexFilesTests {
 
     // MARK: - Folders beside their manifests
 
-    @Test("foldersBesideManifests finds a named folder beside its manifest in the chain's newest backup alone")
+    @Test("foldersBesideManifests finds every named folder beside its manifest in the chain's newest backup alone")
     func foldersBesideManifests() async throws {
         let checked = try CheckedIndex()
         let index = checked.index
@@ -423,7 +423,7 @@ struct SnapshotIndexFilesTests {
             "/data/lib": true, "/data/lib/build": true,
             // A second manifest of the same folder name.
             "/data/py": true, "/data/py/build": true, "/data/py/setup.py": false,
-            // Inside a found folder: the outer one answers for it.
+            // Inside a found folder: found too (the plan's offer decides).
             "/data/py/build/sub": true, "/data/py/build/sub/build": true, "/data/py/build/sub/build.gradle": false,
             // A file named like the folder, and a folder named like the manifest.
             "/data/x": true, "/data/x/build": false, "/data/x/build.gradle": false,
@@ -450,6 +450,7 @@ struct SnapshotIndexFilesTests {
         #expect(found.map { "\($0.path) \($0.manifest)" } == [
             "/data/app/build build.gradle",
             "/data/py/build setup.py",
+            "/data/py/build/sub/build build.gradle",
             "/data/web/bower_components bower.json",
         ])
         #expect(try await index.foldersBesideManifests(manifests, inChain: planB).map(\.path) == ["/data/b/build"])

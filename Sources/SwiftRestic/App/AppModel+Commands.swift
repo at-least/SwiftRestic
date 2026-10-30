@@ -12,9 +12,8 @@ struct PlanCommandState: Equatable {
     /// repository is the reason.
     var backUpDisabledReason: String?
     var canStop = false
-    /// "Stop Backup", or "Stop Applying Retention" while that phase runs —
-    /// a backup's own retention step included; the tray's row words itself
-    /// by the same rule (`MenuBarStatus.stopsRetention`).
+    /// "Stop Backup", or the words for the work a plan's run is in that is
+    /// no backup (`MenuBarStatus.stopTitle(for:)`).
     var stopTitle = "Stop Backup"
     var canEdit = false
     /// "Pause Schedule" or "Resume Schedule", keyed on
@@ -90,9 +89,7 @@ extension AppModel {
             state.backUpDisabledReason = row.disabledReason
             state.canStop = row.action == .stop
         }
-        if MenuBarStatus.stopsRetention(activity[id]?.phase) {
-            state.stopTitle = "Stop Applying Retention"
-        }
+        state.stopTitle = MenuBarStatus.stopTitle(for: activity[id]?.phase)
         state.canEdit = true
         state.canDelete = true
         state.isScheduleActive = plan.isScheduleActive(at: now)
@@ -195,9 +192,11 @@ extension AppModel {
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
-            let message = switch activity[id]?.isBackup {
-            case true?: "The running backup will be stopped and recorded as cancelled. \(landing)"
-            case false?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
+            let message = switch activity[id] {
+            case let run? where run.phase == .removingFromEarlierBackups:
+                "Removing items from earlier backups will be stopped and recorded as cancelled. \(landing)"
+            case let run? where run.isBackup: "The running backup will be stopped and recorded as cancelled. \(landing)"
+            case _?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
             case nil: "This Mac stops backing up “\(name)”. \(landing)"
             }
             return ConfirmationCopy(title: "Remove “\(name)”?", message: message)

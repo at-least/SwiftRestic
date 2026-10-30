@@ -1113,10 +1113,9 @@ final class SnapshotIndex: @unchecked Sendable {
     /// The folders the chain's newest indexed snapshot holds whose name is
     /// a key of `manifests` and beside which that snapshot holds a file
     /// named by one of the key's manifests — `build` beside `build.gradle`.
-    /// A folder found inside another found one is left out: the outer one
-    /// answers for it. Each folder once, with the first of its manifests
-    /// present, ordered by path bytewise. An unknown chain, or one with
-    /// nothing indexed, answers `[]`.
+    /// Folders inside other found ones included. Each folder once, with the
+    /// first of its manifests present, ordered by path bytewise. An unknown
+    /// chain, or one with nothing indexed, answers `[]`.
     func foldersBesideManifests(_ manifests: [String: [String]], inChain chainKey: String) async throws -> [FolderBesideManifest] {
         try await pool.read { db in
             guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]),
@@ -1146,13 +1145,7 @@ final class SnapshotIndex: @unchecked Sendable {
                     found.append(FolderBesideManifest(path: try Self.path(db, of: node, memo: &paths), manifest: manifest))
                 }
             }
-            let sorted = found.sorted { Self.bytesLess($0.path, $1.path) }
-            // In byte order a folder comes before everything inside it.
-            var kept: [FolderBesideManifest] = []
-            for folder in sorted where !kept.contains(where: { folder.path.utf8.starts(with: ($0.path + "/").utf8) }) {
-                kept.append(folder)
-            }
-            return kept
+            return found.sorted { Self.bytesLess($0.path, $1.path) }
         }
     }
 

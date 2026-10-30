@@ -122,6 +122,9 @@ extension AppModel {
             // removed entry gets no state, no rows and no banner.
             guard configuration.repository(id: repositoryID) != nil else { return }
             snapshots[repositoryID] = listing
+            if let runs = RunRecord.adoptingRewrites(configuration.runs, listing: listing) {
+                configuration.runs = runs
+            }
             snapshotsGeneration[repositoryID] = generation
             repositoryStats[repositoryID] = stats
             snapshotListingOutcomes[repositoryID] = .loaded

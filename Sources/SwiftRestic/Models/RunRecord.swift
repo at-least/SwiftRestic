@@ -221,6 +221,13 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// backup keeps its incomplete mark and its drawer after the merge. Nil
     /// for a whole skip's record; no run writes it now.
     var continuedSnapshotIDs: [String]?
+    /// The IDs `restic rewrite` gave this run's snapshot since, oldest
+    /// first, each resolving to this record (`backupRunsBySnapshot`), so a
+    /// rewritten backup keeps its incomplete mark and its drawer. Filled as
+    /// listings arrive (`adoptingRewrites`): restic's `original` names only
+    /// the snapshot just before, so the chain is followed one listing at a
+    /// time.
+    var rewrittenSnapshotIDs: [String]?
 
     /// A failed or completed-with-errors backup's stretch: how many of its
     /// plan's backups in a row, this one the last, ended the same way for
@@ -287,6 +294,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
+        rewrittenSnapshotIDs = c.optional(.rewrittenSnapshotIDs)
         problemStretch = c.optional(.problemStretch)
     }
 
@@ -390,11 +398,36 @@ extension RunRecord {
         for run in runs where run.kind == .backup {
             guard let snapshotID = run.snapshotID, map[snapshotID] == nil else { continue }
             map[snapshotID] = run
-            for continued in run.continuedSnapshotIDs ?? [] where map[continued] == nil {
+            for continued in (run.continuedSnapshotIDs ?? []) + (run.rewrittenSnapshotIDs ?? []) where map[continued] == nil {
                 map[continued] = run
             }
         }
         return map
+    }
+
+    /// `runs` with each snapshot of `listing` that `restic rewrite` made from
+    /// a run's snapshot recorded on that run (`rewrittenSnapshotIDs`); nil
+    /// when the listing names no new one.
+    static func adoptingRewrites(_ runs: [RunRecord], listing: [Snapshot]) -> [RunRecord]? {
+        var map = backupRunsBySnapshot(runs)
+        var runs = runs
+        var changed = false
+        // Until nothing moves: a rewrite of a rewrite (one kept without
+        // --forget) can list ahead of the snapshot it names.
+        var adoptedThisPass = true
+        while adoptedThisPass {
+            adoptedThisPass = false
+            for snapshot in listing where map[snapshot.id] == nil {
+                guard let original = snapshot.original, let run = map[original],
+                      let index = runs.firstIndex(where: { $0.id == run.id })
+                else { continue }
+                runs[index].rewrittenSnapshotIDs = (runs[index].rewrittenSnapshotIDs ?? []) + [snapshot.id]
+                map[snapshot.id] = runs[index]
+                adoptedThisPass = true
+                changed = true
+            }
+        }
+        return changed ? runs : nil
     }
 }
 

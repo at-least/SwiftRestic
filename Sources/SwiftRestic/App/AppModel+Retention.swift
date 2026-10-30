@@ -32,37 +32,50 @@ extension AppModel {
     /// backup. Guarded like `runMaintenance`: a busy repository says so
     /// instead of queueing.
     func applyRetention(planID: UUID) {
+        guard let plan = plan(id: planID), plan.retention.isSafeToRun else { return }
+        startQuietPlanRun(planID: planID, phase: .applyingRetention) { plan, repository, sink in
+            await RetentionRunEngine.perform(plan: plan, repository: repository, sink: sink)
+        }
+    }
+
+    /// A plan's run that is no backup (`QuietPlanRunSink`), in the plan's
+    /// own slot: nothing while quitting or while the slot is taken, the
+    /// busy banner while the repository is, and the slot unwound however
+    /// `perform` ends.
+    func startQuietPlanRun(
+        planID: UUID,
+        phase: PlanActivity.Phase,
+        perform: @escaping @MainActor (BackupPlan, Repository, AppModel) async -> Void
+    ) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
-        guard let plan = plan(id: planID), plan.retention.isSafeToRun,
-              let repository = repository(id: plan.repositoryID)
-        else { return }
+        guard let plan = plan(id: planID), let repository = repository(id: plan.repositoryID) else { return }
         guard !busyRepositoryIDs.contains(repository.id) else {
             postBusyBanner(for: repository)
             return
         }
 
         installPlanActivity(planID: planID)
-        activity[planID]?.phase = .applyingRetention
+        activity[planID]?.phase = phase
         activity[planID]?.isBackup = false
         tasks.install(Task { [weak self] in
             if let self {
-                await RetentionRunEngine.perform(plan: plan, repository: repository, sink: self)
+                await perform(plan, repository, self)
             }
             self?.unwindPlanRun(planID)
         }, in: .plan(planID))
     }
 }
 
-// MARK: - The retention engine's view of the model
+// MARK: - The quiet runs' view of the model
 
-extension AppModel: RetentionRunEngine.Sink {
+extension AppModel: QuietPlanRunSink {
     /// The record, and nothing else: no banner, no local notification and
     /// no channel alert (see `RetentionRunEngine`). How it went is the plan
     /// page's — its Backups count, or its problem card and the sidebar's
     /// caption for a failure — and Activity's, where a banner over every
     /// page said it again.
-    func deliverRetention(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+    func deliverQuietly(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
@@ -100,31 +113,9 @@ extension AppModel {
     /// Removes `items` from every backup the plan made, in the plan's own
     /// slot, guarded as Apply Retention Now is.
     func removeFromEarlierBackups(planID: UUID, items: [ExcludedPath]) {
-        guard !isShuttingDown, !items.isEmpty else { return }
-        guard !tasks.isOccupied(.plan(planID)) else { return }
-        guard let plan = plan(id: planID), let repository = repository(id: plan.repositoryID) else { return }
-        guard !busyRepositoryIDs.contains(repository.id) else {
-            postBusyBanner(for: repository)
-            return
+        guard !items.isEmpty else { return }
+        startQuietPlanRun(planID: planID, phase: .removingFromEarlierBackups) { plan, repository, sink in
+            await RewriteRunEngine.perform(plan: plan, repository: repository, removing: items, sink: sink)
         }
-
-        installPlanActivity(planID: planID)
-        activity[planID]?.phase = .removingFromEarlierBackups
-        activity[planID]?.isBackup = false
-        tasks.install(Task { [weak self] in
-            if let self {
-                await RewriteRunEngine.perform(plan: plan, repository: repository, removing: items, sink: self)
-            }
-            self?.unwindPlanRun(planID)
-        }, in: .plan(planID))
-    }
-}
-
-extension AppModel: RewriteRunEngine.Sink {
-    /// The record alone, as for Apply Retention Now.
-    func deliverRewrite(record: RunRecord, transcript: RunTranscript.Contents) async {
-        var record = record
-        await seal(&record, transcript: transcript)
-        append(record: record)
     }
 }

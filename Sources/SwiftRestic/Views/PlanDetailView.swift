@@ -25,6 +25,7 @@ struct PlanDetailView: View {
         var rebuildable: [RebuildableFolder] = []
         var rebuildableFailure: String?
         var inEarlierBackups: [EarlierBackupItem] = []
+        var inEarlierBackupsFailure: String?
     }
 
     /// What the offers depend on: a new listing or index generation — a
@@ -63,9 +64,11 @@ struct PlanDetailView: View {
             } catch {
                 offers.rebuildableFailure = error.localizedDescription
             }
-            // A failed read offers nothing: the index's failure is the card's
-            // above and the Files tab's to say, and this line is only an offer.
-            offers.inEarlierBackups = (try? await model.itemsInEarlierBackups(planID: plan.id)) ?? []
+            do {
+                offers.inEarlierBackups = try await model.itemsInEarlierBackups(planID: plan.id)
+            } catch {
+                offers.inEarlierBackupsFailure = error.localizedDescription
+            }
             guard !Task.isCancelled else { return }
             indexOffers = offers
             if isComplete { return }
@@ -566,8 +569,13 @@ struct PlanDetailView: View {
                         }
                     }
                 }
-                if indexOffers.planID == plan.id, !indexOffers.inEarlierBackups.isEmpty {
-                    EarlierBackupsLine(plan: plan, items: indexOffers.inEarlierBackups)
+                if indexOffers.planID == plan.id {
+                    if let failure = indexOffers.inEarlierBackupsFailure {
+                        WarningLine(text: "SwiftRestic couldn’t check whether earlier backups still hold what this plan skips. \(Format.firstSentence(failure))")
+                            .help(failure)
+                    } else if !indexOffers.inEarlierBackups.isEmpty {
+                        EarlierBackupsLine(plan: plan, items: indexOffers.inEarlierBackups)
+                    }
                 }
             }
         } accessory: {

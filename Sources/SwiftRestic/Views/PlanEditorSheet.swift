@@ -533,6 +533,7 @@ struct PlanEditorSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            keptFoldersSection
         }
         .formStyle(.grouped)
         // The path's network share, read off the main actor: a stalled
@@ -548,6 +549,37 @@ struct PlanEditorSheet: View {
             guard !Task.isCancelled else { return }
             mountedShares = shares
             pathIsMissing = missing
+        }
+    }
+
+    /// The folders the plan page's Rebuildable Folders were told to keep,
+    /// each with Suggest Again. Read from the stored plan and changed on it
+    /// at once, not in the draft: the field is model-written
+    /// (`BackupPlan.merging(draft:)` keeps the stored list), so Cancel does
+    /// not undo it. Absent while the list is empty.
+    @ViewBuilder
+    private var keptFoldersSection: some View {
+        let kept = model.plan(id: draft.id)?.keptRebuildableFolders ?? []
+        if !kept.isEmpty {
+            Section {
+                ForEach(kept, id: \.self) { path in
+                    HStack {
+                        Text((path as NSString).abbreviatingWithTildeInPath)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                        Spacer(minLength: 8)
+                        Button("Suggest Again") { model.suggestAgain(rebuildableFolder: path, inPlan: draft.id) }
+                            .controlSize(.small)
+                    }
+                }
+            } header: {
+                Text("Kept folders")
+            } footer: {
+                Text("Rebuildable folders you chose to keep backing up. SwiftRestic doesn’t suggest skipping them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

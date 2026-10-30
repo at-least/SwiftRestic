@@ -236,18 +236,26 @@ enum MenuBarStatus {
                 // No percentage: restic's measure is reading, not uploading,
                 // and "Stop (100%)" would make stopping look free. The
                 // running line above keeps restic's figure.
-                let title = stopsRetention(phase) ? "Stop Applying Retention to “\(name)”" : "Stop “\(name)” Backup"
+                let title = switch phase {
+                case .applyingRetention: "Stop Applying Retention to “\(name)”"
+                case .removingFromEarlierBackups: "Stop Removing from Earlier Backups of “\(name)”"
+                default: "Stop “\(name)” Backup"
+                }
                 return PlanRow(planID: plan.id, title: title, action: .stop, isEnabled: true)
             }
         }
     }
 
-    /// Whether Stop, in this phase of a plan's run, ends a forget rather
-    /// than a backup: Apply Retention Now's run, or a backup's own
-    /// retention step, whose snapshot is already written. The one rule the
-    /// tray's row and the Plan menu's Stop item both word themselves by.
-    static func stopsRetention(_ phase: PlanActivity.Phase?) -> Bool {
-        phase == .applyingRetention
+    /// The Plan menu's Stop for this phase of a plan's run: a forget —
+    /// Apply Retention Now's, or a backup's own retention step, whose
+    /// snapshot is already written — and Remove from Earlier Backups'
+    /// rewrite are no backup. The tray's row words itself by the same cases.
+    static func stopTitle(for phase: PlanActivity.Phase?) -> String {
+        switch phase {
+        case .applyingRetention?: "Stop Applying Retention"
+        case .removingFromEarlierBackups?: "Stop Removing from Earlier Backups"
+        default: "Stop Backup"
+        }
     }
 
     /// One group per repository with plans, its plans' rows under the

@@ -574,10 +574,11 @@ struct ResticService: ResticClient {
         return plan.excludePatterns.compactMap { stored in
             let passed = expandTilde(stored, home: home)
             guard !Self.pattern(passed, covers: source),
-                  let path = globUnescaped(passed), path.hasPrefix("/"),
-                  seen.insert(PathKey(path)).inserted
+                  let unescaped = globUnescaped(passed), unescaped.hasPrefix("/")
             else { return nil }
-            return ExcludedPath(pattern: passed, path: ResticPath.normalized(path))
+            let path = ResticPath.normalized(unescaped)
+            guard seen.insert(PathKey(path)).inserted else { return nil }
+            return ExcludedPath(pattern: passed, path: path)
         }
     }
 

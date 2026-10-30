@@ -30,6 +30,36 @@ struct RebuildableFolderTests {
         #expect(offered.map(\.rule.why) == ["Gradle builds it again", "go mod vendor makes it again"])
     }
 
+    @Test("a folder the plan skips is known however its pattern was typed: a tilde, a trailing slash")
+    func skippedAsTyped() {
+        let home = NSHomeDirectory()
+        var plan = BackupPlan()
+        plan.path = "~/proj"
+        plan.excludePatterns = ["~/proj/app/build", "\(home)/proj/go/vendor/"]
+        let found = [
+            FolderBesideManifest(path: "\(home)/proj/app/build", manifest: "build.gradle"),
+            FolderBesideManifest(path: "\(home)/proj/go/vendor", manifest: "go.mod"),
+        ]
+        #expect(RebuildableFolder.offered(found, to: plan).isEmpty)
+    }
+
+    @Test("a folder inside an offered one is left to it, but offered once the outer one is kept")
+    func nestedFolders() {
+        var plan = BackupPlan()
+        plan.path = "/p"
+        let found = [
+            FolderBesideManifest(path: "/p/vendor", manifest: "go.mod"),
+            FolderBesideManifest(path: "/p/vendor/x/build", manifest: "build.gradle"),
+        ]
+        #expect(RebuildableFolder.offered(found, to: plan).map(\.path) == ["/p/vendor"])
+        plan.keptRebuildableFolders = ["/p/vendor"]
+        #expect(RebuildableFolder.offered(found, to: plan).map(\.path) == ["/p/vendor/x/build"])
+        // A skipped one answers for it as an offered one does.
+        plan.keptRebuildableFolders = []
+        plan.excludePatterns = ["/p/vendor"]
+        #expect(RebuildableFolder.offered(found, to: plan).isEmpty)
+    }
+
     @Test("the folders the user kept survive an editor save and the configuration file")
     func keptSurvives() throws {
         var stored = BackupPlan()

@@ -15,9 +15,14 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     /// what the adopt sheet prefills from.
     var excludes: [String]
     var summary: ResticSummary?
+    /// The snapshot `restic rewrite` made this one from: the one just
+    /// before, not the first of a chain (0.19.1, probed: a third rewrite's
+    /// `original` named the second's ID, already gone). Nil for a backup's
+    /// own snapshot.
+    var original: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, time, paths, hostname, tags, excludes, summary
+        case id, time, paths, hostname, tags, excludes, summary, original
         case shortID = "short_id"
     }
 
@@ -31,6 +36,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
         summary = try c.decodeIfPresent(ResticSummary.self, forKey: .summary)
+        original = try c.decodeIfPresent(String.self, forKey: .original)
     }
 
     /// Bytes actually written to the repository by the backup that made this

@@ -137,6 +137,21 @@ struct CommandStateTests {
         #expect(model.plan(id: plan.id)?.path == plan.path)
     }
 
+    @Test("Keep stops a rebuildable folder's offer once, and Suggest Again brings it back")
+    func keepAndSuggestAgain() {
+        let model = makeModel()
+        let repository = makeRepository()
+        let plan = makePlan(on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+
+        model.keepRebuildableFolders(paths: ["/Users/u/app/build", "/Users/u/go/vendor"], inPlan: plan.id)
+        model.keepRebuildableFolders(paths: ["/Users/u/app/build"], inPlan: plan.id)
+        #expect(model.plan(id: plan.id)?.keptRebuildableFolders == ["/Users/u/app/build", "/Users/u/go/vendor"])
+        model.suggestAgain(rebuildableFolder: "/Users/u/app/build", inPlan: plan.id)
+        #expect(model.plan(id: plan.id)?.keptRebuildableFolders == ["/Users/u/go/vendor"])
+    }
+
     @Test("the Plan menu acts on the selected plan, and on nothing else")
     func planCommandsFollowTheSelection() {
         let model = makeModel()
@@ -252,6 +267,11 @@ struct CommandStateTests {
         #expect(trayRow()?.title == "Stop Applying Retention to “Docs”")
         #expect(trayRow()?.action == .stop)
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Applying Retention")
+
+        // Remove from Earlier Backups: no backup runs, and Stop ends a rewrite.
+        model.activity[plan.id]?.phase = .removingFromEarlierBackups
+        #expect(trayRow()?.title == "Stop Removing from Earlier Backups of “Docs”")
+        #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Removing from Earlier Backups")
     }
 
     @Test("without restic only restic's work is disabled")
@@ -550,6 +570,12 @@ struct CommandStateTests {
         model.activity[plan.id]?.isBackup = false
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Applying retention will be stopped and recorded as cancelled.") == true)
+        #expect(model.quitInterruptions == ["Retention is being applied."])
+        // Nor is Remove from Earlier Backups, and it is no retention either.
+        model.activity[plan.id]?.phase = .removingFromEarlierBackups
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
+            .hasPrefix("Removing items from earlier backups will be stopped and recorded as cancelled.") == true)
+        #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
         model.activity[plan.id] = nil
 
         // The check dialog says which size of slow the user is holding.

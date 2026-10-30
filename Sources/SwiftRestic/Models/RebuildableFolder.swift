@@ -61,18 +61,26 @@ struct RebuildableFolder: Hashable, Sendable, Identifiable {
 
     var id: String { path }
 
-    /// What a plan is offered of `found`: each folder with its rule, less
-    /// the ones the plan already skips by their path and the ones the user
-    /// chose to keep (`BackupPlan.keptRebuildableFolders`).
+    /// What a plan is offered of `found` (in path byte order): each folder
+    /// with its rule, less the ones the plan already skips by their path
+    /// however typed (`ResticService.excludedPaths`), or inside one, and the ones the user
+    /// chose to keep (`BackupPlan.keptRebuildableFolders`), and less any
+    /// inside another one offered, which answers for it. Nesting is cut
+    /// last, so a kept folder's inner ones are offered on their own.
     static func offered(_ found: [FolderBesideManifest], to plan: BackupPlan) -> [RebuildableFolder] {
-        let skipped = Set(plan.excludePatterns.map { PathKey($0) })
+        let skipped = ResticService.excludedPaths(of: plan).map(\.path)
         let kept = Set(plan.keptRebuildableFolders.map { PathKey($0) })
-        return found.compactMap { folder in
-            guard !skipped.contains(PathKey(ResticService.globEscaped(folder.path))),
+        var offered: [RebuildableFolder] = []
+        for folder in found {
+            // A skipped folder answers for what is inside it too: the next
+            // backup leaves them all out.
+            guard !skipped.contains(where: { ResticPath.holds($0, folder.path) }),
                   !kept.contains(PathKey(folder.path)),
+                  !offered.contains(where: { ResticPath.holds($0.path, folder.path) }),
                   let rule = RebuildableFolderRule.rule(folder: ResticPath.basename(of: folder.path), manifest: folder.manifest)
-            else { return nil }
-            return RebuildableFolder(path: folder.path, rule: rule)
+            else { continue }
+            offered.append(RebuildableFolder(path: folder.path, rule: rule))
         }
+        return offered
     }
 }
