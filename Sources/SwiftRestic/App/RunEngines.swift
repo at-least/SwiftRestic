@@ -273,6 +273,10 @@ enum BackupRunEngine {
                 break run
             }
 
+            // A Stop during the checks above, which do not answer a cancel:
+            // ended here, before a start ping for a run that will not run.
+            if Task.isCancelled { throw ResticError.cancelled }
+
             // Healthchecks measures the run against this ping, so it has to go out
             // before the backup starts — but concurrently, so a slow endpoint
             // cannot delay the backup itself.

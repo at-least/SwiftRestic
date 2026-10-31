@@ -41,8 +41,13 @@ class EngineRecordingSink {
     /// The canned answer to a server probe; every ask is logged.
     var probeAnswer: ServerProbe.Outcome? = .reachable
 
+    /// Runs inside the probe, in the run's task: a Stop landing while the
+    /// server is asked.
+    var duringProbe: () -> Void = {}
+
     func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
         log.append("probe")
+        duringProbe()
         return probeAnswer
     }
 
@@ -69,8 +74,13 @@ struct BackupRunEngineTests {
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
 
+        /// Runs inside each phase write, in the run's task: a Stop landing
+        /// as a step begins.
+        var duringPhase: (PlanActivity.Phase) -> Void = { _ in }
+
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
             log.append("phase:\(phase)")
+            duringPhase(phase)
         }
 
         func endRetentionStep(for planID: UUID) {
@@ -373,6 +383,27 @@ struct BackupRunEngineTests {
         #expect(!sink.log.contains { $0.hasPrefix("ping:") })
     }
 
+    @Test("a Stop while the server is asked ends the run there: no start ping, restic never asked, recorded as stopped")
+    func stopDuringProbeEndsTheRun() async throws {
+        let sink = RecordingSink()
+        sink.duringProbe = { withUnsafeCurrentTask { $0?.cancel() } }
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        var repository = Repository()
+        repository.kind = .rest
+        repository.restURL = "http://127.0.0.1:18000/app"
+        let plan = makePlan()
+        // Its own task, as the model gives a run: the cancel is the run's.
+        let served = sink.serving(client)
+        await Task { await BackupRunEngine.perform(plan: plan, repository: repository, sink: served) }.value
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
+        #expect(record.failureMessage == "cancelled \(plan.id)")
+        #expect(client.callLog.isEmpty, "restic was asked: \(client.callLog)")
+        #expect(!sink.log.contains("ping:started"), "log was \(sink.log)")
+        #expect(!sink.log.contains("phase:backingUp"), "log was \(sink.log)")
+    }
+
     @Test("a server that answers is backed up to; a local repository is never probed")
     func reachableServerAndLocalRepository() async throws {
         let sink = RecordingSink()
@@ -443,9 +474,11 @@ struct BackupRunEngineTests {
         let client = MockResticClient()
             .onBackup(.success(successOutcome()))
             .onForget(.failure(ResticError.cancelled))
-        let run = Task { await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client)) }
-        run.cancel()
-        await run.value
+        sink.duringPhase = { phase in
+            if phase == .applyingRetention { withUnsafeCurrentTask { $0?.cancel() } }
+        }
+        let served = sink.serving(client)
+        await Task { await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: served) }.value
 
         #expect(await eventually(within: 60) { !sink.refreshCancelled.isEmpty })
         #expect(sink.refreshCancelled == [false], "log was \(sink.log)")
