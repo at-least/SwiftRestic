@@ -131,6 +131,10 @@ enum BackupRunEngine {
         /// Nil-anchored like the activity entry itself: a phase for a plan
         /// whose run has already unwound is dropped, never resurrected.
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID)
+        /// The forget has returned: its restic child is gone, so the
+        /// repository's other backups may start. Leaves the phase alone, so
+        /// a Stop's `.cancelling` stays.
+        func endRetentionStep(for planID: UUID)
         /// The run's progress reporter, hopping to the sink's own actor —
         /// built by the sink because only it knows its concrete isolation.
         /// Sink-built is load-bearing: @Sendable captures a concrete
@@ -357,6 +361,7 @@ enum BackupRunEngine {
                     record.itemErrors.append(line)
                     transcript.note(line)
                 }
+                sink.endRetentionStep(for: plan.id)
             }
 
             // A cache must never delay, and never fail, the run that feeds it.

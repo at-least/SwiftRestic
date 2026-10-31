@@ -73,6 +73,10 @@ struct BackupRunEngineTests {
             log.append("phase:\(phase)")
         }
 
+        func endRetentionStep(for planID: UUID) {
+            log.append("retention-step-ended")
+        }
+
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
             log.append("reporter-built")
             return { _ in }
@@ -152,6 +156,7 @@ struct BackupRunEngineTests {
             "reporter-built",
             "mark:whole",
             "phase:applyingRetention",
+            "retention-step-ended",
             "refresh",
             "deliver:succeeded",
         ], "log was \(sink.log)")

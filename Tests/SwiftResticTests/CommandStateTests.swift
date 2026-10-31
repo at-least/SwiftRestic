@@ -120,6 +120,42 @@ struct CommandStateTests {
         #expect(model.busyRepositoryIDs.isEmpty)
     }
 
+    @Test("a removed plan's stopping run is not stopped again by Pause and Stop, so its record keeps Remove Plan's words")
+    func removedPlansRunIsNotPauseStopped() async {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [photos]
+        model.startQuietPlanRun(planID: photos.id, work: .applyRetention) { _, _, _ in
+            try? await Task.sleep(for: .seconds(60))
+        }
+        model.deletePlan(id: photos.id)
+        #expect(model.activity[photos.id]?.phase == .cancelling)
+        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
+        #expect(!model.pauseStoppedPlanIDs.contains(photos.id))
+        #expect(model.cancellationMessage(for: photos.id) == "Cancelled")
+        await model.tasks.drain()
+    }
+
+    @Test("the lock reason names a running plan as the sidebar does, after a rename too")
+    func lockReasonFollowsARename() async {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        model.startQuietPlanRun(planID: photos.id, work: .applyRetention) { _, _, _ in
+            try? await Task.sleep(for: .seconds(60))
+        }
+        model.configuration.plans[1].path = "/tmp/Pictures"
+        #expect(model.backupLockReason(for: documents)
+            == "“Home NAS” is applying retention for “Pictures” — backups wait until it finishes.")
+        model.cancelBackup(planID: photos.id)
+        await model.tasks.drain()
+    }
+
     @Test("a backup stopped in its forget keeps the repository's backups waiting; after the forget it no longer does")
     func stoppedBackupInItsForgetKeepsTheLock() {
         let model = makeModel()
@@ -136,9 +172,9 @@ struct CommandStateTests {
         model.cancelBackup(planID: photos.id)
         #expect(model.activity[photos.id]?.phase == .cancelling)
         #expect(model.backupLockReason(for: documents) == reason)
-        // The forget has returned, its child gone, when the next phase lands.
-        model.setActivityPhase(.notifying, for: photos.id)
+        model.endRetentionStep(for: photos.id)
         #expect(model.backupLockReason(for: documents) == nil)
+        #expect(model.activity[photos.id]?.phase == .cancelling, "Stop's word stays on the strip")
     }
 
     @Test("a run nobody asked for — a mount's or the network's catch-up — waits for a check or prune without a banner")

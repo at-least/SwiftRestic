@@ -755,6 +755,25 @@ struct AppModelTests {
         await model.shutdown()
     }
 
+    @Test("a Back Up Now whose plan is removed before its skip lands posts no banner for the removed plan")
+    func removedPlansSkipIsQuiet() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
+        model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
+        model.banners.removeAll()
+
+        model.runBackup(planID: harness.plan.id)
+        model.deletePlan(id: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.contains { $0.planID == harness.plan.id && $0.outcome == .skipped },
+                "the skip itself is still recorded")
+        #expect(model.banners.isEmpty, "banners were \(model.banners.map(\.title))")
+
+        await model.shutdown()
+    }
+
     @Test("a drive away at every slot leaves one record that counts the runs, and the replaced run's log goes with it")
     func standingSkipIsOneRecord() async throws {
         let harness = try await makeHarness()

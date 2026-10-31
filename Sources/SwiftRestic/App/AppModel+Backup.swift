@@ -186,6 +186,10 @@ extension AppModel: BackupRunEngine.Sink {
         activity[planID]?.isInRetentionStep = phase == .applyingRetention
     }
 
+    func endRetentionStep(for planID: UUID) {
+        activity[planID]?.isInRetentionStep = false
+    }
+
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
         let token = backupRunTokens[planID]
         return { [weak self] progress in
@@ -244,8 +248,9 @@ extension AppModel: BackupRunEngine.Sink {
     /// drive stays away. The queue is global, so the title names the plan
     /// with its repository.
     private func announceInApp(record: RunRecord) {
+        // A removed plan's run outlives it (`deletePlan`): no banner for it.
         guard record.outcome == .skipped, let planID = record.planID,
-              activity[planID]?.askedByUser == true
+              activity[planID]?.askedByUser == true, plan(id: planID) != nil
         else { return }
         let name = RunRecordPresentation.displayName(
             for: record,

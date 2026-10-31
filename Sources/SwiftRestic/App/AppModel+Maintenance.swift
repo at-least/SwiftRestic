@@ -28,12 +28,15 @@ extension AppModel {
         // its forget step. Not by phase: Stop turns the phase to
         // `.cancelling` while the restic child, still holding the lock,
         // dies.
-        for run in activity.values where run.work != .backup || run.isInRetentionStep {
+        for (planID, run) in activity where run.work != .backup || run.isInRetentionStep {
             guard reasons[run.repositoryID] == nil else { continue }
             let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
+            // The live label, as the sidebar shows it; the run's own copy
+            // only once Remove Plan has taken the plan.
+            let planName = plan(id: planID).map { label(of: $0) } ?? run.planName
             reasons[run.repositoryID] = run.work == .removeFromEarlierBackups
-                ? "\(name) is removing items from earlier backups of “\(run.planName)” — backups wait until it finishes."
-                : "\(name) is applying retention for “\(run.planName)” — backups wait until it finishes."
+                ? "\(name) is removing items from earlier backups of “\(planName)” — backups wait until it finishes."
+                : "\(name) is applying retention for “\(planName)” — backups wait until it finishes."
         }
         return reasons
     }
