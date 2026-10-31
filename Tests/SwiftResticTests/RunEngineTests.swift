@@ -45,6 +45,12 @@ class EngineRecordingSink {
         log.append("probe")
         return probeAnswer
     }
+
+    /// The file system's answer: the tests' away drives are /Volumes
+    /// folders no Mac mounts.
+    func isMounted(volumeOf path: String) async -> Bool? {
+        VolumePresence.isMounted(volumeOf: path)
+    }
 }
 
 /// The run engines' sequencing and outcome mapping, driven through a mock

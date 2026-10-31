@@ -56,7 +56,7 @@ extension AppModel {
         // mounts when the app starts; still away, the words say why. Earlier
         // rows stay, as for any failed read. A mount re-reads it
         // (`refreshRepositories(onVolume:)`).
-        if repository.isDriveAway {
+        if await isDriveAway(repository) {
             let stayedAway: String?
             do {
                 try await reconnectShare(before: repository)
@@ -70,7 +70,7 @@ extension AppModel {
                 snapshotListingOutcomes[repositoryID] = .failed(stayedAway)
                 return
             }
-            if repository.isDriveAway {
+            if await isDriveAway(repository) {
                 snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
                 return
             }

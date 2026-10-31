@@ -31,21 +31,12 @@ struct Schedule: Codable, Sendable, Hashable {
         // The editor's own range (1...24): only a hand-edited config exceeds
         // it, and a huge value would overflow `intervalHours * 3600` on the
         // scheduler's next tick.
-        intervalHours = Self.clamped(c.value(.intervalHours, default: 4), 1...24, "schedule.intervalHours")
-        hour = Self.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
-        minute = Self.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
-        weekday = Self.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
-    }
-
-    /// A type-valid but out-of-range value ("hour": 25) decodes cleanly and
-    /// then matches no wall-clock time — the plan would silently never run.
-    /// Clamp to the nearest valid value; the substitution is reported like
-    /// every other one.
-    private static func clamped(_ value: Int, _ range: ClosedRange<Int>, _ field: String) -> Int {
-        guard !range.contains(value) else { return value }
-        let nearest = value < range.lowerBound ? range.lowerBound : range.upperBound
-        DecodeNotes.current?.add(field: field, "\(value) is out of range — read as \(nearest)")
-        return nearest
+        intervalHours = DecodeNotes.clamped(c.value(.intervalHours, default: 4), 1...24, "schedule.intervalHours")
+        // An "hour": 25 would match no wall-clock time — the plan would
+        // silently never run.
+        hour = DecodeNotes.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
+        minute = DecodeNotes.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
+        weekday = DecodeNotes.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
     }
 
     var summary: String { summary() }
@@ -123,7 +114,8 @@ struct Schedule: Codable, Sendable, Hashable {
         components.second = 0
         if let matchingWeekday { components.weekday = matchingWeekday }
 
-        // The most recent firing time at or before `now`.
+        // The most recent firing time strictly before `now`: a tick landing
+        // exactly on a slot sees it due on the next tick.
         guard let previous = calendar.nextDate(
             after: now,
             matching: components,
@@ -178,12 +170,16 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = c.value(.isEnabled, default: true)
-        keepLast = c.value(.keepLast, default: 0)
-        keepHourly = c.value(.keepHourly, default: 24)
-        keepDaily = c.value(.keepDaily, default: 7)
-        keepWeekly = c.value(.keepWeekly, default: 4)
-        keepMonthly = c.value(.keepMonthly, default: 12)
-        keepYearly = c.value(.keepYearly, default: 3)
+        // Only the floor: a negative rule is off, as `forgetArguments` below
+        // reads it. A rule above the editor's range is still one restic
+        // follows; lowering it would remove backups.
+        let rule = 0...Int.max
+        keepLast = DecodeNotes.clamped(c.value(.keepLast, default: 0), rule, "retention.keepLast")
+        keepHourly = DecodeNotes.clamped(c.value(.keepHourly, default: 24), rule, "retention.keepHourly")
+        keepDaily = DecodeNotes.clamped(c.value(.keepDaily, default: 7), rule, "retention.keepDaily")
+        keepWeekly = DecodeNotes.clamped(c.value(.keepWeekly, default: 4), rule, "retention.keepWeekly")
+        keepMonthly = DecodeNotes.clamped(c.value(.keepMonthly, default: 12), rule, "retention.keepMonthly")
+        keepYearly = DecodeNotes.clamped(c.value(.keepYearly, default: 3), rule, "retention.keepYearly")
         runPrune = c.value(.runPrune, default: false)
     }
 

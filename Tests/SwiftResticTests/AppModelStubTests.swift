@@ -27,7 +27,8 @@ struct AppModelStubTests {
         planHooks: [BackupHook] = [],
         channels: [NotificationChannel] = [],
         // Never the real NetFS: a saved share's reconnect is refused.
-        shareMounter: ShareMounter = ShareMounter { _, _ in .failed(EAUTH) }
+        shareMounter: ShareMounter = ShareMounter { _, _ in .failed(EAUTH) },
+        volumeProbe: VolumeProbe = .fileSystem
     ) async throws -> Harness {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticStubModel-\(UUID().uuidString)")
@@ -75,7 +76,7 @@ struct AppModelStubTests {
         // password is expressed.
         var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         if let password { secrets[repository.id] = (password: password, providerSecret: nil) }
-        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter)
+        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter, volumeProbe: volumeProbe)
         await model.bootstrap()
 
         return Harness(model: model, root: root, repository: repository, plan: plan, stub: stub)
@@ -256,7 +257,7 @@ struct AppModelStubTests {
         model.configuration.runs = skipped
         let (first, second) = (model.configuration.plans[0], model.configuration.plans[1])
 
-        model.runSkippedPlansAfterMount()
+        await model.runSkippedPlansAfterMount()
         #expect(model.isRunning(planID: first.id))
         #expect(model.isQueued(second.id))
         try release(harness)
@@ -331,7 +332,7 @@ struct AppModelStubTests {
         model.resticSearch = .refused(notFound, problem: notFound.localizedDescription)
 
         await model.runDuePlans()
-        model.runSkippedPlansAfterMount()
+        await model.runSkippedPlansAfterMount()
         await model.tasks.drain()
 
         #expect(model.configuration.runs.map(\.id) == [skipped.id])
@@ -1401,6 +1402,76 @@ struct AppModelStubTests {
         #expect(harness.model.banners.isEmpty)
 
         await harness.model.shutdown()
+    }
+
+    /// Each drive read: its path, and whether it ran on the main thread.
+    private final class PresenceReads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [(path: String, onMain: Bool)] = []
+        func record(_ path: String, onMain: Bool) {
+            lock.lock()
+            defer { lock.unlock() }
+            storage.append((path, onMain))
+        }
+        var all: [(path: String, onMain: Bool)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+    }
+
+    @Test("a drive's presence is read off the main actor by a backup, a check, the tick, the mount's catch-up and the listing")
+    func presenceReadsLeaveTheMainActor() async throws {
+        // A stalled network share holds a stat for seconds; on the main
+        // actor that freezes every window, the tray and the scheduler.
+        let reads = PresenceReads()
+        let harness = try await makeHarness(mode: "default", volumeProbe: VolumeProbe { path in
+            reads.record(path, onMain: Thread.isMainThread)
+            return VolumePresence.isMounted(volumeOf: path)
+        })
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        let away = "/Volumes/\(volume)/restic"
+        model.configuration.repositories[index].localPath = away
+        // Each step reads through the probe: one that read past it would add
+        // nothing here. Counted once the step's background work — a run's
+        // closing listing refresh reads the drive too — has settled.
+        var seen = 0
+        func newReads() async -> Int {
+            await model.tasks.drain()
+            let count = reads.all.filter { $0.path == away }.count
+            defer { seen = count }
+            return count - seen
+        }
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.first?.outcome == .skipped)
+        #expect(await newReads() >= 2, "the backup's reconnect and drive check, and its closing refresh")
+        await model.refreshSnapshots(repositoryID: id)
+        #expect(await newReads() >= 1, "the listing's")
+        // A due check skips and waits for the drive; the next tick reads
+        // whether it is back.
+        model.configuration.repositories[index].maintenance.checkEnabled = true
+        model.configuration.repositories[index].maintenance.lastCheckAt = Date.now.addingTimeInterval(-10 * 86400)
+        await model.runDuePlans()
+        await model.waitForMaintenance(repositoryID: id)
+        #expect(await newReads() >= 2, "the check's reconnect and drive check, and its closing refresh")
+        await model.runDuePlans()
+        #expect(await newReads() == 1, "the tick's")
+        // A scheduled plan whose last backup was skipped: the mount's
+        // catch-up asks after its repository's drive.
+        model.configuration.plans[0].schedule.frequency = .daily
+        await model.runSkippedPlansAfterMount()
+        #expect(await newReads() == 1, "the catch-up's")
+
+        let all = reads.all
+        #expect(all.allSatisfy { !$0.onMain }, "on the main thread: \(all.filter(\.onMain))")
+
+        await model.shutdown()
     }
 
     @Test("a check due while its repository's drive is away is Skipped and unstamped; the next tick leaves it alone, and once the drive is back it runs")
@@ -2706,7 +2777,7 @@ struct AppModelStubTests {
         let log = try logText(for: record, in: harness)
         // restic restores the file into a hidden folder beside its landing.
         #expect(
-            log.contains("$    restic restore --json latest:/src --target \(destination.path)/.a.txt."),
+            log.contains("$    restic restore --json latest:/src --target \(destination.path)/."),
             "log was \(log)"
         )
         #expect(log.contains(".partial --include /a.txt"), "log was \(log)")

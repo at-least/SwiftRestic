@@ -86,7 +86,7 @@ extension AppModel {
         isRestoring: Bool,
         runningBackupNames: [String],
         applyingRetentionNames: [String],
-        removingFromEarlierBackupsNames: [String] = [],
+        removingFromEarlierBackupsNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {

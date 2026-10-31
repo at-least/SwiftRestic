@@ -1060,7 +1060,9 @@ struct ResticIntegrationTests {
         let fileThere = fixture.root.appendingPathComponent("file-there")
         try FileManager.default.createDirectory(at: fileThere, withIntermediateDirectories: true)
         try "mine".write(to: fileThere.appendingPathComponent("sub"), atomically: true, encoding: .utf8)
-        await #expect(throws: (any Error).self) { try await restore([sub, file], fileThere, .keepExisting) }
+        await #expect(throws: ResticError.fileInTheWay(path: fileThere.appendingPathComponent("sub").path)) {
+            try await restore([sub, file], fileThere, .keepExisting)
+        }
         #expect(try String(contentsOf: fileThere.appendingPathComponent("sub"), encoding: .utf8) == "mine")
 
         // A folder where the file goes, under Replace: restic fails on it

@@ -67,8 +67,9 @@ enum RepositoryCaption: Equatable, Sendable {
         }
     }
 
-    /// The whole failed read's message, where the row truncates its text
-    /// into the tooltip; nil for a line short enough to show whole.
+    /// The whole failed read's message, for both failure cases' tooltip;
+    /// nil for the count, reading and zero lines, which have nothing more
+    /// to say.
     var help: String? {
         switch self {
         case .notConnected(let full), .failed(_, let full): full
@@ -180,8 +181,9 @@ enum PlanStatus {
             runID: run.id,
             outcome: run.outcome,
             finishedAt: run.finishedAt,
-            // A plan's problem is a backup record: the backup engine is the
-            // only writer that stamps a planID on a run, so the noun is fixed.
+            // A plan's problem is always a backup record — the forget and
+            // rewrite runs that carry its ID too are never one — so the noun
+            // is fixed.
             headline: "Backup \(run.outcome.displayName.lowercased())",
             message: message,
             facts: facts,

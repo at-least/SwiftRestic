@@ -103,6 +103,20 @@ struct SchedulingTests {
         #expect(next == utcDate("2026-09-06 02:00:00"))
     }
 
+    @Test("a tick exactly on the slot finds it due only a moment later")
+    func exactSlotTickIsBeforeTheSlot() {
+        var schedule = Schedule()
+        schedule.frequency = .daily
+        schedule.hour = 2
+        let lastRun = utcDate("2026-09-04 02:00:00")
+        // Calendar's backward search is strictly before `now`, so the slot
+        // that `now` sits on is not yet the most recent one.
+        #expect(schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 02:00:00"), calendar: calendar)
+            == utcDate("2026-09-06 02:00:00"))
+        #expect(schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 02:00:01"), calendar: calendar)
+            == utcDate("2026-09-05 02:00:00"))
+    }
+
     // 2026-08-31 and 2026-09-07 are both Mondays (weekday 2); 2026-09-05 is a
     // Saturday, so the most recent firing before "now" below is 08-31 02:00.
     @Test("a weekly plan that missed its window is due at the missed slot")

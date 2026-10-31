@@ -795,14 +795,12 @@ struct PlanEditorSheet: View {
                 // Says the count only where no line on the tab already has
                 // it: under the projection it anchors "≈ 41 would stay",
                 // an adopting safe policy the dry run's answer counts, and
-                // otherwise this is the tab's only count. Keyed on what the
-                // draft's plan tag already holds here — an adopt draft's
-                // group counts, the one history it is about to own.
+                // otherwise this is the tab's only count.
                 if mode != .adopt || !draft.retention.isEnabled || !draft.retention.isSafeToRun,
                    let repositoryID = draft.repositoryID,
                    case .loaded = model.snapshotListingOutcome(for: repositoryID)
                 {
-                    let count = model.snapshots(for: repositoryID, planID: draft.id).count
+                    let count = model.shelves(for: repositoryID).backupCount(ofPlan: draft.id)
                     if count > 0 {
                         LabeledContent("Current backups", value: Format.count(count))
                     }

@@ -45,22 +45,26 @@ enum Scheduler {
     /// or its repository's drive was missing — and whose folder and
     /// repository are both here now. They run at once
     /// instead of waiting a whole interval for the next slot. (The app-wide
-    /// hold is the caller's guard, as for the tick.)
+    /// hold is the caller's guard, as for the tick.) On the main actor, the
+    /// model's, so the reads it is handed need not be `Sendable`; they hop
+    /// off it themselves.
+    @MainActor
     static func catchUpAfterMount(
         plans: [BackupPlan],
         newestBackupOutcome: [UUID: RunRecord.Outcome],
         running: Set<UUID>,
-        sourcesExist: (BackupPlan) -> Bool,
-        repositoryReachable: (BackupPlan) -> Bool,
+        sourcesExist: (BackupPlan) async -> Bool,
+        repositoryReachable: (BackupPlan) async -> Bool,
         now: Date
-    ) -> [UUID] {
-        plans
-            .filter {
-                $0.runsOnSchedule(at: now)
-                    && !running.contains($0.id) && newestBackupOutcome[$0.id] == .skipped && sourcesExist($0)
-                    && repositoryReachable($0)
-            }
-            .map(\.id)
+    ) async -> [UUID] {
+        var due: [UUID] = []
+        // The disk is read only for a plan the cheap checks leave.
+        for plan in plans
+            where plan.runsOnSchedule(at: now) && !running.contains(plan.id) && newestBackupOutcome[plan.id] == .skipped
+        {
+            if await sourcesExist(plan), await repositoryReachable(plan) { due.append(plan.id) }
+        }
+        return due
     }
 
     /// The app-wide hold in force at `now`: a live pause wins, then the

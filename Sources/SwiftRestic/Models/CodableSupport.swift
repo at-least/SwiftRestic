@@ -79,6 +79,16 @@ extension KeyedDecodingContainer {
 enum DecodeNotes {
     /// Bound around a decoding pass; tolerant fallbacks record themselves here.
     @TaskLocal static var current: DecodeNoteBox?
+
+    /// A type-valid but out-of-range value decodes cleanly and then does
+    /// harm; it is read as the nearest valid value, and the substitution is
+    /// reported like every other one.
+    static func clamped(_ value: Int, _ range: ClosedRange<Int>, _ field: String) -> Int {
+        guard !range.contains(value) else { return value }
+        let nearest = value < range.lowerBound ? range.lowerBound : range.upperBound
+        current?.add(field: field, "\(value) is out of range — read as \(nearest)")
+        return nearest
+    }
 }
 
 final class DecodeNoteBox: @unchecked Sendable {

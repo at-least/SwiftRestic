@@ -130,6 +130,14 @@ extension BackupShelves {
         others.first { $0.id == .plan(planID) }
     }
 
+    /// The backups the plan editor counts as `planID`'s: a configured plan's
+    /// shelf, where its page counts them, so a backup two plans' tags claim
+    /// counts once; a plan being adopted has no shelf yet, so its group
+    /// under Other backups, the history it is about to own.
+    func backupCount(ofPlan planID: UUID) -> Int {
+        byPlan[planID]?.count ?? orphanPlanGroup(planID)?.snapshots.count ?? 0
+    }
+
     /// The untagged lineage under this repository's Other backups whose
     /// host and folders are `key` — its page's and the selection
     /// revalidation's one lookup. Nil when it is gone: forgotten, tagged

@@ -46,6 +46,20 @@ enum VolumePresence {
     }
 }
 
+/// `VolumePresence.isMounted`, read off the caller's actor: a stalled
+/// network share can hold the read for seconds, and on the main actor that
+/// freezes every window, the tray and the scheduler. Injectable, so a test
+/// can see where the read runs.
+struct VolumeProbe: Sendable {
+    var read: @Sendable (_ path: String) -> Bool?
+
+    static let fileSystem = VolumeProbe { VolumePresence.isMounted(volumeOf: $0) }
+
+    func isMounted(volumeOf path: String) async -> Bool? {
+        await Task.detached { [read] in read(path) }.value
+    }
+}
+
 /// A network share as its mounted volume reports it (`VolumePresence.mountedShare`).
 struct MountedShare: Equatable, Sendable {
     var volumeName: String

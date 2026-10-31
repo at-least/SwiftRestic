@@ -129,6 +129,24 @@ struct SidebarTreeTests {
         #expect(shelves.byPlan[photos.id] == nil)
         #expect(BackupShelves.owner(of: both, among: [documents, photos]) == documents.id)
         #expect(BackupShelves.owner(of: both, among: [photos, documents]) == photos.id)
+        // The plan editor counts it where the page does: once.
+        #expect(shelves.backupCount(ofPlan: documents.id) == 1)
+        #expect(shelves.backupCount(ofPlan: photos.id) == 0)
+    }
+
+    @Test("a plan being adopted counts its group under Other backups")
+    func adoptedPlanCountsItsGroup() throws {
+        let nas = UUID()
+        let documents = plan("Documents", in: nas)
+        let orphanID = UUID()
+        let mine = try snapshot("d1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(documents.id)])
+        let orphans = try ["o1", "o2"].map {
+            try snapshot($0, time: "2026-09-29T02:00:00Z", tags: [ResticService.planTag(orphanID)])
+        }
+        let shelves = BackupShelves(listing: [mine] + orphans, plans: [documents], allPlans: [documents])
+        #expect(shelves.backupCount(ofPlan: orphanID) == 2)
+        #expect(shelves.backupCount(ofPlan: documents.id) == 1)
+        #expect(shelves.backupCount(ofPlan: UUID()) == 0)
     }
 
     @Test("an orphan two deleted plans' tags claim sits with the lexicographically first")

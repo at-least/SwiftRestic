@@ -328,26 +328,26 @@ enum ResticMessageDecoder {
     /// One short line about why decoding failed — enough to name the field
     /// and the problem, never the whole dumped context, so a run record line
     /// or an error detail stays readable.
+    /// An empty coding path is the whole answer failing; a missing key's
+    /// path ends at the object that lacks it, so the key names the field.
     static func briefFailure(_ error: Error) -> String {
         guard let decoding = error as? DecodingError else {
             return String(describing: type(of: error))
         }
-        let context: DecodingError.Context
         switch decoding {
-        case let .typeMismatch(_, c), let .valueNotFound(_, c), let .keyNotFound(_, c):
-            context = c
-        case let .dataCorrupted(c):
-            context = c
+        case let .keyNotFound(key, _):
+            return "field “\(key.stringValue)” is absent"
+        case let .typeMismatch(_, context):
+            guard let field = context.codingPath.last else { return "the answer has an unexpected shape" }
+            return "field “\(field.stringValue)” has an unexpected type"
+        case let .valueNotFound(_, context):
+            guard let field = context.codingPath.last else { return "the answer is empty" }
+            return "field “\(field.stringValue)” was missing a value"
+        case let .dataCorrupted(context):
+            guard let field = context.codingPath.last else { return "the answer is not JSON" }
+            return "field “\(field.stringValue)” is corrupt"
         @unknown default:
             return "the payload did not decode"
-        }
-        let field = context.codingPath.last?.stringValue ?? "?"
-        switch decoding {
-        case .typeMismatch: return "field “\(field)” has an unexpected type"
-        case .valueNotFound: return "field “\(field)” was missing a value"
-        case .keyNotFound: return "field “\(field)” is absent"
-        case .dataCorrupted: return "field “\(field)” is corrupt"
-        @unknown default: return "field “\(field)” did not decode"
         }
     }
 

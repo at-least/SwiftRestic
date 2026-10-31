@@ -16,6 +16,7 @@ struct RemovalConsequencesTests {
                 isRestoring: false,
                 runningBackupNames: [],
                 applyingRetentionNames: [],
+                removingFromEarlierBackupsNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plans “Documents” and “Photos” are removed too. The backups in it are kept."
@@ -26,6 +27,7 @@ struct RemovalConsequencesTests {
                 isRestoring: false,
                 runningBackupNames: [],
                 applyingRetentionNames: [],
+                removingFromEarlierBackupsNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plan “Documents” is removed too. The backups in it are kept."
@@ -38,6 +40,7 @@ struct RemovalConsequencesTests {
                 isRestoring: false,
                 runningBackupNames: [],
                 applyingRetentionNames: [],
+                removingFromEarlierBackupsNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
@@ -49,6 +52,7 @@ struct RemovalConsequencesTests {
                 isRestoring: false,
                 runningBackupNames: [],
                 applyingRetentionNames: [],
+                removingFromEarlierBackupsNames: [],
                 isMaintaining: false,
                 isConsoleRunning: false
             ) == "The backups in it are kept."

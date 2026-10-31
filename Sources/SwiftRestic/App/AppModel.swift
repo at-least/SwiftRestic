@@ -236,6 +236,8 @@ final class AppModel {
     /// Mounts a network share before a backup that needs it (`reconnectShares`).
     let shareMounter: ShareMounter
     let serverProbe: ServerProbe
+    /// Whether a drive is here, for the runs, the scheduler and the listings.
+    let volumeProbe: VolumeProbe
     /// Each share's reconnect in flight, by volume name: a second run that
     /// needs it at the same tick awaits the first's answer rather than
     /// mounting it twice.
@@ -334,6 +336,7 @@ final class AppModel {
         secrets: SecretStore = .standard,
         shareMounter: ShareMounter = .netFS,
         serverProbe: ServerProbe = .network,
+        volumeProbe: VolumeProbe = .fileSystem,
         defaults: UserDefaults = .standard,
         localHostname: String = ResticService.localHostname
     ) {
@@ -341,6 +344,7 @@ final class AppModel {
         self.secrets = secrets
         self.shareMounter = shareMounter
         self.serverProbe = serverProbe
+        self.volumeProbe = volumeProbe
         self.localHostname = localHostname
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)

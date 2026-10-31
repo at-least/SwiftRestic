@@ -1116,6 +1116,57 @@ struct StubResticTests {
         #expect(leftovers.isEmpty, "left behind: \(leftovers)")
     }
 
+    @Test("a single file with a name of the longest length APFS allows still restores")
+    func singleFileRestoreTakesALongestName() async throws {
+        let fixture = try makeFixture(mode: "restorefile")
+        defer { cleanUp(fixture.root) }
+        let destination = fixture.root.appendingPathComponent("restored")
+        let name = String(repeating: "a", count: 255)
+        let node = SnapshotNode(name: name, type: .file, path: "/src/" + name, size: 3)
+
+        try await fixture.service.restore(
+            fixture.context, snapshotID: "latest", node: node,
+            destinationDirectory: destination, overwrite: .replaceExisting
+        )
+
+        #expect(try String(contentsOf: destination.appendingPathComponent(name), encoding: .utf8) == "restored")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: destination.path).filter { $0.hasSuffix(".partial") }
+        #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
+    @Test("a restore of several folders refuses a file at any folder's landing before it makes one")
+    func restoreItemsRefusesAFileAtALaterFolderLanding() async throws {
+        let fixture = try makeFixture(mode: "restorefile")
+        defer { cleanUp(fixture.root) }
+        let destination = fixture.root.appendingPathComponent("restored")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let blocked = destination.appendingPathComponent("two")
+        try "mine".write(to: blocked, atomically: true, encoding: .utf8)
+        // The blocked folder comes last, so the first one's landing would be
+        // made before the second's failed.
+        let nodes = ["one", "two"].map { SnapshotNode(name: $0, type: .dir, path: "/src/" + $0) }
+
+        await #expect(throws: ResticError.fileInTheWay(path: blocked.path)) {
+            try await fixture.service.restoreItems(
+                fixture.context, snapshotID: "latest", parent: "/src", nodes: nodes,
+                destinationDirectory: destination, overwrite: .keepExisting
+            )
+        }
+        // A single folder's restore refuses it in the same words.
+        await #expect(throws: ResticError.fileInTheWay(path: blocked.path)) {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: "latest", node: nodes[1],
+                destinationDirectory: destination, overwrite: .keepExisting
+            )
+        }
+
+        let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? ""
+        #expect(!trace.contains("args=[restore"), "trace: \(trace)")
+        #expect(try String(contentsOf: blocked, encoding: .utf8) == "mine")
+        let left = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(left == ["two"], "left behind: \(left)")
+    }
+
     @Test("a binary that cannot be spawned reports a launch failure")
     func missingBinarySurfacesLaunchError() async throws {
         let fixture = try makeFixture(mode: "hang")

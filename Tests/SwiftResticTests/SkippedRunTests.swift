@@ -134,7 +134,7 @@ struct SkippedRunTests {
     }
 
     @Test("a mounted volume runs again each scheduled plan whose last run was skipped and whose folders are back")
-    func catchUpAfterMount() {
+    func catchUpAfterMount() async {
         func plan(_ frequency: Schedule.Frequency = .daily) -> BackupPlan {
             var plan = BackupPlan()
             plan.repositoryID = UUID()
@@ -154,7 +154,7 @@ struct SkippedRunTests {
         let newest: [UUID: RunRecord.Outcome] = Dictionary(uniqueKeysWithValues: plans.map {
             ($0.id, $0.id == failedLast.id ? .failed : .skipped)
         })
-        let due = Scheduler.catchUpAfterMount(
+        let due = await Scheduler.catchUpAfterMount(
             plans: plans,
             newestBackupOutcome: newest,
             running: [running.id],

@@ -34,7 +34,7 @@ extension AppModel {
         // Failed record, a banner and a notification per slot, backups and
         // upkeep alike — for a cause the window's banner and the menu bar
         // already state.
-        if isResticAvailable { startDueWork() }
+        if isResticAvailable { await startDueWork() }
 
         // After the guard: a hold exempts every plan from the quiet-plan
         // alert, as it holds their runs. After the starts: a plan this tick
@@ -46,12 +46,16 @@ extension AppModel {
         alertQuietPlans(now: .now)
     }
 
-    private func startDueWork() {
+    private func startDueWork() async {
+        let awaitingDrive = await maintenanceStillAwaitingDrive()
+        // The drive reads are awaited: a pause, a quit or restic going away
+        // can land meanwhile, and holds what the tick starts as before.
+        guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         // Upkeep is considered first: a due prune should not be starved by a
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
-        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(maintenanceStillAwaitingDrive())
+        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(awaitingDrive)
         // A server out of reach holds its upkeep only: a backup due to it
         // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(
@@ -76,10 +80,15 @@ extension AppModel {
     /// while the drive is still away; one whose drive is back — mounted by
     /// the user, a backup's hook or reconnect, a read — leaves the set, and
     /// its task, unstamped and so still due, starts on this tick.
-    private func maintenanceStillAwaitingDrive() -> Set<UUID> {
-        maintenanceAwaitingDrive = maintenanceAwaitingDrive.filter { id in
-            repository(id: id)?.isDriveAway ?? false
+    private func maintenanceStillAwaitingDrive() async -> Set<UUID> {
+        var back: Set<UUID> = []
+        for id in maintenanceAwaitingDrive {
+            guard let repository = repository(id: id) else { back.insert(id); continue }
+            if await !isDriveAway(repository) { back.insert(id) }
         }
+        // Only what was read leaves: a repository `markDriveAway` added
+        // during the reads stays.
+        maintenanceAwaitingDrive.subtract(back)
         return maintenanceAwaitingDrive
     }
 
@@ -130,7 +139,7 @@ extension AppModel {
             let volume = (notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL)?.path
             MainActor.assumeIsolated {
                 if let volume { self?.refreshRepositories(onVolume: volume) }
-                self?.runSkippedPlansAfterMount()
+                Task { [weak self] in await self?.runSkippedPlansAfterMount() }
             }
         }
     }
@@ -155,24 +164,32 @@ extension AppModel {
 
     /// The mount's catch-up (`Scheduler.catchUpAfterMount`): only while
     /// nothing holds the schedule and restic is there, as for the tick.
-    func runSkippedPlansAfterMount(now: Date = .now) {
+    func runSkippedPlansAfterMount(now: Date = .now) async {
         guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
         // Newest first.
         for run in configuration.runs where run.kind == .backup {
             if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
         }
-        let planIDs = Scheduler.catchUpAfterMount(
+        let planIDs = await Scheduler.catchUpAfterMount(
             plans: configuration.plans,
             newestBackupOutcome: newest,
             running: runningPlanIDs,
-            sourcesExist: { Self.sourceExists($0.path) },
+            // Off the main actor, as every presence read: a stalled share
+            // holds a stat for seconds.
+            sourcesExist: { plan in
+                let path = plan.path
+                return await Task.detached { Self.sourceExists(path) }.value
+            },
             repositoryReachable: { plan in
-                guard let repository = configuration.repository(id: plan.repositoryID) else { return false }
-                return !repository.isDriveAway
+                guard let repository = self.configuration.repository(id: plan.repositoryID) else { return false }
+                return await !self.isDriveAway(repository)
             },
             now: now
         )
+        // As at the start: the reads are awaited, and a pause or a quit can
+        // land meanwhile.
+        guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         // Two plans on one drive come back together: one at a time.
         runBackups(planIDs: planIDs, askedByUser: false)
     }
@@ -202,7 +219,7 @@ extension AppModel {
                 // The first path is where the app starts, not a change.
                 let previous = self.networkSignature
                 self.networkSignature = signature
-                if let previous, previous != signature, isUp { self.networkPathChanged() }
+                if let previous, previous != signature, isUp { await self.networkPathChanged() }
             }
         }
         monitor.start(queue: DispatchQueue(label: "com.newlix.SwiftRestic.network"))
@@ -214,14 +231,14 @@ extension AppModel {
     /// one may run, network repositories whose listing failed are read
     /// again (each probing its server first), and plans whose newest backup
     /// was skipped run again, as a mount brings back a drive's.
-    func networkPathChanged() {
+    func networkPathChanged() async {
         guard !isShuttingDown else { return }
         maintenanceAwaitingServer.removeAll()
         for repository in configuration.repositories where repository.kind != .local {
             guard case .failed = snapshotListingOutcomes[repository.id] else { continue }
             scheduleSnapshotRefresh(repositoryID: repository.id)
         }
-        runSkippedPlansAfterMount()
+        await runSkippedPlansAfterMount()
     }
 
     /// Pause Backups: holds every scheduled backup, check and prune for

@@ -905,6 +905,30 @@ struct TolerantDecodingTests {
         #expect(quiet.schedule.minute == 30)
     }
 
+    @Test("a negative keep rule reads as off, and says so; a large one stays as written")
+    func negativeKeepRuleClamps() throws {
+        // A hand-edited "keepLast": -1 trapped the plan editor's retention
+        // projection (`0..<-1`). Only the floor clamps: a keep rule above
+        // the editor's range is still a rule restic follows, and lowering
+        // it would remove backups.
+        let notes = DecodeNoteBox()
+        let plan = try DecodeNotes.$current.withValue(notes) {
+            try JSONDecoder().decode(
+                BackupPlan.self,
+                from: Data(#"{"schedule":{"frequency":"daily"},"retention":{"keepLast":-1,"keepDaily":-7,"keepYearly":500}}"#.utf8)
+            )
+        }
+        // Required: unclamped, the projection below would trap the run.
+        try #require(plan.retention.keepLast == 0)
+        try #require(plan.retention.keepDaily == 0)
+        #expect(plan.retention.keepYearly == 500)
+        #expect(notes.notes == [
+            "“retention.keepLast” -1 is out of range — read as 0",
+            "“retention.keepDaily” -7 is out of range — read as 0",
+        ])
+        #expect(RetentionProjection.project(policy: plan.retention, schedule: plan.schedule) != nil)
+    }
+
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")
     func wrongTypedValues() throws {
         // keepLast is a string; keepDaily is untouched next to it.

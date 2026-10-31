@@ -210,12 +210,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
     }
 
-    /// A local repository whose drive is not mounted. False for every other
-    /// kind, and while the mount cannot be told.
-    var isDriveAway: Bool {
-        kind == .local && VolumePresence.isMounted(volumeOf: resolvedLocalPath) == false
-    }
-
     /// The name of the drive a local repository sits on; nil for other kinds.
     var driveVolumeName: String? {
         kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil

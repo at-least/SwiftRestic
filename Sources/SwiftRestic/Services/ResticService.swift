@@ -867,8 +867,15 @@ struct ResticService: ResticClient {
                                 detail: "could not read the removal count from restic’s answer"
             )
         }
-        return groups.reduce(0) { total, group in
-            total + ((group["remove"] as? [Any])?.count ?? 0)
+        // restic's nothing-removed is `"remove":null` (NSNull here); a group
+        // with no key at all is a changed shape.
+        return try groups.reduce(0) { total, group in
+            guard let remove = group["remove"] else {
+                throw ResticError.malformedOutput(
+                                    detail: "could not read the removal count from restic’s answer"
+                )
+            }
+            return total + ((remove as? [Any])?.count ?? 0)
         }
     }
 
@@ -941,8 +948,8 @@ struct ResticService: ResticClient {
     /// modification time. Keep is `never`, and not an absolute keep: it
     /// deletes a file that stands where the backup has a folder of the same
     /// name, and gives a folder that already exists the backed-up
-    /// permissions and dates. The landing itself is safe —
-    /// `createDirectory` below fails on a file there before restic runs.
+    /// permissions and dates. The landing itself is safe — a file there is
+    /// refused before restic runs.
     /// The file branch keeps and replaces in-app: restic rewrites an existing file in place, so a failed or cancelled
     /// restore straight onto the landing would leave a file that is neither
     /// the user's nor the backed-up one. An existing landing skips restic
@@ -962,6 +969,7 @@ struct ResticService: ResticClient {
 
         let target = Self.restoredItemURL(for: node, in: destinationDirectory)
         if node.isDirectory {
+            try Self.refuseFileInTheWay(of: target)
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             return try await runRestore(
                 context,
@@ -985,9 +993,10 @@ struct ResticService: ResticClient {
         }
         // Beside the landing, so the commit is a rename on one volume. What
         // the commit did not take — a failed, cancelled or kept restore's
-        // file — goes with the folder.
+        // file — goes with the folder. Not named after the file: a name near
+        // APFS's 255-byte limit would leave no room for the rest.
         let staging = destinationDirectory.appendingPathComponent(
-            ".\(target.lastPathComponent).\(UUID().uuidString).partial",
+            ".\(UUID().uuidString).partial",
             isDirectory: true
         )
         defer { try? FileManager.default.removeItem(at: staging) }
@@ -1024,11 +1033,11 @@ struct ResticService: ResticClient {
     ///
     /// The landings are checked before restic runs, as `restore(node:)`'s
     /// are. restic deletes a file standing where a restored folder goes,
-    /// under Keep too, so each folder's landing is created first, which
-    /// fails on a file there. Under Replace it fails on a folder standing
-    /// where a restored file goes — after taking that folder's permissions
-    /// away — so that is refused; under Keep it leaves the folder and counts
-    /// the file kept, as `restore(node:)` does.
+    /// under Keep too, so that is refused, and each folder's landing is
+    /// created before restic runs. Under Replace restic fails on a folder
+    /// standing where a restored file goes — after taking that folder's
+    /// permissions away — so that is refused; under Keep it leaves the
+    /// folder and counts the file kept, as `restore(node:)` does.
     @discardableResult
     func restoreItems(
         _ context: RepositoryContext,
@@ -1044,7 +1053,11 @@ struct ResticService: ResticClient {
         // Two passes: every refusal comes before any landing is created, so
         // a refused restore leaves the destination as it stood.
         for (node, landing) in zip(nodes, landings) {
-            guard !node.isDirectory, overwrite == .replaceExisting else { continue }
+            if node.isDirectory {
+                try Self.refuseFileInTheWay(of: landing)
+                continue
+            }
+            guard overwrite == .replaceExisting else { continue }
             if (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) == .typeDirectory {
                 throw ResticError.folderInTheWay(path: landing.path)
             }
@@ -1059,6 +1072,17 @@ struct ResticService: ResticClient {
                 + overwrite.resticArguments,
             onProgress: onProgress
         )
+    }
+
+    /// Refuses what `createDirectory` on a folder's landing would fail on: a
+    /// name held (lstat, so a dangling link counts) by anything that does
+    /// not resolve to a folder.
+    private static func refuseFileInTheWay(of landing: URL) throws {
+        var isFolder: ObjCBool = false
+        if RestoreDestinationRules.itemExists(at: landing),
+           !(FileManager.default.fileExists(atPath: landing.path, isDirectory: &isFolder) && isFolder.boolValue) {
+            throw ResticError.fileInTheWay(path: landing.path)
+        }
     }
 
     /// A single file Keep left alone, with the counters a restore summary

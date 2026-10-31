@@ -49,11 +49,15 @@ extension AppModel {
     /// (`ShareNotReconnected`). A volume with no saved share is left to the
     /// read, as before.
     func reconnectShare(before repository: Repository) async throws {
-        guard repository.isDriveAway, let volume = repository.driveVolumeName else { return }
+        guard await isDriveAway(repository), let volume = repository.driveVolumeName else { return }
         let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
         guard failures.isEmpty else {
             throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume))
         }
+    }
+
+    func isMounted(volumeOf path: String) async -> Bool? {
+        await volumeProbe.isMounted(volumeOf: path)
     }
 
     /// One connection attempt to a network repository's server
@@ -81,7 +85,7 @@ extension AppModel {
     /// mount is in flight waits for its answer (`shareReconnects`).
     private func reconnect(_ share: NetworkShare) async -> ShareReconnect {
         if let inFlight = shareReconnects[share.volumeName] { return await inFlight.value }
-        let task = Task { [secrets, shareMounter] () -> ShareReconnect in
+        let task = Task { [secrets, shareMounter, volumeProbe] () -> ShareReconnect in
             func result(_ outcome: ShareReconnect.Outcome) -> ShareReconnect {
                 ShareReconnect(volumeName: share.volumeName, url: share.url, outcome: outcome)
             }
@@ -103,7 +107,7 @@ extension AppModel {
                 // disconnect makes macOS mount the share beside it, as
                 // "NAS-1", where the plan's and repository's paths still
                 // miss it.
-                guard VolumePresence.isVolumeRoot("/Volumes/\(share.volumeName)") else {
+                guard await volumeProbe.isMounted(volumeOf: "/Volumes/\(share.volumeName)") == true else {
                     return result(.refused(
                         "macOS mounted it as \(mountpoints.first ?? "another folder") — a folder named “\(share.volumeName)” is in the way in /Volumes"
                     ))

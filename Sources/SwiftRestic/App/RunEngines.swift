@@ -41,23 +41,26 @@ private func runAfterHooks(
     record.finishedAt = .now
 }
 
-/// The away volumes among `paths`, each once, handed to `reconnect` — an
-/// engine's sink, `AppModel.reconnectShares` — and nothing asked when none
-/// is away. Each answer goes to the run's log; the shares that stayed away
-/// come back, for the run's words (`reasonsByVolume`) and whether one
+/// The away volumes among `paths`, each once, handed to the sink's
+/// `reconnectShares` — `AppModel.reconnectShares` — and nothing asked when
+/// none is away. Each answer goes to the run's log; the shares that stayed
+/// away come back, for the run's words (`reasonsByVolume`) and whether one
 /// refused (`isRefusal`).
 @MainActor
 private func reconnectAwayShares(
     of paths: [String],
     transcript: RunTranscript,
-    reconnect: ([String]) async -> [ShareReconnect]
+    sink: some RunEngineSink
 ) async -> [ShareReconnect] {
     var away: [String] = []
-    for path in paths where VolumePresence.isMounted(volumeOf: path) == false {
-        if let volume = VolumePresence.volumeName(of: path), !away.contains(volume) { away.append(volume) }
+    for path in paths {
+        guard await sink.isMounted(volumeOf: path) == false,
+              let volume = VolumePresence.volumeName(of: path), !away.contains(volume)
+        else { continue }
+        away.append(volume)
     }
     guard !away.isEmpty else { return [] }
-    let answers = await reconnect(away)
+    let answers = await sink.reconnectShares(volumes: away)
     for answer in answers { transcript.note(answer.logLine) }
     return answers.filter { $0.failureReason != nil }
 }
@@ -90,6 +93,18 @@ protocol RunEngineSink: AnyObject {
     /// One connection attempt to a network repository's server
     /// (`ServerProbe`); nil when there is nothing to ask first.
     func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
+    /// Whether the volume holding `path` is mounted; nil for a path on the
+    /// startup disk. Off the main actor (`VolumeProbe`).
+    func isMounted(volumeOf path: String) async -> Bool?
+}
+
+extension RunEngineSink {
+    /// A local repository whose drive is not mounted. False for every other
+    /// kind, and while the mount cannot be told.
+    func isDriveAway(_ repository: Repository) async -> Bool {
+        guard repository.kind == .local else { return false }
+        return await isMounted(volumeOf: repository.resolvedLocalPath) == false
+    }
 }
 
 /// One backup run's lifecycle, so the sequencing — hooks → start ping →
@@ -202,7 +217,7 @@ enum BackupRunEngine {
             let shareFailures = await reconnectAwayShares(
                 of: neededPaths,
                 transcript: transcript,
-                reconnect: { await sink.reconnectShares(volumes: $0) }
+                sink: sink
             )
             reconnectFailures = shareFailures.reasonsByVolume
 
@@ -228,7 +243,7 @@ enum BackupRunEngine {
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
             // whose "does not exist" could not tell it from a moved folder.
-            if repository.isDriveAway {
+            if await sink.isDriveAway(repository) {
                 let reason = RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
                 )
@@ -361,7 +376,7 @@ enum BackupRunEngine {
             // back, so the run fails, a new plan for where the folder is now
             // its fix. The slot is stamped either way, so an hourly plan
             // does not try again every tick.
-            if VolumePresence.isMounted(volumeOf: plan.resolvedPath) == false {
+            if await sink.isMounted(volumeOf: plan.resolvedPath) == false {
                 record.outcome = .skipped
                 record.detailText = RunRecord.skippedReason(sources: [plan.path], reconnectFailures: reconnectFailures)
             } else {
@@ -527,7 +542,7 @@ enum MaintenanceRunEngine {
                 let failures = await reconnectAwayShares(
                     of: [repository.resolvedLocalPath],
                     transcript: transcript,
-                    reconnect: { await sink.reconnectShares(volumes: $0) }
+                    sink: sink
                 )
                 if failures.contains(where: \.isRefusal) {
                     record.outcome = .failed
@@ -537,7 +552,7 @@ enum MaintenanceRunEngine {
                     )
                     break run
                 }
-                if repository.isDriveAway {
+                if await sink.isDriveAway(repository) {
                     record.outcome = .skipped
                     record.detailText = RunRecord.skippedReason(
                         sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
@@ -686,9 +701,9 @@ private func failIfRepositoryAway(
         let failures = await reconnectAwayShares(
             of: [repository.resolvedLocalPath],
             transcript: transcript,
-            reconnect: { await sink.reconnectShares(volumes: $0) }
+            sink: sink
         )
-        if repository.isDriveAway {
+        if await sink.isDriveAway(repository) {
             record.outcome = .failed
             let refused = failures.filter(\.isRefusal).map(\.volumeName)
             if !refused.isEmpty { record.refusedShares = refused }

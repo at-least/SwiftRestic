@@ -76,7 +76,7 @@ struct ServerAwayTests {
             // The server back: the network's change reads the listing again and
             // runs the plan whose backup it skipped.
             await answer.set(.reachable)
-            model.networkPathChanged()
+            await model.networkPathChanged()
             await waitForRuns(2)
             await model.waitForRun(planID: plan.id)
             let ran = try #require(model.configuration.runs.first)

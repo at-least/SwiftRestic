@@ -10,8 +10,8 @@ struct SecretStoreTests {
         let id = UUID()
         let secrets = SecretStore.inMemory([id: (password: "kept", providerSecret: "old")])
 
-        // `KeychainStore.write`'s guard: an empty password writes nothing,
-        // so the stored one survives.
+        // `SecretStore.save`'s guard: an empty password never reaches
+        // `KeychainStore.write`, which would delete the stored one.
         try await secrets.save(id, "", nil)
         #expect(try await secrets.load(id).password == "kept")
         #expect(try await secrets.load(id).providerSecret == "old")

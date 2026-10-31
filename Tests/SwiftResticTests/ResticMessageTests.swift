@@ -333,6 +333,35 @@ struct ResticMessageTests {
         #expect(throws: ResticError.self) {
             try ResticService.countRemoved(forgetOutput: "not json at all")
         }
+        // A group with no "remove" key at all is a changed shape, not
+        // restic's null for nothing removed.
+        #expect(throws: ResticError.malformedOutput(detail: "could not read the removal count from restic’s answer")) {
+            try ResticService.countRemoved(forgetOutput: #"[{"keep":null}]"#)
+        }
+    }
+
+    @Test("a decode failure names the field it failed on, or says the whole answer is wrong")
+    func briefFailureNamesTheField() {
+        struct Answer: Decodable {
+            var items: [Item]
+            struct Item: Decodable { var id: String }
+        }
+        func failure(_ json: String) -> String {
+            do {
+                _ = try ResticMessageDecoder.jsonDecoder.decode(Answer.self, from: Data(json.utf8))
+                return "decoded"
+            } catch {
+                return ResticMessageDecoder.briefFailure(error)
+            }
+        }
+        #expect(failure("not json") == "the answer is not JSON")
+        #expect(failure("42") == "the answer has an unexpected shape")
+        #expect(failure("null") == "the answer is empty")
+        #expect(failure("{}") == "field “items” is absent")
+        // The key that is missing, not the element that lacks it.
+        #expect(failure(#"{"items":[{}]}"#) == "field “id” is absent")
+        #expect(failure(#"{"items":[{"id":3}]}"#) == "field “id” has an unexpected type")
+        #expect(failure(#"{"items":[{"id":null}]}"#) == "field “id” was missing a value")
     }
 }
 
