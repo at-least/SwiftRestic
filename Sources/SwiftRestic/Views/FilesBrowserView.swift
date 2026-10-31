@@ -178,7 +178,11 @@ struct FilesBrowserView: View {
         // The tree does not watch the folder: it is read again when the tab
         // shows, when SwiftRestic comes to the front — another app may have
         // changed the folder meanwhile — and when a volume comes or goes.
-        .onAppear {
+        // Not onAppear: one view serves every plan's Files tab, so another
+        // plan picked in the sidebar does not appear it again (seen in a
+        // VM: a file added to plan B's folder while plan A was shown was
+        // missing from B's tree on its return).
+        .onChange(of: roots, initial: true) {
             filesTree.diskMayHaveChanged()
             shownTurn = filesTree.diskGeneration
         }
