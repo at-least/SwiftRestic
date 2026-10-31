@@ -747,7 +747,7 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .rebuildIndex(repository.id))?.title
             == "Rebuild the search index for “NAS”?")
 
-        let stopping = "will be stopped and recorded as cancelled"
+        let stopping = "will be stopped"
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
         model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
@@ -756,12 +756,12 @@ struct CommandStateTests {
         // Apply Retention Now is no backup.
         model.activity[plan.id]?.work = .applyRetention
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Applying retention will be stopped and recorded as cancelled.") == true)
+            .hasPrefix("Applying retention will be stopped.") == true)
         #expect(model.quitInterruptions == ["Retention is being applied."])
         // Nor is Remove from Earlier Backups, and it is no retention either.
         model.activity[plan.id]?.work = .removeFromEarlierBackups
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Removing items from earlier backups will be stopped and recorded as cancelled.") == true)
+            .hasPrefix("Removing items from earlier backups will be stopped.") == true)
         #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
         model.activity[plan.id] = nil
 
@@ -798,7 +798,7 @@ struct CommandStateTests {
         model.cancelBackup(planID: plan.id)
         #expect(model.activity[plan.id]?.phase == .cancelling)
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Removing items from earlier backups will be stopped and recorded as cancelled.") == true)
+            .hasPrefix("Removing items from earlier backups will be stopped.") == true)
         #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
         #expect(model.removalConsequences(for: repository.id)
             .contains("Items are being removed from earlier backups of “Docs”, which will be cancelled.") == true)

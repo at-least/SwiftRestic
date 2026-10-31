@@ -514,7 +514,7 @@ struct AdoptTests {
         // The running variant keeps its own first sentence.
         model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "The running backup will be stopped and recorded as cancelled."
+            == "The running backup will be stopped."
                 + " Its 2 backups stay in “Home Disk”, and you can continue them later.")
 
         // One backup agrees in number.
