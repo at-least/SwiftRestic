@@ -26,12 +26,17 @@ extension AppModel {
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
-        for (planID, run) in activity where run.phase == .applyingRetention || run.phase == .removingFromEarlierBackups {
+        // A quiet run holds the lock for its whole life, a backup only in
+        // its forget step. By work, not phase: Stop turns the phase to
+        // `.cancelling` while the restic child, still holding the lock,
+        // dies. A backup stopped in its forget step still slips this for
+        // that unwind — its phase was all that said so.
+        for (planID, run) in activity where run.work != .backup || run.phase == .applyingRetention {
             guard let plan = plan(id: planID), let repositoryID = plan.repositoryID, reasons[repositoryID] == nil else { continue }
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
-            reasons[repositoryID] = run.phase == .applyingRetention
-                ? "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
-                : "\(name) is removing items from earlier backups of “\(label(of: plan))” — backups wait until it finishes."
+            reasons[repositoryID] = run.work == .removeFromEarlierBackups
+                ? "\(name) is removing items from earlier backups of “\(label(of: plan))” — backups wait until it finishes."
+                : "\(name) is applying retention for “\(label(of: plan))” — backups wait until it finishes."
         }
         return reasons
     }

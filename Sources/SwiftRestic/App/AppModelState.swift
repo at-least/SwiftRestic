@@ -33,7 +33,7 @@ struct PlanActivity: Sendable, Equatable {
 
     /// What the run in the plan's slot is. Not read from `phase`: Stop
     /// turns that to `.cancelling` while the run unwinds, for seconds, and
-    /// the quit list and the removal dialogs still name the work then.
+    /// the work it names still runs then.
     enum Work: Sendable, Equatable {
         case backup
         /// No backup: however it ends — a quit's cancel included — it

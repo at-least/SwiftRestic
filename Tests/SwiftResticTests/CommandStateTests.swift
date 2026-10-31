@@ -67,6 +67,33 @@ struct CommandStateTests {
             == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
     }
 
+    @Test("a stopped Apply Retention Now or Remove from Earlier Backups keeps the repository's backups waiting until it unwinds")
+    func stoppedQuietRunKeepsTheLock() async {
+        let cases: [(PlanActivity.Work, String)] = [
+            (.applyRetention, "“Home NAS” is applying retention for “Photos” — backups wait until it finishes."),
+            (.removeFromEarlierBackups, "“Home NAS” is removing items from earlier backups of “Photos” — backups wait until it finishes."),
+        ]
+        for (work, reason) in cases {
+            let model = makeModel()
+            let repository = makeRepository("Home NAS")
+            let documents = makePlan("Documents", on: repository)
+            let photos = makePlan("Photos", on: repository)
+            model.configuration.repositories = [repository]
+            model.configuration.plans = [documents, photos]
+            model.startQuietPlanRun(planID: photos.id, work: work) { _, _, _ in
+                try? await Task.sleep(for: .seconds(60))
+            }
+            // Stop: the restic child holds the exclusive lock until it is
+            // gone, and nothing awaits before the reads below.
+            model.cancelBackup(planID: photos.id)
+            #expect(model.activity[photos.id]?.phase == .cancelling)
+            #expect(model.backupLockReason(for: documents) == reason, "\(work)")
+            #expect(!model.planCommands(for: .plan(documents.id)).canBackUp, "\(work)")
+            await model.tasks.drain()
+            #expect(model.backupLockReason(for: documents) == nil, "\(work)")
+        }
+    }
+
     @Test("a run nobody asked for — a mount's or the network's catch-up — waits for a check or prune without a banner")
     func unaskedRunWaitsSilently() {
         let model = makeModel()
