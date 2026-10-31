@@ -319,8 +319,23 @@ struct ResticIntegrationTests {
         // them: restic 0.19.1 prints its JSON, which still lists both as
         // removed, then exits 3, "failed to remove one or more snapshots".
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshotsFolder.path)
-        await #expect(throws: ResticError.snapshotsNotRemoved(removed: 0, refused: 2, reason: "permission denied")) {
+        // restic 0.19.1 races when two refusals land at once: "fatal error:
+        // concurrent map writes" (cmd_forget.go:318), exit 2, its lock left
+        // behind. Fixed upstream in restic 9da3b87b, in no release yet. Both
+        // refused, nothing was removed, so the forget runs again.
+        func forgetPastRacingRefusals() async throws {
+            for _ in 1 ..< 3 {
+                do {
+                    try await fixture.service.forget(fixture.context, plan: plan)
+                    return
+                } catch let ResticError.commandFailed(_, message) where message.contains("fatal error: concurrent map writes") {
+                    try await fixture.service.unlock(fixture.context)
+                }
+            }
             try await fixture.service.forget(fixture.context, plan: plan)
+        }
+        await #expect(throws: ResticError.snapshotsNotRemoved(removed: 0, refused: 2, reason: "permission denied")) {
+            try await forgetPastRacingRefusals()
         }
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshotsFolder.path)
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
