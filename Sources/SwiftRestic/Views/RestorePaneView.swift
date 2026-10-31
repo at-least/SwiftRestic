@@ -910,7 +910,7 @@ struct RestorePaneView: View {
             // would look as if only other backups held them — FindFilesView
             // and the Files view ask the same.
             let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
-            let found: SearchWithMembership
+            let found: (hits: [SearchHit], inSnapshot: [PathKey: Bool], isTruncated: Bool)
             do {
                 // The hits, and which of them the open backup holds with
                 // their kind there. Every hit is held by some backup — the
@@ -931,7 +931,7 @@ struct RestorePaneView: View {
             searchResult = RestorePaneSearch(
                 hits: found.hits,
                 inRecord: found.inSnapshot,
-                limit: AppModel.indexSearchLimit,
+                isTruncated: found.isTruncated,
                 indexIsComplete: indexIsComplete
             )
             selection = []

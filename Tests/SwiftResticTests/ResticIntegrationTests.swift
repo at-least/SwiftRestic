@@ -514,7 +514,7 @@ struct ResticIntegrationTests {
         let before = try await rawSnapshots()
 
         #expect(model.shelves(for: repository.id).orphanPlanGroup(plan.id) != nil)
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: plan.id))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: plan.id))
         // A plan is called by its path: the backup's own folder.
         #expect(model.label(of: draft) == "source")
         #expect(draft.path == fixture.sourceDirectory.path)
@@ -556,7 +556,7 @@ struct ResticIntegrationTests {
         repository.localPath = fixture.root.appendingPathComponent("repo").path
         let model = try await adoptableModel(fixture: fixture, repository: repository)
 
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: plan.id))
+        var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: plan.id))
         // Retention starts off; the sheet's preview turns a policy on in the
         // draft alone — the plan is not saved, so the draft itself travels to
         // restic.

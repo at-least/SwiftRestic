@@ -15,7 +15,7 @@ struct RestorePaneSearchTests {
         let result = RestorePaneSearch(
             hits: [hit("/D/note-1.md"), hit("/D/note-12.md"), hit("/P/note.heic")],
             inRecord: ["/D/note-1.md": false],
-            limit: 200,
+            isTruncated: false,
             indexIsComplete: true
         )
 
@@ -33,28 +33,27 @@ struct RestorePaneSearchTests {
         let one = RestorePaneSearch(
             hits: [hit("/D/Budget.numbers")],
             inRecord: [:],
-            limit: 200,
+            isTruncated: false,
             indexIsComplete: true
         )
         #expect(one.inThisBackup.isEmpty)
         #expect(one.elsewhereCount == 1)
         #expect(one.note == "1 match is only in other backups.")
 
-        let none = RestorePaneSearch(hits: [], inRecord: [:], limit: 200, indexIsComplete: true)
+        let none = RestorePaneSearch(hits: [], inRecord: [:], isTruncated: false, indexIsComplete: true)
         #expect(none.elsewhereCount == 0)
         #expect(none.note == nil)
     }
 
-    @Test("a search at the index ceiling quotes no count")
-    func ceilingIsAFloor() {
+    @Test("a search the index holds more matches for quotes no count")
+    func truncatedSearchQuotesNoCount() {
         let result = RestorePaneSearch(
             hits: [hit("/a"), hit("/b"), hit("/c")],
             inRecord: ["/a": false],
-            limit: 3,
+            isTruncated: true,
             indexIsComplete: true
         )
 
-        #expect(result.isTruncated)
         #expect(result.elsewhereCount == 2)
         #expect(result.note == "Not every match is shown — narrow the search to see the rest.")
     }
@@ -68,7 +67,7 @@ struct RestorePaneSearchTests {
         let unread = RestorePaneSearch(
             hits: [hit("/D/Budget.numbers")],
             inRecord: [:],
-            limit: 200,
+            isTruncated: false,
             indexIsComplete: false
         )
         #expect(unread.inThisBackup.isEmpty)
@@ -76,17 +75,17 @@ struct RestorePaneSearchTests {
         #expect(unread.note?.contains("only in other backups") == false)
 
         // Nothing found yet is not "no other backup matches".
-        let none = RestorePaneSearch(hits: [], inRecord: [:], limit: 200, indexIsComplete: false)
+        let none = RestorePaneSearch(hits: [], inRecord: [:], isTruncated: false, indexIsComplete: false)
         #expect(none.note == hedge)
 
-        // It outranks the ceiling: both parts of a partial index are partial.
-        let atCeiling = RestorePaneSearch(
+        // It outranks truncation: both parts of a partial index are partial.
+        let truncated = RestorePaneSearch(
             hits: [hit("/a"), hit("/b"), hit("/c")],
             inRecord: ["/a": false],
-            limit: 3,
+            isTruncated: true,
             indexIsComplete: false
         )
-        #expect(atCeiling.note == hedge)
+        #expect(truncated.note == hedge)
     }
 
     /// The NFC and NFD spellings of a name are one String to Swift and two
@@ -100,7 +99,7 @@ struct RestorePaneSearchTests {
         let result = RestorePaneSearch(
             hits: [hit(nfd, isDirectory: false), hit(nfc, isDirectory: true)],
             inRecord: [PathKey(nfc): true],
-            limit: 200,
+            isTruncated: false,
             indexIsComplete: true
         )
         #expect(result.inThisBackup.map { Array($0.path.utf8) } == [Array(nfc.utf8)])
@@ -121,7 +120,7 @@ struct RestorePaneSearchTests {
                 hit("/D/report.pdf", isDirectory: false),
             ],
             inRecord: ["/D/Project": true, "/D/notes": false, "/D/report.pdf": false],
-            limit: 200,
+            isTruncated: false,
             indexIsComplete: true
         )
 

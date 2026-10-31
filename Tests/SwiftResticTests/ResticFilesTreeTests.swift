@@ -309,12 +309,13 @@ struct ResticFilesTreeTests {
         await model.shutdown()
     }
 
-    /// The Files tab's search cap, over the index the app builds: a full
-    /// page of hits is the whole answer, one hit past the cap says it was
-    /// cut — the model's probe of asking one hit past the limit. The
-    /// ceiling itself is pinned store-side (`SnapshotIndexScaleTests.search`).
+    /// The index searches' cap, over the index the app builds: a full page
+    /// of hits is the whole answer, one hit past the cap says it was cut —
+    /// the model's probe of asking one hit past the limit, for the Files
+    /// tab, Find Files and the Restore pane. The ceiling itself is pinned
+    /// store-side (`SnapshotIndexScaleTests.search`).
     @MainActor
-    @Test("a Files-tab search's full page is not called cut short; one hit past the cap is")
+    @Test("an index search's full page is not called cut short; one hit past the cap is")
     func searchTruncationAtTheCap() async throws {
         try ResticAvailability.binary()
         let base = FileManager.default.temporaryDirectory
@@ -373,6 +374,18 @@ struct ResticFilesTreeTests {
             )
             #expect(found.hits.count == AppModel.indexSearchLimit, "\(plan.path) returned \(found.hits.count) hits")
             #expect(found.isTruncated == (plan.id == over.id), "\(plan.path) read as truncated \(found.isTruncated)")
+
+            // The repository-wide searches hold every plan backed up so far:
+            // Full's page alone, then Full's notes and Over's together.
+            let summaries = try await model.searchIndexWithSummaries(pattern: "note", repositoryID: repository.id)
+            #expect(summaries.hits.count == AppModel.indexSearchLimit)
+            #expect(summaries.isTruncated == (plan.id == over.id), "Find Files read as truncated \(summaries.isTruncated) after \(plan.path)")
+            let snapshotID = try #require(model.snapshots(for: repository.id, planID: plan.id).first?.id)
+            let membership = try await model.searchIndexWithMembership(
+                pattern: "note", inSnapshot: snapshotID, repositoryID: repository.id
+            )
+            #expect(membership.hits.count == AppModel.indexSearchLimit)
+            #expect(membership.isTruncated == (plan.id == over.id), "the Restore pane read as truncated \(membership.isTruncated) after \(plan.path)")
         }
         await model.shutdown()
     }

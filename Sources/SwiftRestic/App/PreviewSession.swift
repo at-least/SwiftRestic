@@ -35,9 +35,12 @@ final class PreviewSession {
         snapshotID: String,
         node: @escaping @MainActor () async throws -> SnapshotNode
     ) {
-        // Cleared first: ending the last preview can fail to delete its copy.
         failure = nil
-        end()
+        // Not `end()`: its nil url reaches `previewSession(_:)`'s
+        // url-to-nil rule a view update later, and that rule's `end()`
+        // would cancel the copy started below. The last preview stays up
+        // until this one lands or fails.
+        task?.cancel()
         task = Task {
             do {
                 let file = try await node()
@@ -46,6 +49,7 @@ final class PreviewSession {
                 // whatever preview came next.
                 guard !Task.isCancelled else { return }
                 if let reason = VersionPreview.unavailableReason(size: file.size, isReading: false) {
+                    closeShown()
                     // A refusal, not an error: its reason is the line itself,
                     // not a tooltip under "Could not preview".
                     failure = Failure(title: reason, message: "")
@@ -57,11 +61,15 @@ final class PreviewSession {
                     discard(url)
                     return
                 }
+                let shown = copy
                 copy = url
                 self.url = url
+                // Only now: until this line the panel showed it.
+                if let shown { discard(shown) }
             } catch {
                 // A cancelled copy is the pane's own doing, not a failure.
                 if !Task.isCancelled {
+                    closeShown()
                     failure = Failure(title: "Could not preview", message: error.localizedDescription)
                 }
             }
@@ -74,6 +82,11 @@ final class PreviewSession {
     func end() {
         task?.cancel()
         task = nil
+        closeShown()
+    }
+
+    /// Closes Quick Look and deletes the copy it showed.
+    private func closeShown() {
         url = nil
         if let copy {
             self.copy = nil

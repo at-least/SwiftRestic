@@ -66,7 +66,7 @@ struct AdoptTests {
     // MARK: - The draft
 
     @Test("a history whose backup holds several folders is not offered for adoption — a plan backs up one")
-    func severalFoldersAreNotAdoptable() throws {
+    func severalFoldersAreNotAdoptable() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let both = try snapshot("both", time: "2026-09-28T10:00:00Z", paths: ["/Data/Docs", "/Data/Photos"], tags: [tag])
@@ -74,7 +74,7 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [both])
 
-        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID) == nil)
+        #expect(await model.adoptDraft(repositoryID: repository.id, planID: planID) == nil)
         let shelves = model.shelves(for: repository.id)
         #expect(shelves.adoptableGroups(localHost: model.localHostname).isEmpty)
         let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
@@ -86,7 +86,7 @@ struct AdoptTests {
         // A newer backup of one folder is the history a plan continues.
         let one = try snapshot("one", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag])
         loadModel(model, repository: repository, listing: [one, both])
-        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.path == "/Data/Docs")
+        #expect(await model.adoptDraft(repositoryID: repository.id, planID: planID)?.path == "/Data/Docs")
         #expect(model.shelves(for: repository.id).adoptableGroups(localHost: model.localHostname).count == 1)
         #expect(model.shelves(for: repository.id).otherGroupPage(
             .plan(planID), repositories: [repository], localHost: model.localHostname
@@ -94,7 +94,7 @@ struct AdoptTests {
     }
 
     @Test("the draft prefills from the newest backup this Mac made, and adopts one plan either way")
-    func prefillPrefersThisMac() throws {
+    func prefillPrefersThisMac() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         // The newest backup overall is another Mac's; this Mac's is older and
@@ -111,7 +111,7 @@ struct AdoptTests {
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [foreign, local])
 
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(draft.id == planID)
         #expect(draft.repositoryID == repository.id)
         // A plan is called by its path — this Mac's folder, not the
@@ -131,7 +131,7 @@ struct AdoptTests {
     }
 
     @Test("a history made with the developer switch on adopts with the switch on, the list keeping the user's own rows")
-    func developerRulesAdoptAsTheSwitch() throws {
+    func developerRulesAdoptAsTheSwitch() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let model = makeModel()
@@ -143,7 +143,7 @@ struct AdoptTests {
             // Each its own ID: the listing keeps a snapshot it already holds.
             let made = try snapshot("on" + path, time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
             loadModel(model, repository: repository, listing: [made])
-            let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+            let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
             #expect(draft.developerGroups == ExcludeCategory.developerGroups, "path \(path)")
             // In the app's spelling, so each reads as its rule.
             #expect(draft.path == path)
@@ -156,7 +156,7 @@ struct AdoptTests {
         let older = ["*.iso"] + all.dropFirst()
         let made1 = try snapshot("older", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: older)
         loadModel(model, repository: repository, listing: [made1])
-        let olderDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let olderDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(olderDraft.developerGroups == ExcludeCategory.developerGroups)
         #expect(olderDraft.excludePatterns == ["*.iso"])
         #expect(olderDraft.excludesToPass.contains(all[0]))
@@ -165,7 +165,7 @@ struct AdoptTests {
         let pythonOnly = ["*.iso"] + BackupPlan.developerExcludes(groups: [.python])
         let made2 = try snapshot("python", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: pythonOnly)
         loadModel(model, repository: repository, listing: [made2])
-        let pythonDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let pythonDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(pythonDraft.developerGroups == [.python])
         #expect(pythonDraft.excludePatterns == ["*.iso"])
 
@@ -173,13 +173,13 @@ struct AdoptTests {
         let partial = ["*.iso", "**/.venv", "**/__pycache__"]
         let made = try snapshot("off", time: "2026-10-01T10:00:00Z", tags: [tag], excludes: partial)
         loadModel(model, repository: repository, listing: [made])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(!draft.excludeDeveloperFiles)
         #expect(draft.excludePatterns == partial)
     }
 
     @Test("a default restic recorded with its tilde expanded reads as its switch; other rows stay as recorded")
-    func expandedDefaultsAdoptInTheirOwnSpelling() throws {
+    func expandedDefaultsAdoptInTheirOwnSpelling() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let model = makeModel()
@@ -190,13 +190,25 @@ struct AdoptTests {
             excludes: [".DS_Store", caches, "/Users/someone/elsewhere"]
         )
         loadModel(model, repository: repository, listing: [made])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(draft.skipsFinderFiles && draft.skipsSystemFiles)
         #expect(draft.excludePatterns == ["/Users/someone/elsewhere"])
     }
 
+    @Test("a file is here with a trailing or doubled slash, as the new-plan field holds it until Save")
+    func sourceExistsTidiesTheSpelling() throws {
+        let folder = existingFolder()
+        let file = folder + "/report.pdf"
+        try Data("x".utf8).write(to: URL(fileURLWithPath: file))
+        #expect(AppModel.sourceExists(file))
+        #expect(AppModel.sourceExists(file + "/"))
+        #expect(AppModel.sourceExists(file + "//"))
+        #expect(AppModel.sourceExists(folder + "/"))
+        #expect(!AppModel.sourceExists(folder + "/gone.pdf/"))
+    }
+
     @Test("the schedule follows the folder: Daily when it is here, Manual otherwise")
-    func scheduleFollowsTheFolders() throws {
+    func scheduleFollowsTheFolders() async throws {
         let here = existingFolder()
         let planID = UUID()
         let tag = ResticService.planTag(planID)
@@ -205,22 +217,22 @@ struct AdoptTests {
 
         let present = try snapshot("a", time: "2026-10-02T11:45:00Z", paths: [here], tags: [tag])
         loadModel(model, repository: repository, listing: [present])
-        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .daily)
+        #expect(await model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .daily)
 
         let missing = try snapshot("b", time: "2026-10-02T11:45:00Z", paths: ["/Data/Gone"], tags: [tag])
         loadModel(model, repository: repository, listing: [missing])
-        #expect(model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .manual)
+        #expect(await model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .manual)
     }
 
     @Test("retention starts off — the history is the point of adopting")
-    func retentionStartsOff() throws {
+    func retentionStartsOff() async throws {
         let planID = UUID()
         let snapshot = try snapshot("a", time: "2026-10-02T11:45:00Z", tags: [ResticService.planTag(planID)])
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [snapshot])
 
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(!draft.retention.isEnabled)
         #expect(draft.retention.summary == "Keep everything")
     }
@@ -228,7 +240,7 @@ struct AdoptTests {
     // MARK: - Collision rows
 
     @Test("a UUID that names a configured plan is its moved history, never adoptable")
-    func movedGroupNeverAdopts() throws {
+    func movedGroupNeverAdopts() async throws {
         let offsite = makeRepository("Offsite")
         var music = BackupPlan()
         music.repositoryID = offsite.id
@@ -239,13 +251,13 @@ struct AdoptTests {
         model.configuration.plans = [music]
         model.snapshots[home.id] = [snapshot]
 
-        #expect(model.adoptDraft(repositoryID: home.id, planID: music.id) == nil)
+        #expect(await model.adoptDraft(repositoryID: home.id, planID: music.id) == nil)
         // The page agrees on which variant it is.
         #expect(model.shelves(for: home.id).otherGroupPage(.plan(music.id), repositories: model.configuration.repositories, localHost: localHost)?.formerPlan == music)
     }
 
     @Test("an untagged group has no UUID to adopt")
-    func untaggedGroupHasNoUUID() throws {
+    func untaggedGroupHasNoUUID() async throws {
         let console = try snapshot("c1", time: "2026-10-02T11:45:00Z", tags: [])
         let model = makeModel()
         let repository = makeRepository()
@@ -257,11 +269,11 @@ struct AdoptTests {
         #expect(shelves.others.allSatisfy {
             if case .lineage = $0 { return true } else { return false }
         })
-        #expect(model.adoptDraft(repositoryID: repository.id, planID: UUID()) == nil)
+        #expect(await model.adoptDraft(repositoryID: repository.id, planID: UUID()) == nil)
     }
 
     @Test("a group from another Mac warns in order and asks before adopting")
-    func foreignGroupWarnsAndConfirms() throws {
+    func foreignGroupWarnsAndConfirms() async throws {
         let planID = UUID()
         let newest = try snapshot(
             "movies", time: "2026-10-02T11:45:00Z", paths: ["/Data/Movies"], host: "other-mac",
@@ -270,9 +282,9 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [newest])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
-        let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
+        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.historyLine == "This backup becomes this plan’s history.")
         #expect(briefing.madeLine
             == "Made \(Format.historySpan(oldest: newest.time, newest: newest.time)) from other-mac."
@@ -292,7 +304,7 @@ struct AdoptTests {
     }
 
     @Test("the folder warning says where the folder came from, or that it isn't on this Mac")
-    func folderWarningFollowsThePrefill() throws {
+    func folderWarningFollowsThePrefill() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let foreign = try snapshot(
@@ -301,8 +313,8 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [foreign])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z"))?.warnings == [
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z"))?.warnings == [
             "The newest backup was made on “other-mac”, \(Format.timestamp(foreign.time)).",
             "The folder comes from another Mac and may not exist here.",
         ])
@@ -311,13 +323,16 @@ struct AdoptTests {
         // fact instead.
         let local = try snapshot("l", time: "2026-09-28T10:00:00Z", paths: ["/Data/Gone"], tags: [tag])
         loadModel(model, repository: repository, listing: [local])
-        let localDraft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(model.adoptBriefing(for: localDraft, now: date("2026-10-03T12:00:00Z"))?.warnings
+        let localDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
+        #expect(model.adoptBriefing(for: localDraft, sourceExists: AppModel.sourceExists(localDraft.path), now: date("2026-10-03T12:00:00Z"))?.warnings
             == ["This folder isn’t on this Mac."])
+        // The sheet's own read decides, not a stat in the briefing: read as
+        // here, the same gone folder warns of nothing.
+        #expect(model.adoptBriefing(for: localDraft, sourceExists: true, now: date("2026-10-03T12:00:00Z"))?.warnings == [])
     }
 
     @Test("a clean old local group adopts in one click, once its folders are here")
-    func cleanLocalGroupNeedsNoDialog() throws {
+    func cleanLocalGroupNeedsNoDialog() async throws {
         let planID = UUID()
         let here = existingFolder()
         // Three days old, this Mac's own — no foreign writer, nothing recent.
@@ -327,16 +342,16 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [old])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
-        let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
+        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.isEmpty)
         #expect(!briefing.needsConfirmation)
         #expect(briefing.historyLine == "This backup becomes this plan’s history.")
     }
 
     @Test("a fresh backup this Mac itself made still asks once")
-    func recentLocalGroupStillConfirms() throws {
+    func recentLocalGroupStillConfirms() async throws {
         let planID = UUID()
         let here = existingFolder()
         let fresh = try snapshot(
@@ -345,9 +360,9 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [fresh])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
-        let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
+        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         // No warning line — the recent warning is host-aware, so this Mac's
         // own fresh backup is not called another Mac's work — but the dialog
         // still asks, because freshness alone is worth one deliberate look.
@@ -356,7 +371,7 @@ struct AdoptTests {
     }
 
     @Test("an older foreign backup is named precisely, never as the newest")
-    func olderForeignBackupNamedPrecisely() throws {
+    func olderForeignBackupNamedPrecisely() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let local = try snapshot("newest", time: "2026-10-01T11:45:00Z", paths: [existingFolder()], tags: [tag])
@@ -366,9 +381,9 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: [local, foreign])
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
-        let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
+        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.first
             == "The newest backup from another Mac was made on “laptop”, \(Format.timestamp(foreign.time)).")
         // Two Macs made the history; the header counts them.
@@ -378,7 +393,7 @@ struct AdoptTests {
     }
 
     @Test("a backup carrying another plan's tag too says where it stays")
-    func dualTaggedBackupNote() throws {
+    func dualTaggedBackupNote() async throws {
         // The snapshot's one home is its lexicographically first plan tag, so
         // the fixture orders them: this group's UUID sorts first and the
         // dual-tagged backup sits in it.
@@ -395,16 +410,16 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: snapshots)
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
-        let briefing = try #require(model.adoptBriefing(for: draft, now: date("2026-10-03T12:00:00Z")))
+        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.last == "1 backup also carries another plan’s tag and stays with that plan.")
     }
 
     // MARK: - The write
 
     @Test("adopt appends one plan with the group's UUID, moves the records and writes no run record")
-    func adoptAppendsAndReshelves() throws {
+    func adoptAppendsAndReshelves() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let listing = try [
@@ -414,7 +429,7 @@ struct AdoptTests {
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
-        let draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         model.adopt(draft: draft)
 
@@ -436,13 +451,13 @@ struct AdoptTests {
     }
 
     @Test("the banner's singular variant")
-    func bannerSingular() throws {
+    func bannerSingular() async throws {
         let planID = UUID()
         let listing = try [snapshot("only", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(planID)])]
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         draft.path = existingFolder()
 
         model.adopt(draft: draft)
@@ -451,20 +466,20 @@ struct AdoptTests {
     }
 
     @Test("a group that left while the sheet was open adopts with honest words, not a count of zero")
-    func vanishedGroupSaysSo() throws {
+    func vanishedGroupSaysSo() async throws {
         let planID = UUID()
         let listing = try [snapshot("g1", time: "2026-09-28T02:00:00Z", tags: [ResticService.planTag(planID)])]
         let model = makeModel()
         let repository = makeRepository()
         loadModel(model, repository: repository, listing: listing)
-        var draft = try #require(model.adoptDraft(repositoryID: repository.id, planID: planID))
+        var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         draft.path = existingFolder()
 
         // A listing refresh drops the group while the sheet is open: the
         // briefing is gone (the sheet's words already left with it), and
         // the banner must not count a history of zero backups.
         model.snapshots[repository.id] = []
-        #expect(model.adoptBriefing(for: draft) == nil)
+        #expect(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path)) == nil)
 
         model.adopt(draft: draft)
 

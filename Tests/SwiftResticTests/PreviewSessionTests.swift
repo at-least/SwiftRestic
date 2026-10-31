@@ -105,7 +105,7 @@ struct PreviewSessionTests {
         #expect(previewFolders(in: scene.model).isEmpty)
     }
 
-    @Test("starting again ends the first preview: its copy is gone and the second url shows")
+    @Test("starting again keeps the first preview up until the second lands, then its copy is gone")
     func startingAgainReplacesTheCopy() async throws {
         let scene = try await makeScene()
         defer { try? FileManager.default.removeItem(at: scene.root) }
@@ -115,6 +115,10 @@ struct PreviewSessionTests {
         let first = try #require(session.url)
 
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
+        // `previewSession(_:)` ends the session when url turns nil — the
+        // panel closing — so a nil here would end the copy just started.
+        #expect(session.url == first)
+        #expect(FileManager.default.fileExists(atPath: first.path), "the copy the panel shows was deleted under it")
         try await until { session.url != nil && session.url != first }
         #expect(session.failure == nil)
         // The cancelled first task winds down beside the second: once its

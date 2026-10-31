@@ -72,9 +72,11 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// `restic version` answered something that names no version.
     case resticVersionUnreadable(path: String)
     /// A folder stands where a Replace restore would put a file — one item
-    /// or several. Left to restic, the folder's contents are lost, or a
-    /// single file is transferred whole and only then cannot replace the
-    /// folder, so the restore is refused before restic runs.
+    /// or several. Left to restic, several items fail on it ("directory not
+    /// empty") after restic puts the file's mode on the folder, taking its
+    /// execute bits away; its contents stay. A single file is transferred
+    /// whole and only then cannot replace the folder. So the restore is
+    /// refused before restic runs.
     case folderInTheWay(path: String)
     /// Something other than a folder stands where a restored folder goes.
     /// restic would delete it, under Keep too, so the restore is refused

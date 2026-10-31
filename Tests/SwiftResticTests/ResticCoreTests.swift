@@ -426,9 +426,10 @@ struct RawLineStreamingTests {
     }
 }
 
-/// The stdout and stderr text the runner keeps on the result: capped when
+/// The stdout text the runner keeps on the result: capped when
 /// `retainFullOutput` is not set — the unbounded streams (backup, restore,
-/// the walks) ride the message callbacks instead — whole when it is.
+/// the walks) ride the message callbacks instead — whole when it is. stderr
+/// keeps its first 64 KB either way.
 @Suite("Retained output cap")
 struct RetainedOutputCapTests {
     /// 80 lines of 2048 bytes: about 164 KB printed, well past the runner's

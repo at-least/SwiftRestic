@@ -18,14 +18,14 @@ extension AppModel {
         var reasons: [String] = []
         // Apply Retention Now and Remove from Earlier Backups run in a plan's
         // slot too, and are not backups.
-        let backups = activity.values.filter(\.isBackup).count
+        let backups = activity.values.filter { $0.work == .backup }.count
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
         }
-        if activity.values.contains(where: { !$0.isBackup && $0.phase != .removingFromEarlierBackups }) {
+        if activity.values.contains(where: { $0.work == .applyRetention }) {
             reasons.append("Retention is being applied.")
         }
-        if activity.values.contains(where: { $0.phase == .removingFromEarlierBackups }) {
+        if activity.values.contains(where: { $0.work == .removeFromEarlierBackups }) {
             reasons.append("Items are being removed from earlier backups.")
         }
         if !maintenance.isEmpty { reasons.append("Repository maintenance is running.") }
@@ -55,7 +55,7 @@ extension AppModel {
         guard !startsAtLogin else { return nil }
         let hold = scheduleHold(now: now)
         let plansAfterQuit = configuration.plans.map { plan in
-            guard let run = activity[plan.id], run.isBackup, !pauseStoppedPlanIDs.contains(plan.id) else { return plan }
+            guard let run = activity[plan.id], run.work == .backup, !pauseStoppedPlanIDs.contains(plan.id) else { return plan }
             var plan = plan
             plan.lastRunAt = max(plan.lastRunAt ?? .distantPast, run.startedAt)
             return plan

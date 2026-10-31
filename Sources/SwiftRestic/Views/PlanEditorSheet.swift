@@ -98,10 +98,8 @@ struct PlanEditorSheet: View {
 
     var body: some View {
         // One derivation per render pass: the header, footer, locked
-        // repository row and dialog below all read this pass's answer —
-        // and deriving it stats the filesystem once per source, work the
-        // render path should not pay five times over.
-        let briefing = mode == .adopt ? model.adoptBriefing(for: draft) : nil
+        // repository row and dialog below all read this pass's answer.
+        let briefing = mode == .adopt ? model.adoptBriefing(for: draft, sourceExists: !pathIsMissing) : nil
         return VStack(spacing: 0) {
             if let briefing {
                 adoptHeader(briefing)
@@ -197,6 +195,21 @@ struct PlanEditorSheet: View {
         // its own, so adopt's header strip and footer warnings fit the same
         // frame.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
+        // The path's network share and presence, read off the main actor: a
+        // stalled share can hold the read for seconds. On the sheet, not a
+        // tab: the identity rows and adopt's briefing read them on every tab.
+        .task(id: draft.path) {
+            let path = draft.path
+            let (share, missing) = await Task.detached {
+                (
+                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)),
+                    !path.isEmpty && !AppModel.sourceExists(path)
+                )
+            }.value
+            guard !Task.isCancelled else { return }
+            mountedShare = share
+            pathIsMissing = missing
+        }
         .onAppear {
             draft.repositoryID = EditorRequirements.initialRepositoryID(
                 draft.repositoryID, among: model.configuration.repositories
@@ -236,7 +249,7 @@ struct PlanEditorSheet: View {
     /// single pass; this one serves the button's click.
     private var briefing: AdoptBriefing? {
         guard mode == .adopt else { return nil }
-        return model.adoptBriefing(for: draft)
+        return model.adoptBriefing(for: draft, sourceExists: !pathIsMissing)
     }
 
     /// The adopt sheet's title: what the group's backups become, when they
@@ -516,20 +529,6 @@ struct PlanEditorSheet: View {
             keptFoldersSection
         }
         .formStyle(.grouped)
-        // The path's network share, read off the main actor: a stalled
-        // share can hold the read for seconds.
-        .task(id: draft.path) {
-            let path = draft.path
-            let (share, missing) = await Task.detached {
-                (
-                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)),
-                    !path.isEmpty && !AppModel.sourceExists(path)
-                )
-            }.value
-            guard !Task.isCancelled else { return }
-            mountedShare = share
-            pathIsMissing = missing
-        }
     }
 
     /// The folders the plan page's Rebuildable Folders were told to keep,
@@ -668,7 +667,7 @@ struct PlanEditorSheet: View {
                 stored: model.plan(id: draft.id),
                 existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
                 hold: model.scheduleHold,
-                isBackingUp: model.activity[draft.id]?.isBackup == true,
+                isBackingUp: model.activity[draft.id]?.work == .backup,
                 now: now
             ) {
                 LabeledContent("Next backup") {

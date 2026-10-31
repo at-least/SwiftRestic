@@ -192,11 +192,11 @@ extension AppModel {
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
-            let message = switch activity[id] {
-            case let run? where run.phase == .removingFromEarlierBackups:
+            let message = switch activity[id]?.work {
+            case .removeFromEarlierBackups?:
                 "Removing items from earlier backups will be stopped and recorded as cancelled. \(landing)"
-            case let run? where run.isBackup: "The running backup will be stopped and recorded as cancelled. \(landing)"
-            case _?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
+            case .backup?: "The running backup will be stopped and recorded as cancelled. \(landing)"
+            case .applyRetention?: "Applying retention will be stopped and recorded as cancelled. \(landing)"
             case nil: "This Mac stops backing up “\(name)”. \(landing)"
             }
             return ConfirmationCopy(title: "Remove “\(name)”?", message: message)

@@ -31,12 +31,20 @@ struct PlanActivity: Sendable, Equatable {
         }
     }
 
+    /// What the run in the plan's slot is. Not read from `phase`: Stop
+    /// turns that to `.cancelling` while the run unwinds, for seconds, and
+    /// the quit list and the removal dialogs still name the work then.
+    enum Work: Sendable, Equatable {
+        case backup
+        /// No backup: however it ends — a quit's cancel included — it
+        /// stamps no slot as run. Nor does the removal below.
+        case applyRetention
+        case removeFromEarlierBackups
+    }
+
     var phase: Phase = .starting
     var startedAt: Date = .now
-    /// False for Apply Retention Now's forget, which runs in the plan's
-    /// slot but is no backup: however it ends — a quit's cancel included —
-    /// it stamps no slot as run.
-    var isBackup = true
+    var work: Work = .backup
     /// A Back Up Now the user asked for, not the scheduler's or a mount's
     /// catch-up: a skip answers it with a banner.
     var askedByUser = false

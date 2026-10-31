@@ -379,7 +379,7 @@ struct PlanDetailView: View {
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
             hold: model.scheduleHold,
-            isBackingUp: model.activity[plan.id]?.isBackup == true,
+            isBackingUp: model.activity[plan.id]?.work == .backup,
             now: now
         )
         let schedule = PlanStatus.scheduleRow(for: plan)

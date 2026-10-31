@@ -43,9 +43,9 @@ struct FindFilesView: View {
     @State private var searchedLatestOnly = false
     @State private var searchTask: Task<Void, Never>?
     private var isSearching: Bool { searchTask != nil }
-    /// True when the index search stopped early — at the hit cap, or (not
-    /// expected, see `FindResultGrouping.indexRows`) a hit that came
-    /// without its summary. The footer says so; a truncated list must not
+    /// True when the index search stopped early — the index holds more
+    /// hits than the cap, or (not expected, see `FindResultGrouping.indexRows`)
+    /// a hit came without its summary. The footer says so; a truncated list must not
     /// pass for the whole answer.
     @State private var resultsTruncated = false
     /// The toolbar field, focused on arrival — the page exists to answer one
@@ -453,7 +453,7 @@ struct FindFilesView: View {
                             versionsCount: $0.count, hit: $0.hit
                         )
                     }
-                    resultsTruncated = built.dropped > 0 || found.hits.count >= AppModel.indexSearchLimit
+                    resultsTruncated = built.dropped > 0 || found.isTruncated
                 } else {
                     let found = try await model.findFiles(
                         repositoryID: searchedRepository,

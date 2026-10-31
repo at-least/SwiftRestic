@@ -255,7 +255,7 @@ struct RootView: View {
     /// longer reads as adoptable answers nil and nothing opens; the page it
     /// was on is revalidating away in the same breath.
     private func adoptGroup(repositoryID: UUID, planID: UUID) {
-        adoptingPlan = model.adoptDraft(repositoryID: repositoryID, planID: planID)
+        Task { adoptingPlan = await model.adoptDraft(repositoryID: repositoryID, planID: planID) }
     }
 
     /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's

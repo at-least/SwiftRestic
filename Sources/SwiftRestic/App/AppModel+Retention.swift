@@ -33,7 +33,7 @@ extension AppModel {
     /// instead of queueing.
     func applyRetention(planID: UUID) {
         guard let plan = plan(id: planID), plan.retention.isSafeToRun else { return }
-        startQuietPlanRun(planID: planID, phase: .applyingRetention) { plan, repository, sink in
+        startQuietPlanRun(planID: planID, work: .applyRetention) { plan, repository, sink in
             await RetentionRunEngine.perform(plan: plan, repository: repository, sink: sink)
         }
     }
@@ -44,7 +44,7 @@ extension AppModel {
     /// `perform` ends.
     func startQuietPlanRun(
         planID: UUID,
-        phase: PlanActivity.Phase,
+        work: PlanActivity.Work,
         perform: @escaping @MainActor (BackupPlan, Repository, AppModel) async -> Void
     ) {
         guard !isShuttingDown else { return }
@@ -56,8 +56,12 @@ extension AppModel {
         }
 
         installPlanActivity(planID: planID)
-        activity[planID]?.phase = phase
-        activity[planID]?.isBackup = false
+        activity[planID]?.work = work
+        activity[planID]?.phase = switch work {
+        case .applyRetention: .applyingRetention
+        case .removeFromEarlierBackups: .removingFromEarlierBackups
+        case .backup: preconditionFailure("a backup runs through runBackup, not a quiet run")
+        }
         tasks.install(Task { [weak self] in
             if let self {
                 await perform(plan, repository, self)
@@ -114,7 +118,7 @@ extension AppModel {
     /// slot, guarded as Apply Retention Now is.
     func removeFromEarlierBackups(planID: UUID, items: [ExcludedPath]) {
         guard !items.isEmpty else { return }
-        startQuietPlanRun(planID: planID, phase: .removingFromEarlierBackups) { plan, repository, sink in
+        startQuietPlanRun(planID: planID, work: .removeFromEarlierBackups) { plan, repository, sink in
             await RewriteRunEngine.perform(plan: plan, repository: repository, removing: items, sink: sink)
         }
     }

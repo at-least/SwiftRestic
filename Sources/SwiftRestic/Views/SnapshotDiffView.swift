@@ -562,6 +562,10 @@ struct SnapshotDiffView: View {
         }
         isLoading = true
         loadError = nil
+        // The last comparison goes as this one starts: its rows hide behind
+        // the spinner, but its selection would keep Restore Selected… and
+        // Return armed, restoring from the backups this load replaces.
+        installDiff(nil)
         do {
             let result = try await model.diffSnapshots(
                 repositoryID: target.repositoryID,

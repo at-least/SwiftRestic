@@ -19,19 +19,19 @@ struct RestorePaneSearch: Equatable, Sendable {
     /// the membership are one read of the index, so the count is exact as
     /// of that read.
     let elsewhereCount: Int
-    let limit: Int
+    /// The index holds more matches than the search returned, so both
+    /// parts may be short.
+    let isTruncated: Bool
     /// Whether the index had read every backup when the search ran. Until
     /// it has, the open backup may be one it has not read, and its own
     /// files then look as if only other backups held them.
     let indexIsComplete: Bool
-    /// The index stopped at its hit ceiling, so both parts may be short.
-    var isTruncated: Bool { inThisBackup.count + elsewhereCount >= limit }
 
     /// `inRecord` is the index's membership answer for the hits in the open
     /// backup — path to its kind there, true for a folder — keyed by the
     /// path's bytes: a hit whose name only canonically equals one the open
     /// backup holds is another path, and elsewhere.
-    init(hits: [SearchHit], inRecord: [PathKey: Bool], limit: Int, indexIsComplete: Bool) {
+    init(hits: [SearchHit], inRecord: [PathKey: Bool], isTruncated: Bool, indexIsComplete: Bool) {
         var inside: [SearchHit] = []
         for hit in hits {
             if let isDirectory = inRecord[PathKey(hit.path)] {
@@ -40,7 +40,7 @@ struct RestorePaneSearch: Equatable, Sendable {
         }
         inThisBackup = inside
         elsewhereCount = hits.count - inside.count
-        self.limit = limit
+        self.isTruncated = isTruncated
         self.indexIsComplete = indexIsComplete
     }
 

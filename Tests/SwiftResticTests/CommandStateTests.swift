@@ -621,12 +621,12 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
         // Apply Retention Now is no backup.
-        model.activity[plan.id]?.isBackup = false
+        model.activity[plan.id]?.work = .applyRetention
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Applying retention will be stopped and recorded as cancelled.") == true)
         #expect(model.quitInterruptions == ["Retention is being applied."])
         // Nor is Remove from Earlier Backups, and it is no retention either.
-        model.activity[plan.id]?.phase = .removingFromEarlierBackups
+        model.activity[plan.id]?.work = .removeFromEarlierBackups
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Removing items from earlier backups will be stopped and recorded as cancelled.") == true)
         #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
@@ -647,5 +647,29 @@ struct CommandStateTests {
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)
         #expect(model.confirmationCopy(for: .prune(UUID())) == nil)
+    }
+
+    @Test("a stopped Remove from Earlier Backups is still named as a removal until it unwinds")
+    func stoppedRemovalKeepsItsName() async {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        let plan = makePlan("Docs", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+        // Started as the sheet starts it; the wait stands where restic runs.
+        model.startQuietPlanRun(planID: plan.id, work: .removeFromEarlierBackups) { _, _, _ in
+            try? await Task.sleep(for: .seconds(60))
+        }
+        // Stop. The cancelled restic child can take seconds to go, and the
+        // dialogs read the run meanwhile: nothing awaits before they do.
+        model.cancelBackup(planID: plan.id)
+        #expect(model.activity[plan.id]?.phase == .cancelling)
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
+            .hasPrefix("Removing items from earlier backups will be stopped and recorded as cancelled.") == true)
+        #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
+        #expect(model.removalConsequences(for: repository.id)
+            .contains("Items are being removed from earlier backups of “Docs”, which will be cancelled.") == true)
+        await model.tasks.drain()
+        #expect(model.activity[plan.id] == nil)
     }
 }

@@ -61,14 +61,13 @@ extension AppModel {
             removedPlanNames: plans(in: repositoryID).map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == true }
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .backup }
                 .map { label(of: $0) },
             applyingRetentionNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.isBackup == false
-                    && activity[$0.id]?.phase != .removingFromEarlierBackups }
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .applyRetention }
                 .map { label(of: $0) },
             removingFromEarlierBackupsNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.phase == .removingFromEarlierBackups }
+                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .removeFromEarlierBackups }
                 .map { label(of: $0) },
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID

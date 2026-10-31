@@ -30,7 +30,7 @@ extension AppModel {
     /// The draft the adopt sheet edits for one plan-UUID group: the plan
     /// adopting builds, prefilled from the history it adopts. Nil unless the
     /// group is adoptable (`BackupShelves.adoptablePath`).
-    func adoptDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
+    func adoptDraft(repositoryID: UUID, planID: UUID) async -> BackupPlan? {
         let shelves = self.shelves(for: repositoryID)
         guard repository(id: repositoryID) != nil,
               plan(id: planID) == nil,
@@ -60,8 +60,10 @@ extension AppModel {
         draft.tags = prefill.userTags
         // Daily — a new plan's default — only when the prefilled folder is
         // here to back up. Otherwise it is likely another Mac's, and a plan
-        // that cannot run here must not start on a schedule.
-        draft.schedule.frequency = Self.sourceExists(draft.path) ? .daily : .manual
+        // that cannot run here must not start on a schedule. Off the main
+        // actor, as every presence read: a stalled share holds it.
+        let isHere = await Task.detached { Self.sourceExists(path) }.value
+        draft.schedule.frequency = isHere ? .daily : .manual
         // The history is the point of adopting: nothing thins it until a
         // policy is chosen with the dry run's answer in view.
         draft.retention.isEnabled = false
@@ -71,7 +73,9 @@ extension AppModel {
     /// Everything the adopt sheet shows around the draft. Derived as it
     /// stands, so a backup landing or the group leaving while the sheet is
     /// open keeps the words true; nil once the group is gone.
-    func adoptBriefing(for draft: BackupPlan, now: Date = .now) -> AdoptBriefing? {
+    /// `sourceExists` is the sheet's own read of the draft's folder, made
+    /// off the main actor: the sheet derives this on every render.
+    func adoptBriefing(for draft: BackupPlan, sourceExists: Bool, now: Date = .now) -> AdoptBriefing? {
         guard let repositoryID = draft.repositoryID,
               let repository = repository(id: repositoryID),
               let group = shelves(for: repositoryID).orphanPlanGroup(draft.id),
@@ -101,7 +105,7 @@ extension AppModel {
         // came from another Mac, or — this Mac's own — it is gone.
         if prefill.hostname != localHostname {
             warnings.append("The folder comes from another Mac and may not exist here.")
-        } else if !Self.sourceExists(draft.path) {
+        } else if !sourceExists {
             warnings.append(Self.missingSourcesWarning)
         }
         // Both conditions: a stale foreign host is not another Mac still
@@ -175,8 +179,12 @@ extension AppModel {
 
     /// Whether a plan's folder (or file) is on this Mac now, tilde
     /// expanded — the fact behind both the schedule's default and the
-    /// missing-folder warning.
+    /// missing-folder warning. A stat, which a stalled share can hold for
+    /// seconds: never on the main actor.
     nonisolated static func sourceExists(_ path: String) -> Bool {
-        FileManager.default.fileExists(atPath: ResticService.expandTilde(path))
+        // Not ResticService.expandTilde: it leaves a path without a tilde
+        // as typed, and a file spelled with a trailing slash then reads as
+        // missing. NSString tidies every path.
+        FileManager.default.fileExists(atPath: (path as NSString).expandingTildeInPath)
     }
 }

@@ -156,18 +156,21 @@ extension AppModel {
     /// Throws when the index itself fails: for a search tool, "the index is
     /// broken" must never read as "nothing matches". A snapshot the index
     /// has not read holds nothing here; the caller's completeness check
-    /// owns that.
+    /// owns that. At most `indexSearchLimit` hits plus whether the index
+    /// holds more, asked as one hit past the limit so a full page is not
+    /// called cut short.
     func searchIndexWithMembership(
         pattern: String,
         inSnapshot snapshotID: String,
         repositoryID: UUID
-    ) async throws -> SearchWithMembership {
-        try await indexCoordinator.searchWithMembership(
+    ) async throws -> (hits: [SearchHit], inSnapshot: [PathKey: Bool], isTruncated: Bool) {
+        let found = try await indexCoordinator.searchWithMembership(
             matching: pattern,
             inSnapshot: snapshotID,
             repositoryID: repositoryID,
-            limit: AppModel.indexSearchLimit
+            limit: AppModel.indexSearchLimit + 1
         )
+        return (Array(found.hits.prefix(AppModel.indexSearchLimit)), found.inSnapshot, found.hits.count > AppModel.indexSearchLimit)
     }
 
     /// Find Files' search: instant basename hits over the indexed paths,
@@ -175,16 +178,19 @@ extension AppModel {
     /// without the full lists, which can run to thousands per path, from
     /// one read of the index. Throws when the index itself fails, as the
     /// Restore pane's search does; the summaries are keyed by the path's
-    /// bytes (`PathKey`).
+    /// bytes (`PathKey`). At most `indexSearchLimit` hits plus whether the
+    /// index holds more, asked as one hit past the limit so a full page is
+    /// not called cut short.
     func searchIndexWithSummaries(
         pattern: String,
         repositoryID: UUID
-    ) async throws -> SearchWithSummaries {
-        try await indexCoordinator.searchWithSummaries(
+    ) async throws -> (hits: [SearchHit], summaries: [PathKey: VersionSummary], isTruncated: Bool) {
+        let found = try await indexCoordinator.searchWithSummaries(
             matching: pattern,
             repositoryID: repositoryID,
-            limit: AppModel.indexSearchLimit
+            limit: AppModel.indexSearchLimit + 1
         )
+        return (Array(found.hits.prefix(AppModel.indexSearchLimit)), found.summaries, found.hits.count > AppModel.indexSearchLimit)
     }
 
     /// A Files tab's search: instant basename hits over what one chain ever
