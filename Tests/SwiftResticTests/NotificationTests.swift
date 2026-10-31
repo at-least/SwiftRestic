@@ -404,7 +404,10 @@ struct NotificationPosterTests {
             if connection < 0 { try await Task.sleep(for: .milliseconds(10)) }
         }
         try #require(connection >= 0, "the request never connected")
-        close(connection)
+        // Closed only after the cancel has landed: closed first, a loaded
+        // host lets URLSession see the dropped connection and fail the
+        // request in its own words before the cancel arrives.
+        defer { close(connection) }
 
         send.cancel()
         #expect(await send.value == "The request was cancelled")

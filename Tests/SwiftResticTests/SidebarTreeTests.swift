@@ -456,6 +456,21 @@ struct SidebarTreeTests {
         #expect(shelves.versionsPage(of: own) == .plan(plan.id))
         #expect(shelves.versionsPage(of: orphan) == nil)
         #expect(shelves.versionsPage(of: untagged) == nil)
+
+        // Two plans' tags (only an outside `restic tag` writes them): the
+        // index files the backup under its first tag, so Show Versions goes
+        // to that plan's Files tab, whatever order the plans are in.
+        var second = BackupPlan()
+        second.repositoryID = repositoryID
+        let dual = try snapshot("d1", time: "2026-10-04T10:00:00Z",
+                                tags: [ResticService.planTag(second.id), ResticService.planTag(plan.id)])
+        let both = BackupShelves(listing: [dual], plans: [plan, second], allPlans: [plan, second])
+        #expect(SnapshotIndex.chainKey(for: dual) == ResticService.planTag(second.id))
+        #expect(both.versionsPage(of: dual) == .plan(second.id))
+        // Its first tag a plan no longer configured: no Files tab holds it.
+        let firstGone = try snapshot("d2", time: "2026-10-04T11:00:00Z",
+                                     tags: [ResticService.planTag(gone), ResticService.planTag(plan.id)])
+        #expect(shelves.versionsPage(of: firstGone) == nil)
     }
 
     @MainActor
