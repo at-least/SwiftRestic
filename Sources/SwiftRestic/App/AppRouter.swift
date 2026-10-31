@@ -155,6 +155,14 @@ final class AppRouter {
         selection = .findFiles
     }
 
+    /// Find Files' repository, let go once it is removed: the picker has
+    /// no row for it, and its results would offer restores against it.
+    func revalidateFindRepository(repositories: [Repository]) {
+        if let id = findRepositoryID, !repositories.contains(where: { $0.id == id }) {
+            findRepositoryID = nil
+        }
+    }
+
     /// The backup a folder's listing was read from when one of its items
     /// was opened from it: the item's pane opens at it when the item exists
     /// then, so walking down keeps the era. Transient; the next Files pane
@@ -206,6 +214,8 @@ final class AppRouter {
         let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
         setTab(.files, of: page)
         openFolders(above: item, from: record.paths)
+        // A search left on the tab would list its hits over the tree.
+        filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = nil
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
         filesRevealRequest = item
         filesVersionHint = record.id

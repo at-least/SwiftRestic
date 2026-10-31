@@ -534,5 +534,6 @@ struct RootView: View {
             isResticAvailable: model.isResticAvailable
         )
         if corrected != router.selection { router.selection = corrected }
+        router.revalidateFindRepository(repositories: model.configuration.repositories)
     }
 }

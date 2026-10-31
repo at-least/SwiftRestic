@@ -67,6 +67,9 @@ extension AppModel {
     /// holds the repository again must find it.
     func importSettings(_ file: SettingsFile) {
         let incoming = file.configuration
+        // Each run stopped as Stop stops it (`cancelBackup`'s phase), so
+        // Pause and Stop does not take an unwinding run as its own.
+        for planID in activity.keys { activity[planID]?.phase = .cancelling }
         tasks.cancelSlots()
         console.cancelRunningCommand()
         // Before the repository list changes, in removal's order.

@@ -1534,6 +1534,12 @@ final class SnapshotIndex: @unchecked Sendable {
     /// tokens starting with both, and metacharacters the user typed travel
     /// inside the quotes instead of being parsed as syntax. No tokens, no
     /// query — which the caller reads as "match nothing".
+    ///
+    /// A token whose composed and decomposed forms differ is asked in both:
+    /// unicode61 folds Latin marks only, so a kana voicing mark or Hangul
+    /// written decomposed (restic keeps the name's bytes) is another token.
+    /// Not normalized in the index: its rows are node's own names, which
+    /// FTS5's delete and integrity-check compare against.
     static func ftsQuery(from input: String) -> String {
         input.split(whereSeparator: \.isWhitespace)
             .map { token in
@@ -1544,8 +1550,17 @@ final class SnapshotIndex: @unchecked Sendable {
             // A token that was nothing but quotes carries no term; emitting
             // it would make the whole query a zero-token phrase.
             .filter { !$0.isEmpty }
-            .map { "\"\($0)\"*" }
-            .joined(separator: " ")
+            .map { token in
+                let composed = token.precomposedStringWithCanonicalMapping
+                let decomposed = token.decomposedStringWithCanonicalMapping
+                // By scalars: String's == is canonical, so the two compare equal.
+                guard !composed.unicodeScalars.elementsEqual(decomposed.unicodeScalars) else {
+                    return "\"\(composed)\"*"
+                }
+                return "(\"\(composed)\"* OR \"\(decomposed)\"*)"
+            }
+            // Explicit: FTS5 refuses an implicit AND after a parenthesized group.
+            .joined(separator: " AND ")
     }
 
     // MARK: - Test support

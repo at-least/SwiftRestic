@@ -210,6 +210,18 @@ struct AppRouterTests {
         #expect(none.openFolders.isEmpty)
     }
 
+    @Test("Find Files lets go of a repository that was removed, so its results and picker do not outlive it")
+    func findFilesLetsGoOfARemovedRepository() {
+        let kept = namedRepository("Kept")
+        let removed = namedRepository("Removed")
+        let router = AppRouter()
+        router.openFind(repositoryID: removed.id)
+        router.revalidateFindRepository(repositories: [kept, removed])
+        #expect(router.findRepositoryID == removed.id)
+        router.revalidateFindRepository(repositories: [kept])
+        #expect(router.findRepositoryID == nil)
+    }
+
     // MARK: - Selection revalidation
 
     private func revalidated(

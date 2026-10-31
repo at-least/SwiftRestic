@@ -182,7 +182,9 @@ extension AppModel {
 
 extension AppModel: BackupRunEngine.Sink {
     func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
-        activity[planID]?.phase = phase
+        // Stop's word stays: an engine phase landing after it would offer
+        // Stop again, and Pause and Stop would take the run as its own.
+        if activity[planID]?.phase != .cancelling { activity[planID]?.phase = phase }
         activity[planID]?.isInRetentionStep = phase == .applyingRetention
     }
 

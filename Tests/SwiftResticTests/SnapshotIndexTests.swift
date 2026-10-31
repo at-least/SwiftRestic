@@ -498,6 +498,34 @@ struct SnapshotIndexTests {
     /// `inRecord[hit.path]` would miss one hit and invent the other; the
     /// keyed reads therefore return `PathKey`s, which compare bytes. This
     /// pins that they keep the two apart.
+    /// FTS5's unicode61 folds only Latin marks, so a kana voicing mark or
+    /// Hangul jamo written decomposed (HFS+-era names, kept as restic's
+    /// bytes) tokenizes apart from what an input method types.
+    @Test("a search finds a Japanese or Korean name in either Unicode form, typed in either form")
+    func searchFindsEitherNormalization() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let names = ["ガイド 2026.pdf", "한글문서.hwp"]
+        var entries = [IndexedEntry(path: "/data", isDirectory: true)]
+        for name in names {
+            entries.append(IndexedEntry(path: "/data/" + name.precomposedStringWithCanonicalMapping, isDirectory: false))
+            entries.append(IndexedEntry(path: "/data/nfd/" + name.decomposedStringWithCanonicalMapping, isDirectory: false))
+        }
+        entries.append(IndexedEntry(path: "/data/nfd", isDirectory: true))
+        _ = try index.reconcile(listing: [try snap("s1", t0, tags: [planA])])
+        try index.ingestWhole("s1", entries)
+        for (typed, expected) in [("ガイド 2026", names[0]), ("한글문서", names[1])] {
+            for form in [typed.precomposedStringWithCanonicalMapping, typed.decomposedStringWithCanonicalMapping] {
+                let hits = try await index.searchPaths(matching: form, limit: 10)
+                let found = Set(hits.map { Array($0.path.utf8) })
+                #expect(found == [
+                    Array(("/data/" + expected.precomposedStringWithCanonicalMapping).utf8),
+                    Array(("/data/nfd/" + expected.decomposedStringWithCanonicalMapping).utf8),
+                ], "typed \(Array(form.unicodeScalars)): \(hits.map(\.path))")
+            }
+        }
+    }
+
     @Test("canonically equivalent, byte-distinct paths keep their own answers in the keyed reads")
     func keyedReadsKeepByteDistinctSpellings() async throws {
         let fixture = try IndexFixture()

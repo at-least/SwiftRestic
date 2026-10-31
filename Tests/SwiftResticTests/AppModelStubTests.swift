@@ -1919,6 +1919,37 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("a stopped backup's fail ping reaches Healthchecks, though the run's own task is cancelled")
+    func stoppedBackupPingsFail() async throws {
+        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
+        defer { server.stop() }
+        await server.start()
+        var monitor = NotificationChannel()
+        monitor.name = "Monitor"
+        monitor.kind = .healthchecks
+        monitor.url = "http://127.0.0.1:\(server.port)/ping"
+        #expect(monitor.wants(.cancelled))
+
+        let harness = try await makeHarness(mode: "hang-backup", channels: [monitor])
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let planID = harness.plan.id
+        harness.model.runBackup(planID: planID)
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
+        harness.model.cancelBackup(planID: planID)
+        await harness.model.waitForRun(planID: planID)
+
+        let deadline = Date.now.addingTimeInterval(5)
+        while !server.capturedRequestLines.contains(where: { $0.contains("/ping/fail") }), Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(server.capturedRequestLines.contains { $0.contains("/ping/fail") },
+                "requests were \(server.capturedRequestLines)")
+        #expect(!harness.model.banners.contains { $0.title.hasPrefix("Could not send") },
+                "banners were \(harness.model.banners.map(\.message))")
+
+        await harness.model.shutdown()
+    }
+
     // MARK: - Apply Retention Now
 
     @Test("applying retention records a forget without stamping the plan or alerting a channel")
@@ -2152,6 +2183,9 @@ struct AppModelStubTests {
         file.repositories = [harness.repository]
         file.plans = [harness.plan]
         harness.model.importSettings(SettingsFile(name: "SwiftRestic Settings.json", configuration: file))
+        // Stopped as Stop stops it, so Pause and Stop does not take the
+        // unwinding run as its own.
+        #expect(harness.model.activity[harness.plan.id]?.phase == .cancelling)
         await harness.model.waitForRun(planID: harness.plan.id)
 
         let record = try #require(harness.model.configuration.runs.first)
@@ -2959,6 +2993,7 @@ private func traceLineCount(in root: URL) -> Int {
 private final class HTTPCaptureServer: @unchecked Sendable {
     private let lock = NSLock()
     private var bodies: [String] = []
+    private var requestLines: [String] = []
     private let listener: NWListener
     private let queue = DispatchQueue(label: "SwiftResticTests.http-capture")
 
@@ -2969,6 +3004,13 @@ private final class HTTPCaptureServer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return bodies
+    }
+
+    /// Each request's first line, "POST /path HTTP/1.1", in arrival order.
+    var capturedRequestLines: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestLines
     }
 
     init?() {
@@ -3013,8 +3055,10 @@ private final class HTTPCaptureServer: @unchecked Sendable {
             if let (bodyStart, contentLength) = Self.requestBounds(accumulated),
                accumulated.count >= bodyStart + contentLength {
                 let body = String(data: accumulated.suffix(contentLength), encoding: .utf8) ?? ""
+                let requestLine = String(decoding: accumulated.prefix { $0 != UInt8(ascii: "\r") }, as: UTF8.self)
                 self?.lock.lock()
                 self?.bodies.append(body)
+                self?.requestLines.append(requestLine)
                 self?.lock.unlock()
                 let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in

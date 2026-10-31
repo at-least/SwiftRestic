@@ -138,6 +138,28 @@ struct CommandStateTests {
         await model.tasks.drain()
     }
 
+    @Test("a phase the engine writes after Stop keeps the strip stopping, so Pause and Stop leaves the run to Stop's words")
+    func stopOutlivesLaterPhases() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .starting)
+        model.cancelBackup(planID: photos.id)
+        model.setActivityPhase(.backingUp, for: photos.id)
+        #expect(model.activity[photos.id]?.phase == .cancelling)
+        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
+        #expect(!model.pauseStoppedPlanIDs.contains(photos.id))
+        // A forget launched after the Stop still takes the lock until its
+        // child dies.
+        model.setActivityPhase(.applyingRetention, for: photos.id)
+        #expect(model.activity[photos.id]?.phase == .cancelling)
+        #expect(model.backupLockReason(for: documents)
+            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
+    }
+
     @Test("the lock reason names a running plan as the sidebar does, after a rename too")
     func lockReasonFollowsARename() async {
         let model = makeModel()

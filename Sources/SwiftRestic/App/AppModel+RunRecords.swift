@@ -133,7 +133,13 @@ extension AppModel {
 
         let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID).map { label(of: $0) } ?? "")
 
-        let failures = await NotificationPoster.broadcast(event, to: channels)
+        // Detached: a stopped run delivers from its own cancelled task, and
+        // an inherited cancel fails every send at once — a monitor that
+        // heard /start would never hear /fail. Awaiting a detached task
+        // does not pass the cancel on; quit still waits for it.
+        let failures = await Task.detached {
+            await NotificationPoster.broadcast(event, to: channels)
+        }.value
         if !failures.isEmpty {
             // The queue is global: the title names the run the
             // undelivered alert was about.

@@ -467,6 +467,9 @@ struct SidebarTreeTests {
         let record = try snapshot("b7", time: "2026-10-02T10:00:00Z", paths: ["/Data", "/Data/Photos/2026"], tags: [tag])
         let router = AppRouter()
         router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID)
+        // A search left on the Files tab would list its hits over the tree
+        // the route opens.
+        router.filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: tag)] = "report"
         router.showVersions(
             path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,
             in: record, repositoryID: repositoryID, page: .plan(planID)
@@ -482,6 +485,7 @@ struct SidebarTreeTests {
         #expect(router.filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: tag)]
             == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
         #expect(router.takeFilesVersionHint() == "b7")
+        #expect(router.filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: tag)] == nil)
         // The tab is asked to look whether this Mac still has it.
         #expect(router.filesRevealRequest
             == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
