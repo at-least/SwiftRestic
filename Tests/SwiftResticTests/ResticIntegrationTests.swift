@@ -429,40 +429,10 @@ struct ResticIntegrationTests {
         )
 
         // A backup of its own holds a lock while the preview runs — the
-        // situation a user opening the sheet mid-backup is in. It reads its
-        // file from a pipe this test holds open, so the lock is held for as
-        // long as the preview and the control below take, however slowly
-        // restic runs.
-        let binary = try ResticAvailability.binary()
-        let holder = Process()
-        holder.executableURL = binary.url
-        holder.arguments = ["backup", "--stdin", "--stdin-filename", "hold"]
-        var environment = ProcessInfo.processInfo.environment
-        environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
-        environment["RESTIC_PASSWORD"] = Self.password
-        holder.environment = environment
-        let feed = Pipe()
-        holder.standardInput = feed
-        holder.standardOutput = FileHandle.nullDevice
-        holder.standardError = FileHandle.nullDevice
-        try holder.run()
-        // One byte: with none, restic reports "no data read" (exit 3) at
-        // the end of input, though it still saves and unlocks.
-        try feed.fileHandleForWriting.write(contentsOf: Data("x".utf8))
+        // situation a user opening the sheet mid-backup is in.
+        let holder = try await Self.holdLock(on: fixture)
         // A failed expectation must not leave restic holding the lock.
-        defer {
-            try? feed.fileHandleForWriting.close()
-            holder.terminate()
-        }
-        let locks = fixture.root.appendingPathComponent("repo/locks")
-        // Waits on restic's own start — key derivation and the repository
-        // open — which load stretches; 20 s was a bet on it.
-        let lockDeadline = Date.now.addingTimeInterval(120)
-        while ((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty, Date.now < lockDeadline {
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        #expect(!((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty,
-                "the holder never took its lock")
+        defer { holder.stop() }
 
         let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
         #expect(Set(preview.removed.map(\.id)) == Set(planIDs.prefix(2)))
@@ -483,9 +453,9 @@ struct ResticIntegrationTests {
 
         // Let the holder finish: at the end of its input restic writes its
         // untagged snapshot and releases the lock on its own.
-        try feed.fileHandleForWriting.close()
-        await Self.waitForExit(holder, within: 120)
-        #expect(!holder.isRunning, "the holder did not finish after its input ended")
+        try holder.feed.fileHandleForWriting.close()
+        await Self.waitForExit(holder.process, within: 120)
+        #expect(!holder.process.isRunning, "the holder did not finish after its input ended")
         // Nothing was removed — neither by the dry run nor by the refused forget.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }
@@ -601,6 +571,54 @@ struct ResticIntegrationTests {
         #expect(preview.adoptionLine == "With these rules, 2 backups would become 1.")
         // A dry run over an unsaved plan removed nothing.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
+    }
+
+    /// A restic backup holding the fixture repository's lock. It reads its
+    /// file from a pipe the test holds open, so the lock stays for as long as
+    /// the test takes, however slowly restic runs.
+    private struct LockHolder {
+        var process: Process
+        var feed: Pipe
+
+        func stop() {
+            try? feed.fileHandleForWriting.close()
+            if process.isRunning { process.terminate() }
+        }
+    }
+
+    /// Returns once the holder's lock file is in the repository.
+    private static func holdLock(on fixture: ResticFixture) async throws -> LockHolder {
+        let process = Process()
+        process.executableURL = try ResticAvailability.binary().url
+        process.arguments = ["backup", "--stdin", "--stdin-filename", "hold"]
+        var environment = ProcessInfo.processInfo.environment
+        environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
+        environment["RESTIC_PASSWORD"] = Self.password
+        process.environment = environment
+        let feed = Pipe()
+        process.standardInput = feed
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let holder = LockHolder(process: process, feed: feed)
+        // One byte: with none, restic reports "no data read" (exit 3) at
+        // the end of input, though it still saves and unlocks.
+        do {
+            try feed.fileHandleForWriting.write(contentsOf: Data("x".utf8))
+            let locks = fixture.root.appendingPathComponent("repo/locks")
+            // Waits on restic's own start — key derivation and the repository
+            // open — which load stretches; 20 s was a bet on it.
+            let lockDeadline = Date.now.addingTimeInterval(120)
+            while ((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty, Date.now < lockDeadline {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            try #require(!((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty,
+                         "the holder never took its lock")
+        } catch {
+            holder.stop()
+            throw error
+        }
+        return holder
     }
 
     /// Polls rather than `waitUntilExit()`: from this suite's async tests
@@ -775,6 +793,29 @@ struct ResticIntegrationTests {
         try Data("{}".utf8).write(to: locks.appendingPathComponent(String(repeating: "0", count: 64)))
 
         try await fixture.service.unlock(fixture.context)
+    }
+
+    @Test("unlock removes the lock a killed backup left, and keeps a running backup's")
+    func unlockRemovesOnlyAStaleLock() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        let locks = fixture.root.appendingPathComponent("repo/locks")
+
+        let holder = try await Self.holdLock(on: fixture)
+        defer { holder.stop() }
+        try await fixture.service.unlock(fixture.context)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: locks.path).count == 1,
+                "unlock removed a lock its backup still holds")
+
+        // What a crash leaves: the lock, with no process of this Mac behind
+        // it. SIGKILL, which no restic version can clean up after.
+        kill(holder.process.processIdentifier, SIGKILL)
+        await Self.waitForExit(holder.process)
+        try #require(!holder.process.isRunning, "the killed backup was still running after 30 s")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: locks.path).count == 1)
+        try await fixture.service.unlock(fixture.context)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: locks.path).isEmpty)
     }
 
     @Test("an unreadable file yields exit 3 with the file named, and the snapshot still lands")
