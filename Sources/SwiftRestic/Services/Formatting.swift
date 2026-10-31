@@ -75,6 +75,18 @@ enum Format {
         return String(trimmed[..<cut])
     }
 
+    /// `text` ending in a full stop — appended when the cut left none
+    /// (`firstSentence` does).
+    static func fullSentence(_ text: String) -> String {
+        text.hasSuffix(".") ? text : text + "."
+    }
+
+    /// `text` without its trailing full stop, as a clause joins another
+    /// sentence.
+    static func withoutFinalPeriod(_ text: String) -> String {
+        text.hasSuffix(".") ? String(text.dropLast()) : text
+    }
+
     // Two preconfigured instances, not one mutated per call: `allowedUnits`
     // flips at an hour, and reconfiguring a shared formatter under the lock
     // would make every short duration wait behind every long one — and leak

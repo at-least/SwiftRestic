@@ -85,7 +85,7 @@ struct OtherGroupPageSummary: Equatable {
             // read the same way. A plan that names no reachable repository
             // — its own page says "No repository set" — still left, which
             // is all the sentence can honestly say.
-            let moved = repositories.first(where: { $0.id == formerPlan.repositoryID })
+            let moved = repositories.withID(formerPlan.repositoryID)
                 .map { " before it moved to “\($0.label(among: repositories))”" }
                 ?? " before it moved away"
             explanation = snapshots.count == 1
@@ -118,9 +118,7 @@ struct OtherGroupPageSummary: Equatable {
         pathCount = Set(snapshots.flatMap(\.paths)).count
 
         excludes = BackupPlan.withoutDuplicates(snapshots.flatMap(\.excludes))
-        userTags = BackupPlan.withoutDuplicates(
-            snapshots.flatMap { $0.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) } }
-        )
+        userTags = BackupPlan.withoutDuplicates(snapshots.flatMap(\.userTags))
     }
 }
 

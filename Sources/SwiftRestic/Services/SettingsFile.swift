@@ -82,7 +82,7 @@ extension AppConfiguration {
             repository(id: incoming.id)?.merging(draft: incoming) ?? incoming
         }
         imported.plans = file.plans.map { incoming in
-            plans.first { $0.id == incoming.id }?.merging(draft: incoming) ?? incoming
+            plans.withID(incoming.id)?.merging(draft: incoming) ?? incoming
         }
         imported.keepMachineState(of: self)
         return imported

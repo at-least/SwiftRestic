@@ -57,7 +57,7 @@ extension AppModel {
         draft.readSwitches(fromRecorded: recorded)
         draft.excludePatterns = draft.withoutSwitchRules(recorded)
         // Plan tags are the group's plumbing; what the user tagged is everything else.
-        draft.tags = prefill.tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
+        draft.tags = prefill.userTags
         // Daily — a new plan's default — only when the prefilled folder is
         // here to back up. Otherwise it is likely another Mac's, and a plan
         // that cannot run here must not start on a schedule.
@@ -110,9 +110,7 @@ extension AppModel {
         if hasForeignHost && isRecent {
             warnings.append("These backups are recent — a plan on another Mac may still be writing them.")
         }
-        let dualTagged = snapshots.filter {
-            $0.tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }.count > 1
-        }.count
+        let dualTagged = snapshots.filter { $0.planTags.count > 1 }.count
         if dualTagged == 1 {
             warnings.append("1 backup also carries another plan’s tag and stays with that plan.")
         } else if dualTagged > 1 {
@@ -179,6 +177,6 @@ extension AppModel {
     /// expanded — the fact behind both the schedule's default and the
     /// missing-folder warning.
     nonisolated static func sourceExists(_ path: String) -> Bool {
-        FileManager.default.fileExists(atPath: (path as NSString).expandingTildeInPath)
+        FileManager.default.fileExists(atPath: ResticService.expandTilde(path))
     }
 }

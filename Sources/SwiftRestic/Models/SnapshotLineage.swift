@@ -48,7 +48,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
                 var planTags: Set<String> = []
                 var withoutPlan = false
                 for snapshot in members {
-                    let tags = snapshot.tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }
+                    let tags = snapshot.planTags
                     planTags.formUnion(tags)
                     if tags.isEmpty { withoutPlan = true }
                 }
@@ -186,7 +186,7 @@ extension SnapshotLineage {
         guard lineage.planTags.count == 1, !lineage.hasSnapshotsWithoutPlan,
               let tag = lineage.planTags.first
         else { return nil }
-        return ResticService.planUUID(fromTag: tag).flatMap { id in plans.first { $0.id == id } }
+        return ResticService.planUUID(fromTag: tag).flatMap { plans.withID($0) }
     }
 }
 
@@ -302,13 +302,13 @@ extension OtherBackupsGroup {
             // and kind overflow.
             let detail = "\(folders) — from \(host)"
             if case let .plan(id, _) = group {
-                let plan = plans.first { $0.id == id }
+                let plan = plans.withID(id)
                 // A configured plan: it backs up elsewhere now, which is why
                 // these backups are not under it. Its repository can be read
                 // whenever the configuration is one of the app's own flows —
                 // removing a repository takes its plans — so a plan that
                 // names none says no destination rather than a wrong one.
-                if let plan, let destination = repositories.first(where: { $0.id == plan.repositoryID }) {
+                if let plan, let destination = repositories.withID(plan.repositoryID) {
                     caption.kind = ["now backs up to \(destination.label(among: repositories))"]
                 } else if plan == nil {
                     // No configuration holds this plan: it was deleted here,
@@ -360,7 +360,7 @@ extension OtherBackupsGroup {
     /// The plan's label when the group is a configured plan's, the newest
     /// backup's folders otherwise.
     private static func title(of group: OtherBackupsGroup, plans: [BackupPlan]) -> String {
-        if case let .plan(id, _) = group, let plan = plans.first(where: { $0.id == id }) {
+        if case let .plan(id, _) = group, let plan = plans.withID(id) {
             return plan.label(among: plans)
         }
         return SnapshotLineage.folderTitle(group.snapshots[0].lineageKey.paths)
@@ -390,12 +390,22 @@ extension Snapshot {
     /// sorting again keeps other writers' in step). Nil when no plan tag
     /// marks it.
     var planID: UUID? {
-        tags
-            .filter { $0.hasPrefix(ResticService.planTagPrefix) }
+        planTags
             .sorted()
             .lazy
             .compactMap { ResticService.planUUID(fromTag: $0) }
             .first
+    }
+
+    /// The tags the app stamps to name a snapshot's plan
+    /// (`ResticService.planTag`) — the "who wrote this backup" test.
+    var planTags: [String] {
+        tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }
+    }
+
+    /// The user's own tags: everything that is not a plan tag.
+    var userTags: [String] {
+        tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
     }
 
     /// The group under Other backups that holds this snapshot — the rule

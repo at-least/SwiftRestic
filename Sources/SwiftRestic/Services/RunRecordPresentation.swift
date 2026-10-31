@@ -166,7 +166,7 @@ enum RunRecordPresentation {
     /// `planWithRepository` for a plan — its label read against `plans` —
     /// its repository looked up among `repositories`.
     static func planWithRepository(_ plan: BackupPlan, plans: [BackupPlan], repositories: [Repository]) -> String {
-        planWithRepository(plan.label(among: plans), repositoryName: repositories.first { $0.id == plan.repositoryID }.map { $0.label(among: repositories) })
+        planWithRepository(plan.label(among: plans), repositoryName: repositories.withID(plan.repositoryID).map { $0.label(among: repositories) })
     }
 
     /// What a run is called by the surfaces that have one string for it:
@@ -184,7 +184,7 @@ enum RunRecordPresentation {
         plans: [BackupPlan],
         repositories: [Repository]
     ) -> String {
-        let repositoryName = repositories.first { $0.id == run.repositoryID }.map { $0.label(among: repositories) }
+        let repositoryName = repositories.withID(run.repositoryID).map { $0.label(among: repositories) }
         switch run.kind {
         case .backup, .forget, .rewrite, .restore:
             // The plan as it is called now. A restore carries no planID, so
@@ -199,7 +199,7 @@ enum RunRecordPresentation {
 
     /// The run's plan as it is called now, else the name the run stored.
     private static func currentPlanName(of run: RunRecord, plans: [BackupPlan]) -> String {
-        run.planID.flatMap { id in plans.first { $0.id == id }?.label(among: plans) } ?? run.planName
+        run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
     }
 
     /// A repository page's Recent problems row title: the plan as it is
@@ -252,8 +252,7 @@ enum RunRecordPresentation {
             let reason = Format.firstSentence(failure)
             // A standing failure for the same folders gone, as a skip.
             guard let count = run.skipCount, let since = run.skippedSince else { return reason }
-            // firstSentence leaves the full stop off a cut sentence.
-            let sentence = reason.hasSuffix(".") ? reason : reason + "."
+            let sentence = Format.fullSentence(reason)
             return "\(sentence) Failed \(count) times since \(Format.timestamp(since))."
         }
         // Why there was nothing to back up, before any hook's complaint,
@@ -287,8 +286,7 @@ enum RunRecordPresentation {
             // other entries ("2 unreadable items", "0 new, 1 changed") carry
             // none, and the sentence cut drops one before a second sentence.
             guard let verdict = run.detailText else { return run.outcome.displayName }
-            let first = Format.firstSentence(verdict)
-            return first.hasSuffix(".") ? String(first.dropLast()) : first
+            return Format.withoutFinalPeriod(Format.firstSentence(verdict))
         case .prune:
             return run.outcome.displayName
         }

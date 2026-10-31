@@ -169,7 +169,7 @@ struct BackupShelves: Equatable {
     /// Mac made them; under Other backups, its group's label.
     func label(of record: Snapshot, repositories: [Repository], localHost: String) -> SnapshotLineage.Label? {
         guard let planID = Self.owner(of: record, among: plans),
-              let plan = plans.first(where: { $0.id == planID })
+              let plan = plans.withID(planID)
         else { return otherLabels(repositories: repositories, localHost: localHost)[record.otherGroupID] }
         let lineages = SnapshotLineage.grouping(byPlan[planID] ?? [])
         var label = SnapshotLineage.labels(for: lineages, plans: [plan])[record.lineageKey]
@@ -198,6 +198,6 @@ struct BackupShelves: Equatable {
     /// lineage.
     func formerPlan(of group: OtherBackupsGroup) -> BackupPlan? {
         guard case let .plan(id, _) = group else { return nil }
-        return allPlans.first { $0.id == id }
+        return allPlans.withID(id)
     }
 }

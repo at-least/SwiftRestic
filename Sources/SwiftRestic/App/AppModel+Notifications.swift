@@ -198,7 +198,7 @@ extension AppModel {
             return "Completed with \(Format.plural(record.itemErrorCount, "unreadable item")).\(hint)"
         case .completedWithErrors:
             let detail = RunRecordPresentation.detail(for: record)
-            return "Completed with warnings: \(detail)\(detail.hasSuffix(".") ? "" : ".")"
+            return "Completed with warnings: \(Format.fullSentence(detail))"
         case .failed:
             return record.failureMessage.map { "Failed: \(Format.firstSentence($0))" } ?? "Failed."
         case .cancelled:

@@ -4,8 +4,7 @@ extension AppModel {
     // MARK: - Plans
 
     func plan(id: UUID?) -> BackupPlan? {
-        guard let id else { return nil }
-        return configuration.plans.first { $0.id == id }
+        configuration.plans.withID(id)
     }
 
     /// A repository's plans, in the configuration's order — what its page
@@ -57,7 +56,7 @@ extension AppModel {
             listingLoaded: snapshotListingOutcome(for: repositoryID) == .loaded,
             otherBackupsCount: shelves(for: repositoryID).otherBackupsCount,
             willNotRun: { planID in
-                plans.first { $0.id == planID }.flatMap {
+                plans.withID(planID).flatMap {
                     PlanStatus.willNotRunCaption(for: $0, existingRepositoryIDs: existingRepositoryIDs, now: now)
                 }
             },

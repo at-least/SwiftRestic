@@ -517,7 +517,7 @@ extension RunRecord {
     }
 
     private static func volumeNames(_ sources: [String]) -> [String?] {
-        sources.map { VolumePresence.volumeName(of: ($0 as NSString).expandingTildeInPath) }
+        sources.map { VolumePresence.volumeName(of: ResticService.expandTilde($0)) }
     }
 
     /// Both backups of one plan into one repository, `previous` carrying no

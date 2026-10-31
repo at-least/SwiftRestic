@@ -218,15 +218,9 @@ final class AppRouter {
     /// holds it, so the tree lists the item's row: Show Versions, and a hit
     /// picked in a Files tab's search. Nothing opens when no top holds it.
     func openFolders(above item: FileNode, from tops: [String]) {
-        guard let top = tops.filter({ ResticPath.holds($0, item.path) }).max(by: { $0.utf8.count < $1.utf8.count })
-        else { return }
-        var above = ResticPath.parent(of: item.path)
-        while ResticPath.holds(top, above) {
-            openFolders.insert(FileNode(repositoryID: item.repositoryID, chainKey: item.chainKey, path: above, isDirectory: true))
-            // The root is its own parent: a whole-disk backup's top ends the
-            // walk here.
-            if above.utf8.elementsEqual(top.utf8) { break }
-            above = ResticPath.parent(of: above)
+        // The chain holds `item` itself last; the selection opens it.
+        for folder in Format.pathChain(of: item.path, roots: tops).dropLast() {
+            openFolders.insert(FileNode(repositoryID: item.repositoryID, chainKey: item.chainKey, path: folder, isDirectory: true))
         }
     }
 

@@ -451,10 +451,7 @@ final class FilesTree {
     /// The browser's order (`ResticService.sortedForBrowser`): folders
     /// first, then names as Finder sorts them.
     nonisolated private static func sorted(_ entries: [Entry]) -> [Entry] {
-        entries.sorted { lhs, rhs in
-            if lhs.node.isDirectory != rhs.node.isDirectory { return lhs.node.isDirectory }
-            return lhs.node.name.localizedStandardCompare(rhs.node.name) == .orderedAscending
-        }
+        ResticService.sortedForBrowser(entries, name: { $0.node.name }, isDirectory: { $0.node.isDirectory })
     }
 }
 

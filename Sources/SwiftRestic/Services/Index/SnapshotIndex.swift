@@ -625,9 +625,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// separator — is where GRDB's text binding stops reading, which would
     /// fold every untagged snapshot of every host into one chain.
     static func chainKey(for snapshot: Snapshot) -> String {
-        if let tag = snapshot.tags.first(where: { $0.hasPrefix(ResticService.planTagPrefix) }) {
-            return tag
-        }
+        if let tag = snapshot.planTags.first { return tag }
         let fields = [snapshot.hostname ?? ""] + snapshot.paths.sorted(by: bytesLess)
         return "lineage:[" + fields.map(jsonString).joined(separator: ",") + "]"
     }

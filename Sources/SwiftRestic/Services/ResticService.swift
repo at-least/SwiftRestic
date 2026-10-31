@@ -399,9 +399,17 @@ struct ResticService: ResticClient {
     /// shared by the live `ls` path and the browse-cache read, so a cached
     /// listing renders identically to a fetched one.
     static func sortedForBrowser(_ nodes: [SnapshotNode]) -> [SnapshotNode] {
-        nodes.sorted { lhs, rhs in
-            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        sortedForBrowser(nodes, name: { $0.name }, isDirectory: { $0.isDirectory })
+    }
+
+    static func sortedForBrowser<T>(
+        _ items: [T],
+        name: (T) -> String,
+        isDirectory: (T) -> Bool
+    ) -> [T] {
+        items.sorted { lhs, rhs in
+            if isDirectory(lhs) != isDirectory(rhs) { return isDirectory(lhs) }
+            return name(lhs).localizedStandardCompare(name(rhs)) == .orderedAscending
         }
     }
 

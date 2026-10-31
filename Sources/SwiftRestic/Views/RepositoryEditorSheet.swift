@@ -464,7 +464,7 @@ struct RepositoryEditorSheet: View {
     /// itself: under a backup's or a check's lock it fails at once (exit 11).
     private var passwordChangeBlock: String? {
         if model.busyRepositoryIDs.contains(draft.id) {
-            return "The repository is in use by a backup or maintenance job — try again when it finishes."
+            return BackupPlan.busyRepositoryReason
         }
         if let absence = model.resticAbsence { return absence.sentence }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)

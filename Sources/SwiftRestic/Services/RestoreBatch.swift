@@ -77,11 +77,17 @@ enum RestoreBatch {
     /// One backup's items that restore, in its order: each once, none
     /// inside a selected folder.
     private static func covering<Item: RestoreBatchItem>(_ items: [Item]) -> [Item] {
-        let folders = items.filter(\.isDirectory).map { insidePrefix($0.path) }
+        // `normalized` first: `insidePrefix` appends its separator, and a
+        // diff-spelled folder arrives with one already.
+        let folders = items.filter(\.isDirectory)
+            .map { ResticPath.insidePrefix(of: ResticPath.normalized($0.path)) }
         var seen: Set<PathKey> = []
         return items.filter { item in
             guard seen.insert(PathKey(item.path)).inserted else { return false }
-            return !folders.contains { isInside(item.path, prefix: $0) }
+            // Strictly longer, so a folder spelled with its slash, or the
+            // root, is not inside itself.
+            let path = item.path.utf8
+            return !folders.contains { path.starts(with: $0.utf8) && path.count > $0.utf8.count }
         }
     }
 
@@ -93,11 +99,16 @@ enum RestoreBatch {
         kept: [Item]
     ) -> [(item: Item, folder: Item)] {
         let keptPaths = Set(kept.map { PathKey($0.path) })
-        let keptFolders = kept.filter(\.isDirectory).map { (folder: $0, prefix: insidePrefix($0.path)) }
+        let keptFolders = kept.filter(\.isDirectory)
+            .map { (folder: $0, prefix: ResticPath.insidePrefix(of: ResticPath.normalized($0.path))) }
         var reported: Set<PathKey> = []
         return items.compactMap { item in
             guard !keptPaths.contains(PathKey(item.path)), reported.insert(PathKey(item.path)).inserted,
-                  let folder = keptFolders.first(where: { isInside(item.path, prefix: $0.prefix) })?.folder
+                  let folder = keptFolders.first(where: {
+                      // Strictly longer, as `covering` keeps the folder itself.
+                      let path = item.path.utf8
+                      return path.starts(with: $0.prefix.utf8) && path.count > $0.prefix.utf8.count
+                  })?.folder
             else { return nil }
             return (item, folder)
         }
@@ -121,20 +132,6 @@ enum RestoreBatch {
         default:
             return "\(Format.count(covered.count)) of the selected items are inside \(folder) and are restored with it."
         }
-    }
-
-    /// The bytes every path inside a folder starts with: its path and a
-    /// slash, so a sibling whose name only begins with the folder's is not
-    /// inside it.
-    private static func insidePrefix(_ folderPath: String) -> [UInt8] {
-        Array((folderPath.hasSuffix("/") ? folderPath : folderPath + "/").utf8)
-    }
-
-    /// Whether `path` is inside the folder `prefix` came from: longer than
-    /// it, so a folder spelled with its slash, or the root, is not inside
-    /// itself.
-    private static func isInside(_ path: String, prefix: [UInt8]) -> Bool {
-        path.utf8.count > prefix.count && path.utf8.starts(with: prefix)
     }
 
     /// Names two items would both land under in one directory — the same

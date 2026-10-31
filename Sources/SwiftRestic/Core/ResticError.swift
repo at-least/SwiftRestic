@@ -194,7 +194,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         // 12's fix does, restic's first sentence keeping the detail.
         let restic = Format.firstSentence(message)
         if let complaint = message.split(separator: "\n").last(where: { $0.hasPrefix("rclone: ") }) {
-            let verdict = complaint.hasSuffix(".") ? String(complaint.dropLast()) : String(complaint)
+            let verdict = Format.withoutFinalPeriod(String(complaint))
             return "\(verdict). restic reported: \(restic)"
         }
         // restic waits a minute (its rclone.timeout) for rclone to answer,

@@ -113,7 +113,7 @@ extension AppModel {
         if let absence = resticAbsence { return absence.sentence }
         // The plan's own run included: its backup holds the repository too.
         guard !busyRepositoryIDs.contains(repository.id) else {
-            return "The repository is in use by a backup or maintenance job — try again when it finishes."
+            return BackupPlan.busyRepositoryReason
         }
         return nil
     }

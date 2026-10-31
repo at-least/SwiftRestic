@@ -99,8 +99,7 @@ struct AppConfiguration: Codable, Sendable {
     }
 
     func repository(id: UUID?) -> Repository? {
-        guard let id else { return nil }
-        return repositories.first { $0.id == id }
+        repositories.withID(id)
     }
 }
 
