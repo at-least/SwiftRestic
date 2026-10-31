@@ -168,10 +168,12 @@ struct RunLogTests {
         #expect(lines.contains("Result: No errors found."), "log was \(checkText)")
 
         // A prune has no result line of its own: nothing after the footer
-        // speaks for it.
+        // speaks for it, though its record carries restic's tail as the
+        // detail, as a successful prune's run writes it (`RunEngines`).
         var prune = RunRecord(kind: .prune, planName: "NAS", startedAt: at(0))
         prune.finishedAt = at(30)
         prune.outcome = .succeeded
+        prune.detailText = "removed 2 of 3 packs"
         let pruneText = RunLog.render(
             record: prune,
             repositoryName: nil,
