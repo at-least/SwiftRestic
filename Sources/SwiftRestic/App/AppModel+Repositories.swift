@@ -193,8 +193,8 @@ extension AppModel {
         indexTakenGeneration[id] = nil
         pendingSnapshotRefreshes.remove(id)
         repositoriesMissingPassword.remove(id)
-        upkeepAwaitingDrive.remove(id)
-        upkeepAwaitingServer.remove(id)
+        maintenanceAwaitingDrive.remove(id)
+        maintenanceAwaitingServer.remove(id)
         backupQueue[id] = nil
         statsFailureNoted.remove(id)
         forgetContext(id)

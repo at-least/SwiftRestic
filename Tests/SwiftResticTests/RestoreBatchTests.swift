@@ -15,7 +15,7 @@ struct RestoreBatchTests {
 
     /// A selection of one backup, as the Restore pane's is.
     private func oneBackup(_ nodes: [SnapshotNode]) -> (kept: [SnapshotNode], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
-        RestoreBatch.covering(nodes, backup: { _ in "backup" })
+        RestoreBatch.covering(nodes, snapshotID: { _ in "backup" })
     }
 
     @Test("an item inside a selected folder is dropped — the folder brings it — and a repeat counts once")
@@ -76,7 +76,7 @@ struct RestoreBatchTests {
         let notes = RestoreSource(folder("/src/notes"), snapshotID: "oct2", backupTime: nil)
         let keep = RestoreSource(file("/src/notes/keep.txt"), snapshotID: "oct2", backupTime: nil)
         let deleted = RestoreSource(file("/src/notes/notes.txt"), snapshotID: "oct1", backupTime: nil)
-        let (kept, covered) = RestoreBatch.covering([notes, keep, deleted, keep], backup: \.snapshotID)
+        let (kept, covered) = RestoreBatch.covering([notes, keep, deleted, keep], snapshotID: \.snapshotID)
         #expect(kept.map(\.path) == ["/src/notes", "/src/notes/notes.txt"])
         #expect(kept.map(\.snapshotID) == ["oct2", "oct1"])
         #expect(covered.map(\.item.path) == ["/src/notes/keep.txt"])

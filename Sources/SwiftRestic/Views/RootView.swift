@@ -71,7 +71,7 @@ struct RootView: View {
             onEditRepository: { editingRepository = $0 },
             onNewRepository: { editingRepository = Repository() },
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
-            onRemoveRepository: { pendingConfirmation = .removeRepository($0.id) },
+            onRemoveRepository: { pendingConfirmation = .deleteRepository($0.id) },
             onAdoptGroup: adoptGroup
         )
     }

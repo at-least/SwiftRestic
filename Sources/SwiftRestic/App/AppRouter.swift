@@ -364,7 +364,7 @@ enum PageTab: Hashable, CaseIterable {
 /// action two ways.
 enum CommandConfirmation: Hashable, Identifiable {
     case deletePlan(UUID)
-    case removeRepository(UUID)
+    case deleteRepository(UUID)
     case check(UUID)
     case prune(UUID)
     case unlock(UUID)

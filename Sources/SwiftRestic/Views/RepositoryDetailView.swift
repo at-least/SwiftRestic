@@ -228,7 +228,7 @@ struct RepositoryDetailView: View {
                     // too, so a due task reads "Waiting", never "Due now", and
                     // one in flight reads "Running now".
                     let hold = model.scheduleHold
-                    let awaitingServer = model.upkeepAwaitingServer.contains(repositoryID)
+                    let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
                     DetailRow("Next check", Scheduler.nextMaintenanceText(
                         .check, of: repository, among: model.configuration.repositories,
                         hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,

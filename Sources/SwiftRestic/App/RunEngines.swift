@@ -449,10 +449,10 @@ enum MaintenanceRunEngine {
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)
         /// The repository's drive is away: its upkeep, unstamped, waits for
-        /// the drive (`AppModel.upkeepAwaitingDrive`).
+        /// the drive (`AppModel.maintenanceAwaitingDrive`).
         func markDriveAway(repositoryID: UUID)
         /// The repository's server is out of reach: its upkeep, unstamped,
-        /// waits for it (`AppModel.upkeepAwaitingServer`).
+        /// waits for it (`AppModel.maintenanceAwaitingServer`).
         func markServerAway(repositoryID: UUID)
         /// A scheduled check read its slice of the data: the next one reads
         /// the slice after (`MaintenancePolicy.nextCheckDataSlice`).

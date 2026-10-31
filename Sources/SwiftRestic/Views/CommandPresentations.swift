@@ -70,7 +70,7 @@ struct CommandPresentations: ViewModifier {
         switch confirmation {
         case let .deletePlan(id):
             Button("Remove Plan") { model.deletePlan(id: id) }
-        case let .removeRepository(id):
+        case let .deleteRepository(id):
             Button("Remove") { model.deleteRepository(id: id) }
         case .check:
             // A sheet of its own (CheckSheet); never shown as a dialog.

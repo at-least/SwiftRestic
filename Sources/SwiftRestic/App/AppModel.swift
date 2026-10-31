@@ -129,12 +129,12 @@ final class AppModel {
     /// (`markDriveAway`): unstamped, the task stays due, and the scheduler
     /// leaves it alone while the drive is still away — then it runs on the
     /// next tick.
-    var upkeepAwaitingDrive: Set<UUID> = []
+    var maintenanceAwaitingDrive: Set<UUID> = []
     /// Network repositories whose check or prune found their server out of
     /// reach (`markServerAway`): unstamped, the task stays due, and the
     /// scheduler leaves it alone until the network changes
     /// (`networkPathChanged`) or a listing reads the repository again.
-    var upkeepAwaitingServer: Set<UUID> = []
+    var maintenanceAwaitingServer: Set<UUID> = []
     /// Whether `configuration` holds what bootstrap loaded. Until then no
     /// save runs: an edit made during the load would write the defaults
     /// over the file.

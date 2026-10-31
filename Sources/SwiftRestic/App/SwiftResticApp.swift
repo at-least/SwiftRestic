@@ -489,7 +489,7 @@ struct SwiftResticApp: App {
             }
             .disabled(!r.canEdit)
             Button("Remove from SwiftRestic") {
-                if let id = r.repositoryID { ask(.confirm(.removeRepository(id))) }
+                if let id = r.repositoryID { ask(.confirm(.deleteRepository(id))) }
             }
             .disabled(!r.canRemove)
         }

@@ -168,7 +168,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
     }
 
     func markServerAway(repositoryID: UUID) {
-        upkeepAwaitingServer.insert(repositoryID)
+        maintenanceAwaitingServer.insert(repositoryID)
     }
 
     func advanceCheckDataSlice(repositoryID: UUID) {
@@ -179,7 +179,7 @@ extension AppModel: MaintenanceRunEngine.Sink {
     }
 
     func markDriveAway(repositoryID: UUID) {
-        upkeepAwaitingDrive.insert(repositoryID)
+        maintenanceAwaitingDrive.insert(repositoryID)
     }
 
     /// Stores a finished maintenance run with its log, announces a skip

@@ -42,17 +42,17 @@ enum RestoreBatch {
     /// names that one for every item.
     static func covering<Item: RestoreBatchItem>(
         _ items: [Item],
-        backup: (Item) -> String
+        snapshotID: (Item) -> String
     ) -> (kept: [Item], covered: [(item: Item, folder: Item)]) {
-        let keys = items.map { Key(backup: backup($0), path: PathKey($0.path)) }
+        let keys = items.map { Key(snapshotID: snapshotID($0), path: PathKey($0.path)) }
         var keptKeys: Set<Key> = []
         var coveredByKey: [Key: (item: Item, folder: Item)] = [:]
-        for (backupID, members) in Dictionary(grouping: items.indices, by: { keys[$0].backup }) {
+        for (snapshotID, members) in Dictionary(grouping: items.indices, by: { keys[$0].snapshotID }) {
             let group = members.map { items[$0] }
             let kept = covering(group)
-            for item in kept { keptKeys.insert(Key(backup: backupID, path: PathKey(item.path))) }
+            for item in kept { keptKeys.insert(Key(snapshotID: snapshotID, path: PathKey(item.path))) }
             for pair in covered(group, kept: kept) {
-                coveredByKey[Key(backup: backupID, path: PathKey(pair.item.path))] = pair
+                coveredByKey[Key(snapshotID: snapshotID, path: PathKey(pair.item.path))] = pair
             }
         }
         // Each verdict is taken once, so a repeat of an item finds none.
@@ -70,7 +70,7 @@ enum RestoreBatch {
 
     /// An item of a selection: its backup and its path's bytes.
     private struct Key: Hashable {
-        let backup: String
+        let snapshotID: String
         let path: PathKey
     }
 

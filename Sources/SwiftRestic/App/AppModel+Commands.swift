@@ -200,7 +200,7 @@ extension AppModel {
             case nil: "This Mac stops backing up “\(name)”. \(landing)"
             }
             return ConfirmationCopy(title: "Remove “\(name)”?", message: message)
-        case let .removeRepository(id):
+        case let .deleteRepository(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Remove “\(label(of: repository))” from SwiftRestic?",

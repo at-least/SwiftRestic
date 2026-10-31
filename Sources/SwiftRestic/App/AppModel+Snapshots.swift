@@ -130,7 +130,7 @@ extension AppModel {
             snapshotListingOutcomes[repositoryID] = .loaded
             snapshotsLoadedAt[repositoryID] = .now
             // Read, so its server answers: upkeep waiting for it may run.
-            upkeepAwaitingServer.remove(repositoryID)
+            maintenanceAwaitingServer.remove(repositoryID)
             repositoriesMissingPassword.remove(repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
         } catch ResticError.cancelled {
@@ -326,8 +326,8 @@ extension AppModel {
         )
     }
 
-    /// One file's node in `backupIDs` — its size and modification time
-    /// there — by backup ID, from one `restic find` of its exact path: the
+    /// One file's node in `snapshotIDs` — its size and modification time
+    /// there — by snapshot ID, from one `restic find` of its exact path: the
     /// Files view's version rows, which ask for each version's newest
     /// backup. Case-exact, as a path is, and matched by bytes, as the index
     /// keys paths.
@@ -341,14 +341,14 @@ extension AppModel {
     /// the index, across launches — and only backups without one are asked:
     /// every find costs a restic process, so going back to a file asks
     /// nothing, and a version list a new backup grew asks only for that one.
-    func fileHistory(repositoryID: UUID, path: String, backupIDs: [String]) async throws -> [String: SnapshotNode] {
+    func fileHistory(repositoryID: UUID, path: String, snapshotIDs: [String]) async throws -> [String: SnapshotNode] {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
         let pathKey = PathKey(path)
-        func key(_ backupID: String) -> FileHistoryKey {
-            FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)
+        func key(_ snapshotID: String) -> FileHistoryKey {
+            FileHistoryKey(repositoryID: repositoryID, snapshotID: snapshotID, path: pathKey)
         }
-        var unanswered = backupIDs.filter { fileHistoryAnswers[key($0)] == nil }
-        unanswered = await answersFromIndexCache(path: path, backupIDs: unanswered, repositoryID: repositoryID)
+        var unanswered = snapshotIDs.filter { fileHistoryAnswers[key($0)] == nil }
+        unanswered = await answersFromIndexCache(path: path, snapshotIDs: unanswered, repositoryID: repositoryID)
         if !unanswered.isEmpty {
             let (service, context) = try await resticContext(for: repository)
             let results = try await service.find(
@@ -366,26 +366,26 @@ extension AppModel {
                     found[result.snapshot] = match.node
                 }
             }
-            for (backupID, node) in found { fileHistoryAnswers[key(backupID)] = node }
+            for (snapshotID, node) in found { fileHistoryAnswers[key(snapshotID)] = node }
             indexCoordinator.cacheFileNodes([PathKey(path): found], repositoryID: repositoryID)
         }
         var history: [String: SnapshotNode] = [:]
-        for backupID in backupIDs {
-            history[backupID] = fileHistoryAnswers[key(backupID)]
+        for snapshotID in snapshotIDs {
+            history[snapshotID] = fileHistoryAnswers[key(snapshotID)]
         }
         return history
     }
 
     /// Fills `fileHistoryAnswers` for one path from the index's cached
     /// nodes; returns the backups it could not answer.
-    private func answersFromIndexCache(path: String, backupIDs: [String], repositoryID: UUID) async -> [String] {
-        guard !backupIDs.isEmpty else { return [] }
+    private func answersFromIndexCache(path: String, snapshotIDs: [String], repositoryID: UUID) async -> [String] {
+        guard !snapshotIDs.isEmpty else { return [] }
         let pathKey = PathKey(path)
-        let kept = await indexCoordinator.cachedFileNodes(path: path, snapshotIDs: backupIDs, repositoryID: repositoryID)
-        for (backupID, node) in kept {
-            fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: pathKey)] = node
+        let kept = await indexCoordinator.cachedFileNodes(path: path, snapshotIDs: snapshotIDs, repositoryID: repositoryID)
+        for (snapshotID, node) in kept {
+            fileHistoryAnswers[FileHistoryKey(repositoryID: repositoryID, snapshotID: snapshotID, path: pathKey)] = node
         }
-        return backupIDs.filter { kept[$0] == nil }
+        return snapshotIDs.filter { kept[$0] == nil }
     }
 
     /// Reads ahead what a click on each of `files` — one open folder's, all
@@ -408,8 +408,8 @@ extension AppModel {
     private func readAhead(_ files: [FileNode]) async {
         guard let first = files.first, let repository = repository(id: first.repositoryID) else { return }
         let repositoryID = repository.id
-        func key(_ backupID: String, _ path: String) -> FileHistoryKey {
-            FileHistoryKey(repositoryID: repositoryID, backupID: backupID, path: PathKey(path))
+        func key(_ snapshotID: String, _ path: String) -> FileHistoryKey {
+            FileHistoryKey(repositoryID: repositoryID, snapshotID: snapshotID, path: PathKey(path))
         }
         func reading(_ path: String) -> Bool {
             fileHistoryReadAheads[FileHistoryFile(repositoryID: repositoryID, path: PathKey(path))] != nil
@@ -421,7 +421,7 @@ extension AppModel {
             ) else { return }
             let unanswered = versions.compactMap { $0.snapshots.first?.id }.filter { fileHistoryAnswers[key($0, file.path)] == nil }
             guard !unanswered.isEmpty else { continue }
-            let rest = await answersFromIndexCache(path: file.path, backupIDs: unanswered, repositoryID: repositoryID)
+            let rest = await answersFromIndexCache(path: file.path, snapshotIDs: unanswered, repositoryID: repositoryID)
             if !rest.isEmpty { missing[file.path] = rest }
         }
         // A click answered some meanwhile, or another read-ahead took them.
@@ -429,8 +429,8 @@ extension AppModel {
             let unanswered = ids.filter { fileHistoryAnswers[key($0, path)] == nil }
             missing[path] = reading(path) || unanswered.isEmpty ? nil : unanswered
         }
-        let backupIDs = Set(missing.values.joined())
-        guard !missing.isEmpty, backupIDs.count <= Self.fileHistoryNamedLimit, !isShuttingDown else { return }
+        let snapshotIDs = Set(missing.values.joined())
+        guard !missing.isEmpty, snapshotIDs.count <= Self.fileHistoryNamedLimit, !isShuttingDown else { return }
         let wanted = Dictionary(uniqueKeysWithValues: missing.map { (PathKey($0.key), (path: $0.key, ids: Set($0.value))) })
         let find = Task<Void, any Error> { [self] in
             guard !isShuttingDown else { return }
@@ -439,7 +439,7 @@ extension AppModel {
                 context,
                 patterns: wanted.values.map { ResticService.globEscaped($0.path) },
                 ignoreCase: false,
-                snapshotIDs: Array(backupIDs)
+                snapshotIDs: Array(snapshotIDs)
             )
             // Removed meanwhile: its answers went with it.
             guard self.repository(id: repositoryID) != nil else { return }
@@ -484,7 +484,7 @@ extension AppModel {
 /// answer under. The path is matched by bytes, as the index keys paths.
 struct FileHistoryKey: Hashable {
     let repositoryID: UUID
-    let backupID: String
+    let snapshotID: String
     let path: PathKey
 }
 

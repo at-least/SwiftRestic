@@ -294,7 +294,7 @@ struct FileVersionsView: View {
             let found = try await model.fileHistory(
                 repositoryID: node.repositoryID,
                 path: node.path,
-                backupIDs: versions.compactMap { $0.snapshots.first?.id }
+                snapshotIDs: versions.compactMap { $0.snapshots.first?.id }
             )
             guard !Task.isCancelled else { return }
             details = found

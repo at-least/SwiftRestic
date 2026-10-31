@@ -1073,27 +1073,11 @@ struct ResticService: ResticClient {
         return summary
     }
 
-    /// Restores an entire snapshot, keeping the original directory layout below
-    /// `destinationDirectory`.
-    @discardableResult
-    func restoreWholeSnapshot(
-        _ context: RepositoryContext,
-        snapshotID: String,
-        destinationDirectory: URL,
-        overwrite: RestoreOverwritePolicy,
-        onProgress: (@Sendable (OperationProgress) -> Void)? = nil
-    ) async throws -> ResticSummary? {
-        try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
-        return try await runRestore(
-            context,
-            arguments: [snapshotID, "--target", destinationDirectory.path] + overwrite.resticArguments,
-            onProgress: onProgress
-        )
-    }
-
     /// `restic restore --json` followed by `arguments`, its progress
-    /// streamed to `onProgress`.
-    private func runRestore(
+    /// streamed to `onProgress`. Internal for the test target's
+    /// `restoreWholeSnapshot` (ResticTestSupport.swift); production restores
+    /// all go through `restore` and `restoreItems` above.
+    func runRestore(
         _ context: RepositoryContext,
         arguments: [String],
         onProgress: (@Sendable (OperationProgress) -> Void)?

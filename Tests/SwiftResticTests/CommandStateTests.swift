@@ -608,7 +608,7 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
         #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check “NAS”?")
-        #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.title
+        #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
         #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Unlock “NAS”?")
         #expect(model.confirmationCopy(for: .rebuildIndex(repository.id))?.title
@@ -618,7 +618,7 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
         model.activity[plan.id] = PlanActivity()
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
-        #expect(model.confirmationCopy(for: .removeRepository(repository.id))?.message
+        #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
         // Apply Retention Now is no backup.
         model.activity[plan.id]?.isBackup = false

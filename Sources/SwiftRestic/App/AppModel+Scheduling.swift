@@ -51,12 +51,12 @@ extension AppModel {
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
-        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(upkeepStillAwaitingDrive())
+        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(maintenanceStillAwaitingDrive())
         // A server out of reach holds its upkeep only: a backup due to it
         // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(
             in: configuration.repositories,
-            busyRepositoryIDs: busy.union(upkeepAwaitingServer)
+            busyRepositoryIDs: busy.union(maintenanceAwaitingServer)
         ) {
             runMaintenance(repositoryID: due.repository.id, task: due.task, askedByUser: false)
             busy.insert(due.repository.id)
@@ -76,11 +76,11 @@ extension AppModel {
     /// while the drive is still away; one whose drive is back — mounted by
     /// the user, a backup's hook or reconnect, a read — leaves the set, and
     /// its task, unstamped and so still due, starts on this tick.
-    private func upkeepStillAwaitingDrive() -> Set<UUID> {
-        upkeepAwaitingDrive = upkeepAwaitingDrive.filter { id in
+    private func maintenanceStillAwaitingDrive() -> Set<UUID> {
+        maintenanceAwaitingDrive = maintenanceAwaitingDrive.filter { id in
             repository(id: id)?.isDriveAway ?? false
         }
-        return upkeepAwaitingDrive
+        return maintenanceAwaitingDrive
     }
 
     /// The battery check is a synchronous IOKit round-trip to powerd — quick,
@@ -216,7 +216,7 @@ extension AppModel {
     /// was skipped run again, as a mount brings back a drive's.
     func networkPathChanged() {
         guard !isShuttingDown else { return }
-        upkeepAwaitingServer.removeAll()
+        maintenanceAwaitingServer.removeAll()
         for repository in configuration.repositories where repository.kind != .local {
             guard case .failed = snapshotListingOutcomes[repository.id] else { continue }
             scheduleSnapshotRefresh(repositoryID: repository.id)

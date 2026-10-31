@@ -51,7 +51,7 @@ struct RestoreSelection: Sendable, Equatable {
 
     /// Nil when the picked items restore nothing.
     init?(_ picked: [RestoreSource]) {
-        let (kept, covered) = RestoreBatch.covering(picked, backup: \.snapshotID)
+        let (kept, covered) = RestoreBatch.covering(picked, snapshotID: \.snapshotID)
         guard !kept.isEmpty else { return nil }
         sources = kept
         note = RestoreBatch.coveredNote(covered)

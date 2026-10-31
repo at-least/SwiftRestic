@@ -230,12 +230,12 @@ struct ResticFilesTreeTests {
         // Each file's click: every row answered, sizes as backed up, no find.
         for file in files {
             let ids = try #require(newest[file])
-            let answers = try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, backupIDs: ids)
+            let answers = try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, snapshotIDs: ids)
             #expect(Set(answers.keys) == Set(ids), "\(file.name)")
             #expect(answers.values.allSatisfy { $0.size != nil && $0.mtime != nil }, "\(file.name)")
         }
         let bSizes = try #require(newest[files[1]]).compactMap { model.fileHistoryAnswers[FileHistoryKey(
-            repositoryID: scene.repositoryID, backupID: $0, path: files[1].pathKey
+            repositoryID: scene.repositoryID, snapshotID: $0, path: files[1].pathKey
         )]?.size }
         #expect(bSizes == [3, 2, 1])
         #expect(scene.finds().count == 1)
@@ -275,7 +275,7 @@ struct ResticFilesTreeTests {
         let file = scene.files[1]
         let ids = try #require(try await scene.newest()[file])
 
-        let asking = Task { try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, backupIDs: ids) }
+        let asking = Task { try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, snapshotIDs: ids) }
         // The wrapper logs the find as it starts; restic then derives its
         // key before it answers.
         let deadline = ContinuousClock.now + .seconds(30)

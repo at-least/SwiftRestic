@@ -1062,8 +1062,8 @@ struct AppModelStubTests {
 
         harness.model.deleteRepository(id: id)
 
-        #expect(!harness.model.upkeepAwaitingDrive.contains(id))
-        #expect(!harness.model.upkeepAwaitingServer.contains(id))
+        #expect(!harness.model.maintenanceAwaitingDrive.contains(id))
+        #expect(!harness.model.maintenanceAwaitingServer.contains(id))
         #expect(harness.model.backupQueue[id] == nil)
 
         await harness.model.shutdown()
@@ -2404,7 +2404,7 @@ struct AppModelStubTests {
         let path = "/src/notes.txt"
 
         let first = try await harness.model.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newer, older]
         )
         #expect(Set(first.keys) == [newer, older])
         #expect(first[older]?.size == 42)
@@ -2412,14 +2412,14 @@ struct AppModelStubTests {
         // The pane is made anew for every click, so going back to the
         // file asks again — with the same backups.
         let again = try await harness.model.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newer, older]
         )
         #expect(again == first)
         #expect(try stubRuns("find", in: harness) == 1)
 
         // A backup made since adds one version's newest backup.
         let grown = try await harness.model.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newest, newer, older]
         )
         #expect(Set(grown.keys) == [newest, newer, older])
         #expect(try stubRuns("find", in: harness) == 2)
@@ -2451,7 +2451,7 @@ struct AppModelStubTests {
         let path = "/src/notes.txt"
 
         let first = try await harness.model.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newer, older]
         )
         // A quit waits for the captures handed over before it.
         await harness.model.shutdown()
@@ -2473,7 +2473,7 @@ struct AppModelStubTests {
         #expect(relaunched.snapshots(for: harness.repository.id).count == 3)
 
         let again = try await relaunched.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newer, older]
         )
         // SnapshotNode's equality is its path: the size and date the row
         // shows are checked themselves.
@@ -2482,7 +2482,7 @@ struct AppModelStubTests {
         #expect(try stubRuns("find", in: harness) == 1)
 
         let grown = try await relaunched.fileHistory(
-            repositoryID: harness.repository.id, path: path, backupIDs: [newest, newer, older]
+            repositoryID: harness.repository.id, path: path, snapshotIDs: [newest, newer, older]
         )
         #expect(Set(grown.keys) == [newest, newer, older])
         #expect(try stubRuns("find", in: harness) == 2)
