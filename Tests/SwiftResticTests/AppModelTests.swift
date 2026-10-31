@@ -1119,10 +1119,7 @@ struct AppModelTests {
         // quit — no fixed delay to bet on.
         model.runBackup(planID: harness.plan.id)
         let stub = try #require(harness.stub)
-        #expect(
-            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 60),
-            "the stub never established its hang within 60 s"
-        )
+        await StubRestic.requireHang(matching: stub.sleepMarker, root: harness.root)
 
         // shutdown() cancels the run; the record is written while it unwinds, and
         // the debounced save would never fire if shutdown did not wait for it.
@@ -1152,10 +1149,7 @@ struct AppModelTests {
         // enough for a cold first spawn.
         model.runBackup(planID: harness.plan.id)
         let stub = try #require(harness.stub)
-        #expect(
-            await StubRestic.waitForHang(matching: stub.sleepMarker, within: 60),
-            "the stub never established its hang within 60 s"
-        )
+        await StubRestic.requireHang(matching: stub.sleepMarker, root: harness.root)
         model.cancelBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
 
@@ -1206,16 +1200,17 @@ struct AppModelTests {
     }
 }
 
+/// One model over a throwaway store: the temp-prefix discipline (never
+/// Application Support) lives here, and `directory` goes back so a site
+/// that cleans up after itself can.
 @MainActor
-private func makeModel(_ prefix: String) -> AppModel {
-    let secrets: [UUID: (password: String, providerSecret: String?)] = [:]
-    return AppModel(
-        store: ConfigStore(
-            directory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
-        ),
-        secrets: .inMemory(secrets)
-    )
+private func makeModel(
+    _ prefix: String,
+    secrets: [UUID: (password: String, providerSecret: String?)] = [:]
+) -> (model: AppModel, directory: URL) {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+    return (AppModel(store: ConfigStore(directory: directory), secrets: .inMemory(secrets)), directory)
 }
 
 /// The banner queue's contract: an unread error survives the next message,
@@ -1225,7 +1220,7 @@ private func makeModel(_ prefix: String) -> AppModel {
 struct BannerQueueTests {
     @Test("newest first, dismissal by identity")
     func queueSemantics() {
-        let model = makeModel("SwiftResticBanners")
+        let model = makeModel("SwiftResticBanners").model
         model.post(Banner(title: "first", message: "", isError: true))
         model.post(Banner(title: "second", message: "", isError: true))
         #expect(model.banners.map(\.title) == ["second", "first"])
@@ -1236,7 +1231,7 @@ struct BannerQueueTests {
 
     @Test("the queue is bounded so a failure loop cannot stack banners without end")
     func bounded() {
-        let model = makeModel("SwiftResticBanners")
+        let model = makeModel("SwiftResticBanners").model
         for index in 0 ..< 10 {
             model.post(Banner(title: "banner \(index)", message: "", isError: true))
         }
@@ -1248,7 +1243,7 @@ struct BannerQueueTests {
 
     @Test("the cap evicts a success before it gives up an error")
     func capPrefersErrors() {
-        let model = makeModel("SwiftResticBanners")
+        let model = makeModel("SwiftResticBanners").model
         model.post(Banner(title: "error", message: "", isError: true))
         for index in 0 ..< 4 {
             model.post(Banner(title: "ok \(index)", message: "", isError: false))
@@ -1261,7 +1256,7 @@ struct BannerQueueTests {
         #expect(model.banners.first?.title == "ok 4")
 
         // An all-error queue falls back to dropping its oldest.
-        let errors = makeModel("SwiftResticBanners")
+        let errors = makeModel("SwiftResticBanners").model
         for index in 0 ..< 5 {
             errors.post(Banner(title: "e\(index)", message: "", isError: true))
         }
@@ -1270,7 +1265,7 @@ struct BannerQueueTests {
 
     @Test("an error already on screen is not posted again; a changed message is")
     func errorDeduplicates() {
-        let model = makeModel("SwiftResticBanners")
+        let model = makeModel("SwiftResticBanners").model
         // A repeatable action failing twice must not stack copies that evict
         // successes — one copy of the same words stays.
         model.post(Banner(title: "same", message: "one", isError: true))
@@ -1294,13 +1289,7 @@ struct SnapshotRunLookupTests {
 
     @Test("the model keeps each snapshot's backup run in step with the history")
     func modelKeepsSnapshotRunsInStep() {
-        let model = AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticSnapshotRuns-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory()
-        )
+        let model = makeModel("SwiftResticSnapshotRuns").model
         model.configuration.settings.maxRunHistory = 20
 
         let wrote = backup("s1")
@@ -1341,10 +1330,8 @@ struct SnapshotRunLookupTests {
 struct ListingGenerationTests {
     @Test("each listing number is newer than every one handed out before it")
     func numbersOnlyRise() {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticListingGenerations-\(UUID().uuidString)")
+        let (model, directory) = makeModel("SwiftResticListingGenerations")
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = AppModel(store: ConfigStore(directory: directory), secrets: .inMemory())
         #expect((0 ..< 5).map { _ in model.nextListingGeneration() } == [1, 2, 3, 4, 5])
     }
 }
@@ -1356,13 +1343,7 @@ struct ListingGenerationTests {
 struct NewestChainSnapshotTests {
     @Test("the listing's first backup of the chain answers; another chain and another repository have none")
     func newestOfTheChain() throws {
-        let model = AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticNewestChain-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory([:])
-        )
+        let model = makeModel("SwiftResticNewestChain").model
         let repositoryID = UUID()
         let plan = namedPlan("Docs", repositoryID: repositoryID)
         let chain = ResticService.planTag(plan.id)
@@ -1390,7 +1371,7 @@ struct NewestChainSnapshotTests {
 struct UpsertStampTests {
     @Test("a stale plan draft keeps the last-run and last-success stamps")
     func planStampsSurviveStaleUpsert() {
-        let model = makeModel("SwiftResticUpsert")
+        let model = makeModel("SwiftResticUpsert").model
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/tmp"
@@ -1414,7 +1395,7 @@ struct UpsertStampTests {
 
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
     func markPlanRunStampsBackups() {
-        let model = makeModel("SwiftResticUpsert")
+        let model = makeModel("SwiftResticUpsert").model
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/Volumes/Archive SSD/Photos"
@@ -1432,7 +1413,7 @@ struct UpsertStampTests {
 
     @Test("a stale plan draft keeps the plan's timed pause")
     func planPauseSurvivesStaleUpsert() {
-        let model = makeModel("SwiftResticUpsert")
+        let model = makeModel("SwiftResticUpsert").model
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/tmp"
@@ -1459,7 +1440,7 @@ struct UpsertStampTests {
 
     @Test("a stale repository draft keeps the check and prune stamps")
     func repositoryStampsSurviveStaleUpsert() async {
-        let model = makeModel("SwiftResticUpsert")
+        let model = makeModel("SwiftResticUpsert").model
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
@@ -1494,7 +1475,7 @@ struct PausingTests {
 
     @Test("plan pauses, the app-wide pause and the battery hold reach the model's hold; lapsed pauses clear themselves")
     func pauseModelSemantics() {
-        let model = makeModel("SwiftResticPausing")
+        let model = makeModel("SwiftResticPausing").model
         let nightly = plan("Nightly")
         model.upsert(plan: nightly)
         let now = Date(timeIntervalSince1970: 1_790_400_000)
@@ -1547,14 +1528,8 @@ struct PausingTests {
 @Suite("Start at login surfaces")
 @MainActor
 struct StartAtLoginSurfaceTests {
-    private func makeModel() -> (model: AppModel, plan: BackupPlan) {
-        let model = AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticLoginItem-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory()
-        )
+    private func makeModelWithPlan() -> (model: AppModel, plan: BackupPlan) {
+        let model = makeModel("SwiftResticLoginItem").model
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/Users/someone/NAS"
@@ -1569,7 +1544,7 @@ struct StartAtLoginSurfaceTests {
 
     @Test("an idle quit asks only when the user chose it — a quit requested from outside never waits")
     func idleQuitAsksOnlyWhenChosen() throws {
-        let (model, plan) = makeModel()
+        let (model, plan) = makeModelWithPlan()
         let chosen = try #require(model.quitConfirmation(userChoseQuit: true))
         #expect(!chosen.interruptsWork)
         #expect(chosen.message.contains(model.label(of: plan)))
@@ -1597,7 +1572,7 @@ struct StartAtLoginSurfaceTests {
 
     @Test("a scheduled run already overdue is named as due now, not in the past")
     func overdueRunIsDueNow() throws {
-        let (model, _) = makeModel()
+        let (model, _) = makeModelWithPlan()
         let now = anchorToRealClock(model)
         // Never run: the slot that passed is due, and the pick clamps to now.
         let overdue = try #require(model.quitScheduleNotice(now: now))
@@ -1623,7 +1598,7 @@ struct StartAtLoginSurfaceTests {
 
     @Test("under a hold the quit sentence names it first, as the tray's line does")
     func quitNoticeNamesTheHold() throws {
-        let (model, _) = makeModel()
+        let (model, _) = makeModelWithPlan()
         let now = anchorToRealClock(model)
         // A timed hold moves a due run to its end, where the scheduler
         // picks it up, and says whose end that is.
@@ -1668,7 +1643,7 @@ struct StartAtLoginSurfaceTests {
 
     @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it — unless Pause and Stop ended it")
     func runInFlightIsNotTheMissedRun() throws {
-        let (model, plan) = makeModel()
+        let (model, plan) = makeModelWithPlan()
         let now = anchorToRealClock(model)
         // Due, and running: the quit's cancel stamps the run's start, so
         // this slot is covered and the one missed is the next.
@@ -1767,7 +1742,7 @@ struct LoginItemSwitchTests {
 
     @Test("a click moves the switch at once and the daemon's read confirms it")
     func optimisticClickThenDaemonConfirm() async throws {
-        let model = makeModel("SwiftResticLoginSwitch")
+        let model = makeModel("SwiftResticLoginSwitch").model
         let script = Script(states: [.enabled])
         script.install(in: model)
 
@@ -1782,7 +1757,7 @@ struct LoginItemSwitchTests {
 
     @Test("a daemon read that began before a newer click never snaps the switch back")
     func staleReadDoesNotStomp() async throws {
-        let model = makeModel("SwiftResticLoginSwitchStale")
+        let model = makeModel("SwiftResticLoginSwitchStale").model
         let script = Script(states: [.enabled, .off])
         script.install(in: model)
         script.hold()
@@ -1812,7 +1787,7 @@ struct LoginItemSwitchTests {
 
     @Test("a status read landing beside a change in flight leaves the optimistic value alone")
     func refreshLeavesAnInFlightClickAlone() async throws {
-        let model = makeModel("SwiftResticLoginRefresh")
+        let model = makeModel("SwiftResticLoginRefresh").model
         let script = Script(states: [.enabled])
         script.install(in: model)
         script.hold()
@@ -1833,7 +1808,7 @@ struct LoginItemSwitchTests {
 
     @Test("a change the daemon refuses posts the banner and still applies the daemon's read")
     func refusedChangeIsSaid() async throws {
-        let model = makeModel("SwiftResticLoginRefused")
+        let model = makeModel("SwiftResticLoginRefused").model
         let script = Script(states: [.off])
         script.install(in: model)
         model.loginItemApplier = { _ in throw ResticError.commandFailed(exitCode: 1, message: "daemon refused") }
@@ -1857,7 +1832,7 @@ struct LoginItemSwitchTests {
 @MainActor
 struct CheckDataRotationTests {
     private func makeRotationModel(with policy: MaintenancePolicy) -> (AppModel, UUID) {
-        let model = makeModel("SwiftResticRotation")
+        let model = makeModel("SwiftResticRotation").model
         var repository = Repository()
         repository.kind = .local
         repository.maintenance = policy
@@ -1915,7 +1890,7 @@ struct RunReporterTokenTests {
 
     @Test("a late progress hop from a finished backup never lands in the next run's strip")
     func lateBackupProgressHopDrops() async throws {
-        let model = makeModel("SwiftResticRunTokens")
+        let model = makeModel("SwiftResticRunTokens").model
         let plan = BackupPlan()
         model.upsert(plan: plan)
 
@@ -1951,7 +1926,7 @@ struct RunReporterTokenTests {
 
     @Test("a late maintenance line never lands in the next job's activity")
     func lateMaintenanceLineDrops() async throws {
-        let model = makeModel("SwiftResticRunTokens")
+        let model = makeModel("SwiftResticRunTokens").model
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/tmp/somewhere"
@@ -2254,9 +2229,7 @@ struct IndexLocationTests {
         // Every model a test builds points its store at a temporary folder;
         // the index must follow it and never write into the real Application
         // Support folder.
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticIndexHome-\(UUID().uuidString)")
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        let (model, root) = makeModel("SwiftResticIndexHome")
         #expect(model.indexCoordinator.directory == root)
         // The files themselves live in a folder of their own inside it, the
         // only folder the orphan sweep may touch.
@@ -2314,25 +2287,11 @@ struct IndexOrphanSweepLaunchTests {
         repository.localPath = root.appendingPathComponent("repo").path
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let whole = try encoder.encode(configuration)
-        let live = config.appendingPathComponent("config.json")
-        switch load {
-        case nil:
-            try whole.write(to: live)
-        case .unreadable:
-            for name in ["config.json", "config.json.1", "config.json.2"] {
-                try Data("{ not json".utf8).write(to: config.appendingPathComponent(name))
-            }
-        case .recovered:
-            try Data("{ not json".utf8).write(to: live)
-            try whole.write(to: config.appendingPathComponent("config.json.1"))
-        case .substitutedID:
-            let text = String(decoding: whole, as: UTF8.self)
-            try #require(text.contains(repository.id.uuidString))
-            try Data(text.replacingOccurrences(of: repository.id.uuidString, with: "not-a-uuid").utf8).write(to: live)
-        }
+        try writeConfiguration(
+            configuration, load: load,
+            replacing: repository.id.uuidString, with: "not-a-uuid",
+            in: config
+        )
 
         // The paths the model's own coordinator will use for this folder.
         let paths = IndexCoordinator(directory: config)
@@ -2380,6 +2339,39 @@ struct IndexOrphanSweepLaunchTests {
         for file in [folder.repositoryFile, folder.orphanFile, folder.earlierHome] {
             #expect(FileManager.default.fileExists(atPath: file.path), "\(file.lastPathComponent) was swept after a \(load) load")
         }
+    }
+}
+
+/// The one writer for the three configuration-load states both launch
+/// fixtures leave their folder in: which file holds the good copy, what a
+/// corrupt live file means, and what a `.substitutedID` replaces — `uuid`
+/// and `marker` say, so each suite keeps its own replace rule beside the
+/// call.
+private func writeConfiguration(
+    _ configuration: AppConfiguration,
+    load: IndexOrphanSweepLaunchTests.Load?,
+    replacing uuid: String,
+    with marker: String,
+    in config: URL
+) throws {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let whole = try encoder.encode(configuration)
+    let live = config.appendingPathComponent("config.json")
+    switch load {
+    case nil:
+        try whole.write(to: live)
+    case .unreadable:
+        for name in ["config.json", "config.json.1", "config.json.2"] {
+            try Data("{ not json".utf8).write(to: config.appendingPathComponent(name))
+        }
+    case .recovered:
+        try Data("{ not json".utf8).write(to: live)
+        try whole.write(to: config.appendingPathComponent("config.json.1"))
+    case .substitutedID:
+        let text = String(decoding: whole, as: UTF8.self)
+        try #require(text.contains(uuid))
+        try Data(text.replacingOccurrences(of: uuid, with: marker).utf8).write(to: live)
     }
 }
 
@@ -2431,29 +2423,15 @@ struct OrphanPlanPurgeLaunchTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [folder.detached, folder.attached, folder.dangling]
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let whole = try encoder.encode(configuration)
-        let live = config.appendingPathComponent("config.json")
-        switch load {
-        case nil:
-            try whole.write(to: live)
-        case .unreadable:
-            for name in ["config.json", "config.json.1", "config.json.2"] {
-                try Data("{ not json".utf8).write(to: config.appendingPathComponent(name))
-            }
-        case .recovered:
-            try Data("{ not json".utf8).write(to: live)
-            try whole.write(to: config.appendingPathComponent("config.json.1"))
-        case .substitutedID:
-            // The repository's own `id` does not read, so it decodes with a
-            // fresh one and the attached plan's id names nothing — the plan
-            // the gate exists to keep.
-            let text = String(decoding: whole, as: UTF8.self)
-            let marker = "\"id\":\"\(repository.id.uuidString)\""
-            try #require(text.contains(marker))
-            try Data(text.replacingOccurrences(of: marker, with: "\"id\":\"not-a-uuid\"").utf8).write(to: live)
-        }
+        // The repository's own `id` does not read, so it decodes with a
+        // fresh one and the attached plan's id names nothing — the plan
+        // the gate exists to keep. The marker targets the `id` field only:
+        // a bare replace would also rewrite the plans' copies of it.
+        try writeConfiguration(
+            configuration, load: load,
+            replacing: "\"id\":\"\(repository.id.uuidString)\"", with: "\"id\":\"not-a-uuid\"",
+            in: config
+        )
         return folder
     }
 
@@ -2696,10 +2674,8 @@ struct RestoreBannerTests {
 struct IndexCompletenessTests {
     @Test("a listing whose reconcile has not returned is not complete, however complete the index is for the one before")
     func completenessWaitsForTheReconcile() async {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticIndexCompleteness-\(UUID().uuidString)")
+        let (model, root) = makeModel("SwiftResticIndexCompleteness")
         defer { try? FileManager.default.removeItem(at: root) }
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory([:]))
         // Configured: a reconcile of a repository no longer configured is
         // not counted as taken.
         let repository = namedRepository("NAS")
@@ -2724,10 +2700,8 @@ struct IndexCompletenessTests {
 
     @Test("Rebuild Search Index: the thrown-away store takes the listing again and is complete once more")
     func rebuildIndexLandsTheListingAgain() async {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticRebuild-\(UUID().uuidString)")
+        let (model, root) = makeModel("SwiftResticRebuild")
         defer { try? FileManager.default.removeItem(at: root) }
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory([:]))
         // Configured, as the hatch's own path checks: a reconcile of a
         // repository no longer configured is not counted as taken.
         let repository = namedRepository("NAS")
@@ -2761,13 +2735,7 @@ struct IndexCompletenessTests {
 @MainActor
 struct RunHistoryTrimTests {
     private func model() -> AppModel {
-        let model = AppModel(
-            store: ConfigStore(
-                directory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SwiftResticTrim-\(UUID().uuidString)")
-            ),
-            secrets: .inMemory()
-        )
+        let model = makeModel("SwiftResticTrim").model
         model.configuration.settings.maxRunHistory = 20
         return model
     }

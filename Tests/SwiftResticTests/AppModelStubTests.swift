@@ -557,13 +557,7 @@ struct AppModelStubTests {
 
         // The hang is what guarantees the cancel lands mid-run, so wait for it
         // in the process table rather than betting on a fixed delay.
-        if !(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60)) {
-            let trace = (try? String(
-                contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
-                encoding: .utf8
-            )) ?? "no trace"
-            Issue.record("the stub never established its hang; trace: [\(trace)]")
-        }
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.cancelRestore()
         await waitUntilRestoreFinishes(in: harness.model)
 
@@ -600,10 +594,7 @@ struct AppModelStubTests {
             to: harness.root.appendingPathComponent("restored"),
             overwrite: .replaceExisting
         )
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // The reporter this run built, captured while the run is still live.
         let runReporter = harness.model.restoreProgressReporter()
@@ -654,10 +645,7 @@ struct AppModelStubTests {
         let firstRefresh = Task {
             await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
         }
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // Arrives while the first refresh holds the in-flight slot; returns
         // immediately — but the just-finished backup's snapshot must not be
@@ -715,10 +703,7 @@ struct AppModelStubTests {
         await harness.model.upsert(repository: hanging, password: nil, providerSecret: nil)
 
         harness.model.scheduleSnapshotRefresh(repositoryID: harness.repository.id)
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         // Arrives while the first still holds the in-flight slot: remembered.
         await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
 
@@ -821,10 +806,7 @@ struct AppModelStubTests {
         // The listing answers fast; the hang (detectable only as the live
         // sleep process — the trace line fires for the fast calls too) is
         // what guarantees the cancel lands inside the stats read.
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its stats hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         refreshTask.cancel()
         await refreshTask.value
@@ -854,10 +836,7 @@ struct AppModelStubTests {
         let refreshTask = Task {
             await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
         }
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its listing hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         refreshTask.cancel()
         await refreshTask.value
@@ -883,10 +862,7 @@ struct AppModelStubTests {
         // A read in flight: the listing answers, its size read hangs.
         harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
         let reading = Task { await harness.model.refreshSnapshots(repositoryID: id) }
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its stats hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // The drive goes away mid-read, and a refresh is asked.
         harness.model.configuration.repositories[0].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
@@ -1020,10 +996,7 @@ struct AppModelStubTests {
         // restic is still being asked.
         harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
         let reading = Task { await harness.model.refreshSnapshots(repositoryID: id) }
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its stats hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.deleteRepository(id: id)
         // The stopped size read answers nothing, which is a stats failure.
         for pid in StubRestic.findProcesses(matching: harness.stub.sleepMarker) {
@@ -1280,12 +1253,7 @@ struct AppModelStubTests {
     func tccBlockedRunNamesTheFix() async throws {
         let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
         defer { server.stop() }
-        server.start()
-        let readyDeadline = Date.now.addingTimeInterval(5)
-        while server.port == 0, Date.now < readyDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        #expect(server.port != 0, "the capture listener never became ready")
+        await server.start()
 
         var capture = NotificationChannel()
         capture.name = "Capture"
@@ -1650,10 +1618,7 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         harness.model.cancelMaintenance(repositoryID: harness.repository.id)
         await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
@@ -1696,10 +1661,7 @@ struct AppModelStubTests {
         let answersBeforeCancel = answerCount()
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.cancelMaintenance(repositoryID: harness.repository.id)
         await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
 
@@ -1730,10 +1692,7 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // Counted after the hung check's own start line: the baseline for
         // "nothing ran after shutdown returned".
@@ -1837,7 +1796,7 @@ struct AppModelStubTests {
         harness.model.configuration.plans[0].lastRunAt = earlier
 
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
         await harness.model.waitForRun(planID: planID)
 
@@ -1855,7 +1814,7 @@ struct AppModelStubTests {
         harness.model.resumeBackups()
         #expect(await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10))
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.cancelBackup(planID: planID)
         await harness.model.waitForRun(planID: planID)
         let stamped = try #require(harness.model.plan(id: planID)?.lastRunAt)
@@ -1872,7 +1831,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.runBackup(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.pauseBackups(for: .oneHour)
         // Checked at once: a stopped run stays in `activity`, cancelling,
         // until its task unwinds, so the wait below alone would pass a
@@ -1895,11 +1854,7 @@ struct AppModelStubTests {
     func applyingRetentionRecordsAForgetWithoutStampingThePlan() async throws {
         let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
         defer { server.stop() }
-        server.start()
-        let readyDeadline = Date.now.addingTimeInterval(5)
-        while server.port == 0, Date.now < readyDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        await server.start()
         var channel = NotificationChannel()
         channel.name = "Capture"
         channel.kind = .webhook
@@ -1990,7 +1945,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         let state = harness.model.planCommands(for: .plan(planID))
         #expect(state.stopTitle == "Stop Applying Retention")
         #expect(state.canStop)
@@ -2026,7 +1981,7 @@ struct AppModelStubTests {
         let idle = try #require(harness.model.quitScheduleNotice(now: now))
         #expect(idle.hasPrefix("Stub Plan (Stub Repo) is due now. "))
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // Unlike a backup's, this run's cancel stamps nothing, so the slot
         // is still owed after the quit, as it was before the run began.
@@ -2069,7 +2024,7 @@ struct AppModelStubTests {
         let planID = harness.plan.id
 
         harness.model.applyRetention(planID: planID)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         // What quitting and removing the repository would interrupt: retention, not a backup.
         #expect(harness.model.quitInterruptions == ["Retention is being applied."])
         #expect(harness.model.removalConsequences(for: harness.repository.id)
@@ -2117,7 +2072,7 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.runBackup(planID: harness.plan.id)
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // The file holds the running plan and its repository, so Delete
         // Plan's bookkeeping and `deletePlansWithoutRepository` both pass it
@@ -2154,7 +2109,7 @@ struct AppModelStubTests {
             to: harness.root.appendingPathComponent("first"),
             overwrite: .replaceExisting
         )
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         harness.model.restore(
             repositoryID: harness.repository.id,
@@ -2187,7 +2142,7 @@ struct AppModelStubTests {
         )
         // Same guarantee as the backup case: the hang proves the restore is
         // genuinely in flight before the deletion lands.
-        #expect(await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60))
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         harness.model.deleteRepository(id: harness.repository.id)
         await waitUntilRestoreFinishes(in: harness.model)
@@ -2231,10 +2186,7 @@ struct AppModelStubTests {
             to: harness.root.appendingPathComponent("restored"),
             overwrite: .replaceExisting
         )
-        #expect(
-            await StubRestic.waitForHang(matching: harness.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         let consequences = harness.model.removalConsequences(for: harness.repository.id)
         #expect(consequences.contains("The backups in it are kept."))
@@ -2274,14 +2226,8 @@ struct AppModelStubTests {
         // lands here, so the guarantee can be asserted against the wire.
         let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
         defer { server.stop() }
-        server.start()
-        // The port only exists once the listener is ready; poll for it.
-        let readyDeadline = Date.now.addingTimeInterval(5)
-        while server.port == 0, Date.now < readyDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        await server.start()
         let port = server.port
-        #expect(port != 0, "the capture listener never became ready")
 
         var leaky = BackupHook()
         leaky.name = "leaky"
@@ -2963,7 +2909,7 @@ private final class HTTPCaptureServer: @unchecked Sendable {
         self.listener = listener
     }
 
-    func start() {
+    func start() async {
         listener.newConnectionHandler = { [weak self] connection in
             guard let self else { return }
             // A connection receives nothing until it is started on a queue.
@@ -2971,6 +2917,16 @@ private final class HTTPCaptureServer: @unchecked Sendable {
             self.receive(on: connection, buffer: Data())
         }
         listener.start(queue: queue)
+        // The port only exists once the listener is ready; poll for it, so a
+        // listener that never opens is reported here instead of surfacing
+        // later as a missing payload.
+        let readyDeadline = Date.now.addingTimeInterval(5)
+        while port == 0, Date.now < readyDeadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        if port == 0 {
+            Issue.record("the capture listener never became ready")
+        }
     }
 
     func stop() {

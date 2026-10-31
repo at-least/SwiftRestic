@@ -376,25 +376,6 @@ struct IndexBackfillTests {
     }
 }
 
-/// A lock-guarded flag for the concurrency tests: set on one side, polled on
-/// the other.
-final class Flag: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = false
-
-    func set() {
-        lock.lock()
-        value = true
-        lock.unlock()
-    }
-
-    var isSet: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
-
 /// A lock-guarded counter, for generation numbers handed out from a hook.
 private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
@@ -410,21 +391,6 @@ private final class Counter: @unchecked Sendable {
         value += 1
         return value
     }
-}
-
-/// Polls `condition` every 5 ms for up to `seconds`; true once it held. Runs
-/// on the caller's actor, so a main-actor test may read main-actor state.
-func eventually(
-    within seconds: Double,
-    isolation: isolated (any Actor)? = #isolation,
-    _ condition: () async -> Bool
-) async -> Bool {
-    let deadline = Date().addingTimeInterval(seconds)
-    while Date() < deadline {
-        if await condition() { return true }
-        try? await Task.sleep(for: .milliseconds(5))
-    }
-    return await condition()
 }
 
 extension IndexCoordinator {

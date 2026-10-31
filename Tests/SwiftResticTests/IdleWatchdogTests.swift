@@ -8,13 +8,7 @@ import Testing
 @Suite("restic runner stall cap", .serialized)
 struct IdleWatchdogTests {
     private func installScript(_ body: String) throws -> URL {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticIdle-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let script = root.appendingPathComponent("script.sh")
-        try "#!/bin/sh\n\(body)\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        return script
+        try writeExecutableScript(body, label: "Idle")
     }
 
     @Test("a child that goes silent is killed as hung, not timed out")

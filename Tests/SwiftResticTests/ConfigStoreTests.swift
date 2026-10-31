@@ -1,13 +1,15 @@
 import Foundation
 import Testing
 
+/// A throwaway configuration directory, unique per call so a leaked one
+/// stays attributable; `prefix` names the suite to blame.
+private func temporaryDirectory(prefix: String = "SwiftResticConfig") -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+}
+
 @Suite("Configuration persistence")
 struct ConfigStoreTests {
-    private func temporaryDirectory() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticConfig-\(UUID().uuidString)")
-    }
-
     @Test("a missing config file is not an error")
     func missingFile() async throws {
         let store = ConfigStore(directory: temporaryDirectory())
@@ -274,11 +276,6 @@ struct ConfigStoreTests {
 /// the substitution must be reported, never silent.
 @Suite("Tolerant decoding")
 struct TolerantDecodingTests {
-    private func temporaryDirectory() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticConfig-\(UUID().uuidString)")
-    }
-
     private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -930,8 +927,7 @@ struct TolerantDecodingTests {
 
     @Test("a config file with a malformed field still loads through the store")
     func malformedConfigLoads() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticTolerant-\(UUID().uuidString)")
+        let directory = temporaryDirectory(prefix: "SwiftResticTolerant")
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 

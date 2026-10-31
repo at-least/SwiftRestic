@@ -14,13 +14,7 @@ struct GrandchildPipeTests {
     /// this case's orphan only — the grandchild is never signalled by us (no
     /// signal can reach it; that is the point), so it must be reaped manually.
     private func installScript(_ body: String) throws -> URL {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticGrandchild-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let script = root.appendingPathComponent("script.sh")
-        try "#!/bin/sh\n\(body)\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        return script
+        try writeExecutableScript(body, label: "Grandchild")
     }
 
     private func killOrphan(matching marker: String) {

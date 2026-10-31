@@ -50,13 +50,7 @@ struct RcloneRemotesTests {
     }
 
     private func stubRclone(_ body: String) throws -> URL {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticRclone-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let script = root.appendingPathComponent("rclone")
-        try "#!/bin/sh\n\(body)\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        return script
+        try writeExecutableScript(body, label: "Rclone", named: "rclone")
     }
 
     @Test("rclone's remotes, none yet, or why it could not list them")

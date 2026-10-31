@@ -70,6 +70,41 @@ struct StubRestic: Sendable {
         return !findProcesses(matching: marker).isEmpty
     }
 
+    /// `waitForHang`, with the failure recorded instead of returned: on a
+    /// timeout the issue carries the evidence a cold runner needs — the
+    /// stub's own trace and the process table's stub-related lines — so a
+    /// hang regression always says why. `because` adds the test's own
+    /// context to that record, read only on failure.
+    static func requireHang(
+        matching marker: String,
+        root: URL,
+        because: (() -> String)? = nil,
+        within seconds: TimeInterval = 60
+    ) async {
+        if await waitForHang(matching: marker, within: seconds) { return }
+        let trace = (try? String(contentsOf: root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? "no trace"
+        let extra = because.map { "; \($0())" } ?? ""
+        Issue.record("the stub never established its hang within \(Int(seconds)) s\(extra); trace: [\(trace)]; ps saw: [\(processSnapshot())]")
+    }
+
+    /// Process-table snapshot for failure diagnostics, narrowed to stub-related lines.
+    static func processSnapshot() -> String {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-axo", "pid=,ppid=,stat=,command="]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = FileHandle.nullDevice
+        do { try ps.run() } catch { return "ps unavailable" }
+        // Read to EOF before waiting: draining the pipe is what lets ps exit,
+        // so waiting first could deadlock on a full buffer.
+        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        ps.waitUntilExit()
+        return text.split(separator: "\n")
+            .filter { $0.contains("stub-restic") || $0.contains("sleep ") }
+            .joined(separator: "\n")
+    }
+
     private static func script(sleepMarker: String) -> String {
         """
         #!/bin/sh
@@ -647,24 +682,6 @@ struct StubResticTests {
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// Process-table snapshot for failure diagnostics, narrowed to stub-related lines.
-    private static func processSnapshot() -> String {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-axo", "pid=,ppid=,stat=,command="]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        do { try ps.run() } catch { return "ps unavailable" }
-        // Read to EOF before waiting: draining the pipe is what lets ps exit,
-        // so waiting first could deadlock on a full buffer.
-        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        ps.waitUntilExit()
-        return text.split(separator: "\n")
-            .filter { $0.contains("stub-restic") || $0.contains("sleep ") }
-            .joined(separator: "\n")
-    }
-
     @Test("cancelling a backup ends the run and the child process is really gone")
     func cancellationKillsTheChild() async throws {
         let fixture = try makeFixture(mode: "hang")
@@ -685,14 +702,15 @@ struct StubResticTests {
         // shows, so its length costs a healthy run nothing.
         // If the hang never establishes, this fails with the stub's own trace
         // and when the backup's task got a thread, if it ever did.
-        let hangEstablished = await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60)
-        if !hangEstablished {
-            let trace = (try? String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)) ?? "no trace"
-            let started = taskStarted.value.map {
-                "the backup's task started \(String(format: "%.2f", $0.timeIntervalSince(createdAt))) s after it was made"
-            } ?? "the backup's task never started"
-            Issue.record("the stub never established its hang within 60 s; \(started); trace: [\(trace)]; ps saw: [\(Self.processSnapshot())]")
-        }
+        await StubRestic.requireHang(
+            matching: fixture.stub.sleepMarker,
+            root: fixture.root,
+            because: {
+                taskStarted.value.map {
+                    "the backup's task started \(String(format: "%.2f", $0.timeIntervalSince(createdAt))) s after it was made"
+                } ?? "the backup's task never started"
+            }
+        )
         task.cancel()
 
         // The run must finish promptly; a bounded wait so a regression fails
@@ -979,10 +997,7 @@ struct StubResticTests {
                 try await service.backup(context, plan: plan)
             }
         }
-        #expect(
-            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: fixture.stub.sleepMarker, root: fixture.root)
         task.cancel()
         _ = try? await task.value
 
@@ -1066,10 +1081,7 @@ struct StubResticTests {
         }
         // The hang comes after the stub's part of the file, so the cancel
         // lands on a restore that has written.
-        #expect(
-            await StubRestic.waitForHang(matching: fixture.stub.sleepMarker, within: 60),
-            "the stub never established its hang"
-        )
+        await StubRestic.requireHang(matching: fixture.stub.sleepMarker, root: fixture.root)
         task.cancel()
         await #expect(throws: ResticError.cancelled) { try await task.value }
 

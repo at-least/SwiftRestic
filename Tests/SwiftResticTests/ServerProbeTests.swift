@@ -80,30 +80,3 @@ struct ServerProbeTests {
             == .unreachable("its name could not be found"))
     }
 }
-
-/// A TCP socket listening on a free loopback port. The kernel completes a
-/// connection's handshake into the accept queue, so it answers without an
-/// accept loop.
-enum LocalPort {
-    struct Error: Swift.Error { var call: String }
-
-    static func listening() throws -> (socket: Int32, port: UInt16) {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw Error(call: "socket") }
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        address.sin_port = 0
-        let bound = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
-        }
-        guard bound == 0, listen(fd, 8) == 0 else { close(fd); throw Error(call: "bind/listen") }
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let named = withUnsafeMutablePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
-        }
-        guard named == 0 else { close(fd); throw Error(call: "getsockname") }
-        return (fd, UInt16(bigEndian: address.sin_port))
-    }
-}

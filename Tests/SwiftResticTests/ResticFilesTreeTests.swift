@@ -85,11 +85,10 @@ struct ResticFilesTreeTests {
         #expect(summary(reading) == ["Sub/ disk", "a.txt disk", "new.txt disk"])
 
         model.indexReconcile(repositoryID: repository.id, listing: listing, generation: generation)
-        let deadline = Date.now.addingTimeInterval(60)
-        while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        #expect(await model.indexIsComplete(repositoryID: repository.id), "the index never read the backup")
+        #expect(
+            await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+            "the index never read the backup"
+        )
         let read = try await FilesTree.level(of: folder, model: model)
         #expect(read.isComplete)
         #expect(summary(read) == [
@@ -162,12 +161,14 @@ struct ResticFilesTreeTests {
             try await store.save(configuration)
             model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
             repositoryID = repository.id
+            // A local, not the property: `files` is not set yet, so a closure
+            // over the property would capture self half-initialized.
+            let model = self.model
             await model.bootstrap()
-            let deadline = Date.now.addingTimeInterval(60)
-            while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
-                try await Task.sleep(for: .milliseconds(100))
-            }
-            #expect(await model.indexIsComplete(repositoryID: repository.id), "the index never read the backups")
+            #expect(
+                await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+                "the index never read the backups"
+            )
             let chain = try #require(model.snapshots(for: repository.id).first.map(SnapshotIndex.chainKey(for:)))
             files = ["a.txt", "b.txt", "c.txt", "a[1].txt"].map {
                 FileNode(repositoryID: repository.id, chainKey: chain, path: data.appendingPathComponent($0).path, isDirectory: false)
@@ -253,11 +254,10 @@ struct ResticFilesTreeTests {
         let readAhead = model.warmFileHistory(scene.files)
         // The find has started once its files are registered; restic then
         // derives its key for half a second before it answers.
-        let deadline = ContinuousClock.now + .seconds(30)
-        while model.fileHistoryReadAheads.isEmpty, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(!model.fileHistoryReadAheads.isEmpty, "the read-ahead never started its find")
+        #expect(
+            await eventually(within: 30) { !model.fileHistoryReadAheads.isEmpty },
+            "the read-ahead never started its find"
+        )
         model.deleteRepository(id: scene.repositoryID)
         await readAhead.value
 
@@ -278,11 +278,10 @@ struct ResticFilesTreeTests {
         let asking = Task { try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, snapshotIDs: ids) }
         // The wrapper logs the find as it starts; restic then derives its
         // key before it answers.
-        let deadline = ContinuousClock.now + .seconds(30)
-        while scene.finds().isEmpty, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(!scene.finds().isEmpty, "the click never started its find")
+        #expect(
+            await eventually(within: 30) { !scene.finds().isEmpty },
+            "the click never started its find"
+        )
         model.deleteRepository(id: scene.repositoryID)
         _ = try? await asking.value
 

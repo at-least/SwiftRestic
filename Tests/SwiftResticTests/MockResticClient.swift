@@ -313,7 +313,11 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
             return (
                 listings[olderID] ?? [],
                 listings[newerID] ?? [],
-                unreadableIDs.intersection([olderID, newerID]).first,
+                // A set has no order, so a test scripting both endpoints of
+                // one diff would get either error across runs: the newer
+                // snapshot's stream is the one under way, so its failure is
+                // the one to report, deterministically.
+                [newerID, olderID].first { unreadableIDs.contains($0) },
                 malformedLines[newerID] ?? 0,
                 scriptedDiffs[newerID]
             )

@@ -129,14 +129,6 @@ struct FilesTreeTests {
         #expect(ResticPath.parent(of: "/d\u{0600}/x") == "/d\u{0600}")
     }
 
-    @Test("ResticPath.ancestors walks parent by parent up to the root; none for the root or a bare name")
-    func ancestorPaths() {
-        #expect(ResticPath.ancestors(of: "/a/b/c") == ["/a/b", "/a", "/"])
-        #expect(ResticPath.ancestors(of: "/a") == ["/"])
-        #expect(ResticPath.ancestors(of: "/") == [])
-        #expect(ResticPath.ancestors(of: "a") == [])
-    }
-
     // MARK: - The disk beside the backups
 
     @Test("a folder's rows are the disk's items, each not backed up only once the index has read every backup and found none of it, then what only the backups hold")
@@ -417,11 +409,13 @@ struct FilesTreeTests {
         // An incomplete level is read again every recheckInterval: stop
         // after the first read.
         let task = Task { await reading.keep([folder], model: model) }
-        let deadline = ContinuousClock.now + .seconds(10)
-        while reading.state(of: folder) == nil || reading.state(of: folder) == .loading, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(reading.state(of: folder) != nil && reading.state(of: folder) != .loading, "the level was never read")
+        #expect(
+            await eventually(within: 10) {
+                let state = reading.state(of: folder)
+                return state != nil && state != .loading
+            },
+            "the level was never read"
+        )
         task.cancel()
         await task.value
         #expect(warmed.calls.isEmpty)

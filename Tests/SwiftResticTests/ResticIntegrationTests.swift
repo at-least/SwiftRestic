@@ -43,70 +43,86 @@ struct ResticUnderTestTests {
     }
 }
 
+/// The shared fixture of the real-restic suites: a throwaway local
+/// repository, an empty source tree the `plant` closure fills, and the
+/// service, context and plan wired to reach them. The repository is not
+/// initialized — each suite does that itself, so a test can pin the
+/// not-yet-a-repository state first. Each suite keeps its own prefix and
+/// password, so a leaked directory or a cross-suite password mixup stays
+/// attributable.
+struct ResticFixture {
+    var root: URL
+    var sourceDirectory: URL
+    var context: RepositoryContext
+    var service: ResticService
+    var plan: BackupPlan
+}
+
+func makeResticFixture(
+    prefix: String,
+    password: String,
+    plant: (URL) throws -> Void = { _ in }
+) throws -> ResticFixture {
+    let base = FileManager.default.temporaryDirectory
+        .appendingPathComponent("SwiftRestic\(prefix)-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+    // /var/folders is a symlink to /private/var/folders; restic records the
+    // resolved path, so resolve here or every path comparison is off by one.
+    let root = base.resolvingSymlinksInPath()
+
+    let sourceDirectory = root.appendingPathComponent("source")
+    try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+    try plant(sourceDirectory)
+
+    var repository = Repository()
+    repository.kind = .local
+    repository.localPath = root.appendingPathComponent("repo").path
+
+    var plan = BackupPlan()
+    plan.repositoryID = repository.id
+    plan.path = sourceDirectory.path
+    plan.skipNothing()
+
+    return ResticFixture(
+        root: root,
+        sourceDirectory: sourceDirectory,
+        context: RepositoryContext(repository: repository, password: password),
+        service: try ResticAvailability.service(),
+        plan: plan
+    )
+}
+
 @Suite("restic integration", .serialized, .enabled(if: ResticAvailability.isInstalled))
 struct ResticIntegrationTests {
     private static let password = "integration-test-password"
 
-    /// A repository, a source tree and the context needed to reach them.
-    private struct Fixture {
-        var root: URL
-        var sourceDirectory: URL
-        var context: RepositoryContext
-        var service: ResticService
-        var plan: BackupPlan
-    }
-
-    private func makeFixture() throws -> Fixture {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // /var/folders is a symlink to /private/var/folders; restic records the
-        // resolved path, so resolve here or every path comparison is off by one.
-        let root = base.resolvingSymlinksInPath()
-
-        let repositoryDirectory = root.appendingPathComponent("repo")
-        let sourceDirectory = root.appendingPathComponent("source")
-        let subDirectory = sourceDirectory.appendingPathComponent("sub")
-        try FileManager.default.createDirectory(at: subDirectory, withIntermediateDirectories: true)
-        try "hello world".write(
-            to: sourceDirectory.appendingPathComponent("a.txt"),
-            atomically: true,
-            encoding: .utf8
-        )
-        try Data(repeating: 7, count: 200_000).write(
-            to: sourceDirectory.appendingPathComponent("big.bin")
-        )
-        try "nested".write(
-            to: subDirectory.appendingPathComponent("b.txt"),
-            atomically: true,
-            encoding: .utf8
-        )
-        // A name whose first character is a combining mark: the separator
-        // before it merges into one grapheme, so any Character-level path
-        // arithmetic silently drops the file from a directory listing. A
-        // regression here would lose exactly this file at browse time.
-        try "combining".write(
-            to: sourceDirectory.appendingPathComponent("\u{0301}leading.txt"),
-            atomically: true,
-            encoding: .utf8
-        )
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = repositoryDirectory.path
-
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = sourceDirectory.path
-        plan.skipNothing()
-
-        return Fixture(
-            root: root,
-            sourceDirectory: sourceDirectory,
-            context: RepositoryContext(repository: repository, password: Self.password),
-            service: try ResticAvailability.service(),
-            plan: plan
-        )
+    private func makeFixture() throws -> ResticFixture {
+        try makeResticFixture(prefix: "Tests", password: Self.password) { source in
+            let subDirectory = source.appendingPathComponent("sub")
+            try FileManager.default.createDirectory(at: subDirectory, withIntermediateDirectories: true)
+            try "hello world".write(
+                to: source.appendingPathComponent("a.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            try Data(repeating: 7, count: 200_000).write(
+                to: source.appendingPathComponent("big.bin")
+            )
+            try "nested".write(
+                to: subDirectory.appendingPathComponent("b.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            // A name whose first character is a combining mark: the separator
+            // before it merges into one grapheme, so any Character-level path
+            // arithmetic silently drops the file from a directory listing. A
+            // regression here would lose exactly this file at browse time.
+            try "combining".write(
+                to: source.appendingPathComponent("\u{0301}leading.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
     }
 
     @Test("init, backup, list, browse and restore against a real repository")
@@ -477,7 +493,7 @@ struct ResticIntegrationTests {
     /// The model over the fixture repository, with the history read in: what
     /// the app runs when a repository page shows a group under Other backups.
     @MainActor
-    private func adoptableModel(fixture: Fixture, repository: Repository) async throws -> AppModel {
+    private func adoptableModel(fixture: ResticFixture, repository: Repository) async throws -> AppModel {
         let model = AppModel(
             store: ConfigStore(directory: fixture.root.appendingPathComponent("config")),
             secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
@@ -892,7 +908,7 @@ struct ResticIntegrationTests {
     }
 
     /// The fixture backed up, and its root folder's listing.
-    private func backedUpChildren(_ fixture: Fixture) async throws -> (snapshotID: String, children: [SnapshotNode]) {
+    private func backedUpChildren(_ fixture: ResticFixture) async throws -> (snapshotID: String, children: [SnapshotNode]) {
         _ = try await fixture.service.initializeRepository(fixture.context)
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         let snapshotID = try #require(outcome.summary?.snapshotID)
@@ -1404,32 +1420,17 @@ struct ResticIntegrationTests {
 struct ResticMaintenanceTests {
     @Test("prune reclaims space after forget, and reports in plain text")
     func prune() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticPrune-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let root = base.resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let source = root.appendingPathComponent("source")
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
-
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = source.path
-        plan.skipNothing()
-
-        let service = try ResticAvailability.service()
-        let context = RepositoryContext(repository: repository, password: "prune-test")
+        let fixture = try makeResticFixture(prefix: "Prune", password: "prune-test")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
         _ = try await service.initializeRepository(context)
 
         // Three snapshots of distinct data, so forgetting two leaves real garbage.
         for index in 0 ..< 3 {
             try Data((0 ..< 400_000).map { UInt8(($0 &* 7 &+ index &* 101) % 251) })
-                .write(to: source.appendingPathComponent("blob.bin"))
+                .write(to: fixture.sourceDirectory.appendingPathComponent("blob.bin"))
             _ = try await service.backup(context, plan: plan)
         }
 
@@ -1464,38 +1465,23 @@ struct ResticMaintenanceTests {
 struct ResticCheckDamageTests {
     @Test("a damaged repository's check still carries its error count")
     func checkOnDamagedRepositoryReportsErrors() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticCheckDamage-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let root = base.resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let sourceDirectory = root.appendingPathComponent("source")
-        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
-        // Random bytes, not zeros: compression would shrink them into a pack
-        // too small to aim a corruption at.
-        try Data(randomBytes: 200_000).write(to: sourceDirectory.appendingPathComponent("big.bin"))
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
-
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = sourceDirectory.path
-        plan.skipNothing()
-
-        let context = RepositoryContext(repository: repository, password: "check-damage-password")
-        let service = try ResticAvailability.service()
+        let fixture = try makeResticFixture(prefix: "CheckDamage", password: "check-damage-password") { source in
+            // Random bytes, not zeros: compression would shrink them into a pack
+            // too small to aim a corruption at.
+            try Data(randomBytes: 200_000).write(to: source.appendingPathComponent("big.bin"))
+        }
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let context = fixture.context
+        let service = fixture.service
         _ = try await service.initializeRepository(context)
-        _ = try await service.backup(context, plan: plan)
+        _ = try await service.backup(context, plan: fixture.plan)
 
         // Flip one byte in the middle of the largest data pack. restic marks
         // its packs read-only, so the mode comes back before the write — a
         // failed corrupt must never read as healthy. Structural `check`
         // verifies only headers, so the verdict is read with data: a flipped
         // blob byte is exactly what `--read-data` exists to catch.
-        let dataRoot = root.appendingPathComponent("repo/data")
+        let dataRoot = fixture.root.appendingPathComponent("repo/data")
         let enumerator = FileManager.default.enumerator(
             at: dataRoot,
             includingPropertiesForKeys: [URLResourceKey.isRegularFileKey, .fileSizeKey]
@@ -1544,28 +1530,18 @@ private extension Data {
 struct ResticDiffTests {
     @Test("a modified, an added and a removed file each show up with the right modifier")
     func diffBetweenTwoSnapshots() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticDiff-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let root = base.resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let source = root.appendingPathComponent("source")
+        let fixture = try makeResticFixture(prefix: "Diff", password: "diff-test") { source in
+            let sub = source.appendingPathComponent("sub")
+            try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+            try "one".write(to: source.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+            try "two".write(to: sub.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        }
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let source = fixture.sourceDirectory
         let sub = source.appendingPathComponent("sub")
-        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
-        try "one".write(to: source.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        try "two".write(to: sub.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = source.path
-        plan.skipNothing()
-
-        let service = try ResticAvailability.service()
-        let context = RepositoryContext(repository: repository, password: "diff-test")
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
         _ = try await service.initializeRepository(context)
 
         let first = try await service.backup(context, plan: plan)
@@ -1609,33 +1585,23 @@ struct ResticDiffTests {
 struct ResticFindTests {
     @Test("a file deleted from the source is still findable in an older snapshot")
     func findsFileAcrossSnapshots() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticFind-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let root = base.resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let source = root.appendingPathComponent("source")
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        let secret = source.appendingPathComponent("recovery-codes.txt")
-        try "the codes".write(to: secret, atomically: true, encoding: .utf8)
-        try "kept".write(
-            to: source.appendingPathComponent("keep.txt"),
-            atomically: true,
-            encoding: .utf8
-        )
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
-
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = source.path
-        plan.skipNothing()
-
-        let service = try ResticAvailability.service()
-        let context = RepositoryContext(repository: repository, password: "find-test")
+        let fixture = try makeResticFixture(prefix: "Find", password: "find-test") { source in
+            try "the codes".write(
+                to: source.appendingPathComponent("recovery-codes.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+            try "kept".write(
+                to: source.appendingPathComponent("keep.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
+        let secret = fixture.sourceDirectory.appendingPathComponent("recovery-codes.txt")
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)
 
@@ -1657,7 +1623,7 @@ struct ResticFindTests {
         #expect(try await service.find(context, patterns: ["RECOVERY-*.TXT"]).count == 1)
 
         // The match restores through the same path a browsed node does.
-        let destination = root.appendingPathComponent("restored")
+        let destination = fixture.root.appendingPathComponent("restored")
         _ = try await service.restore(
             context,
             snapshotID: result.snapshot,
@@ -1674,29 +1640,17 @@ struct ResticFindTests {
     /// characters its name holds, with its size in each backup.
     @Test("an escaped path finds exactly that file in every backup, with its size in each")
     func escapedPathFindsOneFile() async throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticFindExact-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let root = base.resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let source = root.appendingPathComponent("source")
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        // Each target beside the name its raw glob would also match.
-        for (name, body) in [("a[1].txt", "one"), ("a1.txt", "x"), ("b*c.txt", "two"), ("bXc.txt", "y")] {
-            try body.write(to: source.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        let fixture = try makeResticFixture(prefix: "FindExact", password: "exact-test") { source in
+            // Each target beside the name its raw glob would also match.
+            for (name, body) in [("a[1].txt", "one"), ("a1.txt", "x"), ("b*c.txt", "two"), ("bXc.txt", "y")] {
+                try body.write(to: source.appendingPathComponent(name), atomically: true, encoding: .utf8)
+            }
         }
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = root.appendingPathComponent("repo").path
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = source.path
-        plan.skipNothing()
-
-        let service = try ResticAvailability.service()
-        let context = RepositoryContext(repository: repository, password: "exact-test")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let source = fixture.sourceDirectory
+        let service = fixture.service
+        let context = fixture.context
+        let plan = fixture.plan
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)
         try "one, longer".write(to: source.appendingPathComponent("a[1].txt"), atomically: true, encoding: .utf8)

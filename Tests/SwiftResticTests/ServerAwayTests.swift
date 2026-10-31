@@ -57,10 +57,7 @@ struct ServerAwayTests {
                 .map(String.init)
         }
         func waitForRuns(_ count: Int) async {
-            let deadline = Date.now.addingTimeInterval(20)
-            while model.configuration.runs.count < count, Date.now < deadline {
-                try? await Task.sleep(for: .milliseconds(50))
-            }
+            await eventually(within: 20) { model.configuration.runs.count >= count }
         }
 
         // A failed requirement still stops the model, whose scheduler would
@@ -85,11 +82,9 @@ struct ServerAwayTests {
             let ran = try #require(model.configuration.runs.first)
             #expect(ran.outcome == .succeeded, "outcome \(ran.outcome), \(ran.failureMessage ?? "")")
             #expect(resticCommands().contains { $0.contains(" backup ") || $0.contains("[backup ") }, "restic ran: \(resticCommands())")
-            let deadline = Date.now.addingTimeInterval(10)
-            while model.snapshotListingOutcomes[repository.id] != .loaded, Date.now < deadline {
-                try? await Task.sleep(for: .milliseconds(50))
-            }
-            #expect(model.snapshotListingOutcomes[repository.id] == .loaded)
+            #expect(
+                await eventually(within: 10) { model.snapshotListingOutcomes[repository.id] == .loaded }
+            )
         } catch {
             await model.shutdown()
             throw error

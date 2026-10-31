@@ -58,13 +58,12 @@ struct ResticPlanIndexOffersTests {
 
     /// The backfill runs in the index coordinator, past what the model's
     /// task registry awaits: the suite's own wait, by deadline.
-    private func waitForTheIndex(_ scene: Scene) async throws {
+    private func waitForTheIndex(_ scene: Scene) async {
         await scene.model.tasks.drain()
-        let deadline = Date.now.addingTimeInterval(60)
-        while !(await scene.model.indexIsComplete(repositoryID: scene.repository.id)), Date.now < deadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        try #require(await scene.model.indexIsComplete(repositoryID: scene.repository.id))
+        #expect(
+            await eventually(within: 60) { await scene.model.indexIsComplete(repositoryID: scene.repository.id) },
+            "the index never finished"
+        )
     }
 
     private func path(_ scene: Scene, _ relative: String) -> String {
@@ -122,7 +121,7 @@ struct ResticPlanIndexOffersTests {
         let planID = scene.plan.id
         model.runBackup(planID: planID)
         await model.waitForRun(planID: planID)
-        try await waitForTheIndex(scene)
+        await waitForTheIndex(scene)
         let backupRun = try #require(model.configuration.runs.first { $0.kind == .backup })
         let firstSnapshot = try #require(backupRun.snapshotID)
 
@@ -142,7 +141,7 @@ struct ResticPlanIndexOffersTests {
         #expect(removal.detailText == "Removed 1 item from 1 backup. The space is freed at the next cleanup.")
 
         // The closing refresh lists the rewritten backup and the index reads it.
-        try await waitForTheIndex(scene)
+        await waitForTheIndex(scene)
         let after = await PlanIndexOffers.read(planID: planID, model: model)
         #expect(after.isIndexComplete)
         #expect(after.inEarlierBackups.isEmpty)

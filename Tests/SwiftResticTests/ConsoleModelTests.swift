@@ -295,4 +295,46 @@ extension ConsoleModelTests {
         #expect(console.recallNext() == nil)
         #expect(console.history == ["password two", "password one", "aaa"])
     }
+
+    @Test("a history-sidebar click ends an in-flight recall walk and shows the entry")
+    func pickingFromHistoryEndsTheRecallWalk() async throws {
+        let (app, console, root) = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: root) }
+        app.consoleDidAppear()
+        await seedHistory(["snapshots --compact", "version"], console: console)
+
+        // A walk is under way: ↑ has recalled the newest entry.
+        #expect(console.recallPrevious(current: "ls") == "version")
+
+        console.pickFromHistory("snapshots --compact")
+        #expect(console.commandText == "snapshots --compact")
+        // The click ended the walk: ↓ must not conjure a recalled entry.
+        #expect(console.recallNext() == nil)
+    }
+
+    @Test("a running command's stream owns the output pane, so Clear waits for stillness")
+    func clearOutputWaitsForStillness() async throws {
+        let console = ConsoleModel()
+        console.persistHistory = { _ in }
+        let (started, startedSignal) = AsyncStream<Void>.makeStream()
+        let (release, releaseSignal) = AsyncStream<Void>.makeStream()
+        console.runCommand = { _, _ in
+            startedSignal.yield()
+            for await _ in release { break }
+            return "done"
+        }
+        console.repositoryID = UUID()
+        console.commandText = "snapshots"
+        console.run()
+        for await _ in started { break }
+        #expect(console.output == "Running…")
+
+        console.clearOutput()
+        #expect(console.output == "Running…", "a running command's stream owns the pane")
+
+        releaseSignal.yield()
+        await console.waitForCommand()
+        console.clearOutput()
+        #expect(console.output == "")
+    }
 }

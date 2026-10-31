@@ -1,6 +1,52 @@
 import Foundation
 import Testing
 
+/// The members all three engines' recording sinks share verbatim: the
+/// ordered log the sequencing assertions read, the delivered records, and
+/// the canned client and network answers. Each suite's `RecordingSink`
+/// subclasses it and adds only what its engine's protocol adds beyond
+/// `RunEngineSink` — the refresh members genuinely differ per engine and
+/// stay per-subclass.
+@MainActor
+class EngineRecordingSink {
+    var log: [String] = []
+    var deliveredRecords: [RunRecord] = []
+
+    /// What `service()` answers; set by `serving(_:)`.
+    var client = MockResticClient()
+    func serving(_ client: MockResticClient) -> Self {
+        self.client = client
+        return self
+    }
+
+    func label(of repository: Repository) -> String { repository.label(among: [repository]) }
+    func service() throws -> any ResticClient { client }
+    func context(for repository: Repository) async throws -> RepositoryContext {
+        log.append("context")
+        return RepositoryContext(repository: repository, password: "test")
+    }
+
+    func noteAuthFailure(_ error: Error, repositoryID: UUID) {
+        log.append("auth-noted")
+    }
+
+    /// The canned answer to a reconnect; every ask is logged.
+    var reconnectAnswer: [ShareReconnect] = []
+
+    func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
+        log.append("reconnect:\(volumes.joined(separator: ","))")
+        return reconnectAnswer
+    }
+
+    /// The canned answer to a server probe; every ask is logged.
+    var probeAnswer: ServerProbe.Outcome? = .reachable
+
+    func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
+        log.append("probe")
+        return probeAnswer
+    }
+}
+
 /// The run engines' sequencing and outcome mapping, driven through a mock
 /// client and a recording sink. restic is mocked; hooks still run as real
 /// `/bin/sh` processes. The stub-shell and real-restic suites own everything
@@ -10,28 +56,12 @@ import Testing
 struct BackupRunEngineTests {
     /// Records every sink call in order; the ordered log is what the
     /// sequencing assertions read.
-    final class RecordingSink: BackupRunEngine.Sink {
-        var log: [String] = []
-        var deliveredRecords: [RunRecord] = []
+    final class RecordingSink: EngineRecordingSink, BackupRunEngine.Sink {
         var deliveredTranscripts: [RunTranscript.Contents] = []
 
         /// Per plan, so a test can tell the engine asked about its own run.
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
-        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
-
-        /// What `service()` answers; set by `serving(_:)`.
-        var client = MockResticClient()
-        func serving(_ client: MockResticClient) -> Self {
-            self.client = client
-            return self
-        }
-
-        func service() throws -> any ResticClient { client }
-        func context(for repository: Repository) async throws -> RepositoryContext {
-            log.append("context")
-            return RepositoryContext(repository: repository, password: "test")
-        }
 
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
             log.append("phase:\(phase)")
@@ -44,10 +74,6 @@ struct BackupRunEngineTests {
 
         func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp) {
             log.append("mark:\(stamp)")
-        }
-
-        func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-            log.append("auth-noted")
         }
 
         func addStartPing(_ event: NotificationEvent) {
@@ -83,22 +109,6 @@ struct BackupRunEngineTests {
 
         func makeHookRunner() -> HookRunner {
             HookRunner(runner: ResticRunner())
-        }
-
-        /// The canned answer to a reconnect; every ask is logged.
-        var reconnectAnswer: [ShareReconnect] = []
-
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
-            log.append("reconnect:\(volumes.joined(separator: ","))")
-            return reconnectAnswer
-        }
-
-        /// The canned answer to a server probe; every ask is logged.
-        var probeAnswer: ServerProbe.Outcome? = .reachable
-
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
-            log.append("probe")
-            return probeAnswer
         }
     }
 
@@ -707,25 +717,9 @@ struct BackupRunEngineTests {
 @MainActor
 @Suite("maintenance run engine")
 struct MaintenanceRunEngineTests {
-    final class RecordingSink: MaintenanceRunEngine.Sink {
-        var log: [String] = []
-        var deliveredRecords: [RunRecord] = []
+    final class RecordingSink: EngineRecordingSink, MaintenanceRunEngine.Sink {
         var deliveredTranscripts: [RunTranscript.Contents] = []
         var cancellationMessage = "cancelled in test"
-        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
-
-        /// What `service()` answers; set by `serving(_:)`.
-        var client = MockResticClient()
-        func serving(_ client: MockResticClient) -> Self {
-            self.client = client
-            return self
-        }
-
-        func service() throws -> any ResticClient { client }
-        func context(for repository: Repository) async throws -> RepositoryContext {
-            log.append("context")
-            return RepositoryContext(repository: repository, password: "test")
-        }
 
         func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
             { [weak self] _ in Task { @MainActor in self?.log.append("prune-line") } }
@@ -751,18 +745,6 @@ struct MaintenanceRunEngineTests {
             log.append("advance-slice")
         }
 
-        /// The canned answer to a server probe; every ask is logged.
-        var probeAnswer: ServerProbe.Outcome? = .reachable
-
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
-            log.append("probe")
-            return probeAnswer
-        }
-
-        func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-            log.append("auth-noted")
-        }
-
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
@@ -782,14 +764,6 @@ struct MaintenanceRunEngineTests {
 
         func makeHookRunner() -> HookRunner {
             HookRunner(runner: ResticRunner())
-        }
-
-        /// The canned answer to a reconnect; every ask is logged.
-        var reconnectAnswer: [ShareReconnect] = []
-
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
-            log.append("reconnect:\(volumes.joined(separator: ","))")
-            return reconnectAnswer
         }
     }
 
@@ -1104,48 +1078,24 @@ struct MaintenanceRunEngineTests {
 @Suite("retention run engine")
 struct RetentionRunEngineTests {
     /// Answers `service()` with the mock itself: this sink has nothing else
-    /// to keep apart from the log.
-    final class RecordingSink: RetentionRunEngine.Sink {
-        let client: MockResticClient
-        var log: [String] = []
-        var deliveredRecords: [RunRecord] = []
-        var deliveredTranscripts: [RunTranscript.Contents] = []
-        init(client: MockResticClient) { self.client = client }
+    /// to keep apart from the log. Nothing here reads the delivered
+    /// transcripts, so unlike the other two sinks it keeps none.
+    final class RecordingSink: EngineRecordingSink, RetentionRunEngine.Sink {
+        init(client: MockResticClient) {
+            super.init()
+            self.client = client
+        }
 
         func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
-        func label(of repository: Repository) -> String { repository.label(among: [repository]) }
-        func service() throws -> any ResticClient { client }
-        func context(for repository: Repository) async throws -> RepositoryContext {
-            log.append("context")
-            return RepositoryContext(repository: repository, password: "test")
-        }
-        func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-            log.append("auth-noted")
-        }
+
         func deliverQuietly(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
-            deliveredTranscripts.append(transcript)
         }
+
         func scheduleSnapshotRefresh(repositoryID: UUID) {
             log.append("schedule-refresh")
-        }
-
-        /// The canned answer to a reconnect; every ask is logged.
-        var reconnectAnswer: [ShareReconnect] = []
-
-        func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
-            log.append("reconnect:\(volumes.joined(separator: ","))")
-            return reconnectAnswer
-        }
-
-        /// The canned answer to a server probe; every ask is logged.
-        var probeAnswer: ServerProbe.Outcome? = .reachable
-
-        func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
-            log.append("probe")
-            return probeAnswer
         }
     }
 
