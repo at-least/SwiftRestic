@@ -236,7 +236,7 @@ struct SettingsTransferTests {
 
         let running = makePlan("Desktop", on: repository.id)
         model.configuration.plans = [running]
-        model.activity[running.id] = PlanActivity()
+        model.activity[running.id] = PlanActivity(of: running)
         #expect(model.confirmationCopy(for: .importSettings(settings))?.message == idle
             + "\n\nA backup is running.\nImporting stops the work in progress.")
     }

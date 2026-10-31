@@ -28,7 +28,7 @@ extension AppModel {
 
         // Back Up Now on a plan waiting its turn starts it now, out of line.
         removeFromBackupQueue(planID)
-        installPlanActivity(planID: planID)
+        installPlanActivity(plan: plan, repository: repository)
         activity[planID]?.askedByUser = askedByUser
         tasks.install(Task { [weak self] in
             if let self {
@@ -98,7 +98,7 @@ extension AppModel {
     /// Whether a plan's run — a backup, or Apply Retention Now's forget —
     /// is in flight on the repository.
     private func planRunHolds(_ repositoryID: UUID) -> Bool {
-        activity.keys.contains { plan(id: $0)?.repositoryID == repositoryID }
+        activity.values.contains { $0.repositoryID == repositoryID }
     }
 
     func removeFromBackupQueue(_ planID: UUID) {
@@ -132,10 +132,10 @@ extension AppModel {
     /// they run inside `perform`, sequenced on the main actor before the
     /// unwind clears the strip — only the runner-invoked reporter runs on a
     /// background thread and hops over unsequenced.
-    func installPlanActivity(planID: UUID) {
-        backupRunTokens[planID] = UUID()
-        activity[planID] = PlanActivity()
-        planProgress[planID] = OperationProgress()
+    func installPlanActivity(plan: BackupPlan, repository: Repository) {
+        backupRunTokens[plan.id] = UUID()
+        activity[plan.id] = PlanActivity(repositoryID: repository.id, planName: label(of: plan))
+        planProgress[plan.id] = OperationProgress()
         reconcileSleepAssertion()
     }
 
@@ -183,6 +183,7 @@ extension AppModel {
 extension AppModel: BackupRunEngine.Sink {
     func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
         activity[planID]?.phase = phase
+        activity[planID]?.isInRetentionStep = phase == .applyingRetention
     }
 
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {

@@ -129,7 +129,7 @@ extension AppModel {
         let channels = configuration.settings.notificationChannels
         guard channels.contains(where: \.isUsable) else { return }
 
-        if let planID = plan?.id { activity[planID]?.phase = .notifying }
+        if let planID = plan?.id { setActivityPhase(.notifying, for: planID) }
 
         let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID).map { label(of: $0) } ?? "")
 

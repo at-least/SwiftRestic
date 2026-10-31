@@ -1807,7 +1807,7 @@ struct AppModelStubTests {
         let removed = harness.plan.id
         harness.model.problemsSeenAt[removed] = .now
         harness.model.pauseStoppedPlanIDs.insert(removed)
-        harness.model.activity[removed] = PlanActivity()
+        harness.model.activity[removed] = PlanActivity(of: harness.plan)
         harness.model.planProgress[removed] = OperationProgress()
         harness.model.backupRunTokens[removed] = UUID()
 

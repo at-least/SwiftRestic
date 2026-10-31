@@ -1648,7 +1648,7 @@ struct StartAtLoginSurfaceTests {
         // Due, and running: the quit's cancel stamps the run's start, so
         // this slot is covered and the one missed is the next.
         let startedAt = now.addingTimeInterval(-60)
-        model.activity[plan.id] = PlanActivity(phase: .backingUp, startedAt: startedAt)
+        model.activity[plan.id] = PlanActivity(of: plan, phase: .backingUp, startedAt: startedAt)
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: startedAt, now: now))
         let running = try #require(model.quitScheduleNotice(now: now))
         #expect(running.hasPrefix("Documents (NAS) is next due \(Format.relative(next))."))
@@ -1891,11 +1891,13 @@ struct RunReporterTokenTests {
     @Test("a late progress hop from a finished backup never lands in the next run's strip")
     func lateBackupProgressHopDrops() async throws {
         let model = makeModel("SwiftResticRunTokens").model
-        let plan = BackupPlan()
+        let repository = Repository()
+        var plan = BackupPlan()
+        plan.repositoryID = repository.id
         model.upsert(plan: plan)
 
         // Run 1: a strip is installed and the engine captures its reporter.
-        model.installPlanActivity(planID: plan.id)
+        model.installPlanActivity(plan: plan, repository: repository)
         let reporter = model.progressReporter(planID: plan.id)
 
         // Run 1 unwinds: token and strip are retired, exactly as the engine
@@ -1914,7 +1916,7 @@ struct RunReporterTokenTests {
         // Run 2 installs a fresh strip; run 1's hop finally lands. A fresh
         // strip starts from zeroed progress, so a new run's strip cannot open
         // on the previous run's last percentage.
-        model.installPlanActivity(planID: plan.id)
+        model.installPlanActivity(plan: plan, repository: repository)
         #expect(model.planProgress[plan.id] == OperationProgress())
         var seed = OperationProgress()
         seed.filesDone = 1

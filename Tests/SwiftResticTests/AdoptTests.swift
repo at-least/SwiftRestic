@@ -512,7 +512,7 @@ struct AdoptTests {
             == "This Mac stops backing up “Untitled Plan”. Its 2 backups stay in “Home Disk”, and you can continue them later.")
 
         // The running variant keeps its own first sentence.
-        model.activity[plan.id] = PlanActivity()
+        model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             == "The running backup will be stopped and recorded as cancelled."
                 + " Its 2 backups stay in “Home Disk”, and you can continue them later.")

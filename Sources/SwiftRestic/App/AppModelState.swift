@@ -42,9 +42,17 @@ struct PlanActivity: Sendable, Equatable {
         case removeFromEarlierBackups
     }
 
+    /// Kept on the run, not read from the plan: Remove Plan takes the plan
+    /// at once, while its cancelled restic child still holds the lock.
+    let repositoryID: UUID
+    let planName: String
     var phase: Phase = .starting
     var startedAt: Date = .now
     var work: Work = .backup
+    /// A backup's forget, which takes the exclusive lock. Set by every
+    /// engine phase write, and not by Stop's `.cancelling`: the child
+    /// still holds the lock while it dies.
+    var isInRetentionStep = false
     /// A Back Up Now the user asked for, not the scheduler's or a mount's
     /// catch-up: a skip answers it with a banner.
     var askedByUser = false

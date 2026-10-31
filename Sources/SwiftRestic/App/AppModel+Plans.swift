@@ -155,13 +155,19 @@ extension AppModel {
     }
 
     func deletePlan(id: UUID) {
-        tasks.cancel(.plan(id))
+        // A run in flight keeps its strip until its own unwind: the
+        // cancelled restic child holds the repository's lock until it is
+        // gone, and the strip is what holds the other plans' backups back.
+        if tasks.isOccupied(.plan(id)) {
+            tasks.cancel(.plan(id))
+        } else {
+            activity[id] = nil
+            planProgress[id] = nil
+            backupRunTokens[id] = nil
+        }
         removeFromBackupQueue(id)
         pauseStoppedPlanIDs.remove(id)
         configuration.plans.removeAll { $0.id == id }
-        activity[id] = nil
-        planProgress[id] = nil
-        backupRunTokens[id] = nil
         forgetProblemSeen(planID: id)
     }
 

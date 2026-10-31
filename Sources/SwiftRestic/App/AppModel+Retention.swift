@@ -55,7 +55,7 @@ extension AppModel {
             return
         }
 
-        installPlanActivity(planID: planID)
+        installPlanActivity(plan: plan, repository: repository)
         activity[planID]?.work = work
         activity[planID]?.phase = switch work {
         case .applyRetention: .applyingRetention

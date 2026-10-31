@@ -59,9 +59,10 @@ struct CommandStateTests {
         model.maintenance = [:]
 
         // Another plan's backup shares the lock; its retention step does not.
-        model.activity[photos.id] = PlanActivity(phase: .backingUp)
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
         #expect(model.planCommands(for: .plan(documents.id)).canBackUp)
-        model.activity[photos.id] = PlanActivity(phase: .applyingRetention)
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+        model.setActivityPhase(.applyingRetention, for: photos.id)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(model.backupLockReason(for: documents)
             == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
@@ -92,6 +93,52 @@ struct CommandStateTests {
             await model.tasks.drain()
             #expect(model.backupLockReason(for: documents) == nil, "\(work)")
         }
+    }
+
+    @Test("a removed plan's stopping run keeps its repository's backups waiting until it unwinds")
+    func removedPlansRunKeepsTheLock() async {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
+            try? await Task.sleep(for: .seconds(60))
+        }
+        // Remove Plan cancels the run; its restic child still holds the
+        // lock while it dies, and nothing awaits before the reads below.
+        model.deletePlan(id: photos.id)
+        #expect(model.plan(id: photos.id) == nil)
+        #expect(model.backupLockReason(for: documents)
+            == "“Home NAS” is removing items from earlier backups of “Photos” — backups wait until it finishes.")
+        #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
+        #expect(model.busyRepositoryIDs == [repository.id])
+        await model.tasks.drain()
+        #expect(model.activity[photos.id] == nil)
+        #expect(model.backupLockReason(for: documents) == nil)
+        #expect(model.busyRepositoryIDs.isEmpty)
+    }
+
+    @Test("a backup stopped in its forget keeps the repository's backups waiting; after the forget it no longer does")
+    func stoppedBackupInItsForgetKeepsTheLock() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        let reason = "“Home NAS” is applying retention for “Photos” — backups wait until it finishes."
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+        // The engine's own phase writes, as the backup moves on.
+        model.setActivityPhase(.applyingRetention, for: photos.id)
+        #expect(model.backupLockReason(for: documents) == reason)
+        model.cancelBackup(planID: photos.id)
+        #expect(model.activity[photos.id]?.phase == .cancelling)
+        #expect(model.backupLockReason(for: documents) == reason)
+        // The forget has returned, its child gone, when the next phase lands.
+        model.setActivityPhase(.notifying, for: photos.id)
+        #expect(model.backupLockReason(for: documents) == nil)
     }
 
     @Test("a run nobody asked for — a mount's or the network's catch-up — waits for a check or prune without a banner")
@@ -178,7 +225,8 @@ struct CommandStateTests {
         model.configuration.plans = [documents, photos, music]
         // Photos' run is past its backup, in the forget — with a prune, for
         // minutes. Its unwind starts the next plan in Home NAS's queue.
-        model.activity[photos.id] = PlanActivity(phase: .applyingRetention)
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+        model.setActivityPhase(.applyingRetention, for: photos.id)
         // Offsite's check holds it exclusively, and no plan's run ends there
         // to start a plan that waited for it.
         model.maintenance[offsite.id] = MaintenanceActivity(task: .check)
@@ -308,7 +356,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        model.activity[plan.id] = PlanActivity()
+        model.activity[plan.id] = PlanActivity(of: plan)
         let running = model.planCommands(for: .plan(plan.id))
         #expect(running.canStop)
         #expect(!running.canBackUp)
@@ -337,7 +385,7 @@ struct CommandStateTests {
             MenuBarStatus.planRows(plans: model.configuration.plans, activity: model.activity, resticAbsence: nil).first
         }
 
-        model.activity[plan.id] = PlanActivity(phase: .backingUp)
+        model.activity[plan.id] = PlanActivity(of: plan, phase: .backingUp)
         #expect(trayRow()?.title == "Stop “Docs” Backup")
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Backup")
 
@@ -389,7 +437,7 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
         #expect(model.planCommands(for: nil).canBackUpAll)
 
-        model.activity[plan.id] = PlanActivity()
+        model.activity[plan.id] = PlanActivity(of: plan)
         #expect(!model.planCommands(for: nil).canBackUpAll)
         model.activity[plan.id] = nil
 
@@ -563,7 +611,7 @@ struct CommandStateTests {
 
         // Another plan's backup to the same repository holds it too.
         model.maintenance[repository.id] = nil
-        model.activity[planB.id] = PlanActivity()
+        model.activity[planB.id] = PlanActivity(of: planB)
         #expect(!model.planCommands(for: .plan(planA.id)).canApplyRetention)
         #expect(model.planCommands(for: .plan(planA.id)).retentionBlocker == busy)
         #expect(!model.repositoryCommands(for: .plan(planA.id)).canMaintain)
@@ -607,7 +655,7 @@ struct CommandStateTests {
         #expect(idle.canPauseBackups && !idle.backupsPaused)
         // Pause and Stop only while a backup runs.
         #expect(!idle.canPauseAndStopBackups)
-        model.activity[plan.id] = PlanActivity()
+        model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.planCommands(for: nil).canPauseAndStopBackups)
 
         model.pauseBackups(for: .untilResumed)
@@ -643,7 +691,7 @@ struct CommandStateTests {
 
         let stopping = "will be stopped and recorded as cancelled"
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
-        model.activity[plan.id] = PlanActivity()
+        model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))

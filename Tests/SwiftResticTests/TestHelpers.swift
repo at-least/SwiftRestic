@@ -114,3 +114,23 @@ func writeExecutableScript(
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
     return script
 }
+
+extension PlanActivity {
+    /// A run of `plan` as `installPlanActivity` records it, for a test that
+    /// sets the strip by hand.
+    init(of plan: BackupPlan, phase: Phase = .starting, startedAt: Date = .now) {
+        guard let repositoryID = plan.repositoryID else { preconditionFailure("a run is of a plan with a repository") }
+        self.init(
+            repositoryID: repositoryID,
+            planName: plan.label(among: [plan]),
+            phase: phase,
+            startedAt: startedAt
+        )
+    }
+
+    /// A run for a presentation test, which reads neither its repository
+    /// nor its plan's name.
+    init(phase: Phase = .starting) {
+        self.init(repositoryID: UUID(), planName: "", phase: phase)
+    }
+}
