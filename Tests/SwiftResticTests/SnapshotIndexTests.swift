@@ -526,6 +526,37 @@ struct SnapshotIndexTests {
         }
     }
 
+    /// unicode61 splits on everything but letters, numbers and private use:
+    /// a typed "-" is no term, and the voicing mark ending a decomposed
+    /// "が" is no part of the token before it.
+    @Test("a search skips a typed dash, and a word ending in a voiced kana does not widen to the unvoiced one")
+    func searchHandlesSeparatorsInTheQuery() async throws {
+        let fixture = try IndexFixture()
+        let index = fixture.index
+        let gakkou = "がっこう.txt"
+        let entries = [
+            IndexedEntry(path: "/data", isDirectory: true),
+            IndexedEntry(path: "/data/Q1 - report.txt", isDirectory: false),
+            IndexedEntry(path: "/data/かき.txt", isDirectory: false),
+            IndexedEntry(path: "/data/" + gakkou.precomposedStringWithCanonicalMapping, isDirectory: false),
+            IndexedEntry(path: "/data/nfd", isDirectory: true),
+            IndexedEntry(path: "/data/nfd/" + gakkou.decomposedStringWithCanonicalMapping, isDirectory: false),
+        ]
+        _ = try index.reconcile(listing: [try snap("s1", t0, tags: [planA])])
+        try index.ingestWhole("s1", entries)
+
+        let dashed = try await index.searchPaths(matching: "Q1 - report", limit: 10)
+        #expect(dashed.map(\.path) == ["/data/Q1 - report.txt"])
+
+        for form in ["が".precomposedStringWithCanonicalMapping, "が".decomposedStringWithCanonicalMapping] {
+            let hits = try await index.searchPaths(matching: form, limit: 10)
+            #expect(Set(hits.map { Array($0.path.utf8) }) == [
+                Array(("/data/" + gakkou.precomposedStringWithCanonicalMapping).utf8),
+                Array(("/data/nfd/" + gakkou.decomposedStringWithCanonicalMapping).utf8),
+            ], "typed \(Array(form.unicodeScalars)): \(hits.map(\.path))")
+        }
+    }
+
     @Test("canonically equivalent, byte-distinct paths keep their own answers in the keyed reads")
     func keyedReadsKeepByteDistinctSpellings() async throws {
         let fixture = try IndexFixture()

@@ -1547,9 +1547,9 @@ final class SnapshotIndex: @unchecked Sendable {
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                     .replacingOccurrences(of: "\"", with: "\"\"")
             }
-            // A token that was nothing but quotes carries no term; emitting
-            // it would make the whole query a zero-token phrase.
-            .filter { !$0.isEmpty }
+            // A token with no term character ("-", "&") is a zero-token
+            // phrase, which under AND makes the whole query match nothing.
+            .filter { $0.unicodeScalars.contains(where: isTermScalar) }
             .map { token in
                 let composed = token.precomposedStringWithCanonicalMapping
                 let decomposed = token.decomposedStringWithCanonicalMapping
@@ -1557,10 +1557,25 @@ final class SnapshotIndex: @unchecked Sendable {
                 guard !composed.unicodeScalars.elementsEqual(decomposed.unicodeScalars) else {
                     return "\"\(composed)\"*"
                 }
-                return "(\"\(composed)\"* OR \"\(decomposed)\"*)"
+                // A trailing mark (the voicing of "が") is a separator, so a
+                // star would land on the token before it: "か"* finds "かき".
+                let star = isTermScalar(decomposed.unicodeScalars.last!) ? "*" : ""
+                return "(\"\(composed)\"* OR \"\(decomposed)\"\(star))"
             }
             // Explicit: FTS5 refuses an implicit AND after a parenthesized group.
             .joined(separator: " AND ")
+    }
+
+    /// unicode61's default token characters (categories L* N* Co); every
+    /// other scalar separates tokens.
+    private static func isTermScalar(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .decimalNumber, .letterNumber, .otherNumber, .privateUse:
+            true
+        default:
+            false
+        }
     }
 
     // MARK: - Test support
