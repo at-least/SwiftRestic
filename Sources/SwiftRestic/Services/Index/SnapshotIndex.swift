@@ -25,7 +25,7 @@ struct PlannedStep: Sendable, Equatable {
 }
 
 /// One snapshot that holds a path — an element of a version list.
-struct IndexVersion: Sendable, Hashable {
+struct IndexVersion: Sendable, Hashable, Identifiable {
     var id: String
     var time: Date
 }
@@ -111,16 +111,20 @@ extension Array where Element == IndexVersion {
         }
         return first
     }
+}
 
+/// Version lists, newest first: `[IndexVersion]` for a folder,
+/// `[ContentVersion]` for a file.
+extension Array where Element: Identifiable, Element.ID == String {
     /// The version a picked ID names, else the newest — the version panes'
     /// "chosen", a pick of the newest being stored as none.
-    func chosen(_ id: String?) -> IndexVersion? {
+    func chosen(_ id: String?) -> Element? {
         id.flatMap { id in first { $0.id == id } } ?? first
     }
 
     /// The version below `version` in the list — the one it follows, the
     /// changes' older side. Nil past the oldest.
-    func after(_ version: IndexVersion) -> IndexVersion? {
+    func after(_ version: Element) -> Element? {
         guard let index = firstIndex(where: { $0.id == version.id }), index + 1 < count else { return nil }
         return self[index + 1]
     }
@@ -139,19 +143,6 @@ extension Array where Element == ContentVersion {
             return kept
         }
         return first
-    }
-
-    /// The version a picked ID names, else the newest — `chosen(_:)` on a
-    /// folder's list, by a content version's own ID.
-    func chosen(_ id: String?) -> ContentVersion? {
-        id.flatMap { id in first { $0.id == id } } ?? first
-    }
-
-    /// The version below `version` in the list — the one it follows.
-    /// Nil past the oldest.
-    func after(_ version: ContentVersion) -> ContentVersion? {
-        guard let index = firstIndex(where: { $0.id == version.id }), index + 1 < count else { return nil }
-        return self[index + 1]
     }
 }
 

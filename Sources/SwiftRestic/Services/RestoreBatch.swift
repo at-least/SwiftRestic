@@ -77,18 +77,24 @@ enum RestoreBatch {
     /// One backup's items that restore, in its order: each once, none
     /// inside a selected folder.
     private static func covering<Item: RestoreBatchItem>(_ items: [Item]) -> [Item] {
-        // `normalized` first: `insidePrefix` appends its separator, and a
-        // diff-spelled folder arrives with one already.
-        let folders = items.filter(\.isDirectory)
-            .map { ResticPath.insidePrefix(of: ResticPath.normalized($0.path)) }
+        let folders = items.filter(\.isDirectory).map { insidePrefix(of: $0) }
         var seen: Set<PathKey> = []
         return items.filter { item in
             guard seen.insert(PathKey(item.path)).inserted else { return false }
-            // Strictly longer, so a folder spelled with its slash, or the
-            // root, is not inside itself.
-            let path = item.path.utf8
-            return !folders.contains { path.starts(with: $0.utf8) && path.count > $0.utf8.count }
+            return !folders.contains { isStrictlyInside(item.path, insidePrefix: $0) }
         }
+    }
+
+    private static func insidePrefix<Item: RestoreBatchItem>(of folder: Item) -> String {
+        // `normalized` first: `insidePrefix` appends its separator, and a
+        // diff-spelled folder arrives with one already.
+        ResticPath.insidePrefix(of: ResticPath.normalized(folder.path))
+    }
+
+    private static func isStrictlyInside(_ path: String, insidePrefix: String) -> Bool {
+        // Strictly longer, so a folder spelled with its slash, or the root,
+        // is not inside itself.
+        path.utf8.starts(with: insidePrefix.utf8) && path.utf8.count > insidePrefix.utf8.count
     }
 
     /// One backup's items `covering` dropped for being inside a selected
@@ -99,16 +105,11 @@ enum RestoreBatch {
         kept: [Item]
     ) -> [(item: Item, folder: Item)] {
         let keptPaths = Set(kept.map { PathKey($0.path) })
-        let keptFolders = kept.filter(\.isDirectory)
-            .map { (folder: $0, prefix: ResticPath.insidePrefix(of: ResticPath.normalized($0.path))) }
+        let keptFolders = kept.filter(\.isDirectory).map { (folder: $0, prefix: insidePrefix(of: $0)) }
         var reported: Set<PathKey> = []
         return items.compactMap { item in
             guard !keptPaths.contains(PathKey(item.path)), reported.insert(PathKey(item.path)).inserted,
-                  let folder = keptFolders.first(where: {
-                      // Strictly longer, as `covering` keeps the folder itself.
-                      let path = item.path.utf8
-                      return path.starts(with: $0.prefix.utf8) && path.count > $0.prefix.utf8.count
-                  })?.folder
+                  let folder = keptFolders.first(where: { isStrictlyInside(item.path, insidePrefix: $0.prefix) })?.folder
             else { return nil }
             return (item, folder)
         }

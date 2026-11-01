@@ -363,12 +363,11 @@ struct ResticFilesTreeTests {
             model.runBackup(planID: plan.id)
             await model.waitForRun(planID: plan.id)
             // The backup's closing refresh lands through the background lane
-            // and the backfill with it: the suite's own wait, by deadline.
-            let deadline = Date.now.addingTimeInterval(60)
-            while !(await model.indexIsComplete(repositoryID: repository.id)), Date.now < deadline {
-                try await Task.sleep(for: .milliseconds(50))
-            }
-            try #require(await model.indexIsComplete(repositoryID: repository.id), "the index never read \(plan.path)'s backup")
+            // and the backfill with it.
+            try #require(
+                await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+                "the index never read \(plan.path)'s backup"
+            )
             let found = try await model.searchIndex(
                 pattern: "note", inChain: ResticService.planTag(plan.id), repositoryID: repository.id
             )

@@ -118,17 +118,10 @@ final class DecodeNoteBox: @unchecked Sendable {
     }
 }
 
-extension Sequence where Element == BackupPlan {
-    /// The plan whose `id` is `id`; nil for a nil id or one no plan holds.
-    func withID(_ id: UUID?) -> BackupPlan? {
-        id.flatMap { wanted in first { $0.id == wanted } }
-    }
-}
-
-extension Sequence where Element == Repository {
-    /// The repository whose `id` is `id`; nil for a nil id or one no
-    /// repository holds.
-    func withID(_ id: UUID?) -> Repository? {
+extension Sequence where Element: Identifiable, Element.ID == UUID {
+    /// The plan or repository whose `id` is `id`; nil for a nil id or one
+    /// none holds.
+    func withID(_ id: UUID?) -> Element? {
         id.flatMap { wanted in first { $0.id == wanted } }
     }
 }

@@ -261,10 +261,8 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        do {
-            return try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: Data(result.stdout.utf8))
-        } catch {
-            throw ResticError.malformedOutput(detail: "the size answer could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        return try Self.decoded("the size answer") {
+            try ResticMessageDecoder.jsonDecoder.decode(RepositoryStats.self, from: Data(result.stdout.utf8))
         }
     }
 
@@ -362,10 +360,8 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        do {
-            return try ResticMessageDecoder.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
-        } catch {
-            throw ResticError.malformedOutput(detail: "the snapshot list could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        return try Self.decoded("the snapshot list") {
+            try ResticMessageDecoder.decodeArray(Snapshot.self, from: result.stdout).sorted { $0.time > $1.time }
         }
     }
 
@@ -490,10 +486,8 @@ struct ResticService: ResticClient {
                 retainFullOutput: true
             )
         )
-        do {
-            return try ResticMessageDecoder.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
-        } catch {
-            throw ResticError.malformedOutput(detail: "the find results could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        return try Self.decoded("the find results") {
+            try ResticMessageDecoder.decodeArray(FindResult.self, from: result.stdout).filter { !$0.matches.isEmpty }
         }
     }
 
@@ -584,19 +578,23 @@ struct ResticService: ResticClient {
         return escaping ? nil : String(path)
     }
 
+    /// `stored` as a backup passes them: blanks dropped, tilde expanded,
+    /// each once, less any naming the source itself or a folder above it.
+    private static func passedExcludes(_ stored: [String], source: String, home: String) -> [String] {
+        let nonBlank = stored.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return BackupPlan.withoutDuplicates(nonBlank.map { expandTilde($0, home: home) })
+            .filter { !pattern($0, covers: source) }
+    }
+
     /// The plan's own patterns that each name one absolute path, as a backup
     /// passes them (tilde expanded, less any naming the source or a folder
     /// above it), with that path: what Remove from Earlier Backups looks for
     /// in the plan's backups and passes to `rewrite`, so it removes exactly
     /// what the next backups skip of those.
     static func excludedPaths(of plan: BackupPlan, home: String = NSHomeDirectory()) -> [ExcludedPath] {
-        let source = expandTilde(plan.path, home: home)
         var seen = Set<PathKey>()
-        return plan.excludePatterns.compactMap { stored in
-            let passed = expandTilde(stored, home: home)
-            guard !Self.pattern(passed, covers: source),
-                  let unescaped = globUnescaped(passed), unescaped.hasPrefix("/")
-            else { return nil }
+        return passedExcludes(plan.excludePatterns, source: expandTilde(plan.path, home: home), home: home).compactMap { passed in
+            guard let unescaped = globUnescaped(passed), unescaped.hasPrefix("/") else { return nil }
             let path = ResticPath.normalized(unescaped)
             guard seen.insert(PathKey(path)).inserted else { return nil }
             return ExcludedPath(pattern: passed, path: path)
@@ -659,11 +657,8 @@ struct ResticService: ResticClient {
         let source = Self.expandTilde(plan.path, home: home)
         args.append(source)
         // The switches' rules and the plan's own patterns
-        // (`BackupPlan.excludesToPass`) — less any that names the source
-        // itself or a folder above it.
-        let stored = plan.excludesToPass.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        for pattern in BackupPlan.withoutDuplicates(stored.map { Self.expandTilde($0, home: home) })
-        where !Self.pattern(pattern, covers: source) {
+        // (`BackupPlan.excludesToPass`).
+        for pattern in Self.passedExcludes(plan.excludesToPass, source: source, home: home) {
             args += ["--exclude", pattern]
         }
         // As arguments, not an --exclude-file: restic expands $VAR in a
@@ -860,21 +855,14 @@ struct ResticService: ResticClient {
     static func countRemoved(forgetOutput: String) throws -> Int {
         let trimmed = forgetOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return 0 }
+        let unreadable = ResticError.malformedOutput(detail: "could not read the removal count from restic’s answer")
         guard let data = trimmed.data(using: .utf8),
               let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else {
-            throw ResticError.malformedOutput(
-                                detail: "could not read the removal count from restic’s answer"
-            )
-        }
+        else { throw unreadable }
         // restic's nothing-removed is `"remove":null` (NSNull here); a group
         // with no key at all is a changed shape.
         return try groups.reduce(0) { total, group in
-            guard let remove = group["remove"] else {
-                throw ResticError.malformedOutput(
-                                    detail: "could not read the removal count from restic’s answer"
-                )
-            }
+            guard let remove = group["remove"] else { throw unreadable }
             return total + ((remove as? [Any])?.count ?? 0)
         }
     }
@@ -987,8 +975,7 @@ struct ResticService: ResticClient {
         // As `restoreItems` refuses before its restic runs: a folder at the
         // landing would otherwise cost the whole transfer and fail only at
         // the commit, with "Is a directory".
-        if overwrite == .replaceExisting,
-           (try? FileManager.default.attributesOfItem(atPath: target.path)[.type] as? FileAttributeType) == .typeDirectory {
+        if overwrite == .replaceExisting, RestoreDestinationRules.isFolder(at: target) {
             throw ResticError.folderInTheWay(path: target.path)
         }
         // Beside the landing, so the commit is a rename on one volume. What
@@ -1058,7 +1045,7 @@ struct ResticService: ResticClient {
                 continue
             }
             guard overwrite == .replaceExisting else { continue }
-            if (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) == .typeDirectory {
+            if RestoreDestinationRules.isFolder(at: landing) {
                 throw ResticError.folderInTheWay(path: landing.path)
             }
         }
@@ -1079,12 +1066,19 @@ struct ResticService: ResticClient {
         return summary
     }
 
+    private static func decoded<T>(_ what: String, _ decode: () throws -> T) throws -> T {
+        do {
+            return try decode()
+        } catch {
+            throw ResticError.malformedOutput(detail: "\(what) could not be read: \(ResticMessageDecoder.briefFailure(error))")
+        }
+    }
+
     /// Refuses a folder's landing held (lstat) by anything but a folder.
     /// A symlink counts even when it resolves to a folder: restic 0.19.1
     /// replaces the link with a new folder, under `--overwrite never` too.
     private static func refuseFileInTheWay(of landing: URL) throws {
-        if RestoreDestinationRules.itemExists(at: landing),
-           (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) != .typeDirectory {
+        if RestoreDestinationRules.itemExists(at: landing), !RestoreDestinationRules.isFolder(at: landing) {
             throw ResticError.fileInTheWay(path: landing.path)
         }
     }

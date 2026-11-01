@@ -236,7 +236,7 @@ struct SidebarView: View {
         Group {
             if let caption {
                 switch caption {
-                case .count, .reading, .zero:
+                case .count, .reading:
                     Text(caption.text)
                 case let .notConnected(full), let .failed(_, full):
                     Text(caption.text)

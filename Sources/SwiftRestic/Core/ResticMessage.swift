@@ -275,16 +275,7 @@ enum ResticMessageDecoder {
     /// Decoder configured for restic's RFC3339-with-fractional-seconds timestamps.
     static let jsonDecoder: JSONDecoder = {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .custom { decoder in
-            let raw = try decoder.singleValueContainer().decode(String.self)
-            guard let date = ResticDateFormat.parse(raw) else {
-                throw DecodingError.dataCorruptedError(
-                    in: try decoder.singleValueContainer(),
-                    debugDescription: "Unrecognised restic timestamp: \(raw)"
-                )
-            }
-            return date
-        }
+        d.dateDecodingStrategy = ResticDateFormat.decodingStrategy
         return d
     }()
 
@@ -387,5 +378,15 @@ enum ResticDateFormat {
         lock.lock()
         defer { lock.unlock() }
         return withFraction.string(from: date)
+    }
+
+    /// `parse` as a JSONDecoder's date strategy; an unreadable date throws.
+    static let decodingStrategy = JSONDecoder.DateDecodingStrategy.custom { decoder in
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        guard let date = parse(raw) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not an RFC 3339 date: \(raw)")
+        }
+        return date
     }
 }

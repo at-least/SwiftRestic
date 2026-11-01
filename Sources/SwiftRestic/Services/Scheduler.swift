@@ -119,8 +119,7 @@ enum Scheduler {
                 guard plan.runsOnSchedule(at: now),
                       let repositoryID = plan.repositoryID, existingRepositoryIDs.contains(repositoryID),
                       !busyPlanIDs.contains(plan.id), !busyRepositoryIDs.contains(repositoryID),
-                      let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now, calendar: calendar),
-                      due <= now
+                      let due = plan.dueSlot(at: now, calendar: calendar)
                 else { return nil }
                 return (plan, repositoryID, due)
             }

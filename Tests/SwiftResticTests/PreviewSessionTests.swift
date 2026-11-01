@@ -59,15 +59,6 @@ struct PreviewSessionTests {
         return Scene(root: root, model: model, repository: repository, snapshotID: snapshot.id, fileNode: node)
     }
 
-    /// Lets the session's task run to its next state, or gives up.
-    private func until(_ condition: @MainActor () -> Bool) async throws {
-        let deadline = Date.now.addingTimeInterval(30)
-        while !condition(), Date.now < deadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try #require(condition())
-    }
-
     /// The preview copies still under the model's staging directory.
     private func previewFolders(in model: AppModel) -> [URL] {
         let contents = (try? FileManager.default.contentsOfDirectory(at: model.stagingDirectory, includingPropertiesForKeys: nil)) ?? []
@@ -78,18 +69,13 @@ struct PreviewSessionTests {
         var errorDescription: String? { "the node is gone" }
     }
 
-    /// A flag the node closures set, so the test waits on facts, not time.
-    private final class Flag {
-        var woke = false
-    }
-
     @Test("starting copies the file out and shows it; ending twice deletes the copy once and fails nothing")
     func startShowsAndEndDeletesOnce() async throws {
         let scene = try await makeScene()
         defer { try? FileManager.default.removeItem(at: scene.root) }
         let session = PreviewSession()
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
-        try await until { session.url != nil }
+        try #require(await eventually(within: 30) { session.url != nil })
         let url = try #require(session.url)
         #expect(session.failure == nil)
         #expect(FileManager.default.fileExists(atPath: url.path))
@@ -111,7 +97,7 @@ struct PreviewSessionTests {
         defer { try? FileManager.default.removeItem(at: scene.root) }
         let session = PreviewSession()
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
-        try await until { session.url != nil }
+        try #require(await eventually(within: 30) { session.url != nil })
         let first = try #require(session.url)
 
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { scene.fileNode })
@@ -119,11 +105,11 @@ struct PreviewSessionTests {
         // panel closing — so a nil here would end the copy just started.
         #expect(session.url == first)
         #expect(FileManager.default.fileExists(atPath: first.path), "the copy the panel shows was deleted under it")
-        try await until { session.url != nil && session.url != first }
+        try #require(await eventually(within: 30) { session.url != nil && session.url != first })
         #expect(session.failure == nil)
         // The cancelled first task winds down beside the second: once its
         // copy is gone, only the second's folder is left.
-        try await until { self.previewFolders(in: scene.model).count == 1 }
+        try #require(await eventually(within: 30) { self.previewFolders(in: scene.model).count == 1 })
         #expect(!FileManager.default.fileExists(atPath: first.deletingLastPathComponent().path))
         session.end()
         #expect(previewFolders(in: scene.model).isEmpty)
@@ -135,7 +121,7 @@ struct PreviewSessionTests {
         defer { try? FileManager.default.removeItem(at: scene.root) }
         let session = PreviewSession()
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { throw NodeGone() })
-        try await until { session.failure != nil }
+        try #require(await eventually(within: 30) { session.failure != nil })
         #expect(session.failure == PreviewSession.Failure(title: "Could not preview", message: "the node is gone"))
         #expect(session.url == nil)
         #expect(previewFolders(in: scene.model).isEmpty)
@@ -148,7 +134,7 @@ struct PreviewSessionTests {
         let big = SnapshotNode(name: "big.bin", type: .file, path: "/Projects/big.bin", size: VersionPreview.sizeLimit + 1)
         let session = PreviewSession()
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { big })
-        try await until { session.failure != nil }
+        try #require(await eventually(within: 30) { session.failure != nil })
         #expect(session.failure == PreviewSession.Failure(
             title: VersionPreview.unavailableReason(size: big.size, isReading: false)!, message: ""))
         #expect(session.url == nil)
@@ -167,14 +153,12 @@ struct PreviewSessionTests {
         let (stream, continuation) = AsyncStream<SnapshotNode>.makeStream()
         let node: @MainActor () async throws -> SnapshotNode = {
             for await offered in stream { return offered }
-            flag.woke = true
+            flag.set()
             throw NodeGone()
         }
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: node)
         session.end()
-        let deadline = Date.now.addingTimeInterval(30)
-        while !flag.woke, Date.now < deadline { await Task.yield() }
-        #expect(flag.woke)
+        #expect(await eventually(within: 30) { flag.isSet })
         #expect(session.failure == nil)
         #expect(previewFolders(in: scene.model).isEmpty)
         continuation.finish()

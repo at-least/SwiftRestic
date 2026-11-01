@@ -45,7 +45,7 @@ struct PlanCaption: Equatable, Sendable {
 /// renderer hangs under its truncated text; the other lines show whole.
 enum RepositoryCaption: Equatable, Sendable {
     /// Every backup the repository holds, every plan's and the other ones
-    /// together.
+    /// together; 0 once a listing settled and found none.
     case count(Int)
     /// A listing in flight.
     case reading
@@ -54,8 +54,6 @@ enum RepositoryCaption: Equatable, Sendable {
     case notConnected(full: String)
     /// The read failed; `full` is its whole message.
     case failed(String, full: String)
-    /// A listing settled and found none.
-    case zero
 
     var text: String {
         switch self {
@@ -63,17 +61,15 @@ enum RepositoryCaption: Equatable, Sendable {
         case .reading: "Reading backups…"
         case .notConnected: "Not connected"
         case .failed(let line, full: _): line
-        case .zero: Format.plural(0, "backup")
         }
     }
 
     /// The whole failed read's message, for both failure cases' tooltip;
-    /// nil for the count, reading and zero lines, which have nothing more
-    /// to say.
+    /// nil for the count and reading lines, which have nothing more to say.
     var help: String? {
         switch self {
         case .notConnected(let full), .failed(_, let full): full
-        case .count, .reading, .zero: nil
+        case .count, .reading: nil
         }
     }
 }
@@ -455,12 +451,12 @@ enum PlanStatus {
             let away = repository.kind == .local
                 ? RunRecord.notConnected([repository.resolvedLocalPath])
                 : nil
-            if line.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == away {
+            if Format.withoutFinalPeriod(line) == away {
                 return .notConnected(full: message)
             }
             return .failed(line, full: message)
         }
-        if outcome == .loaded { return .zero }
+        if outcome == .loaded { return .count(0) }
         return nil
     }
 

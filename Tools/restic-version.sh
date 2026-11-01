@@ -14,7 +14,7 @@
 # that version.
 #
 # Usage: Tools/restic-version.sh <version> [log file]
-#   <version>  one of the releases in `checksums` below, e.g. 0.19.1
+#   <version>  a release with a checksum in the case below, e.g. 0.19.1
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,10 +24,6 @@ version="${1:?usage: Tools/restic-version.sh <version> [log file]}"
 # release's SHA256SUMS on GitHub. A version missing here is refused: an
 # unchecked binary is not a test of that release.
 case "$version" in
-    0.16.5) sha256=c1439cff56678f08ca43ae32b4842fd43ada6b2c2798e647250e93bd32687c26 ;;
-    0.17.3) sha256=18aac652463afe772700f568e52e6416b3940e366472c6c47fb1480dfb1c303c ;;
-    0.18.1) sha256=193fccc8bb4567b498923bc70261e104ff22be88016f0f108b035dad372ab711 ;;
-    0.19.0) sha256=1475397bf759ef4be16a77b19dec650bdbfec00d2cacd82005553411cdd37997 ;;
     0.19.1) sha256=7be0a144ccc377880f294204aa271d76e4b79554b42a751151d425ce6ebac143 ;;
     *)
         echo "error: no checksum for restic $version in Tools/restic-version.sh; add it from the release's SHA256SUMS" >&2

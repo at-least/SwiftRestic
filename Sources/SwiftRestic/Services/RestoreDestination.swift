@@ -177,4 +177,9 @@ enum RestoreDestinationRules {
     static func itemExists(at url: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
     }
+
+    /// lstat semantics: a symlink to a folder is not a folder here.
+    static func isFolder(at url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType) == .typeDirectory
+    }
 }

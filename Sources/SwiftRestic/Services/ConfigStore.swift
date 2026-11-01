@@ -327,14 +327,7 @@ actor ConfigStore {
 
     static func decoded(_ data: Data) throws -> (AppConfiguration, DecodeNoteBox) {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let raw = try container.decode(String.self)
-            guard let date = ResticDateFormat.parse(raw) else {
-                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not an ISO 8601 date: \(raw)")
-            }
-            return date
-        }
+        decoder.dateDecodingStrategy = ResticDateFormat.decodingStrategy
         let notes = DecodeNoteBox()
         let configuration = try DecodeNotes.$current.withValue(notes) {
             try decoder.decode(AppConfiguration.self, from: data)

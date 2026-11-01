@@ -636,10 +636,10 @@ struct PlanStatusTests {
         #expect(PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .idle) == nil)
         #expect(
             PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .loaded)
-                == .zero
+                == .count(0)
         )
         #expect(RepositoryCaption.count(2).text == "2 backups")
-        #expect(RepositoryCaption.zero.text == "0 backups")
+        #expect(RepositoryCaption.count(0).text == "0 backups")
         #expect(RepositoryCaption.reading.text == "Reading backups…")
         #expect(RepositoryCaption.reading.help == nil)
     }

@@ -150,15 +150,20 @@ extension AppModel {
     /// quietly stop the "showing the first matches" footer from appearing.
     static let indexSearchLimit = 200
 
+    /// At most `indexSearchLimit` hits plus whether the index holds more.
+    /// The searches ask for one hit past the limit, so a full page is not
+    /// called cut short.
+    private static func capped<Hit>(_ hits: [Hit]) -> (hits: [Hit], isTruncated: Bool) {
+        (Array(hits.prefix(indexSearchLimit)), hits.count > indexSearchLimit)
+    }
+
     /// The Restore pane's search: instant basename hits over the indexed
     /// paths, and which of them `snapshotID` holds — each with its kind in
     /// that snapshot, true for a directory — from one read of the index.
     /// Throws when the index itself fails: for a search tool, "the index is
     /// broken" must never read as "nothing matches". A snapshot the index
     /// has not read holds nothing here; the caller's completeness check
-    /// owns that. At most `indexSearchLimit` hits plus whether the index
-    /// holds more, asked as one hit past the limit so a full page is not
-    /// called cut short.
+    /// owns that. Capped by `capped`.
     func searchIndexWithMembership(
         pattern: String,
         inSnapshot snapshotID: String,
@@ -170,7 +175,8 @@ extension AppModel {
             repositoryID: repositoryID,
             limit: AppModel.indexSearchLimit + 1
         )
-        return (Array(found.hits.prefix(AppModel.indexSearchLimit)), found.inSnapshot, found.hits.count > AppModel.indexSearchLimit)
+        let page = Self.capped(found.hits)
+        return (page.hits, found.inSnapshot, page.isTruncated)
     }
 
     /// Find Files' search: instant basename hits over the indexed paths,
@@ -178,9 +184,7 @@ extension AppModel {
     /// without the full lists, which can run to thousands per path, from
     /// one read of the index. Throws when the index itself fails, as the
     /// Restore pane's search does; the summaries are keyed by the path's
-    /// bytes (`PathKey`). At most `indexSearchLimit` hits plus whether the
-    /// index holds more, asked as one hit past the limit so a full page is
-    /// not called cut short.
+    /// bytes (`PathKey`). Capped by `capped`.
     func searchIndexWithSummaries(
         pattern: String,
         repositoryID: UUID
@@ -190,15 +194,14 @@ extension AppModel {
             repositoryID: repositoryID,
             limit: AppModel.indexSearchLimit + 1
         )
-        return (Array(found.hits.prefix(AppModel.indexSearchLimit)), found.summaries, found.hits.count > AppModel.indexSearchLimit)
+        let page = Self.capped(found.hits)
+        return (page.hits, found.summaries, page.isTruncated)
     }
 
     /// A Files tab's search: instant basename hits over what one chain ever
     /// held — items its newest backup no longer has included — each as the
-    /// tree lists it, at most `indexSearchLimit` of them plus whether the
-    /// chain holds more, asked as one hit past the limit so a full page is
-    /// not called cut short. Throws when the index itself fails, as the
-    /// other searches do.
+    /// tree lists it, capped by `capped`. Throws when the index itself
+    /// fails, as the other searches do.
     func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> (hits: [IndexChild], isTruncated: Bool) {
         let found = try await indexCoordinator.search(
             matching: pattern,
@@ -206,7 +209,7 @@ extension AppModel {
             repositoryID: repositoryID,
             limit: AppModel.indexSearchLimit + 1
         )
-        return (Array(found.prefix(AppModel.indexSearchLimit)), found.count > AppModel.indexSearchLimit)
+        return Self.capped(found)
     }
 
     /// What changed between two snapshots, keyed by normalized path — the

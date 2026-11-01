@@ -590,10 +590,7 @@ struct FilesSearchAnswer: Equatable {
     /// A hit outside every root keeps the tilde-abbreviated path.
     static func folderLine(for path: String, under roots: [FileNode]) -> String {
         let parent = ResticPath.parent(of: path)
-        let base = roots
-            .filter { ResticPath.holds($0.path, parent) }
-            .map { ResticPath.parent(of: $0.path) }
-            .max { $0.utf8.count < $1.utf8.count }
+        let base = Format.containingRoot(of: parent, in: roots.map(\.path)).map { ResticPath.parent(of: $0) }
         guard let base, parent != base else {
             return (parent as NSString).abbreviatingWithTildeInPath
         }

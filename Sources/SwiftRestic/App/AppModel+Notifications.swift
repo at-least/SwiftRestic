@@ -63,10 +63,8 @@ extension AppModel {
         // away: those hold it with no end in sight.
         let busy = busyRepositoryIDs
         let waitingTheirTurn = configuration.plans.filter { plan in
-            guard let repositoryID = plan.repositoryID, busy.contains(repositoryID),
-                  let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now)
-            else { return false }
-            return due <= now
+            guard let repositoryID = plan.repositoryID else { return false }
+            return busy.contains(repositoryID) && plan.dueSlot(at: now) != nil
         }
         let alerts = StaleAlert.due(
             plans: configuration.plans,

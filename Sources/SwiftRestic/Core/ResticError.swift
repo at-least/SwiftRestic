@@ -179,7 +179,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .fileInTheWay(path):
             return "A file or alias is already at \(path), where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
         case let .notRestored(paths):
-            return "\(paths.joined(separator: ", ")) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
+            return "\(Format.list(paths)) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
         }
     }
 

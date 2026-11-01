@@ -57,18 +57,16 @@ extension AppModel {
     /// clause, so the dialog's word of what will be interrupted can never
     /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
-        Self.removalConsequences(
-            removedPlanNames: plans(in: repositoryID).map { label(of: $0) },
+        let plans = plans(in: repositoryID)
+        func names(doing work: PlanActivity.Work) -> [String] {
+            plans.filter { activity[$0.id]?.work == work }.map { label(of: $0) }
+        }
+        return Self.removalConsequences(
+            removedPlanNames: plans.map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
-            runningBackupNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .backup }
-                .map { label(of: $0) },
-            applyingRetentionNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .applyRetention }
-                .map { label(of: $0) },
-            removingFromEarlierBackupsNames: configuration.plans
-                .filter { $0.repositoryID == repositoryID && activity[$0.id]?.work == .removeFromEarlierBackups }
-                .map { label(of: $0) },
+            runningBackupNames: names(doing: .backup),
+            applyingRetentionNames: names(doing: .applyRetention),
+            removingFromEarlierBackupsNames: names(doing: .removeFromEarlierBackups),
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )

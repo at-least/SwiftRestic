@@ -597,6 +597,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         isScheduleActive(at: now) && schedule.frequency != .manual && isConfigurationComplete
     }
 
+    /// The slot the schedule owes a run for at `now`; nil when none is due.
+    func dueSlot(at now: Date, calendar: Calendar = .current) -> Date? {
+        schedule.nextRunDate(after: lastRunAt, now: now, calendar: calendar).flatMap { $0 <= now ? $0 : nil }
+    }
+
     /// The stored plan wins over the editor's draft for the model-written
     /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
     /// quiet-plan alert's mark, the folders the plan page was told to keep,
