@@ -229,9 +229,9 @@ enum Scheduler {
         isRunning: Bool = false,
         now: Date = .now
     ) -> String {
-        guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) else {
-            return "Off"
-        }
+        guard let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt),
+              let date = nextMaintenanceDate(task, of: repository, hold: hold)
+        else { return "Off" }
         if due <= now, isRunning {
             return "Running now"
         }
@@ -241,9 +241,24 @@ enum Scheduler {
         if due <= now, awaitingServer {
             return "When “\(repository.label(among: repositories))” can be reached"
         }
-        let date = max(due, hold?.resumesAt ?? .distantPast)
         guard date > now else { return hold == nil ? "Due now" : "Waiting" }
         return Format.timestamp(date)
+    }
+
+    /// Remove from Earlier Backups' line on when the space comes back: the
+    /// repository's next scheduled cleanup, or the one the user runs.
+    static func freedSpaceSentence(itemCount: Int, repository: Repository?, hold: ScheduleHold?, now: Date = .now) -> String {
+        let their = itemCount == 1 ? "Its" : "Their"
+        guard let repository, let next = nextMaintenanceDate(.prune, of: repository, hold: hold)
+        else { return "\(their) space is freed when you next clean up the repository." }
+        return "\(their) space is freed at the next cleanup, \(Format.timestamp(max(next, now)))."
+    }
+
+    /// When `task` next runs: its due date, moved to a timed hold's end.
+    /// Nil when the task is off.
+    static func nextMaintenanceDate(_ task: MaintenanceTask, of repository: Repository, hold: ScheduleHold?) -> Date? {
+        repository.maintenance.nextDate(for: task, addedAt: repository.createdAt)
+            .map { max($0, hold?.resumesAt ?? .distantPast) }
     }
 
     /// Every enabled, complete plan's next run date, in plan order — what

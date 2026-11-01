@@ -124,13 +124,7 @@ struct RemoveFromEarlierBackupsSheet: View {
         }
     }
 
-    /// When the space comes back: the repository's next scheduled cleanup,
-    /// or the one the user runs.
     private func cleanupSentence(_ plan: BackupPlan) -> String {
-        let their = items.count == 1 ? "Its" : "Their"
-        guard let repository = model.repository(id: plan.repositoryID),
-              let next = repository.maintenance.nextDate(for: .prune, addedAt: repository.createdAt)
-        else { return "\(their) space is freed when you next clean up the repository." }
-        return "\(their) space is freed at the next cleanup, \(Format.timestamp(max(next, .now)))."
+        Scheduler.freedSpaceSentence(itemCount: items.count, repository: model.repository(id: plan.repositoryID), hold: model.scheduleHold)
     }
 }

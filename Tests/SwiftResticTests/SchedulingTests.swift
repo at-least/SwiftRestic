@@ -886,6 +886,21 @@ struct MaintenanceSchedulingTests {
         #expect(last([]) == ago)
     }
 
+    @Test("Remove from Earlier Backups names the cleanup date the repository page does, a timed pause's end included")
+    func freedSpaceFollowsTheHold() {
+        let repository = repository {
+            $0.maintenance.pruneEnabled = true
+            $0.maintenance.pruneIntervalDays = 30
+        }
+        let now = utcDate("2026-09-10 00:00:00")
+        let prune = utcDate("2026-10-01 00:00:00")
+        #expect(Scheduler.freedSpaceSentence(itemCount: 1, repository: repository, hold: nil, now: now)
+            == "Its space is freed at the next cleanup, \(Format.timestamp(prune)).")
+        let end = utcDate("2026-10-05 00:00:00")
+        #expect(Scheduler.freedSpaceSentence(itemCount: 2, repository: repository, hold: .paused(until: end), now: now)
+            == "Their space is freed at the next cleanup, \(Format.timestamp(end)).")
+    }
+
     @Test("the repository page's Next check and Next cleanup wait under a hold, and move to a timed hold's end")
     func nextMaintenanceUnderAHold() {
         let repository = repository {
