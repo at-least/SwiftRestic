@@ -458,9 +458,25 @@ struct StubRestic: Sendable {
                 # A restore into a folder that already holds most of the
                 # backup's files: restic keeps them and says so in its
                 # summary. The arguments land in the trace's start line.
+                # Each --include lands at the target (its glob escapes
+                # dropped), as restored or kept items stand there after.
                 trace "restoreskip-arm"
                 case " $* " in
                     *" restore "*)
+                        target=""
+                        previous=""
+                        for arg in "$@"; do
+                            [ "$previous" = "--target" ] && target="$arg"
+                            previous="$arg"
+                        done
+                        previous=""
+                        for arg in "$@"; do
+                            if [ "$previous" = "--include" ]; then
+                                name="${arg#/}"
+                                touch "$target/$(printf '%s' "$name" | tr -d '\\\\')"
+                            fi
+                            previous="$arg"
+                        done
                         echo '{"message_type":"summary","total_files":3,"files_restored":1,"files_skipped":3,"bytes_skipped":30}'
                         exit 0
                         ;;
@@ -1114,6 +1130,25 @@ struct StubResticTests {
         #expect(try String(contentsOf: landing.appendingPathComponent("inside.txt"), encoding: .utf8) == "mine")
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: destination.path).filter { $0.hasSuffix(".partial") }
         #expect(leftovers.isEmpty, "left behind: \(leftovers)")
+    }
+
+    /// restic exits 0 when an --include matches nothing — as a name that is
+    /// not UTF-8 does, which `ls --json` spells with U+FFFD. The stub writes
+    /// only the last include, so the first item stands for that name.
+    @Test("a restore of several items fails when one of them did not land")
+    func restoreItemsFailsWhenAnItemDidNotLand() async throws {
+        let fixture = try makeFixture(mode: "restorefile")
+        defer { cleanUp(fixture.root) }
+        let destination = fixture.root.appendingPathComponent("restored")
+        let nodes = ["a.txt", "b.txt"].map { SnapshotNode(name: $0, type: .file, path: "/src/" + $0, size: 3) }
+
+        await #expect(throws: ResticError.notRestored(paths: [destination.appendingPathComponent("a.txt").path])) {
+            try await fixture.service.restoreItems(
+                fixture.context, snapshotID: "latest", parent: "/src", nodes: nodes,
+                destinationDirectory: destination, overwrite: .keepExisting
+            )
+        }
+        #expect(try String(contentsOf: destination.appendingPathComponent("b.txt"), encoding: .utf8) == "restored")
     }
 
     @Test("a single file with a name of the longest length APFS allows still restores")

@@ -82,6 +82,9 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// restic would delete it, under Keep too, so the restore is refused
     /// before restic runs.
     case fileInTheWay(path: String)
+    /// Items of a several-item restore that restic did not write. It exits 0
+    /// when an --include matches nothing.
+    case notRestored(paths: [String])
     /// `forget` could not delete every snapshot retention chose: restic's
     /// exit 3, "failed to remove one or more snapshots", one "unable to
     /// remove snapshot/<id>" line per snapshot the repository kept (restic
@@ -174,7 +177,9 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         case let .fileInTheWay(path):
-            return "A file is already at \(path), where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
+            return "A file or alias is already at \(path), where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
+        case let .notRestored(paths):
+            return "\(paths.joined(separator: ", ")) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
         }
     }
 

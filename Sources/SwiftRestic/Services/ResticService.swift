@@ -1065,22 +1065,26 @@ struct ResticService: ResticClient {
         for (node, landing) in zip(nodes, landings) where node.isDirectory {
             try FileManager.default.createDirectory(at: landing, withIntermediateDirectories: true)
         }
-        return try await runRestore(
+        let summary = try await runRestore(
             context,
             arguments: ["\(snapshotID):\(parent)", "--target", destinationDirectory.path]
                 + nodes.flatMap { ["--include", RestoreBatch.includePattern(forName: $0.name)] }
                 + overwrite.resticArguments,
             onProgress: onProgress
         )
+        // restic 0.19.1 exits 0 when an --include matches nothing, as the
+        // U+FFFD spelling `ls --json` gives a name that is not UTF-8 does.
+        let missing = landings.filter { !RestoreDestinationRules.itemExists(at: $0) }
+        guard missing.isEmpty else { throw ResticError.notRestored(paths: missing.map(\.path)) }
+        return summary
     }
 
-    /// Refuses what `createDirectory` on a folder's landing would fail on: a
-    /// name held (lstat, so a dangling link counts) by anything that does
-    /// not resolve to a folder.
+    /// Refuses a folder's landing held (lstat) by anything but a folder.
+    /// A symlink counts even when it resolves to a folder: restic 0.19.1
+    /// replaces the link with a new folder, under `--overwrite never` too.
     private static func refuseFileInTheWay(of landing: URL) throws {
-        var isFolder: ObjCBool = false
         if RestoreDestinationRules.itemExists(at: landing),
-           !(FileManager.default.fileExists(atPath: landing.path, isDirectory: &isFolder) && isFolder.boolValue) {
+           (try? FileManager.default.attributesOfItem(atPath: landing.path)[.type] as? FileAttributeType) != .typeDirectory {
             throw ResticError.fileInTheWay(path: landing.path)
         }
     }

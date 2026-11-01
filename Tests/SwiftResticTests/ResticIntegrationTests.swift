@@ -1121,6 +1121,25 @@ struct ResticIntegrationTests {
         }
         #expect(try String(contentsOf: fileThere.appendingPathComponent("sub"), encoding: .utf8) == "mine")
 
+        // A symlink to a folder where the folder goes: restic replaces the
+        // link with a new folder, under Keep too, alone or with others.
+        let linkThere = fixture.root.appendingPathComponent("link-there")
+        let elsewhere = fixture.root.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: linkThere, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        let link = linkThere.appendingPathComponent("sub")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: elsewhere)
+        await #expect(throws: ResticError.fileInTheWay(path: link.path)) {
+            try await restore([sub, file], linkThere, .keepExisting)
+        }
+        await #expect(throws: ResticError.fileInTheWay(path: link.path)) {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: snapshotID, node: sub,
+                destinationDirectory: linkThere, overwrite: .keepExisting
+            )
+        }
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == elsewhere.path)
+
         // A folder where the file goes, under Replace: restic fails on it
         // after taking its permissions away.
         let folderThere = fixture.root.appendingPathComponent("folder-there")
