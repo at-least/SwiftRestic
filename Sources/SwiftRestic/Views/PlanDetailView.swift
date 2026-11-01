@@ -19,11 +19,12 @@ struct PlanDetailView: View {
     /// moves to another plan.
     @State private var indexOffers: PlanIndexOffers?
 
-    /// What the offers depend on: a new listing or index generation — a
-    /// backup landed, or the index read more — and the plan's own answers.
+    /// What the offers depend on: the index taking a new listing, and the
+    /// plan's own answers. Not the listing's own time: the offers read the
+    /// index alone, and a refresh stamps its listing before the index takes
+    /// it, so a round keyed to it re-reads the index as it was.
     private struct OffersKey: Hashable {
         var planID: UUID
-        var listedAt: Date?
         var indexGeneration: UInt64?
         var excludePatterns: [String]
         var kept: [String]
@@ -32,7 +33,6 @@ struct PlanDetailView: View {
     private func offersKey(_ plan: BackupPlan) -> OffersKey {
         OffersKey(
             planID: plan.id,
-            listedAt: plan.repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) },
             indexGeneration: plan.repositoryID.flatMap { model.indexTakenGeneration[$0] },
             excludePatterns: plan.excludePatterns,
             kept: plan.keptRebuildableFolders
