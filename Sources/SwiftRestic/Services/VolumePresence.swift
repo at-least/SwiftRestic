@@ -56,7 +56,7 @@ struct VolumeProbe: Sendable {
     static let fileSystem = VolumeProbe { VolumePresence.isMounted(volumeOf: $0) }
 
     func isMounted(volumeOf path: String) async -> Bool? {
-        await Task.detached { [read] in read(path) }.value
+        await BlockingRead.run { [read] in read(path) }
     }
 }
 

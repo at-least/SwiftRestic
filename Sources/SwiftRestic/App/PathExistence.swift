@@ -10,13 +10,16 @@ import Foundation
 @Observable
 final class PathExistence {
     private(set) var exists: Bool?
+    private let read: @Sendable (String) -> Bool
+
+    init(read: @escaping @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) {
+        self.read = read
+    }
 
     func check(_ path: String?) async {
         guard let path else { return }
         exists = nil
-        let found = await Task.detached(priority: .utility) {
-            FileManager.default.fileExists(atPath: path)
-        }.value
+        let found = await BlockingRead.run { [read] in read(path) }
         guard !Task.isCancelled else { return }
         exists = found
     }

@@ -51,6 +51,28 @@ struct PathExistenceTests {
         #expect(existence.exists == nil)
     }
 
+    @Test("rows whose checks all stall each get their own thread, so the shared task pool stays free for the index's reads")
+    func stalledChecksLeaveThePoolFree() async {
+        // More rows than any Mac has cores: on the shared pool, the reads
+        // past its width would wait for a stalled one to come back.
+        let rows = 32
+        let started = StartCount()
+        let stall = DispatchSemaphore(value: 0)
+        let checks = (0..<rows).map { _ in
+            let existence = PathExistence { _ in
+                started.increment()
+                stall.wait()
+                return true
+            }
+            return Task { await existence.check("/Volumes/Gone/item") }
+        }
+        _ = await eventually(within: 5) { started.value == rows }
+        let startedInTime = started.value
+        for _ in 0..<rows { stall.signal() }
+        for check in checks { await check.value }
+        #expect(startedInTime == rows, "\(ProcessInfo.processInfo.activeProcessorCount) cores")
+    }
+
     @Test("a nil path asks nothing and answers nothing: the previous answer stands")
     func nilPathChangesNothing() async throws {
         let existence = PathExistence()
@@ -62,5 +84,22 @@ struct PathExistenceTests {
         #expect(existence.exists == true)
         await existence.check(nil)
         #expect(existence.exists == true)
+    }
+}
+
+private final class StartCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
     }
 }
