@@ -1838,10 +1838,34 @@ struct LoginItemSwitchTests {
         #expect(model.loginItemState == .off)
     }
 
-    // Not tested here: the enable path's installable-location gate
-    // (`LoginItem.isInInstallableLocation`) reads Bundle.main, which answers
-    // for whatever folder hosts the test runner — faking it would be a
-    // behaviour change of its own, so the gate stays a live check.
+    @Test("turning it on from outside the Applications folder says so and registers nothing")
+    func enableOutsideApplicationsIsRefused() async throws {
+        let model = makeModel("SwiftResticLoginNotInstalled").model
+        let script = Script(states: [.off])
+        script.install(in: model)
+        model.installableLocationProbe = { false }
+
+        await model.setStartsAtLogin(true)
+        #expect(script.applyCount == 0)
+        #expect(model.banners.map(\.title) == ["Could not start SwiftRestic at login"])
+        #expect(model.banners.map(\.message) == [LoginItem.notInstalledMessage])
+        #expect(model.startsAtLogin == false)
+        #expect(model.loginItemState == .off)
+    }
+
+    @Test("turning it on from the Applications folder registers, and an approval still owed is said")
+    func enableInsideApplicationsRegisters() async throws {
+        let model = makeModel("SwiftResticLoginInstalled").model
+        let script = Script(states: [.needsApproval])
+        script.install(in: model)
+        model.installableLocationProbe = { true }
+
+        await model.setStartsAtLogin(true)
+        #expect(script.applyCount == 1)
+        #expect(script.askedFirstToEnable)
+        #expect(model.banners.map(\.title) == ["Approval needed"])
+        #expect(model.loginItemState == .needsApproval)
+    }
 }
 
 /// The scheduled check's data rotation: the next slice is moved on by the

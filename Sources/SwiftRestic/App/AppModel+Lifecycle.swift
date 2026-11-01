@@ -372,6 +372,7 @@ extension AppModel {
     private func performSetStartsAtLogin(_ enabled: Bool, generation: Int) async {
         let readLoginItemState = loginItemStateReader
         let applyLoginItem = loginItemApplier
+        let isInInstallableLocation = installableLocationProbe
         // The daemon's answer, written only while this change is still the
         // newest: a newer click's optimistic value already says what the
         // switch must show, and its own turn will read the daemon after.
@@ -384,7 +385,7 @@ extension AppModel {
             }
             return state
         }
-        if enabled, !LoginItem.isInInstallableLocation {
+        if enabled, !isInInstallableLocation() {
             post(Banner(
                 title: "Could not start SwiftRestic at login",
                 message: LoginItem.notInstalledMessage,

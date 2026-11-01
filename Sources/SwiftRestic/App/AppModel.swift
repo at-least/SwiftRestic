@@ -172,6 +172,10 @@ final class AppModel {
     @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
     /// The register/unregister behind `performSetStartsAtLogin`.
     @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
+    /// The location gate in `performSetStartsAtLogin`. Injectable because
+    /// Bundle.main in a test is the xctest runner inside Xcode, which the live
+    /// check counts as installed when Xcode sits in /Applications.
+    @ObservationIgnored var installableLocationProbe: @Sendable () -> Bool = { LoginItem.isInInstallableLocation }
     /// Whether the Mac ran on battery at the last scheduler tick — sampled
     /// every tick whether or not the battery setting is on, so the hold's
     /// words are right the moment the setting is switched on, and written
