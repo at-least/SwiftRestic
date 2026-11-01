@@ -292,6 +292,31 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    @Test("the quiet-plan alert does not name a due plan waiting behind other work on its repository")
+    func quietPlanWaitingItsTurnIsNotNamed() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let now = Date()
+        let last = now.addingTimeInterval(-10 * 86400)
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].schedule.frequency = .daily
+        model.configuration.plans[index].lastSuccessAt = last
+        model.configuration.plans[index].lastRunAt = last
+        // Another plan's backup holds the repository, as the first of two
+        // plans a Mac back from a long sleep starts holds it for the second.
+        var other = BackupPlan()
+        other.repositoryID = harness.plan.repositoryID
+        model.activity[other.id] = PlanActivity(of: other)
+
+        #expect(model.alertQuietPlans(now: now).isEmpty)
+
+        model.activity[other.id] = nil
+        #expect(model.alertQuietPlans(now: now).map(\.planID) == [harness.plan.id])
+
+        await model.shutdown()
+    }
+
     @Test("the quiet-plan alert does not name a plan in the tick that starts its overdue backup")
     func quietAlertWaitsForTheStartingRun() async throws {
         let harness = try await makeHarness(mode: "default")

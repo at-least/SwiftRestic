@@ -72,6 +72,21 @@ struct SchedulingTests {
         #expect(next == utcDate("2026-09-05 12:00:00"))
     }
 
+    /// A clock set ahead stamps the run in the future; corrected, the stamp
+    /// covered every slot until that future date, so the plan never ran.
+    @Test("a last run stamped after now, from a clock set ahead and corrected, counts as no run")
+    func futureLastRunIsNoRun() {
+        let now = utcDate("2026-09-05 12:00:00")
+        let ahead = utcDate("2027-09-05 12:00:00")
+        var schedule = Schedule()
+        for frequency in [Schedule.Frequency.hourly, .daily, .weekly] {
+            schedule.frequency = frequency
+            let due = schedule.nextRunDate(after: ahead, now: now, calendar: calendar)
+            let fresh = schedule.nextRunDate(after: nil, now: now, calendar: calendar)
+            #expect(due == fresh, "\(frequency)")
+        }
+    }
+
     @Test("a daily plan that missed its window while asleep is due now")
     func dailyCatchesUp() throws {
         var schedule = Schedule()
@@ -565,6 +580,27 @@ struct DSTScheduleTests {
         // hour must not trigger a second run.
         let next = try #require(schedule.nextRunDate(after: first, now: now, calendar: losAngeles))
         #expect(next == la(1, 30, 2, 11))
+    }
+
+    @Test("a run at the first 01:30 of the fall-back day covers the second 01:30 too")
+    func fallBackRunAtTheFirstOccurrence() throws {
+        let schedule = dailySchedule(hour: 1, minute: 30)
+        let utc = ISO8601DateFormatter()
+        let firstOccurrence = try #require(utc.date(from: "2026-11-01T08:30:00Z"))  // 01:30 PDT
+        let tomorrow = try #require(utc.date(from: "2026-11-02T09:30:00Z"))         // 01:30 PST
+        let ranAtFirst = firstOccurrence.addingTimeInterval(30)
+
+        for now in ["2026-11-01T09:31:00Z", "2026-11-01T17:00:00Z"] {  // 01:31 PST, 09:00 PST
+            let due = try #require(schedule.nextRunDate(after: ranAtFirst, now: utc.date(from: now)!, calendar: losAngeles))
+            #expect(due == tomorrow, "at \(now)")
+        }
+
+        // Asleep through the first 01:30: due once, at the second.
+        let yesterday = try #require(utc.date(from: "2026-10-31T08:30:00Z"))
+        let awake = try #require(utc.date(from: "2026-11-01T09:31:00Z"))
+        let due = try #require(schedule.nextRunDate(after: yesterday, now: awake, calendar: losAngeles))
+        #expect(due <= awake)
+        #expect(try #require(schedule.nextRunDate(after: awake, now: awake.addingTimeInterval(60), calendar: losAngeles)) == tomorrow)
     }
 
     @Test("an ordinary afternoon slot is unaffected by either transition")

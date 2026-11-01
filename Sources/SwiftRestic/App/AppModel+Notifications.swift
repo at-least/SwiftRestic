@@ -57,11 +57,22 @@ extension AppModel {
         for plan in configuration.plans {
             latest[plan.id] = latestSnapshot(in: plan.repositoryID, planID: plan.id)?.time
         }
+        // A due plan whose repository has work running starts once that work
+        // ends (duePlans starts one plan per repository a tick), so it is
+        // treated as running. Not repositoriesMissingPassword or a drive
+        // away: those hold it with no end in sight.
+        let busy = busyRepositoryIDs
+        let waitingTheirTurn = configuration.plans.filter { plan in
+            guard let repositoryID = plan.repositoryID, busy.contains(repositoryID),
+                  let due = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now)
+            else { return false }
+            return due <= now
+        }
         let alerts = StaleAlert.due(
             plans: configuration.plans,
             latestSnapshotTimes: latest,
             thresholdDays: configuration.settings.staleAlertDays,
-            running: runningPlanIDs,
+            running: runningPlanIDs.union(waitingTheirTurn.map(\.id)),
             now: now
         )
         for alert in alerts {

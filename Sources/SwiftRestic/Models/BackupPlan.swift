@@ -89,6 +89,9 @@ struct Schedule: Codable, Sendable, Hashable {
     /// The next moment this schedule is due, given when it last ran.
     /// Returns `nil` for manual plans.
     func nextRunDate(after lastRun: Date?, now: Date = .now, calendar: Calendar = .current) -> Date? {
+        // A stamp after now comes from a clock that was set ahead; kept, it
+        // would cover every slot until that date and the plan would not run.
+        let lastRun = lastRun.flatMap { $0 <= now ? $0 : nil }
         switch frequency {
         case .manual:
             return nil
@@ -123,8 +126,24 @@ struct Schedule: Codable, Sendable, Hashable {
             direction: .backward
         ) else { return nil }
 
+        // A fall-back day repeats an hour, and the backward search lands on
+        // the second showing of the slot's wall-clock time; a run at the
+        // first must cover it, or the slot runs twice.
+        var slotStart = previous
+        let fold = TimeInterval(
+            calendar.timeZone.secondsFromGMT(for: previous.addingTimeInterval(-86_400))
+                - calendar.timeZone.secondsFromGMT(for: previous)
+        )
+        if fold > 0 {
+            let wallClock: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute]
+            let firstShowing = previous.addingTimeInterval(-fold)
+            if calendar.dateComponents(wallClock, from: firstShowing) == calendar.dateComponents(wallClock, from: previous) {
+                slotStart = firstShowing
+            }
+        }
+
         // Due now if that firing time has not been covered by the last run.
-        if lastRun == nil || lastRun! < previous { return previous }
+        if lastRun == nil || lastRun! < slotStart { return previous }
 
         return calendar.nextDate(
             after: now,
