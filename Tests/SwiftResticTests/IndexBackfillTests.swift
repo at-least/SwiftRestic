@@ -1191,6 +1191,33 @@ struct IndexCoordinatorBackfillTests {
         #expect(client.walkCounts == ["s2": 1])
     }
 
+    /// The running pass may have planned `.done` from a read made before
+    /// the reconcile that asked for the new start: dropping the start would
+    /// leave that reconcile's snapshot unread until the next refresh. An
+    /// unreadable s1 is read once per pass, so its second read is the
+    /// second pass.
+    @Test("a start asked for while a pass runs gets a pass of its own once that one ends")
+    func startDuringAPassRunsAnotherPass() async throws {
+        let scene = try CoordinatorScene("SwiftResticBackfillAgain")
+        defer { scene.remove() }
+        let coordinator = scene.coordinator
+        let repositoryID = scene.repositoryID
+        let context = scene.context
+        let asked = Flag()
+        let client = MockResticClient().onUnreadable(["s1"])
+        _ = client.onWalkStart { _ in
+            guard !asked.isSet else { return }
+            asked.set()
+            await coordinator.startBackfill(repositoryID: repositoryID, service: client, context: context)
+        }
+        await scene.reconcile([try CoordinatorScene.snapshot("s1", 1)], 1)
+
+        await coordinator.startBackfill(repositoryID: repositoryID, service: client, context: context)
+        #expect(await eventually(within: 10) { client.walkCounts["s1"] == 2 }, "walks: \(client.walkCounts)")
+        #expect(await eventually(within: 10) { await !coordinator.isBackfilling(repositoryID: repositoryID) })
+        #expect(await scene.report?.markedUnreadable == 1)
+    }
+
     @Test("the scripted ls streams restic's order: depth-first, siblings by their bytes")
     func scriptedListingIsResticOrder() async throws {
         let client = MockResticClient().onListings(["s1": ["/data": true, "/data/x": false, "/data.bak": false]])

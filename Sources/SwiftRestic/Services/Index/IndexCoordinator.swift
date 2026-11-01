@@ -60,6 +60,9 @@ actor IndexCoordinator {
     /// The browse-cache captures handed over and not yet written.
     private let cacheWrites = CacheWrites()
     private var backfillTasks: [UUID: Task<Void, Never>] = [:]
+    /// Starts asked for while a pass ran, with the newest caller's service
+    /// and context; each runs as one more pass once the running one ends.
+    private var backfillRequests: [UUID: (service: any ResticClient, context: RepositoryContext)] = [:]
     /// The latest reset or drop per repository; the next one waits for it,
     /// so two never delete files under each other's pool.
     private var closings: [UUID: Task<Void, Never>] = [:]
@@ -151,13 +154,24 @@ actor IndexCoordinator {
 
     // MARK: - Backfill
 
-    /// Starts reading what the index has not read, unless a backfill of the
-    /// repository is already running or the coordinator is shutting down.
+    /// Starts reading what the index has not read, unless the coordinator
+    /// is shutting down. While a pass of the repository runs, the start
+    /// waits for it and then runs as a pass of its own: the running pass may
+    /// have planned `.done` from a read made before the reconcile that asked
+    /// for this start. A pass cancelled by a reset or shutdown drops it.
     func startBackfill(repositoryID: UUID, service: any ResticClient, context: RepositoryContext) {
-        guard !isShutDown, !registry.isRemoved(repositoryID), backfillTasks[repositoryID] == nil else { return }
+        guard !isShutDown, !registry.isRemoved(repositoryID) else { return }
+        guard backfillTasks[repositoryID] == nil else {
+            backfillRequests[repositoryID] = (service, context)
+            return
+        }
         backfillTasks[repositoryID] = Task {
             await self.runBackfill(repositoryID: repositoryID, service: service, context: context)
             backfillTasks[repositoryID] = nil
+            let request = backfillRequests.removeValue(forKey: repositoryID)
+            if let request, !Task.isCancelled {
+                startBackfill(repositoryID: repositoryID, service: request.service, context: request.context)
+            }
         }
     }
 
