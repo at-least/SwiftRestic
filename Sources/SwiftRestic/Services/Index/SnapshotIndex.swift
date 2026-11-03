@@ -465,6 +465,8 @@ final class SnapshotIndex: @unchecked Sendable {
     /// including an empty `user_version` over existing tables, which is what
     /// the older index format looks like — throws `schemaMismatch` with the
     /// pool already closed, so the owner can delete the file and open again.
+    /// The file holds every indexed path in clear, names restic keeps
+    /// encrypted in the repository: nothing more sensitive goes in it.
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {

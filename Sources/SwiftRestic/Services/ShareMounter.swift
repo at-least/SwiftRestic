@@ -17,9 +17,10 @@ struct ShareMounter: Sendable {
     /// `NetFSMountURLSync` with `UIOption` = `NoUI` — the CFSTR macros of
     /// NetFS.h (`kNAUIOptionKey`, `kNAUIOptionNoUI`), which Swift does not
     /// import. The user name is the URL's. It blocks for seconds, so it runs
-    /// off the caller's actor. Against Samba 4.23.8: given
+    /// off the caller's actor. Against Samba 4.23.8 (2026-10-16): given
     /// the user and password, mounted in 3.5 s; without a password, status 80
-    /// and no dialog.
+    /// and no dialog. Each mount adds the server to macOS's Recent Servers,
+    /// as Finder's do.
     static let netFS = ShareMounter { url, password in
         await Task.detached(priority: .userInitiated) {
             let open = NSMutableDictionary(dictionary: ["UIOption": "NoUI"])

@@ -107,7 +107,8 @@ enum OverviewMetrics {
     /// The window a "recent problem" counts over: the Recent problems card,
     /// the sidebar's Activity badge and the menu bar's problem line all read
     /// the same week, so a problem cannot age out of one surface before
-    /// another.
+    /// another. A week, not "until the next success": a backup fixes no
+    /// failed check, prune, retention run or restore.
     static func problemWindowStart(from now: Date) -> Date {
         now.addingTimeInterval(-7 * 86_400)
     }

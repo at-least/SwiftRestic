@@ -207,6 +207,8 @@ enum BackupRunEngine {
                     record.outcome = .failed
                     record.failureMessage =
                         "The backup didn’t run because a hook that runs before it failed."
+                    // Stamped although nothing ran: a hook that always refuses
+                    // would otherwise be retried every minute.
                     sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                     break run
                 }
@@ -246,7 +248,9 @@ enum BackupRunEngine {
 
             // The repository's drive away (after the hooks, which may mount
             // it): skipped as for the folders' drive, never asking restic,
-            // whose "does not exist" could not tell it from a moved folder.
+            // whose "does not exist" could not tell it from a moved folder
+            // (both exit 10, "Fatal: repository does not exist: unable to
+            // open config file", restic 0.19.1).
             if await sink.isDriveAway(repository) {
                 let reason = RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
@@ -398,7 +402,10 @@ enum BackupRunEngine {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
             // The repository's disk full: said plainly, with what the run left
             // behind — restic's line, naming a pack file by its hash, stays in
-            // the log — and Clean Up Now as its fix (`repositoryFull`).
+            // the log — and Clean Up Now as its fix (`repositoryFull`): on a
+            // 40 MB disk image a 57 MB backup failed with 35 MB left behind,
+            // which `restic prune` freed (2026-10-16). A full disk elsewhere
+            // (restic's cache on this Mac) keeps restic's own words.
             if case let ResticError.commandFailed(_, message) = error,
                let full = RunRecord.repositoryFullMessage(resticMessage: message, repository: repository)
             {
@@ -790,7 +797,8 @@ private func performQuietPlanRun(
 /// Apply Retention Now's run: the plan's `forget`, outside a backup. It
 /// runs in the plan's own slot — so Stop, the sidebar's spinner, quitting
 /// and the busy repository all work as for a backup — but it is not one:
-/// no hooks (README: `forget` has none of its own), no run stamp, and
+/// no hooks (`forget` has none of its own; inside a backup the plan's
+/// after-backup hooks cover it), no run stamp, and
 /// nothing past the in-app banner and the Activity record. A manual,
 /// attended run needs no alert, and a "succeeded" ping would reset a
 /// Healthchecks dead-man's switch for a run that backed nothing up.

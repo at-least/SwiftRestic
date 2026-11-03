@@ -143,6 +143,8 @@ struct HookEditor: View {
                         // The section header does not label the field for
                         // VoiceOver and Voice Control.
                         .accessibilityLabel(Text("Command"))
+                    // Verbatim: a literal is a LocalizedStringKey, which SwiftUI
+                    // parses as Markdown.
                     Text(verbatim: "Runs through /bin/sh with the app’s own privileges, which are not sandboxed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

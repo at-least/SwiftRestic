@@ -38,7 +38,8 @@ enum VolumePresence {
     /// Whether `folder` is the root of a mounted volume. A folder left
     /// under /Volumes after its drive went away uncleanly is not: it sits
     /// on the startup disk. /Volumes lists the startup disk too, as a link
-    /// to /, which is followed.
+    /// to /, which is followed. A disk image attached with `-nobrowse`
+    /// counted (probed).
     static func isVolumeRoot(_ folder: String) -> Bool {
         let url = URL(fileURLWithPath: folder).resolvingSymlinksInPath()
         guard let volume = try? url.resourceValues(forKeys: [.volumeURLKey]).volume else { return false }

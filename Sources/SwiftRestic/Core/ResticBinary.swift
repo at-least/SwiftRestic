@@ -5,7 +5,9 @@ import Foundation
 /// A GUI app launched from Finder inherits a minimal `PATH` that contains neither
 /// `/opt/homebrew/bin` nor `/usr/local/bin`, so looking restic up through the
 /// environment is unreliable. We probe the well-known locations directly and let
-/// the user override the result in Settings.
+/// the user override the result in Settings. Not downloaded or updated by
+/// the app: fetching an executable from a GUI app is a signing and
+/// quarantine mess, so Homebrew owns it.
 struct ResticBinary: Sendable {
     /// Searched in order; first hit wins.
     static let searchPaths: [String] = [

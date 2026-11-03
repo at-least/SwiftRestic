@@ -404,7 +404,10 @@ actor ResticRunner {
     ]
 
     /// A predictable environment for the child. A GUI app's inherited environment
-    /// is nearly empty, so we rebuild the parts restic actually reads.
+    /// is nearly empty, so we rebuild the parts restic actually reads. It has
+    /// no `SSH_AUTH_SOCK` and no terminal, so an SFTP repository's key must
+    /// be passphrase-less or named in `~/.ssh/config`, and its host key
+    /// accepted once with `ssh` beforehand.
     ///
     /// restic's own repository and password variables are stripped from whatever
     /// we inherited: they would win over the per-repository values restic is

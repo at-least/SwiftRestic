@@ -1,11 +1,14 @@
 import AppKit
 import ScreenCaptureKit
 
-/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`, see README "Looking
-/// at the app"): ScreenCaptureKit with a `cacheDisplay` fallback, the
-/// all-panes sweep, and the display wake. Kept out of the app-entry file:
-/// test scaffolding that ships in debug builds, so the entry file stays app
-/// logic.
+/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`): ScreenCaptureKit
+/// with a `cacheDisplay` fallback, the all-panes sweep, and the display
+/// wake. Kept out of the app-entry file: test scaffolding that ships in
+/// debug builds, so the entry file stays app logic. Needs a logged-in,
+/// unlocked GUI session: on macOS 26 a locked screen hid the window from
+/// this capture entirely (2026-09-14); on macOS 27.0.1 `screencapture -l`
+/// still photographed a window by its ID while locked and a region capture
+/// (`-R`) failed, this capture not tried (2026-10-09).
 
 #if DEBUG
 extension AppDelegate {

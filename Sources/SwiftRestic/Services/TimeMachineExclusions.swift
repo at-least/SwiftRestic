@@ -4,8 +4,9 @@ import Foundation
 /// The items Time Machine's options list as left out of its backups
 /// (`SkipPaths` in its preferences file). Not the mark apps put on single
 /// items (`tmutil addexclusion` without `-p`): that lives on each item,
-/// and finding it means walking the folder before every backup — the
-/// user's call was to leave it out. Not Time Machine's built-in system
+/// and finding it means walking the folder before every backup (measured:
+/// about 35 s for a home folder of 330,000 items) — the user's call was to
+/// leave it out (2026-10-30). Not Time Machine's built-in system
 /// list either: no file holds it on macOS 27.
 enum TimeMachineExclusions {
     /// Time Machine's preferences. macOS lets a process read them only

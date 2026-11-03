@@ -3,7 +3,10 @@ import Foundation
 /// Whether SwiftRestic holds Full Disk Access — and so the restic it runs:
 /// macOS attributes the child process to the app that spawned it, so restic
 /// inherits the app's grant or its lack. `unknown` is the probe finding
-/// none of its files, and the state before it has run.
+/// none of its files, and the state before it has run. An ad-hoc-signed
+/// build can lose the grant at each rebuild or update (its designated
+/// requirement is the build's cdhash), so it is probed again, never cached
+/// across launches.
 enum FullDiskAccessStatus: String, Codable, Sendable, Hashable {
     case granted, notGranted, unknown
 

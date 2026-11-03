@@ -467,8 +467,10 @@ struct RestorePaneView: View {
 
     /// What the pane restores, for File ▸ Restore: the selected items, the
     /// bottom bar's Restore. No whole-backup restore (the user's call,
-    /// 2026-10-24): the tree's top rows are the backed-up folders, so
-    /// selecting them restores everything, Original location included.
+    /// 2026-10-24: Restore Entire Backup rebuilt the full original paths
+    /// under the landing and could not go back to the original location):
+    /// the tree's top rows are the backed-up folders, so selecting them
+    /// restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
             title: "Restore…",

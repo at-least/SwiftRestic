@@ -197,7 +197,9 @@ extension AppModel {
     /// Follows the network for the metered-network hold: macOS's own
     /// "expensive" (cellular and the like) and "constrained" flags on the
     /// current path, watched whether or not the setting is on, so the hold
-    /// is right the moment it is switched on.
+    /// is right the moment it is switched on. UNVERIFIED (never tried on a
+    /// real hotspot): that macOS flags one as expensive; the hold itself
+    /// was checked through the debug override below.
     func startNetworkMonitor() {
         #if DEBUG
         // Live checks cannot switch networks. Gated on the throwaway-config

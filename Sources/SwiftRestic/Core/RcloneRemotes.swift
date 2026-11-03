@@ -29,7 +29,8 @@ enum RcloneSetup: Equatable {
 /// location is rclone's business (XDG directories, `--config`, `RCLONE_CONFIG`
 /// all move it), and parsing it would drag rclone's obscured secrets past the
 /// app. The binary answers with authoritative names and types and never prints
-/// secrets.
+/// secrets. A password-protected configuration cannot be listed: rclone
+/// gets no terminal to ask for the password on.
 struct RcloneRemoteLister: Sendable {
     var runner: ResticRunner
 

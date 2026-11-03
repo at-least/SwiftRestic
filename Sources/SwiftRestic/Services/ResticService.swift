@@ -21,6 +21,9 @@ struct RepositoryContext: Sendable {
         // a repository the plan editor would call incomplete.
         let repositoryString = repository.resticRepositoryString
         if !repositoryString.isEmpty { env["RESTIC_REPOSITORY"] = repositoryString }
+        // Through the environment, so another process of this user sees it
+        // with `ps -E`: accepted on a single-user Mac. A password command or
+        // a file-descriptor handoff would close it.
         env["RESTIC_PASSWORD"] = password
         return env
     }
@@ -815,7 +818,8 @@ struct ResticService: ResticClient {
     /// snapshot retention chose under "remove", deleted or not — then one
     /// "unable to remove snapshot/<id> from the repository" line per
     /// snapshot it could not delete, so the ones that went are the
-    /// difference. An exit 3 without those lines, or with JSON that does
+    /// difference; its `--prune` is then skipped, so the space waits for
+    /// the next cleanup. An exit 3 without those lines, or with JSON that does
     /// not decode, stays restic's failure: no count is claimed unread.
     static func removalFailure(_ result: ResticRunResult) -> ResticError {
         let lines = result.stderr.split(separator: "\n")

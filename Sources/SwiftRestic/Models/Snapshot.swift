@@ -29,6 +29,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        // `short_id` is deprecated upstream, so a release may stop writing it.
         shortID = try c.decodeIfPresent(String.self, forKey: .shortID) ?? String(id.prefix(8))
         time = try c.decode(Date.self, forKey: .time)
         paths = try c.decodeIfPresent([String].self, forKey: .paths) ?? []

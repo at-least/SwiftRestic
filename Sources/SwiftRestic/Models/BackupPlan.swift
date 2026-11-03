@@ -330,8 +330,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var repositoryID: UUID?
     /// The folder or file the plan backs up, as typed or picked (a tilde
     /// expands at run time). Fixed once the plan is saved, like its
-    /// repository: restic keeps one history per set of paths, so another
-    /// path is another plan. Older builds saved a list
+    /// repository: restic keeps one history per set of paths (a backup's
+    /// parent is the newest of the same host whose paths cover its own, and
+    /// retention groups by `host,paths`; restic 0.19.1), so another path is
+    /// another plan, and a list of folders that lost one for a run would
+    /// split its history and retention. Older builds saved a list
     /// (`sources`), split into one plan per entry at load
     /// (`AppConfiguration`).
     var path: String = ""
@@ -372,6 +375,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// Leave out online-only cloud files (iCloud Drive, OneDrive), with
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
+    /// UNVERIFIED (never tried on a real iCloud Drive file): what restic
+    /// does with an online-only file without the flag.
     var excludeCloudFiles: Bool = true
     /// Leave out the items Time Machine's options list
     /// (`TimeMachineExclusions`), read at each backup. On for new plans; a
@@ -496,7 +501,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// The rules the switches pass: the defaults of the ones on, then the
     /// ticked developer groups' rules — whatever the path, since a rule
-    /// naming nothing under it matches nothing.
+    /// naming nothing under it matches nothing. A plan stores the switches,
+    /// not their rules, so a rule a later build adds reaches every plan
+    /// with its switch on.
     var switchExcludes: [String] {
         var categories = Set<ExcludeCategory>()
         if skipsFinderFiles { categories.formUnion(ExcludeCategory.finderFiles) }

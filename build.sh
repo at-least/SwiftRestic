@@ -31,6 +31,13 @@ if grep -rnE "import (AppKit|SwiftUI|Cocoa)" "${portable[@]}"; then
     exit 1
 fi
 
+# GRDB stays inside the snapshot index: every other layer reads it through
+# SnapshotIndex's own types, so the database can be swapped without a sweep.
+if grep -rnE "^import GRDB" Sources --include='*.swift' | grep -vE "^Sources/SwiftRestic/Services/Index/SnapshotIndex[^/]*\.swift:"; then
+    echo "error: GRDB imported outside Services/Index/SnapshotIndex*.swift (see lines above)" >&2
+    exit 1
+fi
+
 # The test target compiles the app's sources itself (project.yml) and has no
 # SwiftRestic module to import. Such an import resolves only against the
 # app's module an earlier build left in DerivedData — xcodebuild warns that

@@ -132,7 +132,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// Fatal error text, when `outcome == .failed`.
     var failureMessage: String?
     /// A plain-text result: the tail of what `prune` printed (it has no JSON
-    /// output, so this is the only record of what it did; the drawer shows
+    /// output in restic 0.19.1, so this is the only record of what it did; the drawer shows
     /// it among the run's messages), a check's verdict, or what Apply
     /// Retention Now removed — the Result row of a check or a forget in
     /// the drawer and Copy Details (a check's in its log too), and a

@@ -138,7 +138,9 @@ enum RunLog {
 /// follow `SWIFTRESTIC_CONFIG_DIR` and a capture or test run never touches
 /// the real ones. Every method is synchronous file work — callers run it
 /// detached, never on the main actor — and only files named `<UUID>.log`
-/// are ever removed.
+/// are ever removed. A log holds restic's command lines and messages,
+/// never the password or a credential (they travel in the environment) and
+/// never a hook's command or output.
 struct RunLogStore: Sendable {
     let directory: URL
 
