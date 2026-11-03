@@ -395,6 +395,16 @@ struct AppModelStubTests {
         )
         let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
         #expect(names == ["a.txt"], "left beside it: \(names)")
+        let trace = try String(
+            contentsOf: harness.root.appendingPathComponent("stub-trace.log"),
+            encoding: .utf8
+        )
+        let restoreStart = trace.split(separator: "\n").first { line in
+            line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
+        }
+        #expect(restoreStart != nil, "no restore in the trace")
+        // The sheet promises both modes remove nothing the backup lacks.
+        #expect(restoreStart?.contains("--delete") == false)
 
         await harness.model.shutdown()
     }
@@ -454,6 +464,8 @@ struct AppModelStubTests {
             line.hasPrefix("start args=[") && line.replacingOccurrences(of: "[", with: " ").contains(" restore ")
         }
         #expect(restoreStart?.contains("--overwrite never") == true, "restore started as: \(restoreStart ?? "nothing")")
+        // The sheet promises both modes remove nothing the backup lacks.
+        #expect(restoreStart?.contains("--delete") == false)
 
         let landing = destination.appendingPathComponent("Project")
         let banner = try #require(harness.model.banners.first)

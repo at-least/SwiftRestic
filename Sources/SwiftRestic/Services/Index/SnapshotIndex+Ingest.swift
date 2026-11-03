@@ -111,15 +111,15 @@ extension SnapshotIndex {
                     default:
                         break
                     }
-                    let nodes = try NodeWriter(db)
-                    let stage = try db.cachedStatement(sql: SQL.stageInsert)
-                    for entry in entries {
-                        let key = ResticPath.normalizedBytes(entry.path)
-                        let (node, created) = try Self.resolveStreaming(nodes, key, &walk)
-                        try stage.execute(arguments: [node, target.id, entry.isDirectory])
-                        if entry.isDirectory { walk.append((key, node, created)) }
+                    try NodeWriter.writing(db) { nodes in
+                        let stage = try db.cachedStatement(sql: SQL.stageInsert)
+                        for entry in entries {
+                            let key = ResticPath.normalizedBytes(entry.path)
+                            let (node, created) = try Self.resolveStreaming(nodes, key, &walk)
+                            try stage.execute(arguments: [node, target.id, entry.isDirectory])
+                            if entry.isDirectory { walk.append((key, node, created)) }
+                        }
                     }
-                    try nodes.indexNewNames()
                     if final {
                         try Self.applyFull(db, target)
                         applied = true
@@ -243,38 +243,38 @@ extension SnapshotIndex {
             }
             try Self.requireNoPending(db, target, between: forward ? hi : target.seq, and: forward ? target.seq : lo)
 
-            let nodes = try NodeWriter(db)
-            let close = try db.cachedStatement(sql: forward ? SQL.forwardClose : SQL.reverseFreeze)
-            let endRun = try db.cachedStatement(sql: forward ? SQL.forwardOpenRun : SQL.reverseBottomRun)
-            let open = try db.cachedStatement(sql: forward ? SQL.forwardInsert : SQL.reverseInsert)
-            let mark = try db.cachedStatement(sql: SQL.editInsert)
-            let end = forward ? hi : lo
-            let markSeq = forward ? target.seq : lo
-            var memo: [[UInt8]: Int64] = [:]
-            for entry in removed {
-                guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
-                try close.execute(arguments: [end, node, target.chainID])
-            }
-            for entry in added {
-                guard let node = try Self.resolve(nodes, entry.path, create: true, memo: &memo) else { continue }
-                if let kind = try Bool.fetchOne(endRun, arguments: [node, target.chainID]) {
-                    // Present at the base already: the same kind is a
-                    // file<->symlink `T`, which keeps the run and changes the
-                    // content; another kind is a file<->dir change the diff
-                    // did not spell as removed.
-                    if kind == entry.isDirectory {
-                        try mark.execute(arguments: [node, target.chainID, markSeq])
-                        continue
-                    }
-                    throw IndexError.kindChanged(snapshot: snapshotID, path: entry.path)
+            try NodeWriter.writing(db) { nodes in
+                let close = try db.cachedStatement(sql: forward ? SQL.forwardClose : SQL.reverseFreeze)
+                let endRun = try db.cachedStatement(sql: forward ? SQL.forwardOpenRun : SQL.reverseBottomRun)
+                let open = try db.cachedStatement(sql: forward ? SQL.forwardInsert : SQL.reverseInsert)
+                let mark = try db.cachedStatement(sql: SQL.editInsert)
+                let end = forward ? hi : lo
+                let markSeq = forward ? target.seq : lo
+                var memo: [[UInt8]: Int64] = [:]
+                for entry in removed {
+                    guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
+                    try close.execute(arguments: [end, node, target.chainID])
                 }
-                try open.execute(arguments: [node, target.chainID, target.seq, entry.isDirectory])
+                for entry in added {
+                    guard let node = try Self.resolve(nodes, entry.path, create: true, memo: &memo) else { continue }
+                    if let kind = try Bool.fetchOne(endRun, arguments: [node, target.chainID]) {
+                        // Present at the base already: the same kind is a
+                        // file<->symlink `T`, which keeps the run and changes the
+                        // content; another kind is a file<->dir change the diff
+                        // did not spell as removed.
+                        if kind == entry.isDirectory {
+                            try mark.execute(arguments: [node, target.chainID, markSeq])
+                            continue
+                        }
+                        throw IndexError.kindChanged(snapshot: snapshotID, path: entry.path)
+                    }
+                    try open.execute(arguments: [node, target.chainID, target.seq, entry.isDirectory])
+                }
+                for entry in modified {
+                    guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
+                    try mark.execute(arguments: [node, target.chainID, markSeq])
+                }
             }
-            for entry in modified {
-                guard let node = try Self.resolve(nodes, entry.path, create: false, memo: &memo) else { continue }
-                try mark.execute(arguments: [node, target.chainID, markSeq])
-            }
-            try nodes.indexNewNames()
             try Self.setWindow(db, target.chainID, lo: forward ? lo : target.seq, hi: forward ? target.seq : hi)
             try Self.markIndexed(db, target)
         }
@@ -347,15 +347,23 @@ extension SnapshotIndex {
     }
 
     /// Node-dictionary writes for one transaction. The FTS rows of every node
-    /// it creates are written by one statement at the end (`indexNewNames`),
-    /// keyed on the largest id before the first insert.
+    /// it creates are written by one statement at the end, keyed on the
+    /// largest id before the first insert.
     final class NodeWriter {
         private let db: Database
         private let lookup: Statement
         private var insert: Statement?
         private var firstNew: Int64?
 
-        init(_ db: Database) throws {
+        /// The only way to get a writer, so no caller can skip the names'
+        /// FTS rows: a node without them is silently unsearchable.
+        static func writing(_ db: Database, _ body: (NodeWriter) throws -> Void) throws {
+            let nodes = try NodeWriter(db)
+            try body(nodes)
+            try nodes.indexNewNames()
+        }
+
+        private init(_ db: Database) throws {
             self.db = db
             lookup = try db.cachedStatement(sql: SQL.nodeLookup)
         }
@@ -387,7 +395,7 @@ extension SnapshotIndex {
             return (id, false)
         }
 
-        func indexNewNames() throws {
+        private func indexNewNames() throws {
             guard let firstNew else { return }
             try db.cachedStatement(sql: SQL.nodeFTSIndexNew).execute(arguments: [firstNew])
             self.firstNew = nil

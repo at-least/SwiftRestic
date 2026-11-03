@@ -149,7 +149,6 @@ struct RestoreDestinationSheet: View {
                 .pickerStyle(.radioGroup)
 
                 LabeledContent {
-                    // True in both modes: restore never runs with --delete.
                     Text("Files that aren’t in the backup are never removed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

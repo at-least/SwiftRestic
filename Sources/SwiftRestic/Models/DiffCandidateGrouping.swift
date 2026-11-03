@@ -23,6 +23,7 @@ enum DiffCandidateGrouping {
     }
 
     static func months<Item>(in items: [Item], time: (Item) -> Date, calendar: Calendar = .current) -> [Month<Item>] {
+        assert(zip(items, items.dropFirst()).allSatisfy { time($0) >= time($1) }, "months(in:) needs its items newest first")
         var order: [DateComponents] = []
         var labels: [DateComponents: String] = [:]
         var grouped: [DateComponents: [Item]] = [:]
