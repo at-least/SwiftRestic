@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Export Settings and Import Settings
-
     /// Once the configuration has loaded, and never over one that could not
     /// be read: nothing imported would be saved (`flushSave`), and an
     /// export would write the empty stand-in.
@@ -22,8 +20,6 @@ extension AppModel {
         }
     }
 
-    /// The file Import Settings chose, read for its confirmation; nil, with
-    /// the reason in a banner, when it does not read.
     func settingsFile(at url: URL) -> SettingsFile? {
         do {
             return try SettingsFile.read(from: url)
@@ -52,15 +48,8 @@ extension AppModel {
         return ConfirmationCopy(title: "Replace your settings with “\(file.name)”?", message: message)
     }
 
-    /// Import Settings, confirmed: the file's repositories, plans and
-    /// settings take the place of this Mac's (`AppConfiguration.importing`).
-    ///
-    /// Work in flight stops first, and the runs' unwind records it as
-    /// cancelled. Every repository's runtime state goes, a
-    /// repository the file keeps too: its listing is read again with the
-    /// imported settings. A plan the file does not hold goes through Delete
-    /// Plan's bookkeeping, and a repository it does not hold takes its index
-    /// files along, as a removal does.
+    /// Every repository's runtime state goes, a repository the file keeps
+    /// too: its listing is read again with the imported settings.
     ///
     /// No password is deleted, unlike a removal: the Keychain may hold a
     /// repository's only copy of its password, and importing a file that

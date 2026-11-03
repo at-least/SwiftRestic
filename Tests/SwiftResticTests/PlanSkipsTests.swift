@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The plan editor's *Skip* switches and the plan page's Excluding card are
-/// one mapping (`PlanSkips`): the switches a plan has on, by the names both
-/// surfaces give them, with the help each carries.
 @Suite("Plan skips")
 struct PlanSkipsTests {
     /// A new plan's defaults, plus the one switch that ships off

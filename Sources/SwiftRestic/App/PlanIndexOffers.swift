@@ -14,7 +14,6 @@ struct PlanIndexOffers: Equatable {
     /// began: until it has, a later round may find more.
     var isIndexComplete = false
 
-    /// One round of both reads.
     @MainActor
     static func read(planID: UUID, model: AppModel) async -> PlanIndexOffers {
         var offers = PlanIndexOffers(planID: planID)

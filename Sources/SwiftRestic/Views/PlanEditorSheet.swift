@@ -46,11 +46,8 @@ struct PlanEditorSheet: View {
     /// so emptiness alone would read it as an edit; adoption says so — the
     /// presenting root names `.adopt` when it raises the sheet.
     enum Mode {
-        /// A fresh plan, nothing prefilled.
         case new
-        /// An existing plan, opened by Edit.
         case editing
-        /// A plan-UUID group's history, prefilled for adoption.
         case adopt
     }
     private let mode: Mode
@@ -562,8 +559,6 @@ struct PlanEditorSheet: View {
         }
     }
 
-    /// One checkbox per developer group, under the switch while it is on;
-    /// its help lists what it leaves out.
     private var developerGroupBoxes: some View {
         // .topLeading, not .firstTextBaseline: the baseline lines a row's other
         // cells up with a wrapped label's last line, a line below its checkbox.
@@ -581,8 +576,6 @@ struct PlanEditorSheet: View {
         .padding(.leading, 4)
     }
 
-    /// What ticking `group` leaves out: its rules, then its marker's
-    /// folders.
     private func developerGroupHelp(_ group: ExcludeCategory) -> String {
         (BackupPlan.developerExcludes(groups: [group])
             + ExcludeRule.developerMarkers.filter { $0.category == group }.map(\.line))
@@ -596,13 +589,10 @@ struct PlanEditorSheet: View {
         "Leaves out what developer tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
     }
 
-    /// The warning section above the switches, with its Full Disk Access
-    /// button.
     private var showsFullDiskAccessSection: Bool {
         model.fullDiskAccess != .granted && ProtectedLocations.needsFullDiskAccess(draft.path, home: NSHomeDirectory())
     }
 
-    /// One condition for the Time Machine switch's caption and its button.
     private var timeMachineListNeedsFullDiskAccess: Bool {
         draft.skipsTimeMachineExclusions && model.fullDiskAccess == .notGranted
     }

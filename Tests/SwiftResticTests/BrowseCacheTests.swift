@@ -1,12 +1,6 @@
 import Foundation
 import Testing
 
-/// The browse caches as the coordinator serves them — one directory's
-/// `restic ls` answer and one `restic diff`, stored verbatim per immutable
-/// content key. The store-level contract (spelling-proof keys, an empty
-/// listing as a hit, first capture wins, deaths sweep their rows) is pinned
-/// by `SnapshotIndexBrowseCacheTests`; what is left here is the coordinator's
-/// part: per-repository stores, canonical lookups and browser row order.
 @Suite("browse caches")
 struct BrowseCacheTests {
     @Test("the coordinator serves a cache hit already in browser order")
@@ -40,7 +34,6 @@ struct BrowseCacheTests {
         // ahead of Zeta.
         #expect(read?.map(\.name) == ["alpha", "Zeta", "a.txt", "b.txt"])
 
-        // A miss stays a miss; the wrapper adds no hit of its own.
         #expect(await coordinator.cachedBrowserListing(
             snapshotID: "s9", directory: "/src", repositoryID: repository
         ) == nil)

@@ -12,8 +12,6 @@ enum VolumePresence {
         return String(parts[1])
     }
 
-    /// Whether the volume holding `path` is mounted; nil for a path on the
-    /// startup disk.
     static func isMounted(volumeOf path: String) -> Bool? {
         volumeName(of: path).map { isVolumeRoot("/Volumes/\($0)") }
     }
@@ -61,7 +59,6 @@ struct VolumeProbe: Sendable {
     }
 }
 
-/// A network share as its mounted volume reports it (`VolumePresence.mountedShare`).
 struct MountedShare: Equatable, Sendable {
     var volumeName: String
     var url: String

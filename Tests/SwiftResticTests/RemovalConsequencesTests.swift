@@ -45,7 +45,6 @@ struct RemovalConsequencesTests {
                 isConsoleRunning: false
             ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
         )
-        // No plan uses it: nothing is removed with it, so nothing says so.
         #expect(
             AppModel.removalConsequences(
                 removedPlanNames: [],

@@ -56,14 +56,10 @@ struct AdoptTests {
         return url.path
     }
 
-    /// The model with `repository` configured and `listing` as its read, so
-    /// the shelves hold the groups the fixtures describe.
     private func loadModel(_ model: AppModel, repository: Repository, listing: [Snapshot]) {
         model.configuration.repositories = [repository]
         model.snapshots[repository.id] = listing
     }
-
-    // MARK: - The draft
 
     @Test("a history whose backup holds several folders is not offered for adoption — a plan backs up one")
     func severalFoldersAreNotAdoptable() async throws {
@@ -236,8 +232,6 @@ struct AdoptTests {
         #expect(!draft.retention.isEnabled)
         #expect(draft.retention.summary == "Keep everything")
     }
-
-    // MARK: - Collision rows
 
     @Test("a UUID that names a configured plan is its moved history, never adoptable")
     func movedGroupNeverAdopts() async throws {
@@ -416,8 +410,6 @@ struct AdoptTests {
         #expect(briefing.warnings.last == "1 backup also carries another plan’s tag and stays with that plan.")
     }
 
-    // MARK: - The write
-
     @Test("adopt appends one plan with the group's UUID, moves the records and writes no run record")
     func adoptAppendsAndReshelves() async throws {
         let planID = UUID()
@@ -433,7 +425,6 @@ struct AdoptTests {
 
         model.adopt(draft: draft)
 
-        // One plan, appended, carrying the group's UUID.
         #expect(model.configuration.plans.map(\.id) == [planID])
         #expect(model.configuration.plans[0].lastRunAt == nil && model.configuration.plans[0].lastSuccessAt == nil)
         // No run record, no activity — adopting is not a run.
@@ -485,8 +476,6 @@ struct AdoptTests {
 
         #expect(model.banners.first?.message == "Its backups are no longer in the repository.")
     }
-
-    // MARK: - The words around deleting and moving
 
     @Test("deleting a plan says where its snapshots land, and that they can come back")
     func deleteCopyNamesTheLanding() throws {

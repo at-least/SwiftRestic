@@ -1,7 +1,6 @@
 import Foundation
 import IOKit.ps
 
-/// Whether the Mac is running on battery, used to honour "pause on battery".
 enum PowerState {
     static var isOnBattery: Bool {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else { return false }

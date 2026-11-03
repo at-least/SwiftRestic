@@ -8,12 +8,10 @@ import SwiftUI
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// The toolbar field's query, until Return hands it to Find Files.
     @State private var searchText = ""
-    /// The window's minute clock: the maintenance dates are as of it.
+    /// The window's minute clock.
     @Environment(\.now) private var now
     let repositoryID: UUID
-    /// Opens the plan editor with this repository preset.
     let onAddPlan: () -> Void
     /// Opens the adopt sheet for a group row on this page — the root owns
     /// the presenting state, as for every sheet a pane raises.
@@ -24,9 +22,7 @@ struct RepositoryDetailView: View {
     /// re-eval (progress ticks, banners) that would also stall the main
     /// thread each time.
     @State private var volumeCapacity: VolumeCapacity?
-    /// Whether a local repository's drive is away, for Next check and Next
-    /// cleanup — read off the body for `volumeCapacity`'s reason, again
-    /// each minute.
+    /// Read off the body for `volumeCapacity`'s reason, again each minute.
     @State private var driveAway = false
 
     private struct DriveReadKey: Equatable {
@@ -48,10 +44,6 @@ struct RepositoryDetailView: View {
         // The toolbar holds the search field alone; the page's verbs are the
         // menus' — the HIG's macOS toolbars: "it doesn't make sense to
         // provide a toolbar item for every menu item".
-        // Every backup in the repository, the toolbar's search on the page
-        // that stands for it: Return carries the query into Find Files, the
-        // page that lists what matches, and leaves this field empty for the
-        // next visit.
         .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search all backups"))
         .onSubmit(of: .search) {
             router.openFind(repositoryID: repositoryID, query: searchText, run: true)
@@ -123,11 +115,6 @@ struct RepositoryDetailView: View {
         }
     }
 
-    /// A count only once the listing it derives from has succeeded; before
-    /// that, or after a failure, "—" with the reason as its tooltip — the
-    /// Protection card says it in words. Loaded, the count splits
-    /// when some of the repository's backups belong to no plan of it, by
-    /// the same count the sidebar's Other backups node carries.
     @ViewBuilder
     private var snapshotsValue: some View {
         switch model.snapshotListingOutcome(for: repositoryID) {
@@ -209,11 +196,6 @@ struct RepositoryDetailView: View {
                     }
                 }
 
-                // When it was last verified, and when next: the policy
-                // behind the dates is the editor's, and each run is a
-                // record in Activity.
-                // Activity's newest run of each, with how it ended; the
-                // stamp is written for every attempt.
                 let runs = model.configuration.runs
                 let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
                 let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
@@ -224,9 +206,6 @@ struct RepositoryDetailView: View {
                             run: check
                         )
                     }
-                    // As the scheduler will start them: the hold holds upkeep
-                    // too, so a due task reads "Waiting", never "Due now", and
-                    // one in flight reads "Running now".
                     let hold = model.scheduleHold
                     let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
                     DetailRow("Next check", Scheduler.nextMaintenanceText(

@@ -16,7 +16,6 @@ enum PlanSkips {
 
     static let cachesHelp = "Folders holding a CACHEDIR.TAG file"
 
-    /// The rules a defaults switch passes, one a line, for its tooltip.
     static func rulesHelp(_ categories: Set<ExcludeCategory>) -> String {
         ExcludeRule.defaults
             .filter { categories.contains($0.category) }

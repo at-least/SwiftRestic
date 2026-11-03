@@ -23,7 +23,6 @@ struct FilesPaneView: View {
     /// The backup the item is shown at — for a file, its version's newest —
     /// nil for the newest.
     @State private var chosenID: String?
-    /// Whether the first read has settled where the pane opens.
     @State private var didOpen = false
     @State private var loadError: String?
     @State private var indexComplete = true
@@ -77,7 +76,6 @@ struct FilesPaneView: View {
         }
     }
 
-    /// The chain's newest backup, from the repository's listing.
     private var chainNewest: Snapshot? {
         model.newestSnapshot(inChain: node.chainKey, repositoryID: node.repositoryID)
     }
@@ -190,7 +188,6 @@ private struct FilesPaneLoadKey: Equatable {
 /// themselves; a file's own line says whether this Mac has it.
 struct FilesPaneHeader: View {
     let node: FileNode
-    /// The newest backup holding it.
     let newestHolder: IndexVersion?
     let chainNewest: Snapshot?
     /// Why the chain's newest backup lacks it, when that backup's own run

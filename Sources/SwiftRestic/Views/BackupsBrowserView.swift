@@ -14,7 +14,6 @@ import SwiftUI
 struct BackupsBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// The page whose backups these are.
     let page: SidebarItem
     let repositoryID: UUID
     /// The page's backups, newest first.
@@ -171,7 +170,6 @@ struct BackupsBrowserView: View {
 /// size, as Arq's is.
 private struct BackupRow: View {
     let snapshot: Snapshot
-    /// The backup run that wrote it, when the history still holds one.
     let run: RunRecord?
     /// The list sits under "October 2026" section headers, so the row drops
     /// the year its header says; a flat single-month list keeps the full

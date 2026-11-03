@@ -1,7 +1,5 @@
 import Foundation
 
-/// Splits a typed command line into arguments the way a shell would.
-///
 /// The console runs restic directly rather than through a shell, so quoting has
 /// to be handled here — otherwise a path with a space arrives as two arguments.
 enum CommandLineTokenizer {

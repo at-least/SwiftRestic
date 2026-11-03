@@ -18,7 +18,6 @@ enum ResticMessage: Sendable, Equatable {
     case node(SnapshotNode)
     case change(ResticDiffChange)
     case statistics(ResticDiffStatistics)
-    /// A line we could recognise as JSON but not map to a known `message_type`.
     case unknown(type: String)
     /// A line carrying a `message_type` we know whose payload failed to
     /// decode — restic's schema moved under us. Kept apart from `unknown`:
@@ -27,8 +26,6 @@ enum ResticMessage: Sendable, Equatable {
     /// instead of dropping the line silently.
     case malformed(type: String, reason: String)
 }
-
-// MARK: - Payloads
 
 /// Periodic progress line (`backup` and `restore` both emit `message_type: status`).
 struct ResticStatus: Sendable, Equatable {
@@ -212,7 +209,6 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
         category == .removed ? older : newer
     }
 
-    /// A short phrase for the row's tooltip.
     var explanation: String {
         var parts: [String] = []
         if modifier.contains("+") { parts.append("added") }
@@ -260,8 +256,6 @@ struct ResticDiffStatistics: Sendable, Equatable, Decodable {
     }
 }
 
-// MARK: - Line decoding
-
 enum ResticMessageDecoder {
     /// restic answers an empty line — or a bare `null` — where a JSON list
     /// command has nothing to report, so both spellings decode as no entries.
@@ -272,7 +266,6 @@ enum ResticMessageDecoder {
         return decoded ?? []
     }
 
-    /// Decoder configured for restic's RFC3339-with-fractional-seconds timestamps.
     static let jsonDecoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = ResticDateFormat.decodingStrategy
@@ -380,7 +373,6 @@ enum ResticDateFormat {
         return withFraction.string(from: date)
     }
 
-    /// `parse` as a JSONDecoder's date strategy; an unreadable date throws.
     static let decodingStrategy = JSONDecoder.DateDecodingStrategy.custom { decoder in
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)

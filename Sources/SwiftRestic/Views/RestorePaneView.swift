@@ -3,9 +3,8 @@ import SwiftUI
 /// The restore pane: one backup record's file tree, beside a page's Backups
 /// tab's list. The app's one snapshot-first browser — the run drawer's
 /// Browse, a group's Show Backups and the Files view's Show in Backups all
-/// land here (`AppRouter.showBackup`) — so the Change column, search,
-/// drag-to-Finder and whole-backup restore never depend on which button you
-/// came through.
+/// land here (`AppRouter.showBackup`) — so the Change column, search and
+/// drag-to-Finder never depend on which button you came through.
 ///
 /// The list beside it owns the timeline; a record is identified, not
 /// chosen, here. Switching records keeps the folder you are in, and the
@@ -18,37 +17,29 @@ struct RestorePaneView: View {
 
     let repositoryID: UUID
     let snapshotID: String
-    /// The open backup's search, as typed in the page's toolbar field.
     @Binding var searchText: String
-    /// "Search All Backups": the host opens Find Files on this repository
-    /// with the query filled in.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
     @State private var currentPath: String?
     @State private var changes: [PathKey: ResticDiffChange] = [:]
-    /// Each folder's tally of the changes beneath it, from the same diff.
     @State private var changesInside: [PathKey: ChangesInside] = [:]
     /// What `changes` was computed against, for the header: written beside
     /// the map in `loadLevel`, never re-derived — the header must name the
     /// comparison whose marks are on screen.
     @State private var comparison: ChangeComparison?
-    /// The search's answer for the open backup; nil while not searching.
     @State private var searchResult: RestorePaneSearch?
     /// The selected rows' ids — paths in the tree, `SearchHit.id` among
     /// search results. Several at once, as in Finder (⌘- or ⇧-click):
     /// Restore restores them together.
     @State private var selection: Set<String> = []
-    /// The tree's or the search results' keyboard focus, whichever is on
-    /// screen — taken by a click in it (`focusOnClick`).
     @FocusState private var listIsFocused: Bool
     @State private var isLoadingTree = false
     @State private var loadError: String?
     /// Why the search could not answer — the Files tab's "Search failed",
     /// never a folder that could not be read.
     @State private var searchError: String?
-    /// Set when the focused folder does not exist in the selected record.
     @State private var folderMissing = false
     /// The record the tree on screen was built for. A folder listing that
     /// lands after a record switch must not install itself into the new
@@ -72,9 +63,7 @@ struct RestorePaneView: View {
     /// set by `loadLevel`, spent by the list. Plain record switches keep
     /// their folder open but never scroll.
     @State private var revealPath: String?
-    /// A file's Preview: its copy and its Quick Look panel.
     @State private var previewer = PreviewSession()
-    /// The restore waiting in the destination sheet.
     @State private var destinationRequest: RestoreDestinationRequest?
     /// The tree rows' content width, read by the column header alone: a
     /// legacy scroller narrows the rows but not the header above them, and
@@ -168,8 +157,6 @@ struct RestorePaneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Toolbar (top)
-
     /// `comparison`, when it is the open record's: between a record switch
     /// and loadLevel's first line it still belongs to the previous record.
     private func shownComparison(for record: Snapshot?) -> ChangeComparison? {
@@ -181,9 +168,6 @@ struct RestorePaneView: View {
         if case .comparing = comparison { true } else { false }
     }
 
-    /// Why the Change column could not be filled, when the comparison
-    /// failed. The search is the toolbar's field, which searches the open
-    /// backup on the Backups tab; Find Files searches every backup.
     private func toolbar(record: Snapshot?, comparison: ChangeComparison?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if let record {
@@ -199,8 +183,6 @@ struct RestorePaneView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }
-
-    // MARK: - Browser
 
     @ViewBuilder
     private func browser(shown: ChangeComparison?) -> some View {
@@ -413,9 +395,6 @@ struct RestorePaneView: View {
         }
     }
 
-    /// Preview: a look at a file of this backup with Quick Look before
-    /// restoring it, from a temporary copy deleted when the preview closes —
-    /// what the file pane's button does, without leaving the backup.
     @ViewBuilder
     private func previewItem(_ node: @escaping @MainActor () async throws -> SnapshotNode) -> some View {
         if let record {
@@ -513,9 +492,6 @@ struct RestorePaneView: View {
         .padding(12)
     }
 
-    /// The browser shows a list whose rows drag: the search's hits in this
-    /// backup, or the tree — not a spinner, an error, an empty answer, a
-    /// missing folder or an empty one standing in for them.
     private var dragListIsShowing: Bool {
         guard !isLoadingTree, loadError == nil else { return false }
         if let searchResult { return !searchResult.inThisBackup.isEmpty }
@@ -531,8 +507,6 @@ struct RestorePaneView: View {
         .disabled(!model.isResticAvailable)
         .help("Open Find Files with this search; other plans’ backups included")
     }
-
-    // MARK: - Rows
 
     /// The nodes behind the current selection, in the list's order: tree
     /// rows while browsing, synthesized hits while searching. Only rows on
@@ -560,7 +534,6 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The one selected node, when exactly one row is selected.
     private var selectedRow: SnapshotNode? {
         let nodes = selectedNodes
         return nodes.count == 1 ? nodes[0] : nil
@@ -595,8 +568,6 @@ struct RestorePaneView: View {
         }
     }
 
-    /// "3 changes inside this folder since Oct 7, 2026 at 11:00 PM: 2
-    /// modified, 1 deleted" — the header's baseline, the tally's kinds.
     private func insideHelp(_ inside: ChangesInside) -> String {
         "\(Format.plural(inside.total, "change")) inside this folder\(sinceBaseline): \(inside.summary)"
     }
@@ -697,8 +668,6 @@ struct RestorePaneView: View {
         )
     }
 
-    // MARK: - Navigation
-
     /// Where ⌫ and ⌘↑ go: from the selected row — or, with none, the folder
     /// in focus — to the folder holding it, when that folder is a row of the
     /// tree. The tree on screen holds every loaded row, so going up selects
@@ -727,8 +696,6 @@ struct RestorePaneView: View {
             reveal(parent)
         }
     }
-
-    // MARK: - Loading
 
     /// The selected record changed, or the pane was just shown: rebuild the
     /// tree, walk the preserved folder's spine back open, then open the
@@ -819,7 +786,6 @@ struct RestorePaneView: View {
         }
         if let deepest { currentPath = deepest }
         guard !Task.isCancelled else { return }
-        // The routed folder is open: select it and bring it on screen.
         if let focus, deepest == focus {
             selection = [FileTree.id(of: focus)]
             revealPath = focus
@@ -1113,9 +1079,6 @@ private struct IncompleteSnapshotStrip: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// An item by name, why and where (`RunRecordPresentation.unreadableItemWords`);
-    /// restic's own line, which the tooltip keeps, where the run stored no
-    /// path.
     private func words(for line: String, in run: RunRecord) -> String {
         let sources = run.planID.flatMap { model.plan(id: $0) }.map { [$0.path] } ?? []
         guard let words = RunRecordPresentation.unreadableItemWords(line: line, path: run.unreadableItemPaths?[PathKey(line)], sources: sources)
@@ -1124,8 +1087,6 @@ private struct IncompleteSnapshotStrip: View {
     }
 }
 
-/// The tree rows' measured content width, written by the rows and read by
-/// the column header alone.
 @Observable
 @MainActor
 private final class RowContentWidth {
@@ -1138,7 +1099,6 @@ private final class RowContentWidth {
 /// tree.
 private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
-    /// What the Change column compares with (`RestoreRecordHeading.columnHelp`).
     let changeHelp: String?
     /// The tree shows before its diff is in: until then a blank Change
     /// cell means "not compared yet", which the spinner says.
@@ -1179,19 +1139,12 @@ private struct TreeColumnHeader: View {
     }
 }
 
-/// The keyboard grammar the restore pane's list speaks, and the parent step
-/// its go-up button takes.
 private enum BrowserListGrammar {
     /// The ⌫ key as `onKeyPress` delivers it: U+007F, what AppKit's Delete
     /// key types. SwiftUI's `KeyEquivalent.delete` is U+0008, which ⌫ never
     /// produces, so only this constant matches the key.
     static let deleteKey = KeyEquivalent("\u{7F}")
 
-    /// The lists' keyboard grammar. Everything unrecognised returns
-    /// `.ignored` so the List keeps its own arrow-key selection movement.
-    /// Return opens the selected directory through `open`; ⌫ and ⌘↑ ascend
-    /// through `goUp` when a parent exists (`hasParent`) — Finder's own
-    /// grammar.
     static func keyPress(
         _ press: KeyPress,
         selected: SnapshotNode?,

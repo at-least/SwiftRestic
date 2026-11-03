@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Repositories
-
     func repository(id: UUID?) -> Repository? { configuration.repository(id: id) }
 
     func upsert(repository: Repository, password: String?, providerSecret: String?) async {
@@ -198,9 +196,6 @@ extension AppModel {
         fileHistoryAnswers = fileHistoryAnswers.filter { $0.key.repositoryID != id }
     }
 
-    /// What this Mac holds for the repository, as the run path sees it: the
-    /// store's answer — the Keychain, or a capture run's environment
-    /// (`SecretStore.standard`).
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
         try await secrets.load(repositoryID)
     }
@@ -258,10 +253,8 @@ extension AppModel {
         }
     }
 
-    /// The read path's opener: the engine plus the repository's decrypted
-    /// context, assembled together. Callers keep their own
-    /// missing-repository guard, because each surface phrases that answer
-    /// its own way.
+    /// Callers keep their own missing-repository guard, because each
+    /// surface phrases that answer its own way.
     func resticContext(
         for repository: Repository
     ) async throws -> (service: any ResticClient, context: RepositoryContext) {
@@ -299,8 +292,6 @@ extension AppModel {
     }
 }
 
-/// Change Password's one failure after the change itself: restic took the
-/// new password, the Keychain did not.
 struct PasswordNotStored: LocalizedError {
     let repositoryName: String
     let reason: String

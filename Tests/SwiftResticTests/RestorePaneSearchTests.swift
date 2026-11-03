@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The Restore pane's search: the hits the open backup holds, and how many
-/// matches only other backups hold — the count that turns "No
-/// matches in this backup" from a dead end into a way on.
 @Suite("Restore pane search")
 struct RestorePaneSearchTests {
     private func hit(_ path: String, isDirectory: Bool = false) -> SearchHit {

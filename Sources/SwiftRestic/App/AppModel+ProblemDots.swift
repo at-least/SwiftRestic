@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Unseen-problem dots (the Mail grammar)
-
     /// The plan's newest problem run (failed or completed-with-errors) that
     /// still stands — no successful run has landed after it
     /// (`OverviewMetrics.isHealed`, the menu bar face's rule too). Seeing the
@@ -40,7 +38,6 @@ extension AppModel {
         unseenProblem(for: planID).map { "New problem — \($0.outcome.displayName)" }
     }
 
-    /// The standing problem behind the dot, while it is unseen.
     private func unseenProblem(for planID: UUID) -> RunRecord? {
         guard let problem = currentProblem(for: planID),
               problem.finishedAt > (problemsSeenAt[planID] ?? .distantPast)

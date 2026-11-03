@@ -1,9 +1,5 @@
 import Foundation
 
-/// Value types making up `AppModel`'s observable runtime state.
-
-/// Live state of one plan that is currently running.
-///
 /// Progress is not here: it lives in `AppModel.planProgress`, its own
 /// observable storage, so a once-a-second status tick invalidates only the
 /// views that show the numbers — not every view that reads which phase a
@@ -58,15 +54,11 @@ struct PlanActivity: Sendable, Equatable {
     var askedByUser = false
 }
 
-/// A plan waiting for its turn on a repository another plan's run holds
-/// (`AppModel.runBackups`).
 struct QueuedBackup: Sendable, Equatable {
     var planID: UUID
-    /// Handed to the run when it starts, as `PlanActivity.askedByUser`.
     var askedByUser: Bool
 }
 
-/// Live state of one repository's check or prune.
 struct MaintenanceActivity: Sendable, Equatable {
     var task: MaintenanceTask
     /// False for the scheduler's runs: a skip nobody asked for posts nothing.
@@ -79,13 +71,9 @@ struct MaintenanceActivity: Sendable, Equatable {
     var lastOutput: String?
 }
 
-/// A transient message shown above the detail pane.
 struct Banner: Identifiable, Equatable {
-    /// What the banner is, and so its glyph and colour — the status
-    /// palette's own (`StatusPalette`), so a colour means one thing app-wide:
-    /// a failure's red octagon, a warning's orange triangle (a run that
-    /// completed with warnings wears it in Activity and the sidebar), a
-    /// success's green check, news in the secondary colour.
+    /// The glyph and colour are the status palette's own (`StatusPalette`),
+    /// so a colour means one thing app-wide.
     enum Level: Equatable {
         case success
         /// News, neither good nor bad — a skipped run, an ask that waits.
@@ -95,8 +83,6 @@ struct Banner: Identifiable, Equatable {
         case error
     }
 
-    /// A button that opens a place outside the app — the notification
-    /// permission's pane in System Settings.
     struct Link: Equatable {
         var title: String
         var url: URL
@@ -131,8 +117,6 @@ struct Banner: Identifiable, Equatable {
         self.link = link
     }
 
-    /// The two-way form most posts use: an error, or a success — a notice
-    /// when it names its own glyph.
     init(title: String, message: String, isError: Bool, revealPaths: [String] = [], symbolName: String? = nil) {
         self.init(
             title: title,
@@ -150,14 +134,11 @@ struct Banner: Identifiable, Equatable {
     var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
 
-/// Which pane the detail column is showing — the sidebar's selection, or
-/// Find Files, which has no row.
 /// Lives beside the model because menu-bar commands must read it: a Plan
 /// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
 /// that lies.
 enum SidebarItem: Hashable {
     case plan(UUID)
-    /// The repository's page, which is also its overview.
     case repository(UUID)
     /// The page of one plan-UUID group under a repository's Other backups —
     /// a plan's history in this repository that none of its plans owns: a
@@ -194,7 +175,6 @@ extension SidebarItem {
         }
     }
 
-    /// The page of a group under `repositoryID`'s Other backups, either kind.
     static func otherGroup(repositoryID: UUID, id: OtherBackupsGroup.ID) -> SidebarItem {
         switch id {
         case let .plan(planID): .orphanPlan(repositoryID: repositoryID, planID: planID)
@@ -234,8 +214,6 @@ struct FileNode: Hashable, Sendable {
     var isRoots: Bool { path.isEmpty }
 }
 
-/// The last settled outcome of a repository's snapshot listing.
-///
 /// Not the in-flight state — `loadingSnapshots` owns that. A refresh that
 /// starts while a repository is in `failed` keeps the failure visible until
 /// it settles, so a background refresh cannot make the error row flicker

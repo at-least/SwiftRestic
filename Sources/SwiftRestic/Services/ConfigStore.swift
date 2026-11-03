@@ -1,6 +1,5 @@
 import Foundation
 
-/// App-wide preferences that are not tied to a single repository or plan.
 struct AppSettings: Codable, Sendable, Hashable {
     /// Explicit path to the restic binary; empty means "search the usual places".
     var resticPathOverride: String = ""
@@ -9,9 +8,7 @@ struct AppSettings: Codable, Sendable, Hashable {
     var notifyOnFailure: Bool = true
     /// The quiet-plan alert's threshold in days (`StaleAlert`); 0 is off.
     var staleAlertDays: Int = 7
-    /// How many run records to keep before the oldest are dropped.
     var maxRunHistory: Int = 300
-    /// Skip scheduled runs while on battery power.
     var pauseOnBattery: Bool = false
     /// Skip scheduled runs while the network is metered — one macOS reports
     /// as expensive or constrained.
@@ -19,9 +16,7 @@ struct AppSettings: Codable, Sendable, Hashable {
     /// The tray's Pause Backups, while it holds: every scheduled backup,
     /// check and prune waits. `nil` when nothing is paused.
     var schedulePause: SchedulePause?
-    /// Webhook, chat and dead-man's-switch destinations.
     var notificationChannels: [NotificationChannel] = []
-    /// The network shares reconnected before a backup that needs them.
     var networkShares: [NetworkShare] = []
     /// The console's last commands, newest first. Persisted so a command
     /// that worked survives closing the sheet.
@@ -52,7 +47,6 @@ struct AppSettings: Codable, Sendable, Hashable {
     }
 }
 
-/// Everything the app persists, in one document.
 struct AppConfiguration: Codable, Sendable {
     var repositories: [Repository] = []
     var plans: [BackupPlan] = []
@@ -196,8 +190,6 @@ struct LoadedConfiguration: Sendable {
     var decodeNotes: [String]
 }
 
-/// Reads and writes `config.json` under Application Support.
-///
 /// Writes are atomic and serialised through the actor, so a crash mid-save
 /// cannot leave a half-written configuration behind. The two previous
 /// generations are kept alongside (`config.json.1`, `config.json.2`): the
@@ -303,10 +295,6 @@ actor ConfigStore {
         }
     }
 
-    // MARK: - Reading
-
-    /// Why the configuration could not be read at all — every generation
-    /// tried and failed.
     enum ConfigError: LocalizedError {
         case unreadable(detail: String)
 
@@ -318,8 +306,6 @@ actor ConfigStore {
         }
     }
 
-    /// Decodes one generation, collecting what tolerant decoding substituted
-    /// along the way.
     private static func read(from url: URL) throws -> (AppConfiguration, [String]) {
         let (configuration, notes) = try decoded(Data(contentsOf: url))
         return (configuration, notes.notes)

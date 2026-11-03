@@ -1,14 +1,11 @@
 import Foundation
 
-/// Runs a plan's or a repository's shell hooks.
-///
 /// Commands go through `/bin/sh -c` with the surrounding run's facts exported as
 /// `SWIFTRESTIC_*` variables. They run with the home directory as their working
 /// directory — a GUI app's inherited cwd is `/`, and a hook's relative paths
 /// should never depend on how the app was launched. They inherit the app's own
 /// privileges, which are not sandboxed — the plan editor's hook field says so.
 struct HookRunner: Sendable {
-    /// What a hook is told about the run that triggered it.
     struct Context: Sendable {
         var event: BackupHook.Event
         var planName: String = ""
@@ -70,8 +67,6 @@ struct HookRunner: Sendable {
         /// whole to ask for help.
         var logLine: String { verdict(withDetail: false) }
 
-        /// The verdict both strings spell, `withDetail` adding the hook's
-        /// first output line for the persisted summary.
         private func verdict(withDetail: Bool) -> String {
             let base = "Hook “\(hookName)”"
             if cancelled { return "\(base) was cancelled before it finished." }
@@ -91,7 +86,7 @@ struct HookRunner: Sendable {
 
     let runner: ResticRunner
 
-    /// Runs one hook to completion. Never throws for a non-zero exit: the caller
+    /// Never throws for a non-zero exit: the caller
     /// decides what a failing hook means.
     ///
     /// Shielded from the run's transcript, which would otherwise record the
@@ -148,12 +143,9 @@ struct HookRunner: Sendable {
         }
     }
 
-    /// Runs every enabled hook for an event, in the order the user arranged
+    /// In the order the user arranged
     /// them. Stops at the first hook to ask for an abort — or at a
     /// cancellation of the surrounding run, which is nobody's verdict.
-    ///
-    /// - Returns: the outcomes, whether one of them asked to abort, and
-    ///   whether the run was cancelled mid-hook.
     func runHooks(
         _ hooks: [BackupHook],
         event: BackupHook.Event,

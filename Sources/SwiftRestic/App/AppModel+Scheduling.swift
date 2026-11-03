@@ -3,8 +3,6 @@ import Foundation
 import Network
 
 extension AppModel {
-    // MARK: - Scheduling
-
     func startScheduler() {
         schedulerTask?.cancel()
         schedulerTask = Task { [weak self] in
@@ -112,8 +110,6 @@ extension AppModel {
         return await Task.detached(priority: .utility) { PowerState.isOnBattery }.value
     }
 
-    /// What holds every scheduled run back right now, if anything — the one
-    /// answer the tray, a repository's page, Settings and the plan page show.
     var scheduleHold: ScheduleHold? {
         scheduleHold(now: .now)
     }
@@ -162,8 +158,6 @@ extension AppModel {
         }
     }
 
-    /// The mount's catch-up (`Scheduler.catchUpAfterMount`): only while
-    /// nothing holds the schedule and restic is there, as for the tick.
     func runSkippedPlansAfterMount(now: Date = .now) async {
         guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
@@ -228,11 +222,6 @@ extension AppModel {
         networkMonitor = monitor
     }
 
-    /// The network changed and is up — another Wi-Fi, a cable, a VPN, back
-    /// online — so a server out of reach may answer now: upkeep waiting for
-    /// one may run, network repositories whose listing failed are read
-    /// again (each probing its server first), and plans whose newest backup
-    /// was skipped run again, as a mount brings back a drive's.
     func networkPathChanged() async {
         guard !isShuttingDown else { return }
         maintenanceAwaitingServer.removeAll()
@@ -279,8 +268,6 @@ extension AppModel {
         }
     }
 
-    /// The soonest run the scheduler will actually start: a timed hold moves
-    /// every date to its end.
     var nextScheduledRun: (plan: BackupPlan, date: Date)? {
         Scheduler.nextScheduledRun(
             in: configuration.plans,

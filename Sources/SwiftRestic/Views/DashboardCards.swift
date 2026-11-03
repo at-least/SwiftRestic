@@ -6,8 +6,6 @@ import SwiftUI
 // questions are asked. No charts or tiles: sizes live in the Details card,
 // history in Activity.
 
-// MARK: - Protection
-
 /// The repository page's Protection card: one line — how many of the
 /// repository's plans are protected, a run in flight, when its newest
 /// backup landed, and, while one is on, the app-wide hold's words with a
@@ -82,8 +80,6 @@ struct ProtectionCard: View {
         }
     }
 }
-
-// MARK: - Other backups
 
 /// The repository page's Other backups card — the adopt flow's landing place,
 /// for a repository added with history already in it: one row per adoptable
@@ -174,8 +170,6 @@ struct OtherBackupsCard: View {
     }
 }
 
-// MARK: - Recent problems
-
 /// The week's failed and completed-with-errors runs — the same window the
 /// sidebar's Activity badge and the menu bar count — one row per plan and
 /// outcome with its count (`OverviewMetrics.problemGroups`), and what five
@@ -186,7 +180,6 @@ struct RecentProblemsCard: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
 
-    /// Every run against this repository, of every kind.
     let repositoryID: UUID
 
     var body: some View {
@@ -264,13 +257,11 @@ struct RecentProblemsCard: View {
         }
     }
 
-    /// Activity with that run selected.
     private func showInActivity(_ run: RunRecord) {
         router.focusRun(run.id)
     }
 }
 
-/// The trailing mark of a row that goes somewhere.
 struct RowChevron: View {
     var body: some View {
         Image(systemName: "chevron.forward")

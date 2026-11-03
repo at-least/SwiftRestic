@@ -299,7 +299,6 @@ enum OverviewMetrics {
             .sorted { $0.severityRank < $1.severityRank }
     }
 
-    /// A plan's row as its snapshot listing alone tells it.
     private static func listingRow(
         plan: BackupPlan,
         among plans: [BackupPlan],
@@ -321,7 +320,6 @@ enum OverviewMetrics {
         switch listingOutcome(repositoryID) {
         case .loaded:
             let line: String
-            // The moment the line above counts from, when it counts one.
             var moment: Date?
             if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshot: latest) {
                 // The sidebar's words and formatter, and the one moment

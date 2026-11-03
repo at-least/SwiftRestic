@@ -31,7 +31,6 @@ enum LoginItem {
     private static let awaitingApproval = "Waiting for approval"
     static let needsApprovalShort = awaitingApproval + "."
 
-    /// What to tell the user about a state.
     static func description(of state: LoginItemState) -> String {
         switch state {
         case .enabled: "SwiftRestic will start at login."
@@ -69,7 +68,6 @@ enum LoginItem {
         }
     }
 
-    /// Opens the pane where the user can approve or remove the login item.
     @MainActor
     static func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()

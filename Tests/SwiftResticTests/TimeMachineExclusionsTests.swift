@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// The items Time Machine's options list, as a backup of a plan's folder
-/// takes them.
 @Suite("Time Machine exclusions")
 struct TimeMachineExclusionsTests {
     /// A scratch folder spelled as FileManager hands it out — under

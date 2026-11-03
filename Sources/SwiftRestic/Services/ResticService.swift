@@ -1,7 +1,5 @@
 import Foundation
 
-/// Everything one restic command needs to reach a repository: the location, the
-/// password and any backend credentials.
 struct RepositoryContext: Sendable {
     var repository: Repository
     var password: String
@@ -37,8 +35,6 @@ struct RepositoryContext: Sendable {
             .sorted()
     }
 
-    /// Flags that apply to every command, not just one: the repository's
-    /// own rate limits.
     var globalArguments: [String] {
         var args: [String] = []
         if repository.uploadLimitKiBps > 0 {
@@ -51,7 +47,6 @@ struct RepositoryContext: Sendable {
     }
 }
 
-/// Live progress of a running backup or restore.
 struct OperationProgress: Sendable, Equatable {
     var fraction: Double = 0
     var filesDone: Int = 0
@@ -74,7 +69,6 @@ struct OperationProgress: Sendable, Equatable {
     }
 }
 
-/// The result of one `restic backup`.
 struct BackupOutcome: Sendable {
     var summary: ResticSummary?
     /// restic's unreadable items, one line per item — skipped sources first,
@@ -98,7 +92,6 @@ struct BackupOutcome: Sendable {
     }
 }
 
-/// The typed restic commands the app uses, layered over `ResticRunner`.
 struct ResticService: ResticClient {
     /// Stall cap for commands that stream NDJSON while they work (`backup`,
     /// `restore`, the index walks): total silence for this long means the
@@ -150,8 +143,6 @@ struct ResticService: ResticClient {
         return String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }()
 
-    /// Every repository command: the repository's global flags lead
-    /// `invocation`'s arguments, and its environment is the run's.
     private func run(
         _ context: RepositoryContext,
         _ invocation: ResticInvocation,
@@ -163,8 +154,6 @@ struct ResticService: ResticClient {
         invocation.environment = context.environment
         return try await runner.run(binary: binary, invocation: invocation, onMessage: onMessage, onRawLine: onRawLine)
     }
-
-    // MARK: - Repository lifecycle
 
     func version() async throws -> String {
         let result = try await runner.run(
@@ -320,8 +309,6 @@ struct ResticService: ResticClient {
         return ResticRunner.tail(of: combined, limit: 4000)
     }
 
-    /// Runs an arbitrary restic command, returning stdout and stderr together.
-    ///
     /// Any exit code is returned rather than thrown: the console shows whatever
     /// restic said, including its complaints.
     func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {
@@ -344,8 +331,6 @@ struct ResticService: ResticClient {
         }
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
-    // MARK: - Snapshots
 
     /// Lock-free, for `find`'s reasons.
     func snapshots(
@@ -633,8 +618,6 @@ struct ResticService: ResticClient {
         return count
     }
 
-    // MARK: - Backup
-
     /// Whether the anchored `pattern` names `source` or a folder above it,
     /// component by component, `*` within one — as the rules the app offers
     /// are drawn. Passed, it would leave nothing to back up: the startup
@@ -659,8 +642,6 @@ struct ResticService: ResticClient {
         var args = ["backup", "--json"]
         let source = Self.expandTilde(plan.path, home: home)
         args.append(source)
-        // The switches' rules and the plan's own patterns
-        // (`BackupPlan.excludesToPass`).
         for pattern in Self.passedExcludes(plan.excludesToPass, source: source, home: home) {
             args += ["--exclude", pattern]
         }
@@ -692,7 +673,6 @@ struct ResticService: ResticClient {
             context,
             ResticInvocation(
                 arguments: args,
-                // 3 = finished, but some source files were unreadable.
                 allowedExitCodes: [0, ResticError.backupPartialSuccessCode],
                 idleTimeout: Self.streamingIdleTimeout
             ),
@@ -871,9 +851,6 @@ struct ResticService: ResticClient {
         }
     }
 
-    // MARK: - Restore
-
-    /// How a single file's staged restore was placed.
     enum StagedFileCommit: Equatable {
         case committed
         /// No-replace only: the target was taken, and the staged output
@@ -1119,10 +1096,6 @@ struct ResticService: ResticClient {
         return result.summary
     }
 
-    // MARK: - Helpers
-
-    /// The message-to-progress adapter the streaming commands share: restic's
-    /// periodic `status` lines become `OperationProgress` callbacks.
     private static func progressHandler(
         _ onProgress: (@Sendable (OperationProgress) -> Void)?
     ) -> @Sendable (ResticMessage) -> Void {
@@ -1133,8 +1106,6 @@ struct ResticService: ResticClient {
         }
     }
 
-    /// Gathers `diff` output as it streams, off the main actor, keeping only the
-    /// first `limit` changes.
     private final class DiffCollector: @unchecked Sendable {
         private let lock = NSLock()
         private let limit: Int

@@ -2,8 +2,6 @@ import AppKit
 import Foundation
 
 extension AppModel {
-    // MARK: - Full Disk Access
-
     /// Probes the grant again, off the main actor (the first TCC-checked
     /// open is a round trip to tccd), and writes the answer only when it
     /// changed, so an activation that finds nothing new re-renders nothing.

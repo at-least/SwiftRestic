@@ -1,11 +1,6 @@
 import Foundation
 import Testing
 
-/// A backup whose every folder is missing — a drive not plugged in — is
-/// recorded as skipped: its reason names the drive, it carries no numbers,
-/// and when a volume comes back the plan runs again without waiting for
-/// its next slot. Online-only cloud files are left out by new plans, with
-/// a restic that can.
 @Suite("Skipped runs and cloud files")
 struct SkippedRunTests {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
@@ -178,13 +173,11 @@ struct SkippedRunTests {
         run.exitCode = 3
         run.detailText = "“Archive SSD” is not connected; the other folders were backed up."
         #expect(RunRecordPresentation.detail(for: run) == "“Archive SSD” is not connected; the other folders were backed up.")
-        // Copy Details carries the reason and the numbers.
         let details = RunRecordPresentation.detailsText(
             for: run, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")
         )
         #expect(details.contains("Skipped: “Archive SSD” is not connected; the other folders were backed up."))
         #expect(details.contains("Files: 2 new"))
-        // So does the run's log.
         let log = RunLog.render(
             record: run, repositoryName: "Home NAS", repositoryKind: nil,
             versions: RunLogVersions.current(resticVersion: ""), transcript: RunTranscript.Contents(),

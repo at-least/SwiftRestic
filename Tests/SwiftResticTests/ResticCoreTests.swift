@@ -44,7 +44,6 @@ struct ResticErrorTests {
             message: "Fatal: repository is locked"
         ).errorDescription == "The repository is locked — if no other Mac is using it, unlock it. restic reported: Fatal: repository is locked")
 
-        // Other known codes: explanation and restic's words, both there.
         let known = ResticError.commandFailed(
             exitCode: 3,
             message: "warning: at least one source file could not be read"
@@ -52,14 +51,12 @@ struct ResticErrorTests {
         #expect(known.contains("some data could not be read"))
         #expect(known.contains("warning: at least one source file could not be read"))
 
-        // Known code, no JSON message: the explanation is all there is.
         let bare = ResticError.commandFailed(
             exitCode: 130,
             message: ""
         ).errorDescription ?? ""
         #expect(bare == "restic was interrupted")
 
-        // Unknown code: restic's words verbatim, no invented explanation.
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "disk on fire")
                 .errorDescription == "disk on fire"
@@ -88,7 +85,6 @@ struct ResticErrorTests {
             )
         }
 
-        // A server this Mac has never connected to.
         let unknown = result(["Host key verification failed."])
         #expect(unknown.failureMessage == fatal + "\nsubprocess ssh: Host key verification failed.")
         // A server whose key changed: ssh's banner runs to a dozen lines;
@@ -106,7 +102,6 @@ struct ResticErrorTests {
             + "\nsubprocess ssh: Offending ED25519 key in /Users/me/.ssh/known_hosts:1"
             + "\nsubprocess ssh: Host key for nas has changed and you have requested strict checking."
             + "\nsubprocess ssh: Host key verification failed.")
-        // Nothing from a subprocess: restic's fatal line alone, as before.
         #expect(result([]).failureMessage == fatal)
 
         let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
@@ -116,7 +111,6 @@ struct ResticErrorTests {
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
-        // Any other fatal error is restic's words alone.
         #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
     }
 
@@ -163,12 +157,10 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(exitCode: 1, message: waited).errorDescription
             == "rclone did not answer within a minute — its remote may be unreachable. restic reported: \(waited)")
 
-        // No rclone to run: the repository editor's own words.
         let missing = "Fatal: unable to open repository at rclone:sftp:backups/restic: exec: \"rclone\": executable file not found in $PATH"
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
         #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with brew install rclone.")
 
-        // Any other fatal error is restic's words alone.
         #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
     }
 
@@ -410,7 +402,6 @@ struct RawLineStreamingTests {
         // stdout and stderr interleave, so compare as a set.
         #expect(Set(collector.lines) == ["packing 12 packs", "not json either", "{\"message_type\":\"summary\"}", "done"])
         #expect(collector.lines.count == 4)
-        // The decoded path is unaffected: the summary line still arrives as a message.
         #expect(result.summary != nil)
     }
 
@@ -486,7 +477,6 @@ struct PasswordPrecedenceTests {
         #expect(env["RESTIC_PASSWORD_FILE"] == nil)
         #expect(env["RESTIC_REPOSITORY_FILE"] == nil)
         #expect(env["RESTIC_HOST"] == nil)
-        // A non-reserved entry passes through untouched.
         #expect(env["TAG"] == "innocent")
     }
 
@@ -502,7 +492,6 @@ struct PasswordPrecedenceTests {
 
         #expect(context.environment["RESTIC_REPOSITORY"] == "sftp:nas.local:/volume1/restic")
 
-        // A repository with a real location still wins over the extra entry.
         repository.localPath = "/Volumes/Backup"
         #expect(
             RepositoryContext(repository: repository, password: "stored-password")
@@ -543,8 +532,6 @@ struct RateLimitTests {
 
 /// The commit a single file's restore ends with: restic restores the file
 /// into a hidden folder beside its landing, and this moves it into place.
-/// A failed, a cancelled and a kept restore are tested through the restore
-/// itself, in "restic runner fault paths".
 @Suite("Staged file commit")
 struct StagedFileCommitTests {
     private func makeDirectory() throws -> URL {
@@ -703,7 +690,6 @@ struct UnreadableItemsTests {
             "/y cannot be accessed, skipping": "/y",
             "/src/a.pdf: open /src/a.pdf: permission denied": "/src/a.pdf",
         ])
-        // An event without an item names no path.
         let itemless = try errors([#"{"message_type":"error","error":{"message":"walk failed"}}"#])
         #expect(ResticService.unreadableItemPaths(errors: itemless, stderr: "") == [:])
 

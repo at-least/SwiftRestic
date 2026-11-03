@@ -1,10 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Maintenance
-
-    /// Repositories that must not be given more work right now.
-    ///
     /// `prune` takes an exclusive lock and `backup` a shared one, so anything
     /// already touching a repository — a plan or an upkeep job — makes the whole
     /// repository off limits, not just that one plan.
@@ -41,7 +37,6 @@ extension AppModel {
         return reasons
     }
 
-    /// The fix a failed run offers here and now (`RunRecordPresentation.fix`).
     func fix(for run: RunRecord) -> RunFix? {
         let repository = repository(id: run.repositoryID)
         return RunRecordPresentation.fix(
@@ -53,13 +48,12 @@ extension AppModel {
         )
     }
 
-    /// Why `plan`'s Back Up Now waits, or nil when it may start.
     func backupLockReason(for plan: BackupPlan) -> String? {
         plan.repositoryID.flatMap { lockedRepositories[$0] }
     }
 
-    /// Starts a `check` or `prune`. `readDataPercent` lets the UI run a
-    /// deeper check than the repository's own policy asks for.
+    /// `readDataPercent` lets the UI run a deeper check than the
+    /// repository's own policy asks for.
     func runMaintenance(
         repositoryID: UUID,
         task: MaintenanceTask,
@@ -97,10 +91,9 @@ extension AppModel {
         reconcileSleepAssertion()
     }
 
-    /// Retires a maintenance job's run — its registry slot, run token and
-    /// strip — however the job ended. Every piece of per-run bookkeeping
-    /// leaves together, `unwindPlanRun(_:)`'s rule, so the copies cannot
-    /// drift. Call only from the job's own task: `clear` while a cancelled
+    /// Every piece of per-run bookkeeping leaves together,
+    /// `unwindPlanRun(_:)`'s rule, so the copies cannot drift. Call only
+    /// from the job's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
     /// `tasks.drain()` would no longer wait for its record.
     func unwindMaintenanceRun(_ repositoryID: UUID) {
@@ -152,8 +145,6 @@ extension AppModel {
     }
 }
 
-// MARK: - The maintenance engine's view of the model
-
 extension AppModel: MaintenanceRunEngine.Sink {
     func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
         let token = maintenanceRunTokens[repositoryID]
@@ -187,10 +178,8 @@ extension AppModel: MaintenanceRunEngine.Sink {
         maintenanceAwaitingDrive.insert(repositoryID)
     }
 
-    /// Stores a finished maintenance run with its log, announces a skip
-    /// the user asked for, and notifies the external channels. A failure —
-    /// a check that found errors is one where hooks are concerned — posts
-    /// no banner: the repository page's Last check or Last cleanup, its
+    /// A failure — a check that found errors is one where hooks are
+    /// concerned — posts no banner: the repository page's Last check or Last cleanup, its
     /// Recent problems and Activity's badge say it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record

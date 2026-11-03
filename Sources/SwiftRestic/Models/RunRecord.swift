@@ -1,13 +1,11 @@
 import Foundation
 
-/// The stored outcome of one backup, check, prune or restore run.
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
         case backup, forget, check, prune, restore
         /// Remove from Earlier Backups: `restic rewrite --forget`.
         case rewrite
 
-        /// The operation's word in titles and rows: "Backup", "Check", …
         /// A forget is "Retention", the word every other surface uses for it
         /// (the plan page's row, Apply Retention Now, "Retention skipped");
         /// a prune is the maintenance task's own word.
@@ -122,14 +120,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// again" from "macOS protects these anyway". Backups only; nil on
     /// records from before it was stamped.
     var fullDiskAccessAtRun: FullDiskAccessStatus?
-    /// Results of failing hooks.
-    ///
     /// Kept apart from `itemErrors`: a hook is an arbitrary user script and
     /// its output can contain anything it printed — a verbose `curl` echoes
     /// its own `Authorization` header. These stay local and are never sent
     /// to a webhook or chat channel.
     var hookMessages: [String] = []
-    /// Fatal error text, when `outcome == .failed`.
     var failureMessage: String?
     /// A plain-text result: the tail of what `prune` printed (it has no JSON
     /// output in restic 0.19.1, so this is the only record of what it did; the drawer shows
@@ -302,8 +297,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 }
 
 extension RunRecord {
-    /// How many item-error lines a record stores; `itemErrorCount` keeps the
-    /// real total past it.
     static let storedItemErrorLimit = 50
 
     /// An item-error line as stored and shown: without trailing whitespace.
@@ -405,9 +398,6 @@ extension RunRecord {
         return map
     }
 
-    /// `runs` with each snapshot of `listing` that `restic rewrite` made from
-    /// a run's snapshot recorded on that run (`rewrittenSnapshotIDs`); nil
-    /// when the listing names no new one.
     static func adoptingRewrites(_ runs: [RunRecord], listing: [Snapshot]) -> [RunRecord]? {
         var map = backupRunsBySnapshot(runs)
         var runs = runs
@@ -446,9 +436,6 @@ extension RunRecord {
         return drives + "." + reconnectClauses(reconnectFailures, sources: sources)
     }
 
-    /// " Reconnecting “NAS” failed: the server could not be reached." for
-    /// each drive of `sources` whose share failed, in the order they name
-    /// them; empty when none did.
     private static func reconnectClauses(_ failures: [String: String], sources: [String]) -> String {
         let volumes = BackupPlan.withoutDuplicates(volumeNames(sources).compactMap { $0 })
         return volumes.compactMap { volume in failures[volume].map { " Reconnecting “\(volume)” failed: \($0)." } }.joined()
@@ -507,8 +494,6 @@ extension RunRecord {
         kind == .backup && outcome == .skipped && snapshotID != nil
     }
 
-    /// "“Archive SSD” is not connected", naming each drive once, or nil
-    /// when a source is not on a volume under /Volumes.
     static func notConnected(_ sources: [String]) -> String? {
         let found = volumeNames(sources)
         guard !found.isEmpty, !found.contains(nil) else { return nil }
@@ -520,8 +505,6 @@ extension RunRecord {
         sources.map { VolumePresence.volumeName(of: ResticService.expandTilde($0)) }
     }
 
-    /// Both backups of one plan into one repository, `previous` carrying no
-    /// hook's complaint — what either continuation requires first.
     private func continuesPlanBackup(_ previous: RunRecord) -> Bool {
         kind == .backup && previous.kind == .backup
             && planID != nil && previous.planID == planID && previous.repositoryID == repositoryID
@@ -567,14 +550,12 @@ extension RunRecord {
 }
 
 extension RunRecord {
-    /// A backup run of the plan `planID` names.
     func isBackup(ofPlan planID: UUID?) -> Bool {
         kind == .backup && self.planID == planID
     }
 }
 
 extension RunRecord {
-    /// A finished Remove from Earlier Backups, as its record says it.
     static func rewriteSummary(items: Int, backups: Int) -> String {
         guard backups > 0 else { return "No backup held \(items == 1 ? "it" : "them")." }
         return "Removed \(Format.plural(items, "item")) from \(Format.plural(backups, "backup")). The space is freed at the next cleanup."

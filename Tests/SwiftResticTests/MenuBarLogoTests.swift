@@ -13,13 +13,10 @@ struct MenuBarLogoTests {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let firstPhase = MenuBarLogo.phase(at: start)
 
-        // Inside one frame's hold time, the phase does not move.
         #expect(MenuBarLogo.phase(at: start.addingTimeInterval(MenuBarLogo.frameInterval * 0.5)) == firstPhase)
 
-        // Past it, the frame has advanced — and with two frames, to the other one.
         #expect(MenuBarLogo.phase(at: start.addingTimeInterval(MenuBarLogo.frameInterval * 1.1)) != firstPhase)
 
-        // A full two-frame cycle later, the pulse is back where it started.
         #expect(MenuBarLogo.phase(at: start.addingTimeInterval(MenuBarLogo.frameInterval * 2)) == firstPhase)
     }
 
@@ -79,7 +76,6 @@ struct MenuBarLogoTests {
         #expect(abs(attentionExtent.height - restingExtent.height) < 0.5)
     }
 
-    /// The drawing's bounding box in points, from opaque pixels.
     private func inkExtent(_ rep: NSBitmapImageRep, canvas: CGFloat) throws -> CGRect {
         var minX = Int.max, minY = Int.max, maxX = -1, maxY = -1
         for y in 0..<rep.pixelsHigh {

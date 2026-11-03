@@ -21,10 +21,8 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     /// The slice the next scheduled check reads, 1 … `checkDataSlices`.
     var nextCheckDataSlice: Int = 1
 
-    /// The scheduled check's depth, as the editor offers it.
     enum CheckDepth: Hashable, Sendable {
         case structure
-        /// The data in `rotatingSlices` slices, one per check.
         case rotating
         case percent(Int)
     }
@@ -45,8 +43,6 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
         }
     }
 
-    /// What a scheduled check reads besides the structure: the rotation's
-    /// next slice, a percentage, or nothing.
     var scheduledDataSubset: CheckDataSubset? {
         if checkDataSlices > 0 { return .slice(min(max(1, nextCheckDataSlice), checkDataSlices), of: checkDataSlices) }
         return checkReadDataPercent > 0 ? .percent(checkReadDataPercent) : nil
@@ -70,10 +66,8 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     var pruneEnabled: Bool = false
     var pruneIntervalDays: Int = 30
 
-    /// What the editor gives a new repository: prune on, every 30 days, the
-    /// first one 30 days after the repository is added — retention runs
-    /// after every backup, and only a prune frees what it removed — and its
-    /// kind's check depth. A repository saved before keeps its own settings.
+    /// Prune on: retention runs after every backup, and only a prune frees
+    /// what it removed. A repository saved before keeps its own settings.
     static func forNewRepository(kind: Repository.Kind) -> MaintenancePolicy {
         var policy = MaintenancePolicy()
         policy.pruneEnabled = true
@@ -99,8 +93,6 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
         lastPruneAt = c.optional(.lastPruneAt)
     }
 
-    /// When the given task next falls due.
-    ///
     /// A repository that has never had the task run counts from when it was
     /// added, not from now — otherwise adding a repository would immediately
     /// kick off a check or a long prune.
@@ -133,7 +125,6 @@ enum CheckDataSubset: Equatable, Sendable {
         }
     }
 
-    /// What the check read, in the repository page's words.
     var words: String {
         switch self {
         case .percent(100): "all of the data"
@@ -143,9 +134,8 @@ enum CheckDataSubset: Equatable, Sendable {
     }
 }
 
-/// The upkeep operations the scheduler can start.
 enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
-    /// Reclaims space. Takes an exclusive lock and can run for a long time, so it
+    /// Takes an exclusive lock and can run for a long time, so it
     /// is ordered ahead of `check` when both fall due at once.
     case prune
     case check
@@ -157,7 +147,6 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
         }
     }
 
-    /// The status line while it runs.
     var inFlightTitle: String {
         switch self {
         case .prune: "Cleaning up…"

@@ -1,9 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Banners
-
-    /// A maintenance job or retention asked for while the repository is in use.
     func postBusyBanner(for repository: Repository) {
         post(Banner(
             title: "“\(label(of: repository))” is busy",

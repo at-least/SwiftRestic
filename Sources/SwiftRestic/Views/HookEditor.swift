@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// The Hooks tab of the plan and repository editors: a list of hooks with a
-/// form for the selected one.
-///
 /// `events` limits which events can be chosen — a plan offers the backup events,
 /// a repository the check-and-prune ones — so a hook cannot be attached to an
 /// event that will never fire where it lives.

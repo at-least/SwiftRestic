@@ -1,12 +1,6 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Card
-
-/// Titled card container, the visual unit of the dashboard and detail
-/// panes: an opaque control-coloured plate with a hairline border and a
-/// headline row, optionally carrying a trailing accessory (segmented
-/// pickers, refresh buttons).
 struct Card<Accessory: View, Content: View>: View {
     var title: LocalizedStringKey
     @ViewBuilder var accessory: () -> Accessory
@@ -36,8 +30,6 @@ struct Card<Accessory: View, Content: View>: View {
         .cardSurface()
     }
 }
-
-// MARK: - Sheet tabs
 
 /// An editor sheet's tabs: a segmented picker over the chosen pane, where a
 /// SwiftUI `TabView` would be an `NSTabView`. That one sizes its tab control
@@ -91,11 +83,8 @@ struct SheetTabs<Tab: Hashable, Pane: View>: View {
     }
 }
 
-// MARK: - Banner
-
-/// Dismissible message strip shown above a detail pane. Banners built in
-/// place (rather than posted to the queue) have nothing to dismiss, so they
-/// hide the close button.
+/// Banners built in place (rather than posted to the queue) have nothing to
+/// dismiss, so they hide the close button.
 ///
 /// Banners keep their icons by rule, where run lists and tiles drop theirs:
 /// a banner is action feedback — success ones dismiss themselves within
@@ -205,10 +194,6 @@ struct BannerView: View {
     }
 }
 
-// MARK: - Stat tile
-
-/// One figure: a caption above a large rounded numeral, on its own card
-/// plate. The compare sheet's statistics are its one use.
 struct StatTile: View {
     let title: String
     let value: String
@@ -270,8 +255,6 @@ struct HoverableButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Removed names
-
 /// A "Deleted:" line — or "Not read:", for what the backup's own run could
 /// not read — whose names are routes: each opens the item's versions at
 /// the backup before, which still holds it — the incomplete strip's
@@ -280,9 +263,7 @@ struct HoverableButtonStyle: ButtonStyle {
 /// would cover the names'.
 struct RemovedNamesLine: View {
     let names: RemovedNames
-    /// Every removed path or name, for the words around the names.
     let help: String
-    /// When the backup before was made, for the names' tooltips.
     let before: Date
     /// Opens a name's versions; nil where there is no Files tab to open
     /// them on (a group's backups under Other backups), and the names are
@@ -328,8 +309,6 @@ struct RemovedNamesLine: View {
     }
 }
 
-// MARK: - Network shares
-
 /// A repository's folder or a plan's folder on a network share: which
 /// share, and the password SwiftRestic reconnects it with before a backup
 /// when it is not mounted (`NetworkShare`). Rows, so a Form lays them out
@@ -365,10 +344,6 @@ struct NetworkSharePasswordRows: View {
     }
 }
 
-// MARK: - Detail rows
-
-/// A label/value row inside an information card.
-///
 /// `LabeledContent` only aligns its two columns inside a `Form`; dropped into a
 /// plain card it renders the value hard against the label, which reads as a
 /// typo. These rows go in a `Grid` so the values line up in a column.
@@ -400,7 +375,6 @@ extension DetailRow where Value == Text {
     }
 }
 
-/// Container for `DetailRow`s.
 struct DetailGrid<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
@@ -411,13 +385,10 @@ struct DetailGrid<Content: View>: View {
     }
 }
 
-// MARK: - Expandable caption
-
 /// A form caption whose teaching text sits behind an info button: the
 /// summary line is always visible, the rest for whoever wants it — the
 /// same on-demand depth the app gives hook variables and diff metadata.
 struct ExpandableCaption: View {
-    /// The always-visible line.
     let summary: String
     /// What reveals on demand; written to read continuously after the summary.
     let detail: String
@@ -461,10 +432,6 @@ struct ExpandableCaption: View {
     }
 }
 
-// MARK: - Operation progress
-
-/// Live progress of a running backup or restore, on its own card plate with a
-/// tinted bar.
 struct OperationProgressView: View {
     let title: String
     let progress: OperationProgress
@@ -537,8 +504,6 @@ struct OperationProgressView: View {
     }
 }
 
-// MARK: - Restore progress strip
-
 /// The restore strip: while a restore runs, its progress is a fact above
 /// whatever surface is on screen, wired to the model's cancel. A restore
 /// outlives the pane that started it, so the strip's home is the window's
@@ -569,8 +534,6 @@ struct RestoreProgressStrip: View {
         return model.restoreDescription
     }
 }
-
-// MARK: - Snapshot listing outcome
 
 /// Orange on the glyph only, the words secondary — the contrast rule the
 /// sidebar's captions follow.
@@ -616,8 +579,6 @@ struct RetentionPreviewStatus: View {
     }
 }
 
-/// A pane that could not load: what failed, and restic's or the system's
-/// words, selectable for copying.
 struct FailureUnavailableView: View {
     let title: LocalizedStringKey
     let message: String
@@ -662,8 +623,6 @@ struct SnapshotListingCaveat: View {
     }
 }
 
-// MARK: - Snapshot completeness
-
 /// A snapshot's completeness, where snapshots are named (a page's
 /// Backups tab, Activity's run drawer). Only trouble wears a glyph — the rule
 /// Activity's outcome column follows — and it is the completed-with-errors
@@ -705,12 +664,7 @@ struct SnapshotCompletenessMark: View {
     }
 }
 
-// MARK: - Snapshot browser chrome
-
-/// The chrome the snapshot browsers share — one icon map, one keyboard
-/// grammar, one ascent step, one row.
 extension SnapshotNode {
-    /// The list glyph for a node's kind.
     var browserIconName: String {
         switch type {
         case .dir: "folder.fill"
@@ -767,8 +721,6 @@ struct SnapshotNodeRow: View {
     }
 }
 
-// MARK: - Path list editor
-
 /// A list of paths with add/remove buttons: a plan's exclude patterns. A row
 /// is edited in place, as Finder renames: double-click or Return on it, or
 /// Edit in its menu; Return or a click away keeps the edit, Escape drops it.
@@ -777,11 +729,9 @@ struct SnapshotNodeRow: View {
 /// the clipboard, and an NSOpenPanel per entry is the app's biggest
 /// efficiency tax.
 struct PathListEditor: View {
-    /// The field's accessibility label.
     let title: String
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    /// Choose items's panel: what it asks for and its button.
     var browseMessage = "Choose folders and files to leave out of backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
@@ -831,7 +781,6 @@ struct PathListEditor: View {
                     }
                 }
             }
-            // primaryAction: a double-click or Return on a row.
             .contextMenu(forSelectionType: String.self) { items in
                 if items.count == 1, let path = items.first {
                     Button("Edit") { startEditing(path) }
@@ -956,8 +905,6 @@ struct PathListEditor: View {
     }
 }
 
-// MARK: - Editable list
-
 /// A list people add rows to and take rows from, the Mac's way — the
 /// Hooks tab's and the Webhooks tab's: framed, with + and − attached beneath
 /// it, symbols and not words (the HIG's square buttons, "adding or removing
@@ -1017,8 +964,6 @@ struct EditableListFrame<Content: View>: View {
 
 }
 
-/// A + or − of the bar attached beneath an editable list: a symbol, its
-/// name in the tooltip and for VoiceOver.
 struct ListBarButton: View {
     let symbol: String
     let title: String
@@ -1045,8 +990,6 @@ extension View {
     }
 }
 
-// MARK: - File picker
-
 /// Thin wrapper over `NSOpenPanel`, which SwiftUI's `fileImporter` cannot fully
 /// replace here (we need multi-select across both files and folders).
 enum FilePicker {
@@ -1061,7 +1004,6 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.urls : nil
     }
 
-    /// One folder or file: a plan's path.
     @MainActor
     static func chooseFolderOrFile(message: String) -> URL? {
         let panel = NSOpenPanel()
@@ -1111,7 +1053,6 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
-    /// Export Settings' file.
     @MainActor
     static func chooseSettingsDestination() -> URL? {
         let panel = NSSavePanel()
@@ -1122,7 +1063,6 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
-    /// Import Settings' file.
     @MainActor
     static func chooseSettingsFile() -> URL? {
         let panel = NSOpenPanel()
@@ -1135,10 +1075,7 @@ enum FilePicker {
     }
 }
 
-// MARK: - Pane container
-
 extension View {
-    /// Standard padded detail-pane container.
     func detailPane() -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Space.section) {
@@ -1149,8 +1086,6 @@ extension View {
         }
     }
 }
-
-// MARK: - Full Disk Access
 
 /// The one way to the grant, wherever the app asks for it. The grant
 /// cannot be requested by prompt, so the list in System Settings is where

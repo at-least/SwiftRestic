@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The one does-this-path-exist check the Show in Finder rows share
-/// (`PathExistence`): the ask off the main actor, the answer reset per
-/// check, a cancelled check landing nothing.
 @Suite("Path existence")
 @MainActor
 struct PathExistenceTests {

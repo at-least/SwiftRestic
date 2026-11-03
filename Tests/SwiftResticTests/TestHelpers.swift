@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// Shared test scaffolding, as TestDates.swift is for dates: helpers with no
-/// single suite's home, used across files in this target.
-
 /// A deterministic pseudo-random generator (SplitMix64), so a property failure
 /// reproduces exactly: the seed in the test is the whole input.
 struct SeededGenerator: RandomNumberGenerator {
@@ -18,8 +15,6 @@ struct SeededGenerator: RandomNumberGenerator {
     }
 }
 
-/// A lock-guarded flag for the concurrency tests: set on one side, polled on
-/// the other.
 final class Flag: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
@@ -56,8 +51,7 @@ final class HangWatchdog: @unchecked Sendable {
     func disarm() { done.signal() }
 }
 
-/// Polls `condition` every 5 ms for up to `seconds`; true once it held. Runs
-/// on the caller's actor, so a main-actor test may read main-actor state.
+/// Runs on the caller's actor, so a main-actor test may read main-actor state.
 func eventually(
     within seconds: Double,
     isolation: isolated (any Actor)? = #isolation,
@@ -98,9 +92,8 @@ enum LocalPort {
     }
 }
 
-/// A throwaway directory holding one executable shell script, for the suites
-/// that run a process instead of restic. `label` names the suite so a leaked
-/// directory stays attributable; the caller removes the script's directory.
+/// `label` names the suite so a leaked directory stays attributable; the
+/// caller removes the script's directory.
 func writeExecutableScript(
     _ body: String,
     label: String,

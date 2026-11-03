@@ -26,7 +26,6 @@ struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
 }
 
 extension RestoreSource {
-    /// An item whose node is in hand.
     init(_ node: SnapshotNode, snapshotID: String, backupTime: Date?) {
         self.init(
             name: node.name,
@@ -49,7 +48,6 @@ struct RestoreSelection: Sendable, Equatable {
     /// The sheet's line about picked items a selected folder brings.
     let note: String?
 
-    /// Nil when the picked items restore nothing.
     init?(_ picked: [RestoreSource]) {
         let (kept, covered) = RestoreBatch.covering(picked, snapshotID: \.snapshotID)
         guard !kept.isEmpty else { return nil }
@@ -65,7 +63,6 @@ struct RestoreSelection: Sendable, Equatable {
         return .items(sources.map { RestoreItem(name: $0.name, path: $0.path, isDirectory: $0.isDirectory) })
     }
 
-    /// How many backups the items come from.
     var backupCount: Int { Set(sources.map(\.snapshotID)).count }
 
     /// The one backup's time; nil for items from several, which the sheet

@@ -2,9 +2,6 @@ import Foundation
 import GRDB
 import Testing
 
-/// The snapshot index's contract, through its public API on a file-backed
-/// store: chains, the one-step window, revival as a re-read, the planner's
-/// order, the delta and full routes' refusals, housekeeping, and the reads.
 /// No test names a seq: seqs are internal.
 @Suite("snapshot index")
 struct SnapshotIndexTests {
@@ -25,8 +22,6 @@ struct SnapshotIndexTests {
         try IndexTestData.snapshot(id, micros: micros, tags: tags ?? [planA], hostname: host, paths: paths)
     }
 
-    // MARK: - Reconcile
-
     @Test("plan-tagged snapshots share a chain; untagged ones chain by host and sorted paths")
     func reconcileChainAssignment() async throws {
         let fixture = try IndexFixture()
@@ -42,7 +37,6 @@ struct SnapshotIndexTests {
             try snap("other", t2, tags: [planB]),
         ]
         try index.reconcile(listing: listing)
-        // One pending row per listed snapshot.
         #expect(try index.snapStates() == Dictionary(uniqueKeysWithValues: listing.map { ($0.id, SnapshotIndex.State.pending) }))
 
         let lineage = SnapshotIndex.chainKey(for: listing[2])
@@ -101,7 +95,6 @@ struct SnapshotIndexTests {
         #expect(summary?.newest.id == "b1")
         #expect(summary?.count == 1, "plan B's one backup, which its Files tab lists, not all three")
 
-        // Plan A backs it up again, newest now: A's three.
         listing.append(try snap("a3", t3))
         try index.reconcile(listing: listing)
         try index.runToDone(Dictionary(uniqueKeysWithValues: listing.map { ($0.id, content) }))
@@ -187,8 +180,6 @@ struct SnapshotIndexTests {
         #expect(try await index.versionIDs("/data/x") == ["b", "a", "late"])
     }
 
-    // MARK: - Window discipline
-
     @Test("an ingest that would skip a pending snapshot is refused; in order, all land")
     func outOfOrderIngestRefused() async throws {
         let fixture = try IndexFixture()
@@ -222,7 +213,6 @@ struct SnapshotIndexTests {
         // Two steps up and two down cross the pending s4 and s2.
         #expect(throws: IndexError.notAdjacent("s5")) { try index.ingestWhole("s5", entries(of: "s5")) }
         #expect(throws: IndexError.notAdjacent("s1")) { try index.ingestWhole("s1", entries(of: "s1")) }
-        // One step each way lands, and then the outer ones do.
         for id in ["s2", "s4", "s1", "s5"] { try index.ingestWhole(id, entries(of: id)) }
         #expect(try await index.versionIDs("/data/a.txt") == ["s5", "s4", "s3", "s2", "s1"])
         for id in ids { #expect(try await index.versionIDs("/data/only-\(id)") == [id]) }
@@ -304,8 +294,6 @@ struct SnapshotIndexTests {
             try index.ingestDiff(snapshotID: "s2", from: "ghost", added: [], removed: [])
         }
     }
-
-    // MARK: - Reads
 
     @Test("versions answers listed indexed snapshots only, newest first across chains; equal times put the later arrival first")
     func versionsAcrossChains() async throws {
@@ -440,8 +428,6 @@ struct SnapshotIndexTests {
         #expect(summaries.values.allSatisfy { $0.count == 1 && $0.newest.id == "s1" })
     }
 
-    /// `contains` takes a path list of any length; past one chunk it must
-    /// still answer every path.
     @Test("contains crosses the lookup chunk without losing paths")
     func containsCrossesChunkBoundary() async throws {
         let fixture = try IndexFixture()
@@ -590,8 +576,6 @@ struct SnapshotIndexTests {
         #expect(summarized.summaries.count == 2)
     }
 
-    // MARK: - Version picking (the Files view's selection rule)
-
     private func version(_ id: String) -> IndexVersion {
         IndexVersion(id: id, time: Date(timeIntervalSince1970: 0))
     }
@@ -652,8 +636,6 @@ struct SnapshotIndexTests {
         #expect(contents.after(contents[0])?.id == "b2")
         #expect(contents.after(contents[2]) == nil)
     }
-
-    // MARK: - Search
 
     @Test("search finds paths by basename, case-insensitively, prefix-wise")
     func searchFindsByBasename() async throws {
@@ -773,17 +755,11 @@ struct SnapshotIndexTests {
         #expect(Set(hits.map(\.path)) == ["/data/inv-1", "/data/inv-2", "/data/inv-3"])
         let summaries = try await index.versionSummaries(ofPaths: hits.map(\.path))
         #expect(Set(summaries.keys) == hits.map(\.path).pathKeys)
-        // Find Files' own read gives every one of those hits its summary.
         let found = try await index.searchWithSummaries(matching: "inv", limit: 50)
         #expect(found.hits == hits)
         #expect(Set(found.summaries.keys) == hits.map(\.path).pathKeys)
     }
 
-    // MARK: - The searches' one read
-
-    /// The Restore pane's read: the search and the open backup's membership
-    /// in one transaction, keyed by node ids. It must answer exactly what the
-    /// two path-keyed reads answer apart.
     @Test("searchWithMembership answers what searchPaths and contains answer apart; a pending, unknown or unlisted snapshot holds nothing")
     func searchWithMembershipMatchesTwoReads() async throws {
         let fixture = try IndexFixture()
@@ -814,14 +790,10 @@ struct SnapshotIndexTests {
         let pending = try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s3")
         #expect(pending.hits.map(\.path) == hits.map(\.path))
         #expect(pending.inSnapshot.isEmpty)
-        // No longer listed: nothing either.
         try index.reconcile(listing: [listing[1]])
         #expect(try await index.searchWithMembership(matching: "k", limit: 10, inSnapshot: "s1").inSnapshot.isEmpty)
     }
 
-    /// Find Files' read: the search and each hit's summary in one
-    /// transaction. The hits keep `searchPaths`' order, limit and tie rule,
-    /// and every hit has its summary — before housekeeping too.
     @Test("searchWithSummaries answers what searchPaths and versionSummaries answer apart, every hit summarized")
     func searchWithSummariesMatchesTwoReads() async throws {
         let fixture = try IndexFixture()
@@ -909,8 +881,6 @@ struct SnapshotIndexTests {
         #expect(Set(summarized.summaries.keys) == all.pathKeys)
         #expect(summarized.summaries.values.allSatisfy { $0.count == 1 && $0.newest.id == "s1" })
     }
-
-    // MARK: - Housekeeping
 
     @Test("housekeeping deletes the gap, bottom and top garbage and a snapshot-less chain, answers unchanged, idempotent")
     func housekeepingSemantics() async throws {
@@ -1015,8 +985,6 @@ struct SnapshotIndexTests {
         #expect(try reverse.index.plannedStep() == PlannedStep(step: .full(snapshotID: "s1"), deadWindowEnd: true))
     }
 
-    // MARK: - Deltas
-
     @Test("a delta closes the removed, opens the added, and a kind change spelled both ways splits the run")
     func applyDeltaSemantics() async throws {
         let fixture = try IndexFixture()
@@ -1087,8 +1055,6 @@ struct SnapshotIndexTests {
         }
     }
 
-    // MARK: - Planner
-
     @Test("the planner builds each chain from its newest, then new backups, then history newest to oldest")
     func plannerOrder() throws {
         let fixture = try IndexFixture()
@@ -1135,9 +1101,6 @@ struct SnapshotIndexTests {
     }
 }
 
-/// The browse caches in the index — one directory's `restic ls` answer and
-/// one `restic diff`, stored verbatim per immutable content key, file-backed.
-/// `BrowseCacheTests` covers the coordinator's pass-through.
 @Suite("snapshot index browse caches")
 struct SnapshotIndexBrowseCacheTests {
     private func snapshot(_ id: String, _ micros: Int64) throws -> Snapshot {

@@ -20,7 +20,6 @@ struct FindFilesView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
 
-    /// A file's Preview: its copy and its Quick Look panel.
     @State private var previewer = PreviewSession()
     @State private var latestOnly = false
     /// The table's rows, built once when a search's results land. A computed
@@ -164,8 +163,6 @@ struct FindFilesView: View {
         .onDisappear { searchTask?.cancel() }
     }
 
-    /// What a search as typed is keyed by: the query, the repository, and
-    /// whether the index answers.
     private struct TypingKey: Equatable {
         let pattern: String
         let repositoryID: UUID?
@@ -388,8 +385,6 @@ struct FindFilesView: View {
         }
         .padding(12)
     }
-
-    // MARK: - Data
 
     /// Show Versions for a row — onto the Files tab of the plan that holds
     /// the match's history, at this match's backup — or nil when the row's

@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The console pane's model: arming destructive commands, the confirmation
-/// round trip, and the history's secret filter.
-///
 /// No restic binary is configured, so an executed command settles on the
 /// binary-not-found error — that is enough to prove execution happened and
 /// its aftermath (output, running flag, history) was recorded.
@@ -11,9 +8,7 @@ import Testing
 @MainActor
 struct ConsoleModelTests {
     /// A model with no restic override and an isolated config directory, so
-    /// nothing touches the login Keychain or a real configuration. One local
-    /// repository exists for the console to target; the missing binary means
-    /// an executed command settles on the not-found error.
+    /// nothing touches the login Keychain or a real configuration.
     private func makeHarness() throws -> (app: AppModel, console: ConsoleModel, root: URL) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticConsole-\(UUID().uuidString)")
@@ -37,8 +32,6 @@ struct ConsoleModelTests {
         app.configuration.repositories.append(other)
         app.consoleDidAppear()
         #expect(console.repositoryID == app.configuration.repositories.first?.id)
-        // A check's Show restic Console on the second repository: the picker
-        // switches, and the pane appearing again keeps it.
         app.pointConsole(at: other.id)
         app.consoleDidAppear()
         #expect(console.repositoryID == other.id)
@@ -56,7 +49,6 @@ struct ConsoleModelTests {
         #expect(console.pendingDestructive != nil)
         #expect(!console.isRunning)
         #expect(console.output.isEmpty)
-        // Cancelling the dialog clears the arm without executing anything.
         console.cancelPending()
         #expect(console.pendingDestructive == nil)
         #expect(console.output.isEmpty)
@@ -188,7 +180,6 @@ struct ConsoleModelTests {
         // executes it: `key …` would only arm the confirmation.
         await seedHistory(["snapshots", "snapshots --password-file secret.txt"], console: console)
         #expect(console.history.count == 2)
-        // The secret-carrying command reached the session's sidebar only.
         #expect(app.configuration.settings.consoleHistory == ["snapshots"])
 
         // Leave the pane and come back: the session's own history — secret
@@ -213,8 +204,6 @@ struct ConsoleModelTests {
         #expect(app.configuration.settings.consoleHistory.isEmpty)
     }
 
-    // MARK: - Arrow recall
-
     /// Seeds history through real runs, the only writer the model allows.
     private func seedHistory(_ commands: [String], console: ConsoleModel) async {
         for command in commands {
@@ -232,16 +221,12 @@ struct ConsoleModelTests {
         await seedHistory(["snapshots --compact", "version"], console: console)
         #expect(console.history.first == "version")
 
-        // ↑ from a typed draft takes the newest entry, then walks older…
         #expect(console.recallPrevious(current: "ls") == "version")
         #expect(console.recallPrevious(current: "version") == "snapshots --compact")
-        // …and clamps at the oldest instead of wrapping.
         #expect(console.recallPrevious(current: "snapshots --compact") == "snapshots --compact")
 
-        // ↓ walks back toward the field's own words.
         #expect(console.recallNext() == "version")
         #expect(console.recallNext() == "ls")
-        // With nothing recalled, ↓ has nothing to offer.
         #expect(console.recallNext() == nil)
     }
 
@@ -257,9 +242,7 @@ struct ConsoleModelTests {
         console.run()
         await console.waitForCommand()
 
-        // The walk is over: ↓ must not conjure a recalled entry.
         #expect(console.recallNext() == nil)
-        // And ↑ starts fresh from the newest entry again.
         #expect(console.recallPrevious(current: console.commandText) == "version")
     }
 
@@ -283,14 +266,10 @@ extension ConsoleModelTests {
         await seedHistory(["aaa", "password one", "password two"], console: console)
         #expect(console.history.count == 3)
 
-        // Walk to the oldest entry, index 2.
         #expect(console.recallPrevious(current: "draft") != nil)
         #expect(console.recallPrevious(current: "") != nil)
         #expect(console.recallPrevious(current: "") != nil)
 
-        // The pane is left and revisited: the walk is over — ↓ must not
-        // conjure a recalled entry — and the session's history survives
-        // whole, secrets included. (Newest first, as typed.)
         app.consoleDidAppear()
         #expect(console.recallNext() == nil)
         #expect(console.history == ["password two", "password one", "aaa"])
@@ -303,12 +282,10 @@ extension ConsoleModelTests {
         app.consoleDidAppear()
         await seedHistory(["snapshots --compact", "version"], console: console)
 
-        // A walk is under way: ↑ has recalled the newest entry.
         #expect(console.recallPrevious(current: "ls") == "version")
 
         console.pickFromHistory("snapshots --compact")
         #expect(console.commandText == "snapshots --compact")
-        // The click ended the walk: ↓ must not conjure a recalled entry.
         #expect(console.recallNext() == nil)
     }
 

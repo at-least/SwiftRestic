@@ -1,10 +1,6 @@
 import Foundation
 import Testing
 
-/// The reach question and the bucket machinery, pinned at the model: picking
-/// a window must write exactly the window its name promises, hand-edited
-/// rules must read back as Custom, and the toggles the answer does not name
-/// must survive every rewrite.
 @Suite("Retention reach presets")
 struct RetentionReachTests {
     @Test("the default policy reads as the standard buckets")
@@ -27,8 +23,6 @@ struct RetentionReachTests {
             #expect(policy.keepHourly == 0, "\(reach) must zero the hourly bucket")
             #expect(policy.keepDaily == daily)
             #expect(policy.keepWeekly == 0 && policy.keepMonthly == 0 && policy.keepYearly == 0)
-            // The rewrite must land the policy back on the choice that wrote
-            // it — the picker may never silently disagree with the buckets.
             #expect(RetentionPolicy.Reach(policy: policy) == reach)
         }
     }

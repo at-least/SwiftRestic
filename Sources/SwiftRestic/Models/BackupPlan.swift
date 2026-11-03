@@ -1,6 +1,5 @@
 import Foundation
 
-/// How often a plan should run by itself.
 struct Schedule: Codable, Sendable, Hashable {
     enum Frequency: String, Codable, Sendable, CaseIterable, Identifiable {
         case manual, hourly, daily, weekly
@@ -58,8 +57,6 @@ struct Schedule: Codable, Sendable, Hashable {
         }
     }
 
-    /// The time of day a daily or weekly schedule runs at, in the Mac's
-    /// clock.
     func timeOfDay(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
         Self.moment(hour: hour, minute: minute, calendar: calendar)
             .formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).hour().minute())
@@ -76,7 +73,6 @@ struct Schedule: Codable, Sendable, Hashable {
         return gregorian.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: hour, minute: minute))!
     }
 
-    /// The time between runs; nil for manual plans.
     var interval: TimeInterval? {
         switch frequency {
         case .manual: nil
@@ -86,8 +82,6 @@ struct Schedule: Codable, Sendable, Hashable {
         }
     }
 
-    /// The next moment this schedule is due, given when it last ran.
-    /// Returns `nil` for manual plans.
     func nextRunDate(after lastRun: Date?, now: Date = .now, calendar: Calendar = .current) -> Date? {
         // A stamp after now comes from a clock that was set ahead; kept, it
         // would cover every slot until that date and the plan would not run.
@@ -142,7 +136,6 @@ struct Schedule: Codable, Sendable, Hashable {
             }
         }
 
-        // Due now if that firing time has not been covered by the last run.
         if lastRun == nil || lastRun! < slotStart { return previous }
 
         return calendar.nextDate(
@@ -154,7 +147,6 @@ struct Schedule: Codable, Sendable, Hashable {
     }
 }
 
-/// `restic forget` retention rules applied after a successful backup.
 struct RetentionPolicy: Codable, Sendable, Hashable {
     var isEnabled: Bool = true
     var keepLast: Int = 0
@@ -202,7 +194,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         runPrune = c.value(.runPrune, default: false)
     }
 
-    /// The `--keep-*` flags, omitting rules set to zero.
     var forgetArguments: [String] {
         var args: [String] = []
         func add(_ flag: String, _ value: Int) {
@@ -243,12 +234,10 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     /// disagree with the policy it describes. Not Codable: a derived view of
     /// the buckets, never a persisted fact.
     enum Reach: String, Sendable, CaseIterable, Identifiable {
-        /// The default bucket set: 24h, 7d, 4w, 12m, 3y.
         case standard
         case month
         case quarter
         case year
-        /// A hand-edited policy no preset expresses.
         case custom
 
         var id: String { rawValue }
@@ -324,7 +313,6 @@ struct EarlierBackupItem: Hashable, Sendable, Identifiable {
     var id: String { excluded.path }
 }
 
-/// One folder or file backed up to one repository on a schedule.
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var repositoryID: UUID?
@@ -339,7 +327,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`AppConfiguration`).
     var path: String = ""
 
-    /// `path` with a leading `~` expanded, as restic and the disk read it.
     var resolvedPath: String { ResticService.expandTilde(path) }
 
     /// The patterns the user added, as typed or picked: the editor's
@@ -364,7 +351,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// and resumes by itself once it passes — `isScheduleActive(at:)` reads
     /// the date, so nothing has to be written for the pause to end.
     var pausedUntil: Date?
-    /// Shell commands run around each backup.
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
@@ -397,7 +383,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// offered again.
     var keptRebuildableFolders: [String] = []
 
-    /// The switch itself: on while any group is ticked.
     var excludeDeveloperFiles: Bool { !developerGroups.isEmpty }
 
     enum CodingKeys: String, CodingKey {
@@ -452,43 +437,30 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// The patterns of the rules a new plan is offered
-    /// (`ExcludeRule.defaults`, where each is said and grouped).
     static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
 
-    /// The patterns of `rules` whose category `categories` holds, in the
-    /// rules' order.
     private static func patterns(of rules: [ExcludeRule], in categories: some Collection<ExcludeCategory>) -> [String] {
         rules.filter { categories.contains($0.category) }.map(\.pattern)
     }
 
-    /// The defaults of `categories`, in the defaults' order.
     static func defaultExcludes(in categories: Set<ExcludeCategory>) -> [String] {
         patterns(of: ExcludeRule.defaults, in: categories)
     }
 
-    /// What developer tools rebuild: the patterns of `ExcludeRule.developer`,
-    /// of which each ticked group of the developer switch adds its own to
-    /// a plan's list (`developerExcludes(groups:)`).
     static let developerExcludes = developerExcludes(groups: ExcludeCategory.developerGroups)
 
-    /// The files `--exclude-if-present` is passed for `groups`
-    /// (`ExcludeRule.developerMarkers`).
     static func developerMarkers(for groups: [ExcludeCategory]) -> [String] {
         patterns(of: ExcludeRule.developerMarkers, in: groups)
     }
 
-    /// The developer rules of `groups`, in the list's order.
     static func developerExcludes(groups: [ExcludeCategory]) -> [String] {
         patterns(of: ExcludeRule.developer, in: groups)
     }
 
-    /// One developer group's checkbox.
     mutating func setSkips(_ group: ExcludeCategory, _ isOn: Bool) {
         setSkips([group], isOn)
     }
 
-    /// The switch itself: every group ticked, or none.
     mutating func setSkipsDeveloperFiles(_ isOn: Bool) {
         setSkips(ExcludeCategory.developerGroups, isOn)
     }
@@ -511,13 +483,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return Self.defaultExcludes(in: categories) + Self.developerExcludes(groups: developerGroups)
     }
 
-    /// Every `--exclude` a run passes: the switches' rules, then the
-    /// user's own patterns, each once.
     var excludesToPass: [String] {
         Self.withoutDuplicates(switchExcludes + excludePatterns)
     }
 
-    /// `patterns` less the rules the switches pass.
     func withoutSwitchRules(_ patterns: [String]) -> [String] {
         let passed = Set(switchExcludes)
         return patterns.filter { !passed.contains($0) }
@@ -538,15 +507,12 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// The two defaults switches alone, as `readSwitches(fromRecorded:)`
-    /// reads them.
     private mutating func readDefaultSwitches(fromRecorded patterns: [String]) {
         let present = Set(patterns)
         skipsFinderFiles = Self.defaultExcludes(in: ExcludeCategory.finderFiles).contains(where: present.contains)
         skipsSystemFiles = Self.defaultExcludes(in: ExcludeCategory.systemFiles).contains(where: present.contains)
     }
 
-    /// First-occurrence-wins deduplication, order preserved.
     static func withoutDuplicates(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
@@ -556,11 +522,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         repositoryID != nil && !path.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Why a plan that is not `isConfigurationComplete` cannot run.
     static let incompleteConfigurationReason = "This plan needs a repository and a folder or file to back up"
 
-    /// Why a restic action on a repository waits while a backup or
-    /// maintenance job holds it.
     static let busyRepositoryReason = "The repository is in use by a backup or maintenance job — try again when it finishes."
 
     /// What every surface calls the plan — it has no name of its own: the
@@ -583,8 +546,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
-    /// The end of a timed pause that is still in force; `nil` once it has
-    /// passed, or when there is none.
     func activePauseEnd(at now: Date) -> Date? {
         guard let pausedUntil, pausedUntil > now else { return nil }
         return pausedUntil
@@ -598,13 +559,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         isEnabled && activePauseEnd(at: now) == nil
     }
 
-    /// Whether the scheduler starts this plan by itself at `now`: active,
-    /// on a schedule, and set up.
     func runsOnSchedule(at now: Date) -> Bool {
         isScheduleActive(at: now) && schedule.frequency != .manual && isConfigurationComplete
     }
 
-    /// The slot the schedule owes a run for at `now`; nil when none is due.
     func dueSlot(at now: Date, calendar: Calendar = .current) -> Date? {
         schedule.nextRunDate(after: lastRunAt, now: now, calendar: calendar).flatMap { $0 <= now ? $0 : nil }
     }

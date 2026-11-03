@@ -27,7 +27,6 @@ extension KeyedDecodingContainer {
         return read(key, substitute: "read as absent")
     }
 
-    /// The present key's value, or nil with a note ending in `substitute`.
     private func read<T: Decodable>(_ key: Key, substitute: @autoclosure () -> String) -> T? {
         do {
             if let decoded = try decodeIfPresent(T.self, forKey: key) { return decoded }
@@ -58,7 +57,6 @@ extension KeyedDecodingContainer {
         box.add(field: Self.fieldName(in: codingPath, key: key), reason)
     }
 
-    /// `repositories[0].kind` — indices bracketed, names dot-separated.
     private static func fieldName(in path: [any CodingKey], key: any CodingKey) -> String {
         var field = ""
         for component in path + [key] {
@@ -77,7 +75,6 @@ extension KeyedDecodingContainer {
 /// boundary; the lock exists only so the box can claim `Sendable`, which
 /// binding a task-local value requires.
 enum DecodeNotes {
-    /// Bound around a decoding pass; tolerant fallbacks record themselves here.
     @TaskLocal static var current: DecodeNoteBox?
 
     /// A type-valid but out-of-range value decodes cleanly and then does
@@ -95,8 +92,6 @@ final class DecodeNoteBox: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [(field: String, detail: String)] = []
 
-    /// `field` as `repositories[0].kind`; `detail` says what was read in
-    /// its place.
     func add(field: String, _ detail: String) {
         lock.lock()
         defer { lock.unlock() }
@@ -119,8 +114,6 @@ final class DecodeNoteBox: @unchecked Sendable {
 }
 
 extension Sequence where Element: Identifiable, Element.ID == UUID {
-    /// The plan or repository whose `id` is `id`; nil for a nil id or one
-    /// none holds.
     func withID(_ id: UUID?) -> Element? {
         id.flatMap { wanted in first { $0.id == wanted } }
     }

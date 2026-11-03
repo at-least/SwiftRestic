@@ -102,7 +102,6 @@ enum NotificationPoster {
         }
     }
 
-    /// Fans an event out to every channel that asked for it.
     static func broadcast(
         _ event: NotificationEvent,
         to channels: [NotificationChannel]

@@ -13,7 +13,6 @@ struct ItemErrorDiagnosisTests {
     func classification() {
         #expect(ItemErrorDiagnosis.kind(of: mailLine) == .blockedByMacOS)
         #expect(ItemErrorDiagnosis.kind(of: "/x/locked.txt: open /x/locked.txt: permission denied") == .deniedByFilePermissions)
-        // The unprefixed shape — no `<item>: ` prefix — still classifies.
         #expect(ItemErrorDiagnosis.kind(of: "open /x/locked.pdf: permission denied") == .deniedByFilePermissions)
         // The words anywhere but at the end are a path, not an errno.
         #expect(ItemErrorDiagnosis.kind(of: "/x/permission denied/y: open /x/permission denied/y: no such file or directory") == .other)
@@ -69,8 +68,6 @@ struct ItemErrorDiagnosisTests {
         record.itemErrorCount = 1
         #expect(ItemErrorDiagnosis.hints(for: record, accessNow: .notGranted) == [.grantFullDiskAccess(1)])
 
-        // No stored tally and no stamp: diagnosed from its items —
-        // permissions only.
         var legacy = RunRecord(kind: .backup, planName: "Documents")
         legacy.itemErrors = ["open /x/Taxes/2025/locked.pdf: permission denied"]
         legacy.itemErrorCount = 1
@@ -140,11 +137,9 @@ struct ItemErrorDiagnosisTests {
         // A count past the stored lines (the tally runs over every item,
         // the record keeps `storedItemErrorLimit`): no partial Exclude.
         #expect(paths(.protectedEvenWithAccess(60), record).isEmpty)
-        // A stored line without its path: the same.
         record.unreadableItemPaths?[PathKey(speech2Line)] = nil
         #expect(paths(.protectedEvenWithAccess(2), record).isEmpty)
         #expect(paths(.filePermissions(1), record) == [tombstone])
-        // A record stored before items had paths offers nothing to exclude.
         record.unreadableItemPaths = nil
         #expect(paths(.filePermissions(1), record).isEmpty)
     }

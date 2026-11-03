@@ -164,7 +164,6 @@ struct PlanDetailView: View {
         @Environment(AppModel.self) private var model
         @Environment(\.now) private var now
         let summary: PlanProblemSummary
-        /// The run the summary describes, for the fix its items need.
         let run: RunRecord
         /// How many backups in a row ended this way (`RunRecord.problemStretch`).
         let inARow: Int
@@ -246,7 +245,6 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The row's landing: Activity with the problem run selected.
     private func showInActivity(_ run: RunRecord) -> () -> Void {
         { router.focusRun(run.id) }
     }
@@ -296,8 +294,6 @@ struct PlanDetailView: View {
         plan.repositoryID.flatMap { model.shelves(for: $0).byPlan[plan.id] } ?? []
     }
 
-    /// The Backups tab: the plan's backups in the repository it backs up
-    /// to, each one's files beside the list.
     @ViewBuilder
     private func backups(_ plan: BackupPlan) -> some View {
         if let repositoryID = plan.repositoryID {
@@ -324,8 +320,6 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The Files tab: the plan's folder as this Mac holds it, each item by
-    /// version from the plan's backups in the repository it backs up to.
     @ViewBuilder
     private func files(_ plan: BackupPlan) -> some View {
         if let repositoryID = plan.repositoryID {
@@ -488,7 +482,6 @@ struct PlanDetailView: View {
                 case .idle:
                     Text("—")
                 }
-                // A spinner while a read is in flight.
                 if model.loadingSnapshots.contains(repositoryID) {
                     ProgressView().controlSize(.small)
                 }
@@ -568,7 +561,6 @@ private struct RebuildableFoldersCard: View {
 
     @State private var showsAll = false
 
-    /// Rows shown before Show All.
     private static let shownRows = 5
 
     var body: some View {
@@ -634,7 +626,6 @@ private struct RebuildableFoldersCard: View {
         }
     }
 
-    /// The folder that holds it, below the plan's folder.
     private func location(of folder: RebuildableFolder) -> String {
         let parent = ResticPath.parent(of: folder.path)
         if parent == plan.resolvedPath { return "In \(model.label(of: plan))" }

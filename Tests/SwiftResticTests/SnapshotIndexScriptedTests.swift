@@ -2,13 +2,6 @@ import Foundation
 import GRDB
 import Testing
 
-/// Scripted interleavings that the unit tests and the property test do not
-/// reach on their own: the S1–S5 scenarios, the fault probe and its
-/// fixtures, the X1–X8 cases, the abandoned-stage GC, the
-/// quarantine's release, and the schema check at open. Each asserts its
-/// PASS condition through the public API; every write goes through
-/// `CheckedIndex`, so the stored-state invariants are checked after each.
-///
 /// Mutation checklist — each line is a mutant these tests must catch (not
 /// run by `./build.sh test`; plant one, run every SnapshotIndex suite,
 /// and expect red):
@@ -65,8 +58,6 @@ struct SnapshotIndexScriptedTests {
     private func snap(_ id: String, _ micros: Int64, tags: [String]? = nil) throws -> Snapshot {
         try IndexTestData.snapshot(id, micros: micros, tags: tags ?? [plan], paths: ["/r"])
     }
-
-    // MARK: - S1–S5
 
     @Test("S1: a cancelled first build of a forgotten snapshot leaves no claim on a later snapshot of the plan")
     func s1CancelledFirstBuild() async throws {
@@ -170,8 +161,6 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.kinds(of: ["/r/k"], inSnapshot: "s2") == ["/r/k": true])
     }
 
-    // MARK: - Targeted tests
-
     /// A file<->dir change restic spells as one `T` line — the new kind only,
     /// both subtrees omitted — must be refused atomically; a file<->symlink
     /// `T` keeps the kind and changes nothing.
@@ -235,8 +224,6 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.versionIDs("/e/y") == ["b1"])
         #expect(try await checked.index.versionIDs("/d/x") == ["s3"])
     }
-
-    // MARK: - Streams: what a listing may repeat or reorder, and what may land between chunks
 
     /// restic's `ls --json` coerces names to valid UTF-8, so two siblings
     /// whose names differ only in invalid bytes list as one path twice. The
@@ -420,8 +407,6 @@ struct SnapshotIndexScriptedTests {
         try index.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM node") ?? 0 }
     }
 
-    // MARK: - The fault probe
-
     @Test("N3: a chunk that rolls back after creating nodes leaves no broken node, and a re-read is exact and searchable")
     func faultedChunkLeavesTreeWhole() async throws {
         let checked = try CheckedIndex()
@@ -440,7 +425,6 @@ struct SnapshotIndexScriptedTests {
         try Self.disarmBoomTrigger(checked.path)
         #expect(try await !checked.index.isComplete())
 
-        // Pass 2 re-reads from the top.
         try checked.full("s1", chunk1 + chunk2 + chunk3)
         #expect(try await checked.index.isComplete())
         #expect(Set(try await checked.index.kinds(of: Array(truth), inSnapshot: "s1").keys) == truth.pathKeys)
@@ -487,8 +471,6 @@ struct SnapshotIndexScriptedTests {
         }
     }
 
-    // MARK: - Fixtures
-
     @Test("N4 (b): a snapshot that dies and returns with no housekeeping between is pending, then exact after one step")
     func revivalWithoutHousekeeping() async throws {
         let checked = try CheckedIndex()
@@ -506,8 +488,6 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.versionIDs("/data/a.txt") == ["n", "o"])
         #expect(try await checked.index.isComplete())
     }
-
-    // MARK: - X1–X8 (the N9-labelled release test among them)
 
     @Test("X1: reconcile adds one pending row per listed ID, deletes a dead one's, re-adds a return as a new row, and writes nothing on a repeat")
     func x1ReconcileRows() async throws {
@@ -805,8 +785,6 @@ struct SnapshotIndexScriptedTests {
         #expect(try await checked.index.isComplete())
     }
 
-    // MARK: - Abandoned-stage GC
-
     @Test("N14: the next beginFull collects a cancelled stream's run-less nodes with their FTS rows")
     func n14CancelledStreamCollected() async throws {
         let checked = try CheckedIndex()
@@ -867,8 +845,6 @@ struct SnapshotIndexScriptedTests {
         // The re-read adopted the node, so nothing is left to excuse.
         #expect(try checked.index.violations(afterHousekeeping: false).isEmpty)
     }
-
-    // MARK: - Schema check at open
 
     @Test("N10: a file with another user_version is refused with the pool closed; deleted and reopened, it is empty and complete once a listing lands")
     func n10SchemaMismatch() async throws {

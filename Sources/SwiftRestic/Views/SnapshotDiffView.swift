@@ -54,7 +54,6 @@ struct SnapshotDiffView: View {
 
     private var newer: Snapshot { target.snapshot }
 
-    /// Every snapshot older than the one being examined, newest first.
     private var candidates: [Snapshot] {
         model.snapshots(for: target.repositoryID)
             .filter { $0.time < newer.time }
@@ -118,8 +117,6 @@ struct SnapshotDiffView: View {
             await computeRows()
         }
     }
-
-    // MARK: - Sections
 
     private func header(_ candidates: [Snapshot]) -> some View {
         // Both groupings are one pass over the candidates, with the date
@@ -421,8 +418,6 @@ struct SnapshotDiffView: View {
         .padding(12)
     }
 
-    // MARK: - Routes
-
     /// The backup of the two compared that holds a row's item
     /// (`ResticDiffChange.holder`): the rows are the loaded diff's, so its
     /// older backup, which the picker may already have moved past. Nil once
@@ -464,8 +459,6 @@ struct SnapshotDiffView: View {
             model: model
         )
     }
-
-    // MARK: - Helpers
 
     private var visibleCategories: [ResticDiffChange.Category] {
         includeMetadata

@@ -1,48 +1,29 @@
 import Foundation
 
-/// What the Plan menu can do for the sidebar's selection. Derived on every
-/// read, never stored: the menu bar, the sidebar's plan menu and the plan
-/// page read the same answers, so one surface cannot enable what another
-/// refuses.
+/// Derived on every read, never stored: the menu bar, the sidebar's plan
+/// menu and the plan page read the same answers, so one surface cannot
+/// enable what another refuses.
 struct PlanCommandState: Equatable {
-    /// The selected plan, when the selection is one that still exists.
     var planID: UUID?
     var canBackUp = false
-    /// Why Back Up Now waits, when an exclusive lock on the plan's
-    /// repository is the reason.
     var backUpDisabledReason: String?
     var canStop = false
-    /// "Stop Backup", or the words for the work a plan's run is in that is
-    /// no backup (`MenuBarStatus.stopTitle(for:)`).
     var stopTitle = "Stop Backup"
     var canEdit = false
-    /// "Pause Schedule" or "Resume Schedule", keyed on
-    /// `BackupPlan.isScheduleActive(at:)` — both kinds of pause resume.
     var scheduleTitle = "Pause Schedule"
     var isScheduleActive = true
-    /// Resume always; Pause only where there is a schedule to pause.
     var canToggleSchedule = false
     var canApplyRetention = false
-    /// Why Apply Retention Now is disabled, for its help and the sheet.
     var retentionBlocker: String?
     var canDelete = false
-    /// Back Up All Plans Now, in the SwiftRestic menu: not about the
-    /// selection.
     var canBackUpAll = false
-    /// The app-wide pause, in the SwiftRestic menu, by the tray's rules: Resume Backups while
-    /// paused, else Pause Backups once a repository exists, and Pause and
-    /// Stop only while a backup runs.
     var backupsPaused = false
     var canPauseBackups = false
     var canPauseAndStopBackups = false
 }
 
-/// What the Repository menu can do for the sidebar's selection.
 struct RepositoryCommandState: Equatable {
-    /// The repository the menu acts on — see `commandRepositoryID(for:)`.
     var repositoryID: UUID?
-    /// Find Files and Refresh All Backups: every repository's, not the
-    /// selection's.
     var canFind = false
     var canRefreshAll = false
     /// restic Console, the menu's and the sidebar row's: the console
@@ -56,15 +37,12 @@ struct RepositoryCommandState: Equatable {
     var canRemove = false
 }
 
-/// A confirmation dialog's words.
 struct ConfirmationCopy: Equatable {
     var title: String
     var message: String
 }
 
 extension AppModel {
-    // MARK: - Menu command state
-
     func planCommands(for selection: SidebarItem?, now: Date = .now) -> PlanCommandState {
         var state = PlanCommandState()
         // One rule for every Back Up Now and every Stop: the tray's.
@@ -100,8 +78,6 @@ extension AppModel {
         return state
     }
 
-    /// Why the plan's retention cannot be applied now, first reason first;
-    /// nil when it can.
     private func retentionBlocker(for plan: BackupPlan) -> String? {
         guard plan.isConfigurationComplete, let repository = repository(id: plan.repositoryID) else {
             return BackupPlan.incompleteConfigurationReason
@@ -168,8 +144,6 @@ extension AppModel {
         guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
         return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
     }
-
-    // MARK: - Confirmations
 
     /// A confirmation's title and message, naming its target — the dialog
     /// is raised from the sidebar's row menus and the menu bar, where an

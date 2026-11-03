@@ -2,8 +2,6 @@ import Foundation
 import UserNotifications
 
 extension AppModel {
-    // MARK: - Notifications
-
     /// The outcome of a Settings › Webhooks test, reported inline where the
     /// user clicked rather than as a global banner on another window.
     enum TestNotificationOutcome: Equatable, Sendable {
@@ -99,9 +97,6 @@ extension AppModel {
     /// ID, which a click opens; a run notification's is the run's ID.
     nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
 
-    /// Whether a finished backup gets a local notification: its outcome's
-    /// setting, and for a problem, only the first of its stretch
-    /// (`RunRecord.problemStretch`).
     func wantsNotification(for record: RunRecord) -> Bool {
         let settings = configuration.settings
         switch record.outcome {
@@ -138,7 +133,6 @@ extension AppModel {
         ))
     }
 
-    /// Hands a notification to macOS, or says once why it cannot.
     private func deliver(_ request: UNNotificationRequest) {
         Task {
             // A notification that silently never arrives is the failure mode
@@ -176,14 +170,10 @@ extension AppModel {
         }
     }
 
-    /// System Settings › Notifications, on this app's own entry.
     static let notificationSettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(Bundle.main.bundleIdentifier!)"
     )!
 
-    /// The local notification's title: the run's display name — the plan
-    /// with its repository, the one rule every run surface names by — or
-    /// the app's name when the record names nothing.
     static func notificationTitle(
         for record: RunRecord,
         plans: [BackupPlan],
@@ -217,7 +207,6 @@ extension AppModel {
         }
     }
 
-    /// Why a local notification could not be delivered, for the banner text.
     private enum NotificationProblem: Error {
         case permissionDenied
     }

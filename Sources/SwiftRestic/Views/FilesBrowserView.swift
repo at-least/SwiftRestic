@@ -22,7 +22,6 @@ struct FilesBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
-    /// The plan's roots (`FileNode.roots`).
     let roots: FileNode
     /// The plan's page, whose Backups tab the tab points to when the
     /// folder can't be read.
@@ -71,7 +70,6 @@ struct FilesBrowserView: View {
         })
     }
 
-    /// The search as typed, trimmed; empty shows the tree.
     private var query: String {
         (router.filesSearchText[roots] ?? "").trimmingCharacters(in: .whitespaces)
     }
@@ -83,7 +81,6 @@ struct FilesBrowserView: View {
             .map { model.unreadItems(inBackup: $0.id) } ?? UnreadItems()
     }
 
-    /// The roots level's one folder — the plan's — once read.
     private var rootEntries: [FileNode] {
         guard case let .loaded(level)? = filesTree.state(of: roots) else { return [] }
         return level.entries.map(\.node)
@@ -296,7 +293,6 @@ struct FilesBrowserView: View {
         }
     }
 
-    /// The search's answer in the column: the hits, or why there are none.
     @ViewBuilder
     private var hits: some View {
         if let answer = searchAnswer, answer.roots == roots, answer.query == query {
@@ -551,7 +547,6 @@ extension View {
 }
 
 private struct PageSearch: ViewModifier {
-    /// A plan's Files tab, what its field searches there.
     struct Files {
         /// The chain the tab lists; nil for a plan with no repository,
         /// which has nothing to search.
@@ -606,7 +601,6 @@ private struct PageSearch: ViewModifier {
     }
 }
 
-/// A Files pane's identity: its item, and which Show Versions opened it.
 private struct FilesPaneIdentity: Hashable {
     let node: FileNode
     let opening: Int
@@ -630,8 +624,6 @@ private struct FilesSearchKey: Equatable {
 /// words.
 struct FilesSearchRow: View {
     let entry: FilesTree.Entry
-    /// The folder holding the hit, as the caption line shows it
-    /// (`FilesSearchAnswer.folderLine`).
     let folder: String
 
     var body: some View {
@@ -661,8 +653,6 @@ struct FilesSearchRow: View {
     }
 }
 
-/// A list's edge beside its pane — a Files tab's tree, a Backups tab's
-/// list: a hairline with a wider grip that drags the list's width.
 struct TreeEdge: View {
     @Binding var width: Double
     let bounds: ClosedRange<Double>
@@ -688,7 +678,6 @@ struct TreeEdge: View {
     }
 }
 
-/// A fold's disclosure mark: chevron right when closed, down when open.
 /// The row around it is the button.
 struct FoldChevron: View {
     let isExpanded: Bool
@@ -707,7 +696,6 @@ struct FoldChevron: View {
 /// backed up; one only the backups hold, when shown, says when it was last
 /// backed up.
 struct FilesTreeRow: View {
-    /// The fold column's width, a chevron's.
     static let foldWidth: CGFloat = 14
 
     let entry: FilesTree.Entry

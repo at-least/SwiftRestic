@@ -1,35 +1,20 @@
 import Foundation
 
-/// What the adopt sheet says around the draft it edits: the header strip's
-/// two lines, the warnings that hold of the group, and whether Adopt asks
-/// again. Derived once here, so the offering page, the sheet and the tests
+/// Derived once here, so the offering page, the sheet and the tests
 /// that pin them cannot disagree.
 struct AdoptBriefing: Equatable {
-    /// "These 2 backups become this plan’s history."
     var historyLine: String
-    /// "Made Sep 28 – Oct 2, 2026 from this Mac. Nothing in “Home Disk” changes."
     var madeLine: String
-    /// The locked repository row: "Home Disk".
     var repositoryLine: String
-    /// The warnings that hold of the group, in the order the sheet shows them.
+    /// In the order the sheet shows them.
     var warnings: [String]
-    /// Whether pressing Adopt asks again — any snapshot from another host, or
-    /// a newest backup under 48 hours old.
     var needsConfirmation: Bool
-    /// The asking-again dialog's words.
     var confirmation: ConfirmationCopy
 
-    /// Always, as the sheet's footer: what adopting does not do, and the one
-    /// situation it must not be used in.
     static let footer = "Don’t continue backups another Mac still makes — the two Macs would share one history."
 }
 
 extension AppModel {
-    // MARK: - Adopt
-
-    /// The draft the adopt sheet edits for one plan-UUID group: the plan
-    /// adopting builds, prefilled from the history it adopts. Nil unless the
-    /// group is adoptable (`BackupShelves.adoptablePath`).
     func adoptDraft(repositoryID: UUID, planID: UUID) async -> BackupPlan? {
         let shelves = self.shelves(for: repositoryID)
         guard repository(id: repositoryID) != nil,
@@ -56,7 +41,6 @@ extension AppModel {
         // pass is the user's own list.
         draft.readSwitches(fromRecorded: recorded)
         draft.excludePatterns = draft.withoutSwitchRules(recorded)
-        // Plan tags are the group's plumbing; what the user tagged is everything else.
         draft.tags = prefill.userTags
         // Daily — a new plan's default — only when the prefilled folder is
         // here to back up. Otherwise it is likely another Mac's, and a plan
@@ -70,9 +54,8 @@ extension AppModel {
         return draft
     }
 
-    /// Everything the adopt sheet shows around the draft. Derived as it
-    /// stands, so a backup landing or the group leaving while the sheet is
-    /// open keeps the words true; nil once the group is gone.
+    /// Derived as it stands, so a backup landing or the group leaving while
+    /// the sheet is open keeps the words true; nil once the group is gone.
     /// `sourceExists` is the sheet's own read of the draft's folder, made
     /// off the main actor: the sheet derives this on every render.
     func adoptBriefing(for draft: BackupPlan, sourceExists: Bool, now: Date = .now) -> AdoptBriefing? {
@@ -173,14 +156,10 @@ extension AppModel {
         ))
     }
 
-    /// The missing-folder warning, said by the adopt sheet's footer and
-    /// beside the plan editor's path.
     static let missingSourcesWarning = "This folder isn’t on this Mac."
 
-    /// Whether a plan's folder (or file) is on this Mac now, tilde
-    /// expanded — the fact behind both the schedule's default and the
-    /// missing-folder warning. A stat, which a stalled share can hold for
-    /// seconds: never on the main actor.
+    /// A stat, which a stalled share can hold for seconds: never on the
+    /// main actor.
     nonisolated static func sourceExists(_ path: String) -> Bool {
         // Not ResticService.expandTilde: it leaves a path without a tilde
         // as typed, and a file spelled with a trailing slash then reads as

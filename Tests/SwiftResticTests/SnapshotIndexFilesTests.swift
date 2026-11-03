@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// The reads behind the Files view, through the public API on a file-backed
-/// store: a folder's children across a chain's whole indexed history.
 @Suite("snapshot index files view")
 struct SnapshotIndexFilesTests {
     private let planA = IndexTestData.planA
@@ -38,13 +36,10 @@ struct SnapshotIndexFilesTests {
         ])
         #expect(summary(try await index.children(ofPath: "/data/sub", inChain: planA)) == ["/data/sub/x file s1 gone"])
         #expect(summary(try await index.children(ofPath: "/", inChain: planA)) == ["/data dir s2 now"])
-        // Chains do not mix.
         #expect(summary(try await index.children(ofPath: "/data", inChain: planB)) == ["/data/c.txt file b1 now"])
-        // Unknown folders and chains, and misspellings, hold nothing.
         #expect(try await index.children(ofPath: "/nope", inChain: planA).isEmpty)
         #expect(try await index.children(ofPath: "/data/", inChain: planA).isEmpty)
         #expect(try await index.children(ofPath: "/data", inChain: "swiftrestic-plan-unknown").isEmpty)
-        // A file has no children.
         #expect(try await index.children(ofPath: "/data/a.txt", inChain: planA).isEmpty)
     }
 
@@ -67,8 +62,6 @@ struct SnapshotIndexFilesTests {
         #expect(summary(try await index.children(ofPath: "/data", inChain: planA)) == ["/data/a.txt file s1 now"])
     }
 
-    // MARK: - Search within a chain
-
     @Test("a chain's search keeps the chain's own paths, gone ones included, each as the tree lists it")
     func searchWithinAChain() async throws {
         let checked = try CheckedIndex()
@@ -88,7 +81,6 @@ struct SnapshotIndexFilesTests {
             // A kind change: the chain's newest snapshot holding it decides.
             "/data/reports dir s2 now",
         ])
-        // Chains do not mix: another plan's match is no hit here.
         #expect(summary(try await index.search(matching: "report", inChain: planB, limit: 10)) == [
             "/data/report-b.txt file b1 now",
         ])
@@ -136,8 +128,6 @@ struct SnapshotIndexFilesTests {
         #expect(try await index.search(matching: "gone", inChain: planA, limit: 10).isEmpty)
     }
 
-    // MARK: - A folder's changes between two backups
-
     private func changes(_ index: SnapshotIndex, _ path: String = "/data", from older: String, to newer: String) async throws -> [String]? {
         try await index.changes(underPath: path, inChain: planA, from: older, to: newer).map { changes in
             changes.added.map { "+ \($0)" } + changes.removed.map { "- \($0)" }
@@ -165,7 +155,6 @@ struct SnapshotIndexFilesTests {
         // sub's level to say.
         #expect(try await changes(index, from: "s1", to: "s2") == ["+ /data/new", "- /data/gone", "M /data/a", "M /data/k"])
         #expect(try await changes(index, "/data/sub", from: "s1", to: "s2") == ["M /data/sub/x"])
-        // Asked the other way round, what was added was removed.
         #expect(try await changes(index, from: "s2", to: "s1") == ["+ /data/gone", "- /data/new", "M /data/a", "M /data/k"])
         // Nothing known is no answer, never "nothing changed": a snapshot
         // the index does not hold, another chain's, an unknown folder.
@@ -232,10 +221,6 @@ struct SnapshotIndexFilesTests {
         #expect(try await changes(absent.index, from: "s1", to: "s2") == ["- /data/f"])
     }
 
-    // MARK: - Content versions
-
-    /// Each version as its snapshot IDs, newest first, after how it follows
-    /// the next older one: "changed", "uncertain", or "first".
     private func versions(_ index: SnapshotIndex, _ path: String = "/data/f", chain: String? = nil) async throws -> [String] {
         try await index.contentVersions(ofPath: path, inChain: chain ?? planA).map { version in
             let since = switch version.since {
@@ -321,7 +306,6 @@ struct SnapshotIndexFilesTests {
         #expect(try await versions(index) == ["changed:s4", "first:s3"])
         #expect(try count(index, "edit") == 1)
 
-        // The whole chain goes: no mark stays.
         try checked.reconcile([])
         try checked.housekeeping()
         #expect(try count(index, "edit") == 0)
@@ -408,8 +392,6 @@ struct SnapshotIndexFilesTests {
             "/data/old.txt file s1 gone",
         ])
     }
-
-    // MARK: - Folders beside their manifests
 
     @Test("foldersBesideManifests finds every named folder beside its manifest in the chain's newest backup alone")
     func foldersBesideManifests() async throws {

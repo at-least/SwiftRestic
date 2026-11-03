@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 
-/// The repository page's volume strip is only as honest as this arithmetic.
 @Suite("Volume capacity")
 struct VolumeCapacityTests {
     @Test("used and fraction come back from total and free")

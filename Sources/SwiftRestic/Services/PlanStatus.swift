@@ -47,12 +47,10 @@ enum RepositoryCaption: Equatable, Sendable {
     /// Every backup the repository holds, every plan's and the other ones
     /// together; 0 once a listing settled and found none.
     case count(Int)
-    /// A listing in flight.
     case reading
     /// The read failed and its first sentence is the missing drive's own
     /// (`RunRecord.notConnected`); `full` is the whole message.
     case notConnected(full: String)
-    /// The read failed; `full` is its whole message.
     case failed(String, full: String)
 
     var text: String {
@@ -64,8 +62,6 @@ enum RepositoryCaption: Equatable, Sendable {
         }
     }
 
-    /// The whole failed read's message, for both failure cases' tooltip;
-    /// nil for the count and reading lines, which have nothing more to say.
     var help: String? {
         switch self {
         case .notConnected(let full), .failed(_, let full): full

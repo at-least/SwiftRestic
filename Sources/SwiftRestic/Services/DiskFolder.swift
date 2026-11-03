@@ -9,7 +9,6 @@ import Foundation
 /// indexed one are one `PathKey`. Each call reads the file system, which a
 /// stalled share can hold for seconds: callers run it off the main actor.
 enum DiskFolder {
-    /// One item of a listing.
     struct Item: Equatable, Sendable {
         let name: String
         /// A folder, a package among them, as restic records a `dir`. A
@@ -21,8 +20,6 @@ enum DiskFolder {
 
     private static let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey]
 
-    /// The items directly in the folder at `path`. Throws `FolderAbsence`
-    /// when it cannot be listed.
     static func list(_ path: String) throws -> [Item] {
         let urls: [URL]
         do {
@@ -48,9 +45,7 @@ enum DiskFolder {
         }
     }
 
-    /// Whether the item at `path` is a folder, by `lstat`, so a link is the
-    /// link. Throws `FolderAbsence` when nothing is there or it cannot be
-    /// looked at.
+    /// By `lstat`, so a link is the link.
     static func isDirectory(_ path: String) throws -> Bool {
         var info = stat()
         guard lstat(path, &info) == 0 else { throw FolderAbsence(path: path, code: errno) }
@@ -112,15 +107,10 @@ enum DiskFolder {
 /// them (`RunRecord`), macOS's privacy protection and the file permissions
 /// as an unreadable item's diagnosis does (`ItemErrorDiagnosis`).
 enum FolderAbsence: Error, Equatable, Sendable {
-    /// The drive or network share it is on is not connected: its volume.
     case volumeAway(volume: String)
-    /// Nothing is there: moved, renamed or deleted.
     case missing(name: String)
-    /// EPERM: macOS's privacy protection said no.
     case blockedByMacOS(name: String)
-    /// EACCES: the folder's own permissions keep the user out.
     case deniedByFilePermissions(name: String)
-    /// Anything else, in the system's words.
     case unreadable(name: String, reason: String)
 
     init(path: String, code: Int32) {
@@ -150,7 +140,6 @@ enum FolderAbsence: Error, Equatable, Sendable {
         }
     }
 
-    /// The headline: what is wrong, naming what it is wrong with.
     var title: String {
         switch self {
         case let .volumeAway(volume): "“\(volume)” is not connected"
@@ -182,8 +171,6 @@ enum FolderAbsence: Error, Equatable, Sendable {
     /// — macOS's own protection, the system's own error.
     struct Remedy: Equatable, Sendable {
         enum Fix: Equatable, Sendable {
-            /// System Settings › Privacy & Security › Full Disk Access
-            /// (`FullDiskAccessButton`).
             case openFullDiskAccessSettings
             /// The folder selected in Finder, where Get Info is.
             case revealInFinder

@@ -59,8 +59,6 @@ struct IndexBackfillBufferTests {
         for index in 4000..<12_010 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
 
         #expect(throws: (any Error).self) { try buffer.finish() }
-        // Exactly two flushes were ever tried: the chunk that landed and the
-        // one that failed. No later chunk, no remainder, no final marker.
         #expect(recorder.attempted.map(\.count) == [4000, 4000])
         #expect(recorder.attempted.allSatisfy { !$0.final })
         #expect(recorder.recorded.map(\.count) == [4000])
@@ -129,7 +127,6 @@ struct IndexBackfillBufferTests {
         for index in 0 ..< SnapshotIndex.chunkSize {
             buffer.append(IndexedEntry(path: "/data/b\(index)", isDirectory: false))
         }
-        // Never a full read landed.
         #expect(throws: CancellationError.self) { try buffer.finish() }
         #expect(recorder.attempted.isEmpty)
     }

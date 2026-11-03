@@ -40,8 +40,6 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         original = try c.decodeIfPresent(String.self, forKey: .original)
     }
 
-    /// Bytes actually written to the repository by the backup that made this
-    /// snapshot — the number worth showing next to a snapshot in a list.
     var dataAdded: Int64? { summary?.dataAdded }
 
     static func == (lhs: Snapshot, rhs: Snapshot) -> Bool { lhs.id == rhs.id }
@@ -74,10 +72,6 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
         case name, type, path, size, mtime
     }
 
-    /// The optional members all default to `nil`, so a node can be built from
-    /// just the three fields the browser and the search results need — or
-    /// carry size and mtime when they arrived decoded or from the browse
-    /// cache with the node.
     init(name: String, type: Kind, path: String, size: Int64? = nil, mtime: Date? = nil) {
         self.name = name
         self.type = type
@@ -120,7 +114,6 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     static func == (lhs: FindMatch, rhs: FindMatch) -> Bool { lhs.path == rhs.path }
     func hash(into hasher: inout Hasher) { hasher.combine(path) }
 
-    /// The node shape the restore code already understands.
     var node: SnapshotNode {
         var node = SnapshotNode(name: name, type: type, path: path)
         node.size = size
@@ -182,9 +175,6 @@ struct DiffChangeSearch: Sendable {
         entries = changes.map { ($0, $0.path.lowercased()) }
     }
 
-    /// The changes the category gate and path search admit. The needle
-    /// arrives as typed — surrounding whitespace is tolerated, and an empty
-    /// needle admits everything the category allows.
     func matches(category: ResticDiffChange.Category?, needle: String) -> [ResticDiffChange] {
         let key = needle.trimmingCharacters(in: .whitespaces).lowercased()
         return entries.filter { entry in

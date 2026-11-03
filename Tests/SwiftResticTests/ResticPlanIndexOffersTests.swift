@@ -1,10 +1,6 @@
 import Foundation
 import Testing
 
-/// The plan page's offers over real restic (`PlanIndexOffers`): the
-/// rebuildable folders and the skipped paths earlier backups still hold,
-/// read from the index the app builds, through Exclude, Remove from Earlier
-/// Backups and a failing index.
 @Suite("restic plan offers", .serialized, .enabled(if: ResticAvailability.isInstalled))
 @MainActor
 struct ResticPlanIndexOffersTests {
@@ -16,9 +12,6 @@ struct ResticPlanIndexOffersTests {
         var plan: BackupPlan
     }
 
-    /// A folder with a Gradle build, a Go module's vendor folder and a note;
-    /// a plan of it that skips nothing, on a fresh repository; the model
-    /// booted on it with the empty listing indexed.
     private func makeScene() async throws -> Scene {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticPlanOffers-\(UUID().uuidString)")
@@ -108,7 +101,6 @@ struct ResticPlanIndexOffersTests {
         #expect(last.rebuildable.map(\.rule.manifest) == ["build.gradle", "go.mod"])
         #expect(last.inEarlierBackups.isEmpty)
         #expect(last.rebuildableFailure == nil && last.inEarlierBackupsFailure == nil)
-        // Every round before the last found the index still reading.
         #expect(rounds.dropLast().allSatisfy { !$0.isIndexComplete })
         await model.shutdown()
     }

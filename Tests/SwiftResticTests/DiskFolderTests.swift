@@ -2,8 +2,6 @@ import Darwin
 import Foundation
 import Testing
 
-/// A folder of this Mac as a plan's Files tab lists it (`DiskFolder`), and
-/// why one can't be listed (`FolderAbsence`), on scratch folders.
 @Suite("disk folder")
 struct DiskFolderTests {
     private func scratch() throws -> String {
@@ -150,7 +148,6 @@ struct DiskFolderTests {
             == "macOS blocked it even with Full Disk Access on — it is likely protected by macOS itself.")
         #expect(blocked.remedy(fullDiskAccess: .granted) == nil)
 
-        // The file permissions: Finder's Get Info, whatever the grant.
         let denied = FolderAbsence.deniedByFilePermissions(name: "Documents")
         #expect(denied.title == "SwiftRestic can’t read “Documents”")
         for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {

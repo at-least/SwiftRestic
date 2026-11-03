@@ -15,7 +15,6 @@ enum DiskFile: Equatable {
     /// file to compare.
     case other
     case file(size: Int64, modified: Date)
-    /// The attributes could not be read, and why.
     case unreadable(String)
 
     static func at(_ path: String) -> DiskFile {

@@ -22,8 +22,6 @@ enum DiffCandidateGrouping {
         months(in: candidates, time: \.time, calendar: calendar)
     }
 
-    /// The same bucketing for anything with a moment, so every list of
-    /// backups shares the Compare sheet's months.
     static func months<Item>(in items: [Item], time: (Item) -> Date, calendar: Calendar = .current) -> [Month<Item>] {
         var order: [DateComponents] = []
         var labels: [DateComponents: String] = [:]

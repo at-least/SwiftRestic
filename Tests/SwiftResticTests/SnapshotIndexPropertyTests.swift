@@ -1,15 +1,7 @@
 import Foundation
 import Testing
 
-/// The randomized differential test: a seeded world of
-/// snapshots with known contents drives the index through everything the
-/// backfill can meet — stale listings, forgets at any frontier and in the
-/// middle of a reverse backfill, a whole chain dying and returning, the
-/// streamed snapshot dying and returning between two of its own chunks,
-/// cancelled streams, a reopen mid-stream, injected diff failures, file<->dir
-/// flips spelled both as complete diffs and as restic's `T`-only lines,
-/// back-dated snapshots, snapshots set aside as unreadable, and housekeeping
-/// skipped at random. The truth comes from the world, never from SQL.
+/// The truth comes from the world, never from SQL.
 ///
 /// After every write the stored-state checks must hold ((a)–(c) and (l) only
 /// right after housekeeping). Check (i) runs by path: the nodes a reopen
@@ -88,9 +80,6 @@ struct SnapshotIndexPropertyTests {
     }
 }
 
-// MARK: - The world
-
-/// One snapshot of the model: its listing metadata, content and chain.
 private struct WorldSnapshot {
     var id: String
     var micros: Int64
@@ -135,8 +124,6 @@ private struct Dice {
     }
 }
 
-// MARK: - One seeded run
-
 private final class PropertyRun {
     let variant: SnapshotIndexPropertyTests.Variant
     let fixture: IndexFixture
@@ -168,8 +155,6 @@ private final class PropertyRun {
         bump(key)
         if failures.count < 20 { failures.append(message) }
     }
-
-    // MARK: Checked writes
 
     private func check(_ operation: String, afterHousekeeping: Bool = false) {
         bump("invariantChecks")
@@ -203,8 +188,6 @@ private final class PropertyRun {
             try write("housekeeping", afterHousekeeping: true) { try index.housekeeping() }
         }
     }
-
-    // MARK: Snapshots and contents
 
     func newSnapshot(chain: String, backDated: Bool) throws {
         world.serial += 1
@@ -252,9 +235,6 @@ private final class PropertyRun {
         return revisions
     }
 
-    /// The content generator: a small universe with a directory
-    /// `/r/k` that flips kind, gains and loses a child, and an empty
-    /// directory that comes and goes.
     func randomContent(from base: IndexContent?) -> IndexContent {
         var files = Set<String>()
         var kIsDirectory = false, kChild = false, kPresent = true, emptyDirectory = false
@@ -293,8 +273,6 @@ private final class PropertyRun {
         if emptyDirectory { content["/r/e"] = true }
         return content
     }
-
-    // MARK: The run
 
     func run(rounds: Int) async throws {
         for _ in 0 ..< 5 { try newSnapshot(chain: "P", backDated: false) }
@@ -464,8 +442,6 @@ private final class PropertyRun {
         fail("mismatch", "step cap")
     }
 
-    /// Removes each flipped path's old spelling and both subtrees, keeping
-    /// only the new spelling of the flipped path itself.
     private func tOnly(_ diff: (added: [String], removed: [String]), flipped: [String]) -> (added: [String], removed: [String]) {
         func under(_ path: String, _ root: String) -> Bool { path.hasPrefix(root + "/") }
         func bare(_ path: String) -> String { ResticPath.normalized(path) }
@@ -474,9 +450,6 @@ private final class PropertyRun {
         return (added, removed)
     }
 
-    /// Streams `id`'s listing in random chunks after `beginFull`. A cancel
-    /// returns without the final, sometimes as a crash (the store reopens);
-    /// a flap makes the streamed snapshot die and return between chunks.
     func feedFull(_ view: World, _ id: String, flap: (() throws -> Void)?) {
         bump("full")
         let entries = IndexTestData.ls(view.all[id]?.content ?? [:])
@@ -525,8 +498,6 @@ private final class PropertyRun {
         try reconcile(staleNow)
         try reconcile(now)
     }
-
-    // MARK: Verification against the model
 
     func verify(label: String) async throws {
         let index = self.index

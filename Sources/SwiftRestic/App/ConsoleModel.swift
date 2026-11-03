@@ -8,8 +8,6 @@ struct PendingCommand {
     let text: String
 }
 
-/// State of the restic console pane.
-///
 /// Owned by `AppModel` rather than the view: as a first-class pane it must
 /// survive pane switches — navigation cancels nothing; a running command
 /// ends by its Stop button, its repository's deletion, or quitting
@@ -23,13 +21,9 @@ struct PendingCommand {
 @MainActor
 @Observable
 final class ConsoleModel {
-    /// Runs a command against a repository — `AppModel.runConsoleCommand`,
-    /// the engine chokepoint, handed over at wiring.
     var runCommand: (_ repositoryID: UUID, _ arguments: [String]) async -> String = { _, _ in
         preconditionFailure("the console was never wired")
     }
-    /// Persists the secret-filtered history — the configuration write,
-    /// handed over at wiring.
     var persistHistory: ([String]) -> Void = { _ in preconditionFailure("the console was never wired") }
 
     var repositoryID: UUID?
@@ -55,8 +49,6 @@ final class ConsoleModel {
     private var recalledDraft: String?
     private var runTask: Task<Void, Never>?
 
-    /// The pane's appear moment, driven by `AppModel.consoleDidAppear`:
-    /// the model reads its own configuration and hands the values over.
     func appear(repositoryID defaultRepositoryID: UUID?, persistedHistory: [String]) {
         if repositoryID == nil { repositoryID = defaultRepositoryID }
         // The session's history outranks the persisted list once it exists:
@@ -131,8 +123,6 @@ final class ConsoleModel {
         return history[historyIndex!]
     }
 
-    /// The entry ↓ should show: one step newer per press, and past the newest
-    /// back to the draft the field held when the walk started.
     func recallNext() -> String? {
         guard let index = historyIndex else { return nil }
         if index == 0 {
@@ -144,8 +134,6 @@ final class ConsoleModel {
         return history[historyIndex!]
     }
 
-    /// History-sidebar click: the user chose a command, so any walk ends and
-    /// the field shows the entry.
     func pickFromHistory(_ entry: String) {
         endRecall()
         commandText = entry

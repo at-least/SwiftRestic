@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// Walks the menu bar headline through its lifecycle, appending state one step
-/// at a time the way a user's afternoon actually unfolds: idle → next run
-/// announced → backup starts → phases tick over → finishes → idle again.
 @Suite("Menu bar status")
 struct MenuBarStatusTests {
     private func plan(name: String) -> BackupPlan {
@@ -77,8 +74,6 @@ struct MenuBarStatusTests {
                 nextRun: (nightly, next)
             ) == "Next: Nightly (Home Disk) — \(Format.tileTimestamp(next))"
         )
-        // A plan named like its repository is not said twice, and a
-        // repository the list does not resolve leaves the plan's name alone.
         var twin = plan(name: "Home Disk")
         twin.repositoryID = home.id
         #expect(
@@ -147,7 +142,6 @@ struct MenuBarStatusTests {
         #expect(lines.map(\.text) == ["Documents (Home Disk) — 42%", "Documents (Offsite) — 10%"])
         #expect(lines.map(\.id) == [documents.id.uuidString, twin.id.uuidString])
 
-        // A repository the list does not resolve leaves the plan's name alone.
         let orphan = plan(name: "Nightly")
         #expect(
             MenuBarStatus.runningLines(
@@ -166,7 +160,6 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0)) == "0%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
-        // Retention and notification phases are named, never shown as a percent.
         #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Applying retention…")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Cancelling…")
     }
@@ -195,7 +188,6 @@ struct MenuBarStatusTests {
         var progress = OperationProgress()
         progress.fraction = 0.25
 
-        // The restore is one line with its own stable identity.
         let restore = MenuBarStatus.restoreLine(progress: progress)
         #expect(restore?.text == "Restoring — 25%")
         #expect(restore?.id == "restore")
@@ -363,10 +355,8 @@ struct MenuBarStatusTests {
             == ["Code: Failed — 2 hours ago"])
         #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago)
             == ["Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
-        // A problem and a pause are both news: both lines, the problem first.
         #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
             == ["Photos: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
-        // Quiet success says nothing; a running plan's line leads the menu.
         #expect(MenuBarStatus.newsLines(for: quiet, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
 
@@ -418,7 +408,6 @@ struct MenuBarStatusTests {
         // The cause no wait cures leads.
         #expect(rows.first?.disabledReason == "restic is missing")
 
-        // A restic found but refused is named for what it is, not as missing.
         #expect(MenuBarStatus.resticMissingLine(.needsUpdate) == "restic needs an update — backups are on hold")
         #expect(MenuBarStatus.planRows(plans: [plan], activity: [:], resticAbsence: .needsUpdate).first?.disabledReason
             == "restic needs an update")
@@ -485,7 +474,6 @@ struct MenuBarStatusTests {
         stale.finishedAt = .now.addingTimeInterval(-8 * 86_400)
         #expect(MenuBarStatus.problemLine(runs: [stale], hasNoRepositories: false) == nil)
 
-        // Just inside the window still counts.
         var fresh = RunRecord(planName: "New Plan")
         fresh.outcome = .failed
         fresh.startedAt = .now.addingTimeInterval(-7 * 86_400)
@@ -493,7 +481,6 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [fresh], hasNoRepositories: false) != nil)
     }
 
-    /// A run of `planID` that finished `minutesAgo` minutes ago.
     private func run(
         _ outcome: RunRecord.Outcome,
         minutesAgo: Double,
@@ -660,7 +647,6 @@ struct MenuBarStatusTests {
             return record
         }
 
-        // A plan with its repository — the same words on every run surface.
         #expect(
             MenuBarStatus.problemLine(
                 runs: [failedBackup(planID: documents.id, planName: "Documents", repositoryID: home.id)],
@@ -698,8 +684,6 @@ struct MenuBarStatusTests {
             ) == "Check on Offsite failed 2 hours ago"
         )
     }
-
-    // MARK: - Holds, stops and the dimmed face
 
     private var newYork: Calendar { newYorkCalendar() }
 
@@ -760,7 +744,6 @@ struct MenuBarStatusTests {
             ]
         )
 
-        // The headline replaces the running lines, never joins them.
         #expect(
             MenuBarStatus.trayLines(
                 missing: nil,
@@ -773,8 +756,6 @@ struct MenuBarStatusTests {
             ) == [.status("Next: Documents — in an hour")]
         )
 
-        // With no submenu to carry it, the named Protection line joins the
-        // status lines: after the problem sentence, before the headline.
         #expect(
             MenuBarStatus.trayLines(
                 missing: nil,
@@ -805,7 +786,6 @@ struct MenuBarStatusTests {
         #expect(idle[1].title == "Back Up “Untitled Plan” Now")
         #expect(idle[2].title == "Back Up “Scans” Now")
 
-        // Back Up Now is enabled only where the plan could run: restic too.
         let noRestic = MenuBarStatus.planRows(plans: [nightly], activity: [:], resticAbsence: .missing)
         #expect(noRestic.first?.isEnabled == false)
 
@@ -856,7 +836,6 @@ struct MenuBarStatusTests {
         #expect(groups[1].rows.map(\.title) == ["Back Up “Photos” Now", "Back Up “Documents” Now"])
         #expect(MenuBarStatus.showsGroupsAsSubmenus(groups))
 
-        // A running plan's Stop row stays inside its repository's group.
         let running = MenuBarStatus.planGroups(
             plans: [documents],
             repositories: [home],
@@ -866,7 +845,6 @@ struct MenuBarStatusTests {
         #expect(running.map(\.title) == ["Home Disk"])
         #expect(running[0].rows.map(\.title) == ["Stop “Documents” Backup"])
 
-        // A single repository's rows sit in the menu itself.
         let single = MenuBarStatus.planGroups(
             plans: [documents],
             repositories: [home],

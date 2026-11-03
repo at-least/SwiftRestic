@@ -48,8 +48,6 @@ struct RunDetailPanel: View {
         .frame(height: hasMessages ? 320 : 220)
     }
 
-    // MARK: - Header
-
     private var header: some View {
         HStack(spacing: 6) {
             // Decorative beside words that already say the outcome — the
@@ -65,8 +63,6 @@ struct RunDetailPanel: View {
         }
     }
 
-    // MARK: - Facts
-
     private var repositoryName: String? { model.repository(id: run.repositoryID).map { model.label(of: $0) } }
 
     @ViewBuilder
@@ -76,7 +72,6 @@ struct RunDetailPanel: View {
             if let snapshotID = run.snapshotID {
                 DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
             }
-            // Why there was nothing to back up — the Detail column's words.
             if run.outcome == .skipped, let reason = run.detailText {
                 DetailRow("Reason", reason)
             }
@@ -101,7 +96,6 @@ struct RunDetailPanel: View {
             // rows are left out rather than guessed.
             if let destination = run.destinationPath {
                 if let paths = run.sourcePaths {
-                    // The names in the row, every full path in the tooltip.
                     DetailRow("Items") {
                         Text(paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "))
                             .lineLimit(1)
@@ -138,7 +132,6 @@ struct RunDetailPanel: View {
                         // The verdict advises `restic repair`: the console
                         // is where it runs with the password supplied.
                         if let id = RunRecordPresentation.repairRoute(for: run, repositoryExists: repositoryName != nil) {
-                            // The drawer's buttons' size.
                             ConsoleRouteButton(repositoryID: id)
                                 .controlSize(.small)
                         }
@@ -178,8 +171,6 @@ struct RunDetailPanel: View {
             DetailRow("restic exit") { Text(text).textSelection(.enabled) }
         }
     }
-
-    // MARK: - Messages
 
     private var hasMessages: Bool {
         (run.failureMessage != nil && run.failureMessage != run.outcome.displayName)
@@ -242,8 +233,6 @@ struct RunDetailPanel: View {
             }
         }
     }
-
-    // MARK: - Buttons
 
     private var buttons: some View {
         HStack(spacing: 10) {
@@ -427,7 +416,6 @@ private struct RunSnapshotRow: View {
 private struct RevealRow: View {
     let path: String
     let runID: UUID
-    /// Nil until the check lands; the button waits disabled until then.
     @State private var existence = PathExistence()
 
     var body: some View {

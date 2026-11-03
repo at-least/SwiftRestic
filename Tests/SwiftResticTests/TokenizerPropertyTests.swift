@@ -1,11 +1,6 @@
 import Foundation
 import Testing
 
-/// Property tests for the console's shell-like tokenizer.
-///
-/// One example per quirk is not enough for a parser: these run hundreds of
-/// generated inputs against invariants that must hold for every input, seeded
-/// so a failure names the exact case to reproduce.
 @Suite("Tokenizer properties")
 struct TokenizerPropertyTests {
     /// A pool without whitespace, quotes or backslashes: characters that can
@@ -51,7 +46,6 @@ struct TokenizerPropertyTests {
 
     @Test("arbitrary input never crashes, and only quotes can produce an empty token")
     func arbitraryInputIsSafe() {
-        // Quotes, escapes, every kind of whitespace.
         let alphabet = Array("a b'c\"d\\ e\t\n")
         var generator = SeededGenerator(seed: 2)
         for _ in 0 ..< 500 {

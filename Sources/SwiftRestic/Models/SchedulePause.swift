@@ -39,7 +39,6 @@ enum PauseLength: String, CaseIterable, Identifiable, Sendable {
 /// relaunch — a pause that quietly ended on restart would break the user's
 /// own "until tomorrow".
 struct SchedulePause: Codable, Sendable, Hashable {
-    /// When the pause ends by itself; `nil` for Until I Resume.
     var until: Date?
 
     init(until: Date?) {

@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// The folders the plan page offers to skip after a backup: the rule table,
-/// what a plan is offered of the index's finds, and the user's Keep.
 @Suite("Rebuildable folders")
 struct RebuildableFolderTests {
     @Test("no rule names a folder a developer group already skips by name, and no rule is listed twice")
@@ -54,7 +52,6 @@ struct RebuildableFolderTests {
         #expect(RebuildableFolder.offered(found, to: plan).map(\.path) == ["/p/vendor"])
         plan.keptRebuildableFolders = ["/p/vendor"]
         #expect(RebuildableFolder.offered(found, to: plan).map(\.path) == ["/p/vendor/x/build"])
-        // A skipped one answers for it as an offered one does.
         plan.keptRebuildableFolders = []
         plan.excludePatterns = ["/p/vendor"]
         #expect(RebuildableFolder.offered(found, to: plan).isEmpty)
@@ -69,7 +66,6 @@ struct RebuildableFolderTests {
         #expect(stored.merging(draft: draft).keptRebuildableFolders == ["/data/kept/vendor"])
         let decoded = try JSONDecoder().decode(BackupPlan.self, from: JSONEncoder().encode(stored))
         #expect(decoded.keptRebuildableFolders == ["/data/kept/vendor"])
-        // A plan saved before the key has kept nothing.
         let older = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"path": "/data"}"#.utf8))
         #expect(older.keptRebuildableFolders.isEmpty)
     }

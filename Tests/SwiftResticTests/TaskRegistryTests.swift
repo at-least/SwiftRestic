@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// The run census the quit path drains.
-///
 /// `shutdown` leans on one property: when `drain` returns, everything it
 /// was tracking — including anything that landed while it was draining —
 /// has finished unwinding, so the final save cannot race a run record into
@@ -10,8 +8,6 @@ import Testing
 @Suite("Task registry")
 @MainActor
 struct TaskRegistryTests {
-    /// Flag box the tracked tasks write from their own suspension points and
-    /// the assertions read after `drain` returns.
     private final class Flags: @unchecked Sendable {
         private let lock = NSLock()
         private var marked: Set<String> = []

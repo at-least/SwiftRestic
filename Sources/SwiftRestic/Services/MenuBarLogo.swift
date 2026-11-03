@@ -94,7 +94,6 @@ enum MenuBarLogo {
         draw(in: rect, into: context, content: .resting)
     }
 
-    /// The ring at rest, the plate stack settled rather than pulsing.
     static func image() -> NSImage { restingImage }
 
     /// The attention face: the resting ring with an exclamation mark in the
@@ -106,7 +105,6 @@ enum MenuBarLogo {
     /// scale, not a borrowed SF Symbol.
     static var heroImage: NSImage { heroImageCache }
 
-    /// A running frame: the ring with the snapshot stack pulsing.
     static func image(phase: Int) -> NSImage {
         runningImages[((phase % runningImages.count) + runningImages.count) % runningImages.count]
     }
@@ -201,8 +199,6 @@ enum MenuBarLogo {
         }
     }
 
-    /// The exclamation mark (`exclamationBarTop` and friends): the bar with
-    /// the stroke's round ends, the dot below it, both solid ink.
     private static func drawExclamation(into context: CGContext, center: CGPoint, s: CGFloat, stroke: CGFloat) {
         context.setFillColor(ink)
         let bar = CGRect(

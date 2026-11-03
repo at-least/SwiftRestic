@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The dry-run loader both retention surfaces share (`RetentionPreviewLoad`):
-/// the answer, the failure that replaces it, and the cancelled attempt that
-/// leaves the state to its successor.
 @MainActor
 @Suite("Retention preview load")
 struct RetentionPreviewLoadTests {
@@ -34,7 +31,6 @@ struct RetentionPreviewLoadTests {
     @Test("a cancelled attempt leaves the state to its successor")
     func cancelledAttempt() async throws {
         let load = RetentionPreviewLoad()
-        // Attempt A hangs inside its fetch until the test resumes it.
         let (held, holdA) = AsyncStream<CheckedContinuation<Void, Never>>.makeStream()
         let attemptA = Task {
             await load.load {
@@ -46,7 +42,6 @@ struct RetentionPreviewLoadTests {
         for await continuation in held { suspended = continuation; break }
         holdA.finish()
 
-        // Attempt B, the successor, runs to completion while A hangs.
         let answer = RetentionPreview(kept: [], removed: [])
         await load.load { answer }
         #expect(load.result == answer)

@@ -66,8 +66,6 @@ enum FindResultGrouping {
             .map(\.element)
     }
 
-    /// One row of the index engine, the hit beside the summary's facts a
-    /// row shows.
     struct IndexRow {
         var match: FindMatch
         var snapshotID: String

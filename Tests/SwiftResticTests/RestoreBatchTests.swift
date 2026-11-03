@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Several items restored together: which items a selection restores,
-/// which names it refuses, and the restic calls it becomes.
 @Suite("Restore batch")
 struct RestoreBatchTests {
     private func file(_ path: String) -> SnapshotNode {
@@ -13,7 +11,6 @@ struct RestoreBatchTests {
         SnapshotNode(name: (path as NSString).lastPathComponent, type: .dir, path: path)
     }
 
-    /// A selection of one backup, as the Restore pane's is.
     private func oneBackup(_ nodes: [SnapshotNode]) -> (kept: [SnapshotNode], covered: [(item: SnapshotNode, folder: SnapshotNode)]) {
         RestoreBatch.covering(nodes, snapshotID: { _ in "backup" })
     }
@@ -54,9 +51,7 @@ struct RestoreBatchTests {
         let covered = oneBackup([project, src, main, other]).covered
         #expect(covered.map(\.item.path) == ["/Data/Project/src", "/Data/Project/src/main.swift"])
         #expect(covered.map(\.folder.path) == ["/Data/Project", "/Data/Project"])
-        // A row twice is restored once, and was not inside anything.
         #expect(oneBackup([project, other, project]).covered.isEmpty)
-        // Nothing inside anything: nothing to say.
         #expect(oneBackup([project, other]).covered.isEmpty)
         #expect(RestoreBatch.coveredNote(oneBackup([]).covered) == nil)
 

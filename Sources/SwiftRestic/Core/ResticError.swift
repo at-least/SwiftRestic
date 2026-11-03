@@ -8,7 +8,6 @@ enum ResticAbsence: Equatable, Sendable {
     case needsUpdate
     case unusable
 
-    /// From the error the search for restic ended on.
     init(refusal error: any Error) {
         switch error as? ResticError {
         case .resticTooOld?: self = .needsUpdate
@@ -25,27 +24,18 @@ enum ResticAbsence: Equatable, Sendable {
         }
     }
 
-    /// `words` as a disabled control's reason.
     var sentence: String { words + "." }
 }
 
-/// Everything that can go wrong between us and the restic binary.
 enum ResticError: Error, LocalizedError, Equatable {
-    /// No usable `restic` executable was found on disk.
     case binaryNotFound(searched: [String])
-    /// The configured restic path exists but is not executable.
     case binaryNotExecutable(path: String)
-    /// The process exited non-zero. `message` is restic's own text when it gave one.
+    /// `message` is restic's own text when it gave one.
     case commandFailed(exitCode: Int32, message: String)
-    /// The run was cancelled by the user.
     case cancelled
-    /// The repository asked for is no longer in the configuration.
     case repositoryMissing
-    /// The plan asked for is no longer in the configuration.
     case planMissing
-    /// The item a restore asked for by path is not in its backup's listing.
     case itemNotListed(name: String)
-    /// No password is stored for the repository.
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
     /// The child outlived its timeout and was terminated. `cause` is what
@@ -67,9 +57,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// beside the landing could not be moved into place. The staged copy is
     /// gone; whatever the destination held before is untouched.
     case stagedFileMoveFailed(path: String, reason: String)
-    /// The restic found is older than `ResticVersion.minimumSupported`.
     case resticTooOld(path: String, found: String)
-    /// `restic version` answered something that names no version.
     case resticVersionUnreadable(path: String)
     /// A folder stands where a Replace restore would put a file — one item
     /// or several. Left to restic, several items fail on it ("directory not
@@ -198,8 +186,6 @@ enum ResticError: Error, LocalizedError, Equatable {
             + "Connect to it once in Terminal with ssh and accept the key, then try again."
     }
 
-    /// rclone's failures in its own verdict, or in plain words where it
-    /// said none; nil for a failure that is not rclone's.
     static func rcloneWords(_ message: String) -> String? {
         if message.contains(#"exec: "rclone": executable file not found"#) { return rcloneMissing }
         // restic's line says only "error talking HTTP to rclone"; rclone's
@@ -226,7 +212,6 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// it is now is a new repository, as a moved plan folder is a new plan.
     static let noRepositoryAtLocation = "No repository is at its location — put it back, or add it where it is now as a new repository"
 
-    /// restic's documented exit codes.
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
         case 1: "restic reported a fatal error"
@@ -245,11 +230,8 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// must not abort a scheduled run. `forget`'s 3 is another matter: it
     /// could not delete snapshots (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
-    /// restic's exit when no repository is at the location.
     static let repositoryMissingCode: Int32 = 10
-    /// restic's exit when another process holds the repository's lock.
     static let repositoryLockedCode: Int32 = 11
-    /// restic's exit when the password opens no key of the repository.
     static let wrongPasswordCode: Int32 = 12
 
     /// Whether an error is a stop — Swift's task cancellation or restic's

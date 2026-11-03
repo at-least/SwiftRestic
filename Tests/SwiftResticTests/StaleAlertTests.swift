@@ -1,11 +1,6 @@
 import Foundation
 import Testing
 
-/// The quiet-plan alert: a scheduled plan with no successful backup for
-/// longer than its window is named once per stretch — never per tick — and
-/// its next success re-arms it. Paused, manual, incomplete and running
-/// plans are never named, and a weekly plan is not named for the week its
-/// schedule itself waits.
 @Suite("Quiet-plan alert")
 struct StaleAlertTests {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
@@ -32,11 +27,9 @@ struct StaleAlertTests {
         let alerts = due([quiet, plan(lastSuccessDaysAgo: 6.9)])
         #expect(alerts == [StalePlanAlert(planID: quiet.id, lastBackupAt: try #require(quiet.lastSuccessAt), days: 8)])
 
-        // Alerted for this stretch: not again, however many ticks pass.
         var alerted = quiet
         alerted.staleAlertedFor = quiet.lastSuccessAt
         #expect(due([alerted]).isEmpty)
-        // A newer success re-arms it: the next stretch is named in its turn.
         alerted.lastSuccessAt = now.addingTimeInterval(-7.5 * day)
         #expect(due([alerted]).map(\.days) == [7])
     }
@@ -111,7 +104,6 @@ struct StaleAlertTests {
         let relaunched = try ConfigStore.decoded(ConfigStore.encoded(configuration)).0.plans[0]
         #expect(relaunched.staleAlertedFor == snapshotTime)
         #expect(due([relaunched], snapshots: [stored.id: snapshotTime]).isEmpty)
-        // A newer backup re-arms it.
         let later = snapshotTime.addingTimeInterval(day)
         #expect(due([relaunched], snapshots: [stored.id: later]).count == 1)
     }

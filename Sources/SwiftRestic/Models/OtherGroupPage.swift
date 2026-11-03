@@ -15,17 +15,14 @@ import Foundation
 struct OtherGroupPageSummary: Equatable {
     /// The group's label title — the page's name is the sidebar row's.
     var title: String
-    /// The explanation card's whole sentence.
     var explanation: String
     /// The one configured plan the group belonged to, when it still is
     /// one: the moved variant's Show Plan target. Nil for an adoptable
     /// group, whose page offers the adopt verb instead.
     var formerPlan: BackupPlan?
-    /// Whether the page offers Adopt (`BackupShelves.adoptablePath`).
     var isAdoptable: Bool
     var newestAt: Date
     var oldestAt: Date
-    /// The group's newest backup.
     var newestSnapshotID: String
     /// The Mac the backups came from, or "N Macs — the list" when several
     /// did — the count first, so a long hostname cannot push it out.
@@ -52,8 +49,6 @@ struct OtherGroupPageSummary: Equatable {
 
     /// `snapshots` are the group's, newest first as `OtherBackupsGroup`
     /// sorts them, and never empty — a group exists only around backups.
-    /// `planID` is the plan tag's UUID, nil for an untagged lineage;
-    /// `allPlans` every configured plan, which `formerPlan`'s label reads.
     init(
         snapshots: [Snapshot],
         title: String,
@@ -123,8 +118,6 @@ struct OtherGroupPageSummary: Equatable {
 }
 
 extension BackupShelves {
-    /// The group under this repository's Other backups whose plan tag names
-    /// `planID` — the page's and the selection revalidation's one lookup.
     /// Nil when it is gone: adopted, or refreshed away.
     func orphanPlanGroup(_ planID: UUID) -> OtherBackupsGroup? {
         others.first { $0.id == .plan(planID) }
@@ -138,16 +131,12 @@ extension BackupShelves {
         byPlan[planID]?.count ?? orphanPlanGroup(planID)?.snapshots.count ?? 0
     }
 
-    /// The untagged lineage under this repository's Other backups whose
-    /// host and folders are `key` — its page's and the selection
-    /// revalidation's one lookup. Nil when it is gone: forgotten, tagged
-    /// by the console, or refreshed away.
+    /// Nil when it is gone: forgotten, tagged by the console, or refreshed
+    /// away.
     func lineageGroup(_ key: SnapshotLineage.Key) -> OtherBackupsGroup? {
         others.first { $0.id == .lineage(key) }
     }
 
-    /// The page a group's selection shows, either kind, or nil when the
-    /// group is not under this repository's Other backups.
     func otherGroupPage(
         _ id: OtherBackupsGroup.ID,
         repositories: [Repository],

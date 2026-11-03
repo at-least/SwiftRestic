@@ -225,7 +225,6 @@ struct SchedulingTests {
         #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).isEmpty)
         #expect(Scheduler.nextScheduledRun(in: [plan], now: now, existingRepositoryIDs: existing) == nil)
 
-        // With the repository present the plan behaves normally again.
         #expect(Scheduler.duePlans(
             in: [plan],
             now: now,
@@ -344,9 +343,6 @@ struct SchedulingTests {
     }
 }
 
-/// The two pause levels — a plan's own timed pause and the app-wide hold —
-/// and the promise both make: what the displays announce is when the
-/// scheduler will actually fire.
 @Suite("Pausing the schedule")
 struct PauseSchedulingTests {
     private let repositoryID = UUID()
@@ -654,7 +650,6 @@ struct UpcomingRunTests {
             existingRepositoryIDs: Set([manual, later, disabled, incomplete, soon].compactMap(\.repositoryID))
         )
         #expect(next?.plan.id == soon.id)
-        // An hourly plan that ran ten minutes ago is due in fifty.
         #expect(next?.date == utcDate("2026-09-05 12:50:00"))
     }
 
@@ -731,7 +726,6 @@ struct MaintenanceSchedulingTests {
             #expect(MaintenancePolicy.forNewRepository(kind: kind).checkDepth == .structure, "\(kind)")
             #expect(MaintenancePolicy.forNewRepository(kind: kind).scheduledDataSubset == nil, "\(kind)")
         }
-        // The rotation's place, and the percentages it sits beside.
         var policy = MaintenancePolicy.forNewRepository(kind: .local)
         policy.nextCheckDataSlice = 3
         #expect(policy.scheduledDataSubset == .slice(3, of: 12))
@@ -740,11 +734,9 @@ struct MaintenanceSchedulingTests {
         #expect(policy.checkDataSlices == 0)
         policy.checkDepth = .structure
         #expect(policy.scheduledDataSubset == nil)
-        // A repository saved before keeps its setting.
         let saved = try JSONDecoder().decode(MaintenancePolicy.self, from: Data(#"{"checkEnabled":true,"checkIntervalDays":7,"checkReadDataPercent":5}"#.utf8))
         #expect(saved.checkDepth == .percent(5))
         #expect(saved.checkDataSlices == 0)
-        // What each reads, in the page's words and restic's argument.
         #expect(CheckDataSubset.slice(3, of: 12).words == "part 3 of 12")
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
         #expect(CheckDataSubset.percent(5).words == "5% of the data")
@@ -844,7 +836,6 @@ struct MaintenanceSchedulingTests {
         func last(_ runs: [RunRecord]) -> String {
             Scheduler.lastMaintenanceText(.check, of: repository, runs: runs, now: now)
         }
-        // Neither a stamp nor a record.
         #expect(last([]) == "Never")
         // A record without a stamp — history older than the stamp itself.
         #expect(last([check(.succeeded, at: "2026-09-08 12:00:00")]) == Format.ago(utcDate("2026-09-08 12:00:00"), now: now))
@@ -882,7 +873,6 @@ struct MaintenanceSchedulingTests {
         #expect(found?.id == damaged.id)
         #expect(found.flatMap { RunRecordPresentation.repairRoute(for: $0, repositoryExists: true) } == repository.id)
         #expect(Scheduler.newestMaintenanceRun(.check, of: repository, runs: [check(.completedWithErrors, at: "2026-09-02 12:00:00")]) == nil)
-        // Nothing recorded: the stamp, as before.
         #expect(last([]) == ago)
     }
 
@@ -1193,7 +1183,6 @@ struct RepositoryTests {
         #expect(env["RESTIC_REST_PASSWORD"] == "s3cret")
         #expect(rest.resticRepositoryString == "rest:https://host:8000/")
 
-        // A pasted URL sheds its login, decoded, into the fields.
         let split = try #require(Repository.splittingRESTCredentials("https://alice:p%40ss@host:8000/repo/"))
         #expect(split.url == "https://host:8000/repo/")
         #expect(split.user == "alice")
@@ -1241,7 +1230,6 @@ struct RepositoryTests {
         for shape in shapes {
             #expect(ResticService.expandTilde(shape) == (shape as NSString).expandingTildeInPath, "\(shape)")
         }
-        // A stand-in home takes the real one's place in the same result.
         #expect(ResticService.expandTilde("~", home: "/Users/probe") == "/Users/probe")
         #expect(ResticService.expandTilde("~/", home: "/Users/probe") == "/Users/probe")
         #expect(ResticService.expandTilde("~/Documents/", home: "/Users/probe") == "/Users/probe/Documents")

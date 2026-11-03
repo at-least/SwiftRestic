@@ -55,7 +55,6 @@ enum RunFix: Equatable {
     }
 }
 
-/// One unreadable item as the app says it (`RunRecordPresentation.unreadableItemWords`).
 struct UnreadableItemWords: Equatable {
     var name: String
     var location: String
@@ -89,8 +88,6 @@ enum MaintenanceRetry: Equatable {
 /// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
 /// cannot disagree.
 enum RunRecordPresentation {
-    /// The re-run a failed check or prune offers, or one that found errors;
-    /// nil for any other run, a clean one, or one whose repository is gone.
     static func maintenanceRetry(for run: RunRecord, repositoryExists: Bool) -> MaintenanceRetry? {
         guard repositoryExists, let id = run.repositoryID,
               run.outcome.isProblem
@@ -104,16 +101,14 @@ enum RunRecordPresentation {
 
     /// The repository a check that found damage sends to the restic console:
     /// its verdict advises `restic repair`, and the console is where the
-    /// repository's password is supplied. Nil for any other run.
+    /// repository's password is supplied.
     static func repairRoute(for run: RunRecord, repositoryExists: Bool) -> UUID? {
         guard repositoryExists, run.kind == .check, run.outcome == .completedWithErrors else { return nil }
         return run.repositoryID
     }
 
-    /// The fix for a failed run, or nil when its cause has none the app can
-    /// perform. Only while the repository is still set up; Unlock
-    /// only while no run here holds a lock on it, so "stale" means
-    /// nobody here is using it.
+    /// Only while the repository is still set up; Unlock only while no run
+    /// here holds a lock on it, so "stale" means nobody here is using it.
     static func fix(
         for run: RunRecord,
         repositoryExists: Bool,
@@ -163,8 +158,6 @@ enum RunRecordPresentation {
         return "\(planName) (\(repositoryName))"
     }
 
-    /// `planWithRepository` for a plan — its label read against `plans` —
-    /// its repository looked up among `repositories`.
     static func planWithRepository(_ plan: BackupPlan, plans: [BackupPlan], repositories: [Repository]) -> String {
         planWithRepository(plan.label(among: plans), repositoryName: repositories.withID(plan.repositoryID).map { $0.label(among: repositories) })
     }
@@ -197,7 +190,6 @@ enum RunRecordPresentation {
         }
     }
 
-    /// The run's plan as it is called now, else the name the run stored.
     private static func currentPlanName(of run: RunRecord, plans: [BackupPlan]) -> String {
         run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
     }
@@ -216,8 +208,6 @@ enum RunRecordPresentation {
         }
     }
 
-    /// A Recent problems row's caption: the outcome, then why in the Detail
-    /// column's words — the outcome alone when the detail would only repeat it.
     static func problemRowCaption(for run: RunRecord) -> String {
         let outcome = run.outcome.displayName
         let why = detail(for: run)
@@ -323,10 +313,6 @@ enum RunRecordPresentation {
         )
     }
 
-    /// Why restic could not read the item at `path`, from its line: the
-    /// cause `ItemErrorDiagnosis` reads off the line's end, a top folder
-    /// restic skipped, or any other cause in restic's words after the
-    /// item's own name.
     static func unreadableReason(line: String, path: String) -> String {
         switch ItemErrorDiagnosis.kind(of: line) {
         case .deniedByFilePermissions: "permission denied"

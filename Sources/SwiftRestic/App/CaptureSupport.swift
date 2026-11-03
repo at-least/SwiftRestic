@@ -77,7 +77,6 @@ extension AppDelegate {
         var stops: [(name: String, select: () async -> Void)] = []
         if let plan = model.configuration.plans.first {
             stops.append(("plan", { router.selection = .plan(plan.id) }))
-            // The same page on its Files tab: the tree and the pane beside it.
             stops.append(("files", {
                 router.selection = .plan(plan.id)
                 router.setTab(.files, of: .plan(plan.id))

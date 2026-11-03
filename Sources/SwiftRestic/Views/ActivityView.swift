@@ -8,7 +8,6 @@ struct ActivityView: View {
     /// runs rather than the sidebar out of Activity.
     @FocusState private var tableIsFocused: Bool
     @State private var isConfirmingClear = false
-    /// The drawer's Compare with Previous and Show Log sheets.
     @State private var comparing: SnapshotDiffTarget?
     @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
@@ -230,7 +229,6 @@ struct ActivityView: View {
         .task(id: router.activityFocusRunID) {
             guard let id = router.activityFocusRunID else { return }
             router.activityFocusRunID = nil
-            // A run the Problems filter hides is shown by showing all.
             if router.activityShowsProblemsOnly, !visibleRuns.contains(where: { $0.id == id }) {
                 router.activityShowsProblemsOnly = false
             }

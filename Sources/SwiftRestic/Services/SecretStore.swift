@@ -1,7 +1,5 @@
 import Foundation
 
-/// Where repository secrets come from.
-///
 /// The real implementation is the login Keychain. It is injectable so the backup
 /// path can be exercised in tests without a Keychain prompt, and so a test never
 /// writes to the developer's own login keychain.
@@ -15,7 +13,6 @@ struct SecretStore: Sendable {
     var load: @Sendable (UUID) async throws -> (password: String?, providerSecret: String?)
     var save: @Sendable (UUID, String?, String?) async throws -> Void
     var remove: @Sendable (UUID) async throws -> Void
-    /// A network share's password, by the share's ID (`NetworkShare`).
     var loadSharePassword: @Sendable (UUID) async throws -> String?
     /// Stores a share's password; nil or empty removes it.
     var saveSharePassword: @Sendable (UUID, String?) async throws -> Void
@@ -58,8 +55,6 @@ struct SecretStore: Sendable {
         }
     )
 
-    /// The app's store: the login Keychain — or, in a debug build, a
-    /// capture run's environment (`injectedForCapture`).
     static var standard: SecretStore {
         #if DEBUG
         if let injected = injectedForCapture { return injected }
@@ -96,12 +91,9 @@ struct SecretStore: Sendable {
     }
     #endif
 
-    /// In-memory store for tests.
     static func inMemory(_ initial: [UUID: (password: String, providerSecret: String?)] = [:]) -> SecretStore {
         let box = InMemorySecrets(initial)
         return SecretStore(
-            // Non-throwing: an in-memory read cannot fail, and a
-            // non-throwing closure satisfies the throwing requirement.
             load: { await box.load($0) },
             save: { await box.save($0, $1, $2) },
             remove: { await box.remove($0) },

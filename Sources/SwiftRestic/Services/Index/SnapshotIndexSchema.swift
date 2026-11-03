@@ -190,7 +190,6 @@ enum SnapshotIndexSchema {
     /// WHERE term verbatim), and the state values in the planner statements
     /// that `snap_cover` covers.
     struct Statements: Sendable {
-        // MARK: Nodes
         let nodeLookup = "SELECT id FROM node WHERE parent = ? AND name = ?"
         /// Yields to an existing row: a caller that skipped the lookup (a
         /// child of a directory it just created) then looks the node up.
@@ -202,7 +201,6 @@ enum SnapshotIndexSchema {
         /// the largest node id before its first insert.
         let nodeFTSIndexNew = "INSERT INTO node_fts (rowid, name) SELECT id, name FROM node WHERE id > ?"
 
-        // MARK: Snapshots and chains
         let snapAll = "SELECT id, hash, chain_id, seq FROM snap"
         let snapByHash = "SELECT id, chain_id, seq, state FROM snap WHERE hash = ?"
         let snapDelete = "DELETE FROM snap WHERE id = ?"
@@ -213,7 +211,6 @@ enum SnapshotIndexSchema {
         let chainInsert = "INSERT INTO chain (key) VALUES (?) ON CONFLICT (key) DO NOTHING"
         let chainByKey = "SELECT id, next_seq FROM chain WHERE key = ?"
         let chainNextSeq = "UPDATE chain SET next_seq = ? WHERE id = ?"
-        /// One fresh seq for the chain: `next_seq` before the increment.
         let chainTakeSeq = "UPDATE chain SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1"
         let chainByID = "SELECT lo, hi FROM chain WHERE id = ?"
         let chainSetWindow = "UPDATE chain SET lo = ?, hi = ? WHERE id = ?"
@@ -221,7 +218,6 @@ enum SnapshotIndexSchema {
         let listingMarkApplied = "INSERT INTO listing_applied (id) VALUES (1) ON CONFLICT DO NOTHING"
         let unreadableList = "SELECT id, chain_id FROM snap WHERE state = 2"
 
-        // MARK: Forward delta (target above hi, base = the alive hi snapshot)
         let forwardClose =
             "UPDATE run SET last_seq = ? WHERE node_id = ? AND chain_id = ? AND last_seq = 2147483647"
         let forwardOpenRun =
@@ -229,7 +225,6 @@ enum SnapshotIndexSchema {
         let forwardInsert =
             "INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir) VALUES (?, ?, ?, 2147483647, ?)"
 
-        // MARK: Reverse delta (target below lo, base = the alive lo snapshot)
         let reverseFreeze =
             "UPDATE run SET first_seq = ? WHERE node_id = ? AND chain_id = ? AND first_seq = 0"
         let reverseBottomRun =
@@ -237,11 +232,9 @@ enum SnapshotIndexSchema {
         let reverseInsert =
             "INSERT INTO run (node_id, chain_id, first_seq, last_seq, is_dir) VALUES (?, ?, 0, ?, ?)"
 
-        // MARK: Content changes (an edit per `M` a delta saw, a blind per full step)
         let editInsert = "INSERT OR IGNORE INTO edit (node_id, chain_id, seq) VALUES (?, ?, ?)"
         let blindInsert = "INSERT OR IGNORE INTO blind (chain_id, seq) VALUES (?, ?)"
 
-        // MARK: Full ingest: a staged `restic ls` compared with the sentinel-ended runs
         let stageInsert = "INSERT OR IGNORE INTO temp.stage (node_id, snap_id, is_dir) VALUES (?, ?, ?)"
         let stageClear = "DELETE FROM temp.stage"
         /// Whose stream the stage holds: one snapshot's rows at most, so the
@@ -281,7 +274,6 @@ enum SnapshotIndexSchema {
                 WHERE r.node_id = g.node_id AND r.chain_id = ? AND r.first_seq = 0 AND r.is_dir = g.is_dir)
             """
 
-        // MARK: Planner (state 0 only: unreadable snapshots are passed over)
         let pendingChains = """
             SELECT id FROM chain
             WHERE EXISTS (SELECT 1 FROM snap WHERE snap.chain_id = chain.id AND snap.state = 0)
@@ -298,7 +290,6 @@ enum SnapshotIndexSchema {
             SELECT EXISTS (SELECT 1 FROM snap WHERE chain_id = ? AND state = 0 AND seq > ? AND seq < ?)
             """
 
-        // MARK: Housekeeping: only queued chains, only the gaps around queued seqs
         let hkChains = "SELECT DISTINCT chain_id FROM hk_pending"
         let hkSeqs = "SELECT seq FROM hk_pending WHERE chain_id = ? ORDER BY seq"
         let hkDone = "DELETE FROM hk_pending WHERE chain_id = ?"
@@ -326,7 +317,6 @@ enum SnapshotIndexSchema {
             "run WHERE chain_id = ? AND last_seq > ? AND last_seq < 2147483647 AND first_seq > ?"
         private static let orphanChainRuns = "run WHERE chain_id = ?"
 
-        /// A pair's fill: the nodes of `runs`, queued for `collectNodes`.
         private static func queueNodes(of runs: String) -> String {
             "INSERT OR IGNORE INTO temp.gc (id) SELECT node_id FROM " + runs
         }
@@ -365,7 +355,6 @@ enum SnapshotIndexSchema {
         let hkBlindsUpTo = "DELETE FROM blind WHERE chain_id = ? AND seq <= ?"
         let hkBlindsAbove = "DELETE FROM blind WHERE chain_id = ? AND seq > ?"
 
-        // MARK: Node GC, one level at a time over temp.gc
         let gcClear = "DELETE FROM temp.gc"
         let gcInsert = "INSERT OR IGNORE INTO temp.gc (id) VALUES (?)"
         /// Keeps, of the queued ids, only nodes nothing needs: gone from the
@@ -390,7 +379,6 @@ enum SnapshotIndexSchema {
         let gcDeleteEdits = "DELETE FROM edit WHERE node_id IN (SELECT id FROM temp.gc)"
         let gcDeleteNodes = "DELETE FROM node WHERE id IN (SELECT id FROM temp.gc)"
 
-        // MARK: Reads
         let versionsTimed = """
             SELECT s.hash, s.time FROM run r
             JOIN snap s ON s.chain_id = r.chain_id AND s.state = 1
@@ -477,8 +465,6 @@ enum SnapshotIndexSchema {
             JOIN run r ON r.node_id = n.id AND r.chain_id = ? AND r.first_seq <= ? AND r.last_seq >= ?
             WHERE n.parent = ?
             """
-        /// A folder's children whose content a chain's diffs said changed
-        /// in a seq interval `(lower, upper]`.
         let childEditsBetween = """
             SELECT n.name FROM node n
             JOIN edit e ON e.node_id = n.id AND e.chain_id = ? AND e.seq > ? AND e.seq <= ?
@@ -529,7 +515,6 @@ enum SnapshotIndexSchema {
                     WHERE EXISTS (SELECT 1 FROM snap WHERE snap.chain_id = chain.id AND snap.state IN (0, 2)))
             """
 
-        // MARK: Browse caches
         let cacheOwnerPut = "INSERT INTO cache_owner (snapshot_id) VALUES (?) ON CONFLICT DO NOTHING"
         let cacheListingPut =
             "INSERT INTO dir_listing (snapshot_id, dir_path, nodes) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
@@ -603,7 +588,6 @@ enum SnapshotIndexSchema {
             statements[keyPath: keyPath]
         }
 
-        /// `count` comma-separated `?`s for an IN list.
         static func placeholders(_ count: Int) -> String {
             Array(repeating: "?", count: count).joined(separator: ", ")
         }

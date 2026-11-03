@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// Identifies Apply Retention Now's sheet by the plan it previews.
 struct RetentionTarget: Identifiable, Equatable {
     let planID: UUID
     var id: UUID { planID }
 }
 
-/// Identifies Check's sheet by the repository it checks.
 private struct CheckTarget: Identifiable {
     let repositoryID: UUID
     var id: UUID { repositoryID }

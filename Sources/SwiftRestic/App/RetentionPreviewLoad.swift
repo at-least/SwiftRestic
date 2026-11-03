@@ -28,8 +28,6 @@ final class RetentionPreviewLoad {
         failure = nil
         do {
             let preview = try await fetch()
-            // A newer key (or the sheet closing) cancelled this read; its
-            // successor owns the state now.
             guard !Task.isCancelled else { return }
             result = preview
         } catch {

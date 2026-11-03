@@ -1,14 +1,11 @@
 import Foundation
 
-/// Shared number and date formatting so every view reads the same way.
-///
 /// The formatter-backed helpers are paid for per row per render — lists,
 /// tables, the once-a-second progress strips — and formatter construction is
 /// the expensive half of each call, so the instances are built once. Not all
 /// of them are Sendable across SDKs (these helpers also run on the
 /// notification broadcast's background task), so every use takes the lock.
 enum Format {
-    /// "A", "A and B", "A, B and C".
     static func list(_ items: [String]) -> String {
         guard items.count > 1 else { return items.first ?? "" }
         return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
@@ -31,7 +28,6 @@ enum Format {
         return byteCounter.string(fromByteCount: value)
     }
 
-    /// "42%": a fraction of 1, to the whole percent.
     static func percent(_ fraction: Double) -> String {
         fraction.formatted(.percent.precision(.fractionLength(0)))
     }
@@ -49,10 +45,7 @@ enum Format {
     }
 
     /// The first sentence of a longer message — the part a scan surface can
-    /// afford to show, with the rest one selection or tooltip away. Splits on
-    /// a period followed by whitespace and then a capital or "restic" (so
-    /// "0.5 GB" and "U.S. region" survive whole), a newline, or a CJK full
-    /// stop.
+    /// afford to show, with the rest one selection or tooltip away.
     static func firstSentence(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var cuts = ["\n", "。"].compactMap { trimmed.range(of: $0)?.lowerBound }
@@ -75,14 +68,10 @@ enum Format {
         return String(trimmed[..<cut])
     }
 
-    /// `text` ending in a full stop — appended when the cut left none
-    /// (`firstSentence` does).
     static func fullSentence(_ text: String) -> String {
         text.hasSuffix(".") ? text : text + "."
     }
 
-    /// `text` without its trailing full stop, as a clause joins another
-    /// sentence.
     static func withoutFinalPeriod(_ text: String) -> String {
         text.hasSuffix(".") ? String(text.dropLast()) : text
     }
@@ -262,9 +251,6 @@ enum Format {
         Date.FormatStyle(locale: calendar.locale ?? .autoupdatingCurrent, calendar: calendar, timeZone: calendar.timeZone)
     }
 
-    /// The far end both next-run and pause-end spellings share: weekday and
-    /// time within a week of `now`, month-day and time within the year, the
-    /// full date past it.
     private static func datedForm(
         _ date: Date,
         now: Date,

@@ -4,7 +4,6 @@ import Foundation
 /// comparison with the previous backup. `restic diff` runs beside the
 /// listing, and its marks are shown whole, once, when it ends.
 enum RestorePaneLoad {
-    /// What the Change column shows.
     struct Marks: Equatable {
         var changes: [PathKey: ResticDiffChange]
         var changesInside: [PathKey: ChangesInside]

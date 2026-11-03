@@ -30,8 +30,6 @@ enum EditorRequirements {
         return nil
     }
 
-    /// A path as restic will read it, for comparing two spellings of one:
-    /// trimmed, a tilde expanded, a trailing slash dropped.
     private static func comparable(_ path: String) -> String {
         ResticPath.normalized(PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? "")
     }
@@ -79,8 +77,6 @@ enum EditorRequirements {
         return nil
     }
 
-    /// A repository's location as restic reads it, for comparing two
-    /// spellings of one: a trailing slash dropped.
     private static func comparableLocation(_ repository: Repository) -> String {
         ResticPath.normalized(repository.resticRepositoryString)
     }

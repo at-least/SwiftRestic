@@ -952,7 +952,6 @@ struct AppModelTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
-        // Delete the repository out from under the plan.
         try FileManager.default.removeItem(at: harness.root.appendingPathComponent("repo"))
 
         model.runBackup(planID: harness.plan.id)
@@ -1738,7 +1737,6 @@ struct LoginItemSwitchTests {
 
         func hold() { lock.lock(); holding = true; lock.unlock() }
 
-        /// Lets one parked apply pass.
         func release() { lock.lock(); releases += 1; lock.unlock() }
 
         /// Wires the fake daemon into the model's seams. On the main actor:
@@ -1895,7 +1893,6 @@ struct CheckDataRotationTests {
         local.advanceCheckDataSlice(repositoryID: id)
         #expect(slice(of: local, id) == 2)
 
-        // The last slice wraps to the first.
         local.updateRepository(id) { $0.maintenance.nextCheckDataSlice = 12 }
         local.advanceCheckDataSlice(repositoryID: id)
         #expect(slice(of: local, id) == 1)
@@ -2181,7 +2178,6 @@ struct ResolveBinaryTests {
         return (model, root, program.path)
     }
 
-    /// The model after a search that found a script printing `versionLine`.
     private func resolve(printing versionLine: String) async throws -> (AppModel, String) {
         let (model, root, path) = try scriptedModel(running: "echo '\(versionLine)'")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -2293,7 +2289,6 @@ struct IndexLocationTests {
 @Suite("index orphan sweep at launch")
 @MainActor
 struct IndexOrphanSweepLaunchTests {
-    /// How the configuration folder is left before launch.
     enum Load: String, CaseIterable, CustomTestStringConvertible {
         /// No generation reads: the configuration reads as no repositories.
         case unreadable
@@ -2306,13 +2301,10 @@ struct IndexOrphanSweepLaunchTests {
         var testDescription: String { rawValue }
     }
 
-    /// A configuration folder, and the three files the sweep must judge.
     private struct Folder {
         var root: URL
         var config: URL
-        /// The configured repository's index file.
         var repositoryFile: URL
-        /// An index file whose repository no configuration names.
         var orphanFile: URL
         /// The orphan's file at the index's earlier home, `<configDir>/<uuid>.sqlite`.
         var earlierHome: URL
@@ -2480,7 +2472,6 @@ struct OrphanPlanPurgeLaunchTests {
         return folder
     }
 
-    /// The plans after launch, and the plans a fresh read of the folder finds.
     private func launch(in folder: Folder) async throws -> (memory: [UUID], disk: [UUID]?) {
         let store = ConfigStore(directory: folder.config)
         let model = AppModel(store: store, secrets: .inMemory())
@@ -2826,7 +2817,6 @@ struct RunHistoryTrimTests {
         #expect(!ids.contains(healing.id))
         #expect(!ids.contains(oldCheck.id))
         #expect(model.configuration.runs.count == 22)
-        // Newest first still.
         #expect(model.configuration.runs.first?.planID == busy)
         #expect(model.configuration.runs.last?.id == standing.id)
 

@@ -155,7 +155,6 @@ struct NotificationTests {
         let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", kind: .check, errorMessage: "locked")
         #expect(check.summary == "Check failed: NAS — locked", "summary was \(check.summary)")
         #expect(!check.summary.contains("NAS (NAS)"))
-        // An event with no plan names the repository alone.
         let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", kind: .prune, errorMessage: "locked")
         #expect(bare.summary == "Cleanup failed: NAS — locked", "summary was \(bare.summary)")
     }
@@ -169,8 +168,6 @@ struct NotificationTests {
             ).summary
                 == "Backup skipped: Documents (NAS) — “Archive SSD” is not connected."
         )
-        // The reason suffix is the skip alone: without one the sentence
-        // ends at the subject.
         #expect(
             NotificationEvent(stage: .skipped, planName: "Documents", repositoryName: "NAS", kind: .backup).summary
                 == "Backup skipped: Documents (NAS)"
@@ -212,7 +209,6 @@ struct NotificationTests {
             title(for: RunRecord(kind: .backup, planID: documents.id, planName: "Documents", repositoryID: home.id))
                 == "Documents (Home Disk)"
         )
-        // A record that names nothing falls back to the app's name.
         #expect(title(for: RunRecord(kind: .backup)) == "SwiftRestic")
     }
 
@@ -256,7 +252,6 @@ struct NotificationTests {
         record.fullDiskAccessAtRun = .granted
         #expect(AppModel.notificationEvent(for: record, repositoryName: "NAS").hint
             == "macOS blocked 1 item even with Full Disk Access on.")
-        // A run with nothing to diagnose sends no hint.
         #expect(AppModel.notificationEvent(for: RunRecord(kind: .backup, planName: "Documents"), repositoryName: "NAS").hint == nil)
     }
 
@@ -376,8 +371,6 @@ struct NotificationSafetyTests {
     }
 }
 
-/// The poster's own failure words, reported verbatim beside Settings' Send
-/// Test Notification button and in the channels' banners.
 @Suite("NotificationPoster")
 struct NotificationPosterTests {
     @Test("a cancelled send reads as the app's sentence, not URLSession's bare word")
@@ -570,7 +563,6 @@ struct RepeatedProblemNotificationTests {
         func counts(_ newestFirst: [RunRecord]) -> [Int?] {
             RunRecord.fillingProblemStretches(newestFirst).map(\.problemStretch)
         }
-        // Three warnings for the same file since a success, two before it.
         #expect(counts([warned(600), warned(540), warned(480), ended(420, .succeeded), warned(360), warned(300)])
             == [3, 2, 1, nil, 2, 1])
         // A backup skipped whole or stopped ran nothing: the stretch goes on.
@@ -580,7 +572,6 @@ struct RepeatedProblemNotificationTests {
         var partial = ended(540, .skipped)
         partial.snapshotID = "0ef0dab0"
         #expect(counts([warned(600), partial, warned(480)]) == [1, nil, 1])
-        // Another cause, or another outcome, is another problem.
         #expect(counts([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == [1, 1])
         #expect(counts([failed(600), warned(540)]) == [1, 1])
         // Another plan's runs, and the plan's own retention run, neither end

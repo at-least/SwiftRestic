@@ -14,7 +14,6 @@ enum KeychainStore {
         case repositoryPassword = "repository-password"
         /// The backend secret: AWS secret access key, B2 application key, …
         case providerSecret = "provider-secret"
-        /// A network share's password (`NetworkShare`).
         case sharePassword = "share-password"
     }
 
@@ -63,7 +62,6 @@ enum KeychainStore {
         }
     }
 
-    /// Writes a secret, or removes it when `value` is `nil` or empty.
     static func write(_ value: String?, ownerID: UUID, slot: Slot) throws {
         guard let value, !value.isEmpty else {
             try delete(ownerID: ownerID, slot: slot)
@@ -98,8 +96,6 @@ enum KeychainStore {
         }
     }
 
-    /// Removes every secret belonging to a repository that is being deleted.
-    /// Tries every slot; the first failure throws once all were tried.
     static func deleteAll(repositoryID: UUID) throws {
         var failure: Error?
         for slot in [Slot.repositoryPassword, .providerSecret] {

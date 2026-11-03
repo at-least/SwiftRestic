@@ -1,9 +1,7 @@
 import Foundation
 import Testing
 
-/// The destination sheet's rules: where "Original location" is, where each
-/// restore lands, and when Replace has to ask first. Pure, with the file
-/// system injected, so the paths here never need to exist.
+/// Pure, with the file system injected, so the paths here never need to exist.
 @Suite("restore destination rules")
 struct RestoreDestinationTests {
     private func original(
@@ -104,7 +102,6 @@ struct RestoreDestinationTests {
         #expect(RestoreDestinationRules.landings(
             for: .item(name: "a/../../x", path: "/p/x", isDirectory: false), into: [destination]
         ).map(\.path) == ["/dest/x"])
-        // Several items: each in its own directory, by the same rule.
         #expect(RestoreDestinationRules.landings(
             for: .items([
                 RestoreItem(name: "a.txt", path: "/p/a.txt", isDirectory: false),

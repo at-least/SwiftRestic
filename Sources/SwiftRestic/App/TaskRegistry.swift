@@ -18,8 +18,6 @@ final class TaskRegistry {
 
     private var slots: [Slot: Task<Void, Never>] = [:]
 
-    // MARK: - Slots
-
     /// Whether the slot already holds a run — the one-at-a-time guard the
     /// run kinds apply to themselves.
     func isOccupied(_ slot: Slot) -> Bool {
@@ -38,7 +36,6 @@ final class TaskRegistry {
         slots[slot] = task
     }
 
-    /// Cancels the slot's run, if any.
     func cancel(_ slot: Slot) {
         slots[slot]?.cancel()
     }
@@ -48,8 +45,6 @@ final class TaskRegistry {
     func clear(_ slot: Slot) {
         slots[slot] = nil
     }
-
-    // MARK: - Background lane
 
     /// A send that must not outlive the quit (a start ping arming a
     /// monitor's timer), but which nothing cancels individually.
@@ -67,8 +62,6 @@ final class TaskRegistry {
             self?.background[token] = nil
         }
     }
-
-    // MARK: - Census
 
     /// Cancels every slotted run. Used by `shutdown`; the runs themselves
     /// unwind and write their own records. Not the background lane: a start

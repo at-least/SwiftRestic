@@ -1,10 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Console
-
-    /// The console pane's appear moment: the default repository and the
-    /// persisted history come from the configuration the model owns.
     func consoleDidAppear() {
         console.appear(
             repositoryID: configuration.repositories.first?.id,
@@ -19,9 +15,6 @@ extension AppModel {
         console.repositoryID = repositoryID
     }
 
-    /// Runs an arbitrary restic command against a repository and returns
-    /// what it printed.
-    ///
     /// No `--json` is added: the console exists to show restic's own output,
     /// and the human-readable form is what the user came for.
     ///

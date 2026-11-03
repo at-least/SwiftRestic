@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// The Compare sheet's Restore Selected: which rows restore, from which of
-/// the two backups, and what the destination sheet says about the rest.
 @Suite("Compare sheet selection restore")
 struct DiffRestoreSelectionTests {
     private func snapshot(_ id: String, time: String) throws -> Snapshot {
@@ -14,8 +12,6 @@ struct DiffRestoreSelectionTests {
         let older = try snapshot("a1", time: "2026-09-01T02:00:00Z")
         let newer = try snapshot("a2", time: "2026-09-02T02:00:00Z")
         let holder = { (change: ResticDiffChange) in change.holder(newer: newer, older: older) }
-        // Last night's backup dropped a folder and a file elsewhere, and
-        // changed a third.
         let gone = ResticDiffChange(path: "/src/sub/", modifier: "-")
         let goneInside = ResticDiffChange(path: "/src/sub/x.txt", modifier: "-")
         let checklist = ResticDiffChange(path: "/src/onboarding-checklist.txt", modifier: "-")
@@ -38,7 +34,6 @@ struct DiffRestoreSelectionTests {
         #expect(mixed.sources.map(\.snapshotID) == ["a2", "a1"])
         #expect(mixed.note == nil)
 
-        // A row whose backup is no longer listed is left out.
         let listed = DiffRestoreSelection.sources([checklist, changed]) { $0 == changed ? newer : nil }
         #expect(listed.map(\.path) == ["/src/notes.txt"])
     }

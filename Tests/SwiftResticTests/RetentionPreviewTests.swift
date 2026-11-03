@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// Apply Retention Now's preview: restic's `forget --dry-run --json` answer
-/// read into what would go and what would stay, and the sheet's and the
-/// record's words for it.
 @Suite("retention preview")
 struct RetentionPreviewTests {
     private static let tag = "swiftrestic-plan-11111111-2222-3333-4444-555555555555"

@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// A fake `restic` executable for the fault-path tests.
-///
 /// The script is installed per-fixture and picks its behaviour from the
 /// `SWIFTRESTIC_STUB` environment variable, which tests set through the
 /// repository's extra environment. That makes the failure modes a CLI wrapper
@@ -46,7 +44,6 @@ struct StubRestic: Sendable {
         return text.split(separator: "\n").map(String.init)
     }
 
-    /// Polls the process table until nothing matches `pattern`, or time runs out.
     static func processVanishes(matching pattern: String, within seconds: TimeInterval) async -> Bool {
         let deadline = Date.now.addingTimeInterval(seconds)
         while Date.now < deadline {
@@ -56,8 +53,6 @@ struct StubRestic: Sendable {
         return findProcesses(matching: pattern).isEmpty
     }
 
-    /// Polls the process table until the stub's sleep child shows up in it.
-    ///
     /// Tests that cancel or quit mid-run need the hang actually established:
     /// a fixed delay bets on spawn speed, which is exactly what a cold runner
     /// loses. The sleep marker is what the hung stub is sleeping on.
@@ -87,7 +82,6 @@ struct StubRestic: Sendable {
         Issue.record("the stub never established its hang within \(Int(seconds)) s\(extra); trace: [\(trace)]; ps saw: [\(processSnapshot())]")
     }
 
-    /// Process-table snapshot for failure diagnostics, narrowed to stub-related lines.
     static func processSnapshot() -> String {
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -653,8 +647,6 @@ struct StubRestic: Sendable {
     }
 }
 
-/// The runner's failure paths, driven by the stub binary: no real restic and no
-/// large fixtures, so these run everywhere and run fast.
 @Suite("restic runner fault paths", .serialized)
 struct StubResticTests {
     private struct Fixture {
@@ -747,7 +739,6 @@ struct StubResticTests {
             "the stub restic process outlived the cancellation"
         )
 
-        // And the Swift side must have seen it as a cancellation, not a crash.
         await #expect(throws: ResticError.cancelled) {
             try await task.value
         }
@@ -770,7 +761,6 @@ struct StubResticTests {
             FileManager.default.createFile(atPath: flag.path, contents: nil)
         }
 
-        // The status line's numbers must have survived the decode.
         try #require(firstProgress.value != nil, "no progress with bytes_done == 100 was ever reported")
         // A reader that buffers until EOF delivers the line only after the
         // stub gave up waiting — the regression this guards.
@@ -780,7 +770,6 @@ struct StubResticTests {
             "the stub never saw the first status line delivered mid-run — the pipe reader is buffering again; trace: [\(trace)]"
         )
 
-        // The closing summary is parsed into the outcome.
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary?.snapshotID == "deadbeef00000000")
         #expect(outcome.summary?.filesNew == 4)
@@ -1054,7 +1043,6 @@ struct StubResticTests {
         #expect(leftovers.isEmpty, "left behind: \(leftovers)")
     }
 
-    /// A destination holding "mine" at a.txt, and the node restored there.
     private func occupiedLanding(_ fixture: Fixture) throws -> (destination: URL, landing: URL, node: SnapshotNode) {
         let destination = fixture.root.appendingPathComponent("restored")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -1187,7 +1175,6 @@ struct StubResticTests {
                 destinationDirectory: destination, overwrite: .keepExisting
             )
         }
-        // A single folder's restore refuses it in the same words.
         await #expect(throws: ResticError.fileInTheWay(path: blocked.path)) {
             try await fixture.service.restore(
                 fixture.context, snapshotID: "latest", node: nodes[1],
@@ -1215,7 +1202,6 @@ struct StubResticTests {
             _ = try await service.version()
             Issue.record("expected the missing binary to fail")
         } catch {
-            // The exact failure, not a generic command failure.
             guard case ResticError.processLaunchFailed(_) = error else {
                 Issue.record("expected a launch failure, got \(error)")
                 return
@@ -1325,7 +1311,6 @@ struct StubResticTests {
         _ = try await fixture.service.find(fixture.context, patterns: ["/src/a.txt"], ignoreCase: false, snapshotIDs: ["feedface"])
         _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
-        // Compare with Previous.
         _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe", includeMetadata: false)
         // The refresh's size, which the default arm's "[]" does not decode as.
         _ = try? await fixture.service.stats(fixture.context, timeout: nil)
@@ -1359,8 +1344,6 @@ struct StubResticTests {
             }
         }
     }
-
-    // MARK: - Index streams
 
     @Test("a full ls with a node line that did not decode delivers every node that did, then throws malformedOutput")
     func walkSnapshotThrowsAfterAShortStream() async throws {
@@ -1437,7 +1420,6 @@ struct StubResticTests {
     }
 }
 
-/// First-observation timestamp for `@Sendable` progress callbacks.
 final class ProgressTimestamp: @unchecked Sendable {
     private let lock = NSLock()
     private var date: Date?

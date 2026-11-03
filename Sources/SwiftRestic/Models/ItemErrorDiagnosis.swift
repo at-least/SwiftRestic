@@ -81,11 +81,8 @@ enum ItemErrorDiagnosis {
         return tally
     }
 
-    /// What to tell the user, each with its item count.
     enum Hint: Equatable, Sendable {
-        /// Blocked, and the grant is still missing.
         case grantFullDiskAccess(Int)
-        /// Blocked while the grant was missing; it is there now.
         case retryNowGranted(Int)
         /// Blocked although the grant was there — a path macOS protects
         /// from everyone (SIP), or one restic reads beyond the file itself.
@@ -183,7 +180,6 @@ enum ItemErrorDiagnosis {
         }
     }
 
-    /// The banner's, the notification's and the channels' sentence.
     static func headline(_ hint: Hint) -> String {
         switch hint {
         case .grantFullDiskAccess(let count):

@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// A Files folder's changes since the backup before, as the pane words
-/// them: the counts in a fixed order, only those that are not zero, the
-/// gone names, and a mark per listed child.
 @Suite("Folder change summary")
 struct FolderChangeSummaryTests {
     private let previous = Date(timeIntervalSince1970: 1_790_904_600)
@@ -30,11 +27,9 @@ struct FolderChangeSummaryTests {
         #expect(shown.removed == ["/d/gone"])
         #expect(shown.summary(since: previous, notRead: notRead.count) == "Since \(since), in this folder: 1 deleted, 1 not read")
         #expect(RemovedNames(notRead, label: "Not read: ").line == "Not read: locked.pdf")
-        // Only what it could not read: the line says so, and no "Deleted:".
         let (onlyUnread, one) = FolderChanges(removed: ["/d/locked.pdf"]).separatingUnread(unread)
         #expect(onlyUnread.removedNames == nil)
         #expect(onlyUnread.summary(since: previous, notRead: one.count) == "Since \(since), in this folder: 1 not read")
-        // Nothing unread: nothing moves.
         #expect(changes.separatingUnread(UnreadItems()).changes == changes)
     }
 
@@ -93,7 +88,6 @@ struct FolderChangeSummaryTests {
         #expect(changes.marks == [
             PathKey("/d/new"): "Added", PathKey("/d/caf\u{E9}"): "Modified", PathKey("/d/u"): "May have changed",
         ])
-        // The other spelling of the same name is another file, unmarked.
         #expect(changes.marks[PathKey("/d/cafe\u{301}")] == nil)
     }
 }

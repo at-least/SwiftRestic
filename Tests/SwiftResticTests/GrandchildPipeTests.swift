@@ -91,8 +91,6 @@ struct GrandchildPipeTests {
         }
     }
 
-    /// Cancelling a run whose child is alive, with an orphaned job holding
-    /// the pipe, must return as cancelled instead of blocking the reader.
     @Test("cancelling a run answers even when a grandchild holds the pipes")
     func cancelledRunIsNotHeldByGrandchild() async throws {
         let script = try installScript("""

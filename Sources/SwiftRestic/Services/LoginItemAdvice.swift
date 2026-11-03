@@ -6,7 +6,6 @@ import Foundation
 /// (`LoginItem`).
 enum LoginItemAdvice {
     enum Offer: Equatable, Sendable {
-        /// Registering would work: one click.
         case startAtLogin
         /// A registration exists and waits for the user in System Settings.
         case awaitingApproval
@@ -14,7 +13,6 @@ enum LoginItemAdvice {
         case moveToApplications
     }
 
-    /// The confirmation after the editor's Start at Login.
     static let enabledConfirmation = LoginItem.description(of: .enabled)
 
     /// Nil once the app starts at login. Otherwise approval comes before

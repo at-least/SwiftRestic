@@ -1,10 +1,6 @@
 import Foundation
 
-/// Network shares reconnected before a backup that needs them
-/// (`NetworkShare`): the backup engine asks for the volumes it found away,
-/// and each saved share among them is mounted with its saved password.
 extension AppModel {
-    /// The saved share that mounts as /Volumes/`volumeName`.
     func networkShare(forVolume volumeName: String) -> NetworkShare? {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
@@ -60,9 +56,8 @@ extension AppModel {
         await volumeProbe.isMounted(volumeOf: path)
     }
 
-    /// One connection attempt to a network repository's server
-    /// (`ServerProbe`), with the environment restic would run with — a proxy
-    /// there means nothing is probed.
+    /// With the environment restic would run with — a proxy there means
+    /// nothing is probed.
     func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
         guard repository.kind != .local else { return nil }
         let environment = ProcessInfo.processInfo.environment.merging(repository.extraEnvironment) { _, own in own }
@@ -122,8 +117,6 @@ extension AppModel {
     }
 }
 
-/// A local repository's network share that stayed away when a read needed
-/// it, in a skipped run's words.
 struct ShareNotReconnected: LocalizedError {
     let message: String
     var errorDescription: String? { message }

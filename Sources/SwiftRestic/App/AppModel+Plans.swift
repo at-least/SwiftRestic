@@ -1,14 +1,10 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Plans
-
     func plan(id: UUID?) -> BackupPlan? {
         configuration.plans.withID(id)
     }
 
-    /// A repository's plans, in the configuration's order — what its page
-    /// lists and what its removal takes with it.
     func plans(in repositoryID: UUID) -> [BackupPlan] {
         configuration.plans.filter { $0.repositoryID == repositoryID }
     }
@@ -67,11 +63,8 @@ extension AppModel {
         )
     }
 
-    /// Exclude, from an unreadable item's line or a diagnosis's items: each
-    /// item's exact path, its glob characters escaped so it matches itself
-    /// alone, added to the plan's patterns once. Mutates only that list, as
-    /// the pause does — a whole-plan upsert from a captured copy could undo
-    /// a run's stamps.
+    /// Mutates only the pattern list, as the pause does — a whole-plan
+    /// upsert from a captured copy could undo a run's stamps.
     func exclude(paths: [String], fromPlan planID: UUID) {
         updatePlan(planID) { plan in
             for pattern in paths.map(ResticService.globEscaped) where !plan.excludePatterns.contains(pattern) {
@@ -80,8 +73,6 @@ extension AppModel {
         }
     }
 
-    /// Keep, on the plan page's rebuildable folders: the plan keeps backing
-    /// them up, and the page never offers them again.
     func keepRebuildableFolders(paths: [String], inPlan planID: UUID) {
         updatePlan(planID) { plan in
             for path in paths where !plan.keptRebuildableFolders.contains(path) {
@@ -90,8 +81,6 @@ extension AppModel {
         }
     }
 
-    /// Suggest Again, in the plan editor: a kept folder is offered again
-    /// once a backup still holds it.
     func suggestAgain(rebuildableFolder path: String, inPlan planID: UUID) {
         updatePlan(planID) { plan in
             plan.keptRebuildableFolders.removeAll { PathKey($0) == PathKey(path) }
@@ -105,20 +94,15 @@ extension AppModel {
         change(&configuration.plans[index])
     }
 
-    /// `updatePlan(_:_:)` for a repository.
     func updateRepository(_ id: UUID, _ change: (inout Repository) -> Void) {
         guard let index = configuration.repositories.firstIndex(where: { $0.id == id }) else { return }
         change(&configuration.repositories[index])
     }
 
-    /// What every surface calls `plan` (`BackupPlan.label(among:)`), read
-    /// against the configured plans.
     func label(of plan: BackupPlan) -> String {
         plan.label(among: configuration.plans)
     }
 
-    /// What every surface calls `repository` (`Repository.label(among:)`),
-    /// read against the configured repositories.
     func label(of repository: Repository) -> String {
         repository.label(among: configuration.repositories)
     }
@@ -131,8 +115,6 @@ extension AppModel {
         }
     }
 
-    /// Pause Schedule: Until I Resume switches the schedule off; the timed
-    /// lengths leave it on with an end date, so it resumes by itself.
     /// Mutates only these two fields.
     ///
     /// A whole-struct `upsert` from a captured copy would silently undo
@@ -146,7 +128,6 @@ extension AppModel {
         }
     }
 
-    /// Resume Schedule, for either kind of pause.
     func resumePlanSchedule(id: UUID) {
         updatePlan(id) { plan in
             plan.isEnabled = true

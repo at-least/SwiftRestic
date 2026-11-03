@@ -3,20 +3,12 @@ import Network
 import Observation
 import SwiftUI
 
-/// The single source of truth the SwiftUI views observe.
-///
 /// Everything that touches persisted state happens here on the main actor;
 /// restic itself runs on the `ResticRunner` actor and reports back by hopping
 /// home.
-///
-/// The implementation is split across sibling files by domain
-/// (`AppModel+Backup.swift`, `AppModel+Maintenance.swift`, …); the stored
-/// state and the debounced save below are what every domain reads and writes.
 @MainActor
 @Observable
 final class AppModel {
-    // MARK: Persisted state
-
     var configuration = AppConfiguration() {
         didSet {
             // Array `!=` short-circuits on shared storage, so an edit that
@@ -33,22 +25,15 @@ final class AppModel {
             scheduleSave()
         }
     }
-    /// The backup run that wrote each snapshot, derived once per history
-    /// write rather than by every row that shows a snapshot (a page's
-    /// Backups tab, the Restore pane, Activity's run drawer). A snapshot
-    /// whose run was trimmed from the history, or never recorded here, is
-    /// simply absent — unknown, never complete.
+    /// Derived once per history write rather than by every row that shows a
+    /// snapshot. A snapshot whose run was trimmed from the history, or never
+    /// recorded here, is simply absent — unknown, never complete.
     private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
 
-    /// The backup run that wrote a snapshot, while the history still holds
-    /// it — the join behind the incomplete marks.
     func backupRun(forSnapshot id: String) -> RunRecord? {
         backupRunsBySnapshot[id]
     }
 
-    /// What a backup's own run could not read (`RunRecord.unreadableItemPaths`,
-    /// turned around): empty when the history no longer holds the run, or
-    /// it named no path.
     func unreadItems(inBackup id: String) -> UnreadItems {
         var items = UnreadItems()
         for (lineKey, path) in backupRun(forSnapshot: id)?.unreadableItemPaths ?? [:] {
@@ -58,15 +43,10 @@ final class AppModel {
         return items
     }
 
-    // MARK: Runtime state
-
-    /// Where the search for restic stands; `resolveBinary` writes it whole.
+    /// `resolveBinary` writes it whole.
     var resticSearch: ResticSearch = .searching
-    /// restic's cache as Settings › restic last measured it: nil until the
-    /// tab asks, then the report or the failure's words.
     var resticCache: ResticCacheState?
     var isWorkingOnResticCache = false
-    /// What the last cleanup removed, in the Settings tab's own words.
     var resticCacheNote: String?
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a
@@ -76,7 +56,6 @@ final class AppModel {
     /// rows, which must not re-render per tick; the pair is installed and
     /// retired together by `installPlanActivity` and the run's unwind.
     var planProgress: [UUID: OperationProgress] = [:]
-    /// Repository upkeep currently in flight, keyed by repository.
     var maintenance: [UUID: MaintenanceActivity] = [:]
     /// Plans waiting for their turn, keyed by the repository another
     /// plan's run holds, first in line first (`runBackups`).
@@ -101,12 +80,11 @@ final class AppModel {
     /// finished backup wrote would stay invisible until some unrelated
     /// refresh happened along.
     @ObservationIgnored var pendingSnapshotRefreshes: Set<UUID> = []
-    /// The last settled listing outcome per repository. Kept apart from the
-    /// rows themselves: a failed refresh must read as "unknown", never as an
-    /// empty list.
+    /// Kept apart from the rows themselves: a failed refresh must read as
+    /// "unknown", never as an empty list.
     var snapshotListingOutcomes: [UUID: SnapshotListingOutcome] = [:]
-    /// When the listing last succeeded. A freshness stamp the surfaces show
-    /// so a number can always be traced to the moment it was read.
+    /// A freshness stamp the surfaces show so a number can always be traced
+    /// to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
     /// The last listing generation handed out, one counter for every
     /// repository — see `nextListingGeneration`. Only the index reads these
@@ -150,7 +128,6 @@ final class AppModel {
     /// The login item as the daemon last answered — written beside
     /// `startsAtLogin` from the same read and never optimistically.
     var loginItemState: LoginItemState = .off
-    /// Whether the login item waits for approval in System Settings.
     var loginItemNeedsApproval: Bool { loginItemState == .needsApproval }
     /// Whether this copy could be registered as a login item, read once at
     /// launch so the plan editor's start-at-login offer does not resolve
@@ -170,7 +147,6 @@ final class AppModel {
     /// is: `SMAppService` answers for whatever process macOS holds
     /// responsible, and a test must not register anything with it.
     @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
-    /// The register/unregister behind `performSetStartsAtLogin`.
     @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
     /// The location gate in `performSetStartsAtLogin`. Injectable because
     /// Bundle.main in a test is the xctest runner inside Xcode, which the live
@@ -190,7 +166,6 @@ final class AppModel {
     /// The last network path seen — whether it is up, through which
     /// interfaces — so only a change calls `networkPathChanged`.
     @ObservationIgnored var networkSignature: String?
-    /// The volume-mount observer (`startMountWatcher`).
     @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
     /// Plans whose running backup Pause and Stop ended. Such a run is
     /// recorded as stopped by the pause and leaves its slot unstamped, so
@@ -207,11 +182,11 @@ final class AppModel {
     /// behind the sidebar's Mail dot. View state, not configuration: it lives
     /// in UserDefaults (see `ProblemDotsStore`), never in config.json, because
     /// whether a failure has been looked at is this device's reading progress,
-    /// not a setting. See `AppModel+ProblemDots.swift`.
+    /// not a setting.
     var problemsSeenAt: [UUID: Date]
     /// When Activity was last open with a problem it had not shown — the
     /// stamp behind the sidebar's Activity badge. View state in UserDefaults,
-    /// as `problemsSeenAt`. See `AppModel+ProblemDots.swift`.
+    /// as `problemsSeenAt`.
     var activitySeenAt: Date?
 
     /// Progress of a picker-started restore, of which there is at most one
@@ -237,10 +212,8 @@ final class AppModel {
 
     let store: ConfigStore
     let secrets: SecretStore
-    /// Mounts a network share before a backup that needs it (`reconnectShares`).
     let shareMounter: ShareMounter
     let serverProbe: ServerProbe
-    /// Whether a drive is here, for the runs, the scheduler and the listings.
     let volumeProbe: VolumeProbe
     /// Each share's reconnect in flight, by volume name: a second run that
     /// needs it at the same tick awaits the first's answer rather than
@@ -283,10 +256,8 @@ final class AppModel {
     /// Where drag restores and previews copy files out, and the only folder
     /// the launch sweep empties (`stagingDirectory(for:)`).
     let stagingDirectory: URL
-    /// State of the restic console pane (see `ConsoleModel`); its two
-    /// injected closures are set below, at the end of `init`.
+    /// Its two injected closures are set at the end of `init`.
     let console = ConsoleModel()
-    /// In-flight runs and the sends quitting must drain. See `TaskRegistry`.
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
@@ -308,8 +279,6 @@ final class AppModel {
     /// banner: once per failing stretch, so a denial does not nag on every
     /// failed run.
     @ObservationIgnored var notificationsProblemNoted = false
-    /// The idle-sleep assertion held while backups or maintenance run
-    /// (`reconcileSleepAssertion`).
     @ObservationIgnored var sleepActivity: (any NSObjectProtocol)?
     /// The configuration writes, one at a time in call order — see
     /// `flushSave`.
@@ -372,8 +341,7 @@ final class AppModel {
         #else
         self.loginItemInstallable = LoginItem.isInInstallableLocation
         #endif
-        // The console's whole view of its owner: run a command, persist the
-        // history. A gone owner is the quit unwinding: the pane says so in
+        // A gone owner is the quit unwinding: the pane says so in
         // the words the rest of the app uses for a cancel.
         console.runCommand = { [weak self] repositoryID, arguments in
             await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
@@ -393,8 +361,6 @@ final class AppModel {
             BackupShelves(listing: $0, plans: plans(in: repositoryID), allPlans: configuration.plans)
         }
     }
-
-    // MARK: - Persistence
 
     /// Coalesces rapid edits (typing in a text field) into one write.
     private func scheduleSave() {

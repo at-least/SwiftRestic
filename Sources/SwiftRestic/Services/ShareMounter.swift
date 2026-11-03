@@ -6,7 +6,6 @@ import NetFS
 /// not a prompt. Injectable so a test never mounts anything.
 struct ShareMounter: Sendable {
     enum Result: Equatable, Sendable {
-        /// Where macOS mounted it.
         case mounted([String])
         /// NetFS's status: an errno when positive, an OSStatus when negative.
         case failed(Int32)

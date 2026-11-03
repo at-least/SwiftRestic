@@ -8,8 +8,6 @@ import Foundation
 enum VersionPreview {
     static let sizeLimit: Int64 = 1_000_000_000
 
-    /// Why Preview cannot run for a version of this size, as its help; nil
-    /// when it can.
     static func unavailableReason(size: Int64?, isReading: Bool) -> String? {
         guard let size else {
             return isReading

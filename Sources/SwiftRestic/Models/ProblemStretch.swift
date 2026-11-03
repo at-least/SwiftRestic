@@ -9,18 +9,14 @@ import Foundation
 /// that heal the card — or another outcome or cause. A backup skipped whole
 /// or stopped ran nothing, and passes over it (`passesOverProblems`).
 extension RunRecord {
-    /// A failed or completed-with-errors backup: what a stretch counts.
     var isBackupProblem: Bool {
         kind == .backup && outcome.isProblem
     }
 
-    /// A backup that leaves its plan's stretch as it was: skipped whole — a
-    /// drive away, nothing backed up — or stopped.
     var passesOverProblems: Bool {
         kind == .backup && (outcome == .cancelled || (outcome == .skipped && !isPartialSkip))
     }
 
-    /// Whether this backup ended as `other` did, for the same cause.
     func isSameProblem(as other: RunRecord) -> Bool {
         isBackupProblem && other.isBackupProblem && outcome == other.outcome && problemCause == other.problemCause
     }
@@ -69,8 +65,6 @@ extension RunRecord {
     /// again.
     static func fillingProblemStretches(_ runs: [RunRecord]) -> [RunRecord] {
         var runs = runs
-        // Per plan, the newest backup met so far, oldest first, that did not
-        // pass over.
         var previous: [UUID: RunRecord] = [:]
         for index in runs.indices.reversed() {
             let run = runs[index]

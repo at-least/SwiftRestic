@@ -7,7 +7,6 @@ import Foundation
 final class MockResticClient: ResticClient, @unchecked Sendable {
     private let lock = NSLock()
 
-    /// One canned answer per method; the last setter wins until replaced.
     private var backupScript: Result<BackupOutcome, Error> =
         .success(BackupOutcome(summary: nil, itemErrors: [], exitCode: 0))
     private var forgetScript: Result<Int, Error> = .success(0)
@@ -20,9 +19,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var statsScript: Result<RepositoryStats, Error> =
         .success(RepositoryStats(totalSize: 0))
 
-    /// Order of arrival across every method, for sequencing assertions.
     private var log: [String] = []
-    /// What each check was asked to read of the data, in order.
     private var checkSubsetLog: [CheckDataSubset?] = []
     /// Whether a run's transcript was bound when each transcribed method
     /// ran — the engines bind one around restic calls only.
@@ -49,7 +46,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    /// The patterns each `rewrite` was passed, in order.
     var rewrites: [[String]] { locked { rewritePatterns } }
 
     func onRewrite(_ result: Result<Int, Error>) -> Self {
@@ -62,8 +58,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    /// `prune`'s answer and the lines its `onRawLine` reports, mirroring
-    /// `onCheck`.
     func onPrune(_ result: Result<String, Error>, rawLines: [String] = []) -> Self {
         locked {
             pruneScript = result
@@ -72,7 +66,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    /// Scripts the exit code `method` leaves in the run's transcript.
     func onExit(_ method: String, _ code: Int32) -> Self {
         locked { exits[method] = code }
         return self
@@ -82,12 +75,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         locked { log.append(name) }
     }
 
-    // MARK: - Index streams
-
-    /// The index backfill's two streams, scripted per snapshot ID: what
-    /// `ls` lists, which snapshots restic cannot read (both streams fail
-    /// for them), which walks hang until cancelled, and how often each
-    /// snapshot was walked.
     private var listings: [String: [SnapshotNode]] = [:]
     private var unreadableIDs: Set<String> = []
     private var hangingIDs: Set<String> = []
@@ -155,14 +142,9 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    /// `ls` runs per snapshot ID.
     var walkCounts: [String: Int] { locked { walks } }
-    /// `diff` runs per target snapshot ID.
     var diffCounts: [String: Int] { locked { diffWalks } }
 
-    /// For the methods a run engine transcribes: notes whether a transcript
-    /// was bound, and writes the scripted exit into it the way the runner
-    /// would.
     private func transcribe(_ name: String) {
         let transcript = RunTranscript.current
         let code = locked {
@@ -175,8 +157,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     var callLog: [String] { locked { log } }
     var checkSubsets: [CheckDataSubset?] { locked { checkSubsetLog } }
     var transcriptBound: [String: Bool] { locked { bound } }
-
-    // MARK: - ResticClient
 
     func cacheReport() async throws -> ResticCacheReport {
         ResticCacheReport(directory: "/tmp/restic-cache", count: 0, oldCount: 0, totalBytes: 0)

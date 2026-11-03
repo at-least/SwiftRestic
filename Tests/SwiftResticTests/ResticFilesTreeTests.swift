@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The Files tree over real restic: a plan's folder listed from the disk
-/// beside what its backups hold (`FilesTree.level`), and an open folder's
-/// files read ahead.
 @Suite("restic Files tree", .serialized, .enabled(if: ResticAvailability.isInstalled))
 struct ResticFilesTreeTests {
     @MainActor
@@ -175,13 +172,11 @@ struct ResticFilesTreeTests {
             }
         }
 
-        /// The finds restic was asked for, as the wrapper logged them.
         func finds() -> [String] {
             let log = (try? String(contentsOf: calls, encoding: .utf8)) ?? ""
             return log.split(separator: "\n").map(String.init).filter { $0.hasPrefix("find ") }
         }
 
-        /// Each file's versions' newest backups, from the index.
         func newest() async throws -> [FileNode: [String]] {
             var newest: [FileNode: [String]] = [:]
             for file in files {
@@ -228,7 +223,6 @@ struct ResticFilesTreeTests {
         // named, but its one version needs only the newest.
         #expect(model.fileHistoryAnswers.keys.filter { $0.path == files[0].pathKey }.count == 1)
 
-        // Each file's click: every row answered, sizes as backed up, no find.
         for file in files {
             let ids = try #require(newest[file])
             let answers = try await model.fileHistory(repositoryID: scene.repositoryID, path: file.path, snapshotIDs: ids)

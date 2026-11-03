@@ -1,7 +1,5 @@
 import Foundation
 
-/// One visible row of the restore browser's file tree: a node, its indent
-/// depth, and whether its children are shown / known.
 struct FileTreeRow: Identifiable, Equatable {
     let node: SnapshotNode
     let depth: Int
@@ -21,9 +19,6 @@ struct FileTreeRow: Identifiable, Equatable {
     }
 }
 
-/// The visible rows of a lazily-loaded file tree, as one flat array — the
-/// shape a `List` wants, with indent depth for the tree look.
-///
 /// Pure state machine so it is testable without SwiftUI: the view toggles
 /// expansion, receives the directory whose children must be fetched, and
 /// feeds listings back through `replaceChildren`. A snapshot switch rebuilds
@@ -35,7 +30,6 @@ struct FileTreeRow: Identifiable, Equatable {
 struct FileTree: Equatable {
     private(set) var rows: [FileTreeRow] = []
 
-    /// A row's identity for SwiftUI's list and selection: the path's bytes.
     static func id(of path: String) -> String { PathKey(path).hex }
 
     func row(id: String) -> FileTreeRow? {
@@ -90,8 +84,6 @@ struct FileTree: Equatable {
         rows.replaceSubrange(index + 1 ..< staleEnd, with: children)
     }
 
-    /// One past the last row inside the subtree at `index` — the next row at
-    /// its depth or shallower.
     private func subtreeEnd(after index: Int) -> Int {
         let depth = rows[index].depth
         var end = index + 1
@@ -99,8 +91,6 @@ struct FileTree: Equatable {
         return end
     }
 
-    /// Marks every row unloaded and collapsed, keeping only the root level —
-    /// the reset a snapshot switch performs before re-expanding the spine.
     mutating func reset(to roots: [SnapshotNode]) {
         rows = roots.map {
             FileTreeRow(node: $0, depth: 0, expanded: false, childrenLoaded: !$0.isDirectory)
@@ -116,14 +106,12 @@ struct FileTree: Equatable {
         _ = toggleExpanded(path: path)
     }
 
-    /// The row's full node, for restore actions.
     func node(at path: String) -> SnapshotNode? {
         index(of: path).map { rows[$0].node }
     }
 }
 
 extension FileTree {
-    /// The two horizontal arrows the tree answers.
     enum HorizontalArrow: Sendable { case left, right }
 
     /// What a Left or Right arrow does to the selected row — NSOutlineView's

@@ -18,7 +18,6 @@ struct EditorRequirementTests {
         plan.repositoryID = UUID()
         #expect(EditorRequirements.plan(plan, isNew: true, among: []) == nil, "a complete plan has nothing to name")
 
-        // Whitespace is as absent as nothing.
         plan.path = "  "
         #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder or file to back up.")
     }
@@ -33,25 +32,20 @@ struct EditorRequirementTests {
         var draft = BackupPlan()
         draft.repositoryID = home
         let taken = "This repository already has a plan for this folder or file."
-        // Spelled the same, with a trailing slash, or padded: one path.
         for spelling in ["/Users/demo/Documents", "/Users/demo/Documents/", " /Users/demo/Documents"] {
             draft.path = spelling
             #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == taken, "spelled \(spelling)")
         }
-        // A tilde is the home folder.
         var inHome = saved
         inHome.path = NSHomeDirectory() + "/Documents"
         draft.path = "~/Documents"
         #expect(EditorRequirements.plan(draft, isNew: true, among: [inHome]) == taken)
 
-        // A folder inside it is another path.
         draft.path = "/Users/demo/Documents/Taxes"
         #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
-        // The same folder to another repository is another plan.
         draft.path = "/Users/demo/Documents"
         draft.repositoryID = UUID()
         #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
-        // A saved plan's own entry is not another plan.
         #expect(EditorRequirements.plan(saved, isNew: false, among: [saved]) == nil)
         // Twins: earlier builds let two plans back up one folder
         // to one repository, and a plan's path is fixed once saved, so
@@ -70,7 +64,6 @@ struct EditorRequirementTests {
         // Two or more: the picker says Choose, and the footer asks.
         #expect(EditorRequirements.initialRepositoryID(nil, among: [one, two]) == nil)
         #expect(EditorRequirements.initialRepositoryID(nil, among: []) == nil)
-        // A plan that has one keeps it.
         #expect(EditorRequirements.initialRepositoryID(two.id, among: [one, two]) == two.id)
     }
 
@@ -92,7 +85,6 @@ struct EditorRequirementTests {
         #expect(PathListEntry.value(for: "**/node_modules", expandsTildeInPath: false, escapesGlobs: false)
             == "**/node_modules")
         #expect(PathListEntry.value(for: "   ", expandsTildeInPath: false, escapesGlobs: true) == nil)
-        // Sources: a real path, its tilde expanded.
         #expect(PathListEntry.value(for: " ~/Documents", expandsTildeInPath: true, escapesGlobs: false)
             == NSHomeDirectory() + "/Documents")
     }
@@ -107,7 +99,6 @@ struct EditorRequirementTests {
         let partial = ["*", #"/Users/me/a\[1].txt"#, "~/Downloads"]
         #expect(PathListEntry.typing("  ", at: 0, original: "**/*.iso", in: partial) == paths)
         #expect(PathListEntry.typing("~/Downloads", at: 0, original: "**/*.iso", in: partial) == paths)
-        // Finished on another row's value: the edited row goes.
         #expect(PathListEntry.finishing("~/Downloads", at: 0, in: paths)
             == [#"/Users/me/a\[1].txt"#, "~/Downloads"])
         #expect(PathListEntry.finishing("**/*.iso", at: 0, in: paths) == paths)
@@ -156,21 +147,18 @@ struct EditorRequirementTests {
         var draft = Repository()
         draft.kind = .local
         let taken = "“T7” is already at this location."
-        // Spelled the same, or with a trailing slash: one place.
         for spelling in ["/Volumes/T7/restic", "/Volumes/T7/restic/"] {
             draft.localPath = spelling
             #expect(EditorRequirements.repository(
                 draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [saved]
             ) == taken, "spelled \(spelling)")
         }
-        // A tilde is the home folder.
         var home = saved
         home.localPath = NSHomeDirectory() + "/restic"
         draft.localPath = "~/restic"
         #expect(EditorRequirements.repository(
             draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [home]
         ) == "“restic” is already at this location.")
-        // A server's repository is its URL.
         var server = Repository()
         server.kind = .rest
         server.restURL = "rest:http://nas.local:8000/"
@@ -180,8 +168,6 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(
             again, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [server]
         ) == "“nas.local” is already at this location.")
-        // Another folder on the drive is another repository, and a saved
-        // repository being edited is not in its own way.
         draft.localPath = "/Volumes/T7/restic-imac"
         #expect(EditorRequirements.repository(
             draft, password: "pw", confirmPassword: "pw", isNew: true, hasStoredPassword: nil, among: [saved]
@@ -239,11 +225,9 @@ struct EditorRequirementTests {
                 providerSecret: secret, initialProviderSecret: ""
             )
         }
-        // Saved at once: nothing restic sees changed.
         #expect(!reaches { _ in })
         #expect(!reaches { $0.maintenance.checkEnabled.toggle() })
         #expect(!reaches { $0.hooks = [BackupHook()] })
-        // Checked first.
         #expect(reaches { $0.sftpPath = "/volume1/restik" })
         #expect(reaches { $0.sftpPort = "2222" })
         #expect(reaches { $0.kind = .local })
@@ -291,7 +275,6 @@ struct EditorRequirementTests {
             == nil)
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: nil, among: [])
             == nil)
-        // The location's gaps come first, in field order.
         draft.localPath = ""
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
             == "Choose a folder to save it.")
@@ -310,7 +293,6 @@ struct EditorRequirementTests {
 
     @Test("a blank provider secret after a failed Keychain read keeps what is stored; no secret field writes nothing")
     func keepsStoredProviderSecret() {
-        // A kind with no secret field: the upsert leaves the Keychain alone.
         #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: nil, readFailed: false, typedSecret: "") == true)
         #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: nil, readFailed: true, typedSecret: "key") == true)
         // The read failed, so the field could not be prefilled: blank keeps
@@ -323,7 +305,6 @@ struct EditorRequirementTests {
 
     @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")
     func missingRepositoryWords() {
-        // A new repository is created on Save.
         #expect(EditorRequirements.noRepositoryYet(isNew: true)
             == "No repository at that location yet. Saving will create one.")
         // An edit's Save creates nothing: its plans would fail against it.

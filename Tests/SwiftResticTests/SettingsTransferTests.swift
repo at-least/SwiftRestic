@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// File ▸ Export Settings and Import Settings: what the file holds, what an
-/// import takes from it and what stays with the Mac, the files it refuses,
-/// and what the import does to the app around the configuration.
 @MainActor
 @Suite("settings export and import")
 struct SettingsTransferTests {

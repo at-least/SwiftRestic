@@ -20,20 +20,10 @@ import Testing
 /// yet: at the default shape a merge burst writes about as much as the
 /// whole population does.
 ///
-/// The default shape keeps `./build.sh test` quick: three plan chains over
-/// disjoint folders of one home, about 20k paths, 600 hourly history ticks
-/// with restic-style retention (keep the last 100 ticks and every second
-/// older one, a different half per chain), so 1,800 snapshots are read and
-/// about 1,050 stay, with an interior seq gap at every thinned tick. Pass
+/// The default shape keeps `./build.sh test` quick. Pass
 /// `SWIFTRESTIC_INDEX_BENCH=1` to the test process — through xcodebuild,
 /// `TEST_RUNNER_SWIFTRESTIC_INDEX_BENCH=1`, which it forwards with the prefix
-/// stripped — for the bench shape: 2M paths in five chains and about 10k
-/// retained snapshots (18,500 read). The bench asserts the same bounds and
-/// prints the timings (means): per backup, housekeeping, a one-letter
-/// search, the summaries against full version lists, the planner and
-/// `isComplete` as the indexed count grows, and four rare events — a head
-/// death, a failed diff, a mass omission and its recovery, and a whole
-/// chain's death.
+/// stripped — for the bench shape.
 @Suite("snapshot index scale")
 struct SnapshotIndexScaleTests {
     @Test("the write counters see what a write costs, and a population-sized write breaks the bounds")
@@ -91,8 +81,6 @@ struct SnapshotIndexScaleTests {
     }
 }
 
-// MARK: - Bounds
-
 /// The machine-independent bounds, per write; the tests compare means.
 ///
 /// Rows: an added path costs at most four rows — its node, the two rows
@@ -145,8 +133,6 @@ enum ScaleBounds {
     }
 }
 
-// MARK: - Shape
-
 struct ScaleShape: Sendable {
     var chains: Int
     var pathsPerChain: Int
@@ -179,8 +165,6 @@ struct ScaleShape: Sendable {
     /// A forward tick with no change in any chain (S-2).
     var quietTick: Int { historyTicks + 3 }
 }
-
-// MARK: - The model
 
 /// One chain's history as node lifetimes, so any tick's content, and the
 /// difference between any two ticks, comes from the events in between —
@@ -338,8 +322,6 @@ private final class ChainModel {
         IndexTestData.diffSpelling(path(of: node), isDirectory: isDir[Int(node)])
     }
 
-    /// What `restic diff` from `base` to `target` would list, either
-    /// direction.
     func delta(from base: Int, to target: Int) -> (added: [String], removed: [String]) {
         var added: [String] = []
         var removed: [String] = []
@@ -390,8 +372,6 @@ private final class ChainModel {
     }
 }
 
-// MARK: - One run
-
 private struct StepRecord {
     var chain: Int
     var added: Int
@@ -417,7 +397,6 @@ private final class ScaleRun {
     let shape: ScaleShape
     let fixture: IndexFixture
     var chains: [ChainModel] = []
-    /// Per chain, the ticks the latest listing holds.
     var listed: [Set<Int>]
     /// Per chain, the newest tick ever indexed forward: the window end whose
     /// content the TOP runs describe, even after it died.
@@ -434,8 +413,6 @@ private final class ScaleRun {
         listed = Array(repeating: [], count: shape.chains)
         hiTick = Array(repeating: -1, count: shape.chains)
     }
-
-    // MARK: Helpers
 
     func id(chain: Int, tick: Int) -> String {
         IndexTestData.hexID(chain * 10_000_000 + tick + 1)
@@ -500,9 +477,6 @@ private final class ScaleRun {
         #expect(found.isEmpty, "\(label): \(found)", sourceLocation: sourceLocation)
     }
 
-    // MARK: Steps
-
-    /// Streams one full read the way the backfill does and measures it.
     func full(_ hash: String, chain: Int, tick: Int, churnFrom base: Int?) throws -> StepRecord {
         let churn: (added: [String], removed: [String]) = base.map { chains[chain].delta(from: $0, to: tick) } ?? ([], [])
         let addedPaths = Set(churn.added.map(ResticPath.normalized))
@@ -605,7 +579,6 @@ private final class ScaleRun {
         bench("S-7 \(label): nextStep \(ms(planner)), isComplete \(ms(complete)) (means of \(rounds))")
     }
 
-    /// Compares the phase's mean cost with the mean of its per-write bounds.
     func expectChangeSized(
         _ label: String, _ records: [StepRecord], rows: (StepRecord) -> Int = { $0.cost.rows },
         rowBound bound: (StepRecord) -> Double = { ScaleBounds.rows(added: $0.added, removed: $0.removed) },
@@ -641,8 +614,6 @@ private final class ScaleRun {
         bench("\(label): mean \(ms(mean(records.map(\.seconds)))) per write, max \(ms(records.map(\.seconds).max() ?? 0))")
     }
 
-    // MARK: Truth
-
     /// Every read of a sample of paths against the model: the versions of
     /// each path are the listed snapshots of its chain whose tick holds it,
     /// newest first.
@@ -662,8 +633,6 @@ private final class ScaleRun {
         #expect(mismatches.isEmpty, "\(label): \(mismatches.prefix(5))", sourceLocation: sourceLocation)
         #expect(try await index.isComplete(), "\(label)", sourceLocation: sourceLocation)
     }
-
-    // MARK: The run
 
     func run() async throws {
         var generator = SeededGenerator(seed: 20_260_928)

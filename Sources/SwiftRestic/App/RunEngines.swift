@@ -1,8 +1,5 @@
 import Foundation
 
-/// Records one hook run's verdicts: failed, non-cancelled hooks surface in
-/// the record's hook messages, and every hook's log line goes to the
-/// transcript.
 private func note(
     _ outcomes: [HookRunner.Outcome],
     into record: inout RunRecord,
@@ -41,11 +38,6 @@ private func runAfterHooks(
     record.finishedAt = .now
 }
 
-/// The away volumes among `paths`, each once, handed to the sink's
-/// `reconnectShares` — `AppModel.reconnectShares` — and nothing asked when
-/// none is away. Each answer goes to the run's log; the shares that stayed
-/// away come back, for the run's words (`reasonsByVolume`) and whether one
-/// refused (`isRefusal`).
 @MainActor
 private func reconnectAwayShares(
     of paths: [String],
@@ -72,8 +64,6 @@ enum BackupStamp: Equatable, Sendable {
     case nothing, whole
 }
 
-/// What every run engine asks of the model. `AppModel` conforms; tests
-/// record the calls instead.
 @MainActor
 protocol RunEngineSink: AnyObject {
     /// What every surface calls the repository (`AppModel.label(of:)`): the
@@ -87,8 +77,6 @@ protocol RunEngineSink: AnyObject {
     /// an inline refresh would die with it — and inside whatever
     /// bookkeeping keeps work from outliving a quit.
     func scheduleSnapshotRefresh(repositoryID: UUID)
-    /// Mounts the saved network shares among `volumes` — volumes this run
-    /// needs that are away (`AppModel.reconnectShares`).
     func reconnectShares(volumes: [String]) async -> [ShareReconnect]
     /// One connection attempt to a network repository's server
     /// (`ServerProbe`); nil when there is nothing to ask first.
@@ -118,8 +106,6 @@ extension RunEngineSink {
 /// not reachable from outside the model layer.
 @MainActor
 enum BackupRunEngine {
-    /// The model surface a backup run drives. `AppModel` conforms; tests
-    /// record the calls instead.
     @MainActor
     protocol Sink: RunEngineSink {
         /// Why this plan's run was cancelled, for its record: the user's
@@ -156,7 +142,6 @@ enum BackupRunEngine {
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
-        /// Runs the plan's shell hooks around the run.
         func makeHookRunner() -> HookRunner
     }
 
@@ -427,8 +412,6 @@ enum BackupRunEngine {
         )
     }
 
-    /// Runs the after-backup hooks (`runAfterHooks`), then hands the finished
-    /// run to the sink for storage and announcement.
     private static func finish(
         record: inout RunRecord,
         plan: BackupPlan,
@@ -658,9 +641,6 @@ enum MaintenanceRunEngine {
         )
     }
 
-    /// Runs the after-maintenance hooks (`runAfterHooks`), then hands the
-    /// finished run to the sink.
-    ///
     /// A check that found errors counts as a failure here: that is the outcome
     /// a repository hook exists to report.
     private static func finish(

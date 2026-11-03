@@ -233,29 +233,23 @@ struct CommandStateTests {
         let model = makeModel()
         let repository = makeRepository("Home NAS")
         let documents = makePlan("Documents", on: repository)
-        // A plan pointing at a repository the configuration no longer holds.
         var orphan = BackupPlan()
         orphan.repositoryID = UUID()
         orphan.path = "/tmp/Orphan"
         model.configuration.repositories = [repository]
         model.configuration.plans = [documents, orphan]
 
-        // The rewrite has nothing to aim at.
         #expect(model.removeFromEarlierBackupsBlocker(planID: makePlan("Draft", on: nil).id)
             == BackupPlan.incompleteConfigurationReason)
         #expect(model.removeFromEarlierBackupsBlocker(planID: orphan.id)
             == BackupPlan.incompleteConfigurationReason)
         #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
 
-        // No restic to run it with.
         model.resticSearch = .searching
         #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
-        // The absence is named before a busy repository: one reason, the
-        // first that stands.
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
         #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
 
-        // The repository is held by a backup or upkeep.
         model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
         #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id)
             == "The repository is in use by a backup or maintenance job — try again when it finishes.")
@@ -312,15 +306,11 @@ struct CommandStateTests {
 
         model.exclude(paths: ["/Users/u/Taxes/a[1].pdf"], fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf"])
-        // Twice is once.
         model.exclude(paths: ["/Users/u/Taxes/a[1].pdf"], fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns.count == 2)
-        // A diagnosis's items at once: the one already there is not added
-        // again, a path named twice is added once, the order is kept.
         model.exclude(paths: ["/Users/u/b?.txt", "/Users/u/Taxes/a[1].pdf", "/Users/u/c", "/Users/u/b?.txt"], fromPlan: plan.id)
         #expect(model.plan(id: plan.id)?.excludePatterns
             == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf", "/Users/u/b\\?.txt", "/Users/u/c"])
-        // Nothing else of the plan moves.
         #expect(model.plan(id: plan.id)?.path == plan.path)
     }
 
@@ -358,7 +348,6 @@ struct CommandStateTests {
             // Back Up All Plans Now is not about the selection.
             #expect(state.canBackUpAll)
         }
-        // A plan deleted since the selection was made is nothing to act on.
         #expect(model.planCommands(for: .plan(UUID())).planID == nil)
 
         let idle = model.planCommands(for: .plan(plan.id))
@@ -386,7 +375,6 @@ struct CommandStateTests {
         #expect(!timed.isScheduleActive)
         #expect(timed.canToggleSchedule)
 
-        // A timed pause that has run out is no pause.
         plan.pausedUntil = .now.addingTimeInterval(-60)
         model.configuration.plans = [plan]
         #expect(model.planCommands(for: .plan(plan.id)).scheduleTitle == "Pause Schedule")
@@ -519,16 +507,12 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .plan(plan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .plan(orphan.id)) == nil)
         #expect(model.commandRepositoryID(for: .plan(unset.id)) == nil)
-        // A group under Other backups resolves to the repository it sits in
-        // — whatever its plan ID names — and to nothing once that
-        // repository is gone.
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: orphan.id)) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: repository.id, planID: UUID())) == repository.id)
         #expect(model.commandRepositoryID(for: .orphanPlan(repositoryID: UUID(), planID: orphan.id)) == nil)
         let lineage = SnapshotLineage.Key(hostname: "studio", paths: ["/Data/Music"])
         #expect(model.commandRepositoryID(for: .lineage(repositoryID: repository.id, key: lineage)) == repository.id)
         #expect(model.commandRepositoryID(for: .lineage(repositoryID: UUID(), key: lineage)) == nil)
-        // A lineage is no plan either.
         #expect(model.planCommands(for: .lineage(repositoryID: repository.id, key: lineage)).planID == nil)
         #expect(model.commandRepositoryID(for: .repository(UUID())) == nil)
         for selection: SidebarItem? in [.activity, .console, nil] {
@@ -562,7 +546,6 @@ struct CommandStateTests {
         model.configuration.repositories = [first, second]
         model.configuration.plans = [plan]
 
-        // Every selection kind the Repository menu acts through.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(second.id), shown: nil) == second.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .plan(plan.id), shown: nil) == second.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .orphanPlan(repositoryID: second.id, planID: UUID()), shown: nil) == second.id)
@@ -571,9 +554,6 @@ struct CommandStateTests {
         // with it — not the first, which threw them away.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .findFiles, shown: second.id) == second.id)
 
-        // Nothing to look at — Activity, the console, nothing selected, a
-        // selection whose target is gone, or Find Files showing none — and
-        // the picker starts on the first repository.
         let gone = makeRepository("Gone")
         let orphan = makePlan("Orphan", on: gone)
         model.configuration.plans = [plan, orphan]
@@ -581,18 +561,13 @@ struct CommandStateTests {
             #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: selection, shown: nil) == first.id,
                     "selection \(String(describing: selection))")
         }
-        // The repository Find Files showed, since removed.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .findFiles, shown: gone.id) == first.id)
         // What Find Files shows speaks for Find Files alone.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .activity, shown: second.id) == first.id)
 
-        // The Restore pane's "Search All Backups" hand-off wins over
-        // whatever the window has selected.
         #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: .repository(second.id), shown: nil) == first.id)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: second.id, selection: nil, shown: nil) == second.id)
 
-        // No repositories: the picker starts empty, unless a hand-off names
-        // one — the prefill still wins.
         model.configuration.repositories = []
         #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: .repository(first.id), shown: nil) == nil)
         #expect(model.findFilesRepositoryID(prefillRepositoryID: first.id, selection: nil, shown: nil) == first.id)
@@ -614,9 +589,6 @@ struct CommandStateTests {
 
         #expect(model.filesSearchRoots(for: .plan(plan.id))
             == FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id)))
-        // No tree to search: a plan with nowhere to back up, and every page
-        // with no Files tab — a group's under Other backups, either kind,
-        // whose backups the listing holds, among them.
         for selection: SidebarItem? in [
             .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: deleted),
             .lineage(repositoryID: repository.id, key: untagged.lineageKey),
@@ -667,7 +639,6 @@ struct CommandStateTests {
         #expect(!heldA.canApplyRetention)
         #expect(heldA.retentionBlocker == busy)
 
-        // Another plan's backup to the same repository holds it too.
         model.maintenance[repository.id] = nil
         model.activity[planB.id] = PlanActivity(of: planB)
         #expect(!model.planCommands(for: .plan(planA.id)).canApplyRetention)
@@ -694,7 +665,6 @@ struct CommandStateTests {
         model.configuration.plans = [unset]
         #expect(model.planCommands(for: .plan(unset.id)).retentionBlocker
             == "This plan needs a repository and a folder or file to back up")
-        // Back Up Now says the same, where it said nothing.
         #expect(!model.planCommands(for: .plan(unset.id)).canBackUp)
         #expect(model.planCommands(for: .plan(unset.id)).backUpDisabledReason
             == "This plan needs a repository and a folder or file to back up")
@@ -711,7 +681,6 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
         let idle = model.planCommands(for: nil)
         #expect(idle.canPauseBackups && !idle.backupsPaused)
-        // Pause and Stop only while a backup runs.
         #expect(!idle.canPauseAndStopBackups)
         model.activity[plan.id] = PlanActivity(of: plan)
         #expect(model.planCommands(for: nil).canPauseAndStopBackups)
@@ -753,12 +722,10 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
-        // Apply Retention Now is no backup.
         model.activity[plan.id]?.work = .applyRetention
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Applying retention will be stopped.") == true)
         #expect(model.quitInterruptions == ["Retention is being applied."])
-        // Nor is Remove from Earlier Backups, and it is no retention either.
         model.activity[plan.id]?.work = .removeFromEarlierBackups
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Removing items from earlier backups will be stopped.") == true)

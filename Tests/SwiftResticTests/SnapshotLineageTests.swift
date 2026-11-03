@@ -144,11 +144,9 @@ struct SnapshotLineageTests {
         #expect(model.backupShelves[repositoryID] == nil)
         model.snapshots[repositoryID] = [docs, photos]
         #expect(model.shelves(for: repositoryID).others.map { $0.snapshots.map(\.id) } == [["d1"], ["p1"]])
-        // The plan arrives: its backup moves under it.
         model.configuration.plans = [plan]
         #expect(model.shelves(for: repositoryID).byPlan[plan.id]?.map(\.id) == ["d1"])
         #expect(model.shelves(for: repositoryID).others.map { $0.snapshots.map(\.id) } == [["p1"]])
-        // It moves to another repository: what it left here is other again.
         model.configuration.plans[0].repositoryID = UUID()
         #expect(model.shelves(for: repositoryID).byPlan.isEmpty)
         model.snapshots[repositoryID] = [photos]
@@ -187,7 +185,6 @@ struct SnapshotLineageTests {
     @Test("the restore header names the open backup the way the sidebar names its group")
     @MainActor
     func restoreHeaderName() throws {
-        // What the sidebar shows: the plan, called by its folder.
         var documentsPlan = BackupPlan()
         documentsPlan.path = "/Data/Documents"
         let docs = try snapshot("d1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"],
@@ -298,7 +295,6 @@ struct SnapshotLineageTests {
         #expect(failed.caption == "Could not compare with \(since): restic reported a fatal error — Fatal: injected")
         #expect(failed.detail.hasSuffix(" restic diff failed: restic reported a fatal error — Fatal: injected. More."))
 
-        // Only a failed comparison wears the warning glyph.
         #expect(failed.isProblem)
         let calm: [ChangeComparison?] = [nil, .firstBackup, .comparing(baseline: baseline),
                                          .compared(baseline: baseline, changeCount: 2)]

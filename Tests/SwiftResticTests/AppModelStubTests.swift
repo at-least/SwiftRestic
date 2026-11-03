@@ -100,8 +100,6 @@ struct AppModelStubTests {
         return model.banners.first(where: { $0.title.contains(fragment) })
     }
 
-    // MARK: - One plan per repository at a time
-
     /// A second plan in the harness's repository, backing up a folder named
     /// Held: under the `holdbackup` stub its backup holds the repository
     /// until the test writes the release file.
@@ -134,7 +132,6 @@ struct AppModelStubTests {
             .map { " " + $0.dropFirst("start args=[".count) }
     }
 
-    /// Polls the stub's trace until a backup of `path` has started.
     private func backupStarts(of path: String, in harness: Harness, within seconds: TimeInterval = 10) async throws -> Bool {
         let deadline = Date.now.addingTimeInterval(seconds)
         while Date.now < deadline {
@@ -366,8 +363,6 @@ struct AppModelStubTests {
 
         await model.shutdown()
     }
-
-    // MARK: - Restore
 
     @Test("restoring a file lands what restic restored, records the run and surfaces a banner")
     func restoringFileSucceeds() async throws {
@@ -653,8 +648,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Snapshot refresh error paths
-
     @Test("a refresh asked while another is running runs after it, not never")
     func refreshAskedMidFlightRunsAfterward() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -906,8 +899,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Snapshot listing states
-
     @Test("a successful refresh settles the listing as loaded and stamps freshness")
     func successfulRefreshSettlesLoaded() async throws {
         let harness = try await makeHarness(mode: "snaprows")
@@ -1068,8 +1059,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Run history
-
     @Test("the run history is capped at twenty even when every run succeeds")
     func runHistoryIsCapped() async throws {
         // maxRunHistory only raises the floor of 20, so 5 is still capped at 20.
@@ -1086,8 +1075,6 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
-
-    // MARK: - Quit confirmation and run banners
 
     @Test("idle sleep is held off while a backup or a check runs, and let go however it ends")
     func sleepAssertionFollowsRuns() async throws {
@@ -1344,8 +1331,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Console
-
     @Test("the console returns restic's own output, or explains there is nothing")
     func consoleOutput() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -1382,8 +1367,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Unlock
-
     @Test("unlocking a repository confirms with a banner")
     func unlockSuccess() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -1409,8 +1392,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Maintenance
-
     @Test("a check against a repository with no password records nothing at all")
     func missingPasswordMaintenanceRecordsNothing() async throws {
         let harness = try await makeHarness(mode: "default", password: nil)
@@ -1429,7 +1410,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    /// Each drive read: its path, and whether it ran on the main thread.
     private final class PresenceReads: @unchecked Sendable {
         private let lock = NSLock()
         private var storage: [(path: String, onMain: Bool)] = []
@@ -1606,7 +1586,6 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    /// Counts the stub mounter's calls.
     private actor MountCount {
         var calls = 0
         func add() { calls += 1 }
@@ -1811,8 +1790,6 @@ struct AppModelStubTests {
         )
     }
 
-    // MARK: - Deletion
-
     @Test("deleting a repository removes its plans and keeps every other repository's")
     func deletingRepositoryRemovesItsPlans() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -1974,8 +1951,6 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
-
-    // MARK: - Apply Retention Now
 
     @Test("applying retention records a forget without stamping the plan or alerting a channel")
     func applyingRetentionRecordsAForgetWithoutStampingThePlan() async throws {
@@ -2296,8 +2271,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    // MARK: - Removal disclosure and wrong-password copy
-
     @Test("removing a repository discloses the restore its removal will cancel")
     func removalDisclosesRunningRestore() async throws {
         let harness = try await makeHarness(mode: "hang-restore")
@@ -2347,8 +2320,6 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
-
-    // MARK: - Notification wiring
 
     @Test("the webhook gets restic's warnings and never a hook's output")
     func broadcastWiring() async throws {
@@ -2423,8 +2394,6 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
-
-    // MARK: - Browse caches
 
     /// The stub logs one `start args=[…]` line per invocation; count the
     /// runs of one subcommand. `ls`/`diff` are what a browse pays for —
@@ -2716,8 +2685,6 @@ struct AppModelStubTests {
 
         await harness.model.shutdown()
     }
-
-    // MARK: - Run logs
 
     private func logsDirectory(_ harness: Harness) -> URL {
         harness.root.appendingPathComponent("config").appendingPathComponent("Logs")
@@ -3031,7 +2998,6 @@ private final class HTTPCaptureServer: @unchecked Sendable {
         return bodies
     }
 
-    /// Each request's first line, "POST /path HTTP/1.1", in arrival order.
     var capturedRequestLines: [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -3100,7 +3066,6 @@ private final class HTTPCaptureServer: @unchecked Sendable {
         }
     }
 
-    /// Locates where the body starts and how long the headers say it is.
     private static func requestBounds(_ data: Data) -> (bodyStart: Int, contentLength: Int)? {
         guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let headers = String(data: data[..<headerEnd.lowerBound], encoding: .utf8) ?? ""

@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// A run's words outside the drawer: the Activity Detail column and Copy
-/// Details. One wording site, so Activity and the plan page cannot disagree.
 @Suite("run record presentation")
 struct RunRecordPresentationTests {
     private func backup(_ configure: (inout RunRecord) -> Void = { _ in }) -> RunRecord {
@@ -51,7 +49,6 @@ struct RunRecordPresentationTests {
             RunRecord(kind: kind, planID: planID, planName: planName, repositoryID: repositoryID)
         }
 
-        // Backup and forget: the plan by its current name, with the repository.
         #expect(
             RunRecordPresentation.displayName(
                 for: run(.backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
@@ -77,7 +74,6 @@ struct RunRecordPresentationTests {
                 repositories: [home]
             ) == "Papers (Home Disk)"
         )
-        // Restore: its step label with the repository, as for backups.
         #expect(
             RunRecordPresentation.displayName(
                 for: run(.restore, planName: "Budget.numbers", repositoryID: home.id),
@@ -85,7 +81,6 @@ struct RunRecordPresentationTests {
                 repositories: [home]
             ) == "Budget.numbers (Home Disk)"
         )
-        // Check and prune: the repository from its ID.
         for kind in [RunRecord.Kind.check, .prune] {
             #expect(
                 RunRecordPresentation.displayName(
@@ -101,7 +96,6 @@ struct RunRecordPresentationTests {
     func displayNameFallbacks() {
         let home = repository(name: "Home Disk")
 
-        // The plan is gone; the record keeps the name it was recorded under.
         #expect(
             RunRecordPresentation.displayName(
                 for: RunRecord(kind: .backup, planID: UUID(), planName: "Documents", repositoryID: home.id),
@@ -159,7 +153,7 @@ struct RunRecordPresentationTests {
     func nextRunLine() {
         let home = repository(name: "Home Disk")
         let documents = plan(name: "Documents", repositoryID: home.id)
-        let date = Date(timeIntervalSince1970: 1_790_409_497) // RunLogTests' pinned instant
+        let date = Date(timeIntervalSince1970: 1_790_409_497)
 
         #expect(
             RunRecordPresentation.nextRunLine(plan: documents, date: date, plans: [documents], repositories: [home])

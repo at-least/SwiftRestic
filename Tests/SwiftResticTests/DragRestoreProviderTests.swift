@@ -17,7 +17,6 @@ struct DragRestoreProviderTests {
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         let node = SnapshotNode(name: "a.txt", type: .file, path: "/Data/a.txt")
 
-        // A record picked from a repository that is gone.
         let orphan = model.dragRestoreProvider(repositoryID: UUID(), snapshotID: "s1", node: node)
         #expect(orphan.registeredTypeIdentifiers.isEmpty)
         let gone = try #require(model.banners.first)
@@ -25,7 +24,6 @@ struct DragRestoreProviderTests {
         #expect(gone.message.contains("no longer exists"))
         #expect(gone.isError)
 
-        // The repository exists, but no restic binary does.
         var repository = Repository()
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path

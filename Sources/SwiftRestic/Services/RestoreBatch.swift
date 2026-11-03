@@ -68,7 +68,6 @@ enum RestoreBatch {
         return (keptItems, coveredItems)
     }
 
-    /// An item of a selection: its backup and its path's bytes.
     private struct Key: Hashable {
         let snapshotID: String
         let path: PathKey

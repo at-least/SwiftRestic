@@ -12,8 +12,6 @@ import Foundation
 /// `countRemoved`) stay on `ResticService` — no state to abstract behind
 /// a protocol.
 protocol ResticClient: Sendable {
-    // MARK: - Repository lifecycle
-
     func version() async throws -> String
 
     /// `restic cache`: the local cache's directories, sizes and which are
@@ -48,8 +46,6 @@ protocol ResticClient: Sendable {
     /// Any exit code is returned rather than thrown: the console shows
     /// whatever restic said, including its complaints.
     func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String
-
-    // MARK: - Snapshots
 
     func snapshots(
         _ context: RepositoryContext,
@@ -101,8 +97,6 @@ protocol ResticClient: Sendable {
         onChange: @Sendable @escaping (ResticDiffChange) -> Void
     ) async throws
 
-    // MARK: - Backup
-
     func backup(
         _ context: RepositoryContext,
         plan: BackupPlan,
@@ -119,8 +113,6 @@ protocol ResticClient: Sendable {
     /// `rewrite --forget` of the plan's backups without what `patterns`
     /// match; returns how many backups restic rewrote.
     func rewrite(_ context: RepositoryContext, plan: BackupPlan, excluding patterns: [String]) async throws -> Int
-
-    // MARK: - Restore
 
     /// `overwrite` has no default, here or below: every caller states what
     /// happens to a file already at the destination.

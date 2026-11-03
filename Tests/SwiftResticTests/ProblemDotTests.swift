@@ -110,12 +110,10 @@ struct ProblemDotTests {
         model.configuration.runs = [record(.failed, finishedAt: hour1)]
         #expect(model.unseenProblemLabel(for: planID) == "New problem — Failed")
 
-        // Seen: the dot and its label go, the standing problem stays named.
         model.markProblemSeen(planID: planID)
         #expect(model.unseenProblemLabel(for: planID) == nil)
         #expect(model.currentProblem(for: planID) != nil)
 
-        // Healed by a later success: nothing to invite the user to.
         let fresh = makeModel()
         fresh.configuration.runs = [
             record(.succeeded, finishedAt: hour2),

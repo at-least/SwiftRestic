@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Snapshots
-
     /// Generous ceiling on one repository's `snapshots`/`stats` refresh: a
     /// black-holed SFTP host or S3 endpoint would otherwise hang the
     /// refresh — and, at launch, the scheduler that is armed once it
@@ -171,8 +169,6 @@ extension AppModel {
         }
     }
 
-    /// The listing outcome a surface should render for a repository, `.idle`
-    /// when there is none (including the "no repository" case).
     func snapshotListingOutcome(for repositoryID: UUID?) -> SnapshotListingOutcome {
         guard let repositoryID else { return .idle }
         return snapshotListingOutcomes[repositoryID] ?? .idle
@@ -189,41 +185,28 @@ extension AppModel {
             : "Repository missing. If it moved, put it back, or add it where it is now as a new repository."
     }
 
-    /// When the repository's listing last succeeded, for freshness stamps.
     func snapshotsLoadedAt(for repositoryID: UUID?) -> Date? {
         guard let repositoryID else { return nil }
         return snapshotsLoadedAt[repositoryID]
     }
 
-    /// The repository's backups sorted to where they are listed: on their
-    /// plans' Backups tabs, the rest on their groups' under Other backups.
     func shelves(for repositoryID: UUID) -> BackupShelves {
         backupShelves[repositoryID]
             ?? BackupShelves(listing: [], plans: plans(in: repositoryID), allPlans: configuration.plans)
     }
 
-    /// How many of a plan's backups would stay behind if it left
-    /// `repositoryID`; nil when it holds none there.
     func backupsLeftBehind(planID: UUID, in repositoryID: UUID) -> Int? {
         guard let count = shelves(for: repositoryID).byPlan[planID]?.count, count > 0
         else { return nil }
         return count
     }
 
-    /// How the sidebar names the place `record` sits — its plan, or its group
-    /// under Other backups — for surfaces that name one backup (with
-    /// `SnapshotLineage.displayName(of:label:)`) instead of a second rule of
-    /// their own.
     func recordLabel(of record: Snapshot, repositoryID: UUID) -> SnapshotLineage.Label? {
         shelves(for: repositoryID).label(
             of: record, repositories: configuration.repositories, localHost: localHostname
         )
     }
 
-    /// The page whose Backups tab lists a backup — the plan of the
-    /// repository that made it, or its group under Other backups — for a
-    /// route that names a backup by its ID: the run drawer's Browse, a Files
-    /// tab's Show in Backups. Nil when the listing no longer holds it.
     func page(ofBackup snapshotID: String, in repositoryID: UUID) -> SidebarItem? {
         snapshots(for: repositoryID).first { $0.id == snapshotID }
             .map { shelves(for: repositoryID).page(of: $0, repositoryID: repositoryID) }
@@ -236,33 +219,27 @@ extension AppModel {
         return all.filter { $0.tags.contains(tag) }
     }
 
-    /// The plan's newest backup in the repository: the first of
-    /// `snapshots(for:planID:)`, found without filtering the rest.
+    /// The first of `snapshots(for:planID:)`, found without filtering the
+    /// rest.
     func latestSnapshot(in repositoryID: UUID?, planID: UUID) -> Snapshot? {
         guard let repositoryID else { return nil }
         let tag = ResticService.planTag(planID)
         return snapshots[repositoryID]?.first { $0.tags.contains(tag) }
     }
 
-    /// The listing's newest backup of one chain (`SnapshotIndex.chainKey`):
-    /// the Files views' "the chain's newest backup", the listing's first of
-    /// the chain — the listing is newest first.
+    /// The listing's first of the chain — the listing is newest first.
     func newestSnapshot(inChain chainKey: String, repositoryID: UUID) -> Snapshot? {
         snapshots(for: repositoryID).first { SnapshotIndex.chainKey(for: $0) == chainKey }
     }
 
-    /// `path` as a node of its kind in a backup the index has read — no
-    /// restic process; nil when the index has not read that backup, or it
-    /// does not hold the path. Name, path and kind only: a restore routes by
-    /// nothing else.
+    /// Name, path and kind only: a restore routes by nothing else.
     func indexedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode? {
         let kinds = try await kinds(of: [path], inSnapshot: snapshotID, repositoryID: repositoryID)
         guard let isDirectory = kinds[PathKey(path)] else { return nil }
         return SnapshotNode(name: ResticPath.basename(of: path), type: isDirectory ? .dir : .file, path: path)
     }
 
-    /// The node restic lists for `path` in a backup — its parent's listing,
-    /// matched by bytes: a sibling whose name only canonically equals this
+    /// Matched by bytes: a sibling whose name only canonically equals this
     /// one is another file. A path the backup no longer lists fails loudly.
     func listedNode(repositoryID: UUID, snapshotID: String, path: String) async throws -> SnapshotNode {
         let siblings = try await children(repositoryID: repositoryID, snapshotID: snapshotID, path: ResticPath.parent(of: path))
@@ -376,8 +353,6 @@ extension AppModel {
         return history
     }
 
-    /// Fills `fileHistoryAnswers` for one path from the index's cached
-    /// nodes; returns the backups it could not answer.
     private func answersFromIndexCache(path: String, snapshotIDs: [String], repositoryID: UUID) async -> [String] {
         guard !snapshotIDs.isEmpty else { return [] }
         let pathKey = PathKey(path)
@@ -480,15 +455,13 @@ extension AppModel {
     }
 }
 
-/// One file in one backup of one repository: what `fileHistory` keeps an
-/// answer under. The path is matched by bytes, as the index keys paths.
+/// The path is matched by bytes, as the index keys paths.
 struct FileHistoryKey: Hashable {
     let repositoryID: UUID
     let snapshotID: String
     let path: PathKey
 }
 
-/// One file of one repository: what a read-ahead in flight is kept under.
 struct FileHistoryFile: Hashable {
     let repositoryID: UUID
     let path: PathKey

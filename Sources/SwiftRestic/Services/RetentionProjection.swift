@@ -10,7 +10,6 @@ import Foundation
 /// satisfies several rules still survives once.
 enum RetentionProjection {
     struct Outcome: Equatable {
-        /// Snapshots the policy would keep.
         var keptSnapshots: Int
         /// Age of the oldest survivor, in whole days, rounded up.
         var historyDays: Int

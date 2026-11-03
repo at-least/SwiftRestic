@@ -23,7 +23,6 @@ struct FormattingTests {
         #expect(Format.duration(.nan) == "—")
         // Just under a second is not "0s" — it did happen, briefly.
         #expect(Format.duration(0.999) == "<1s")
-        // From one second up the formatter takes over, rounding to whole units.
         #expect(Format.duration(1) != "<1s")
         #expect(Format.duration(59.9) != "—")
     }
@@ -46,7 +45,6 @@ struct FormattingTests {
         #expect(Format.plural(0, "pattern") == "0 patterns")
         #expect(Format.plural(1, "pattern") == "1 pattern")
         #expect(Format.plural(2, "pattern") == "2 patterns")
-        // Irregular plurals are spelled out, never auto-s suffixed.
         #expect(Format.plural(3, "entry", "entries") == "3 entries")
         #expect(Format.plural(1, "entry", "entries") == "1 entry")
         #expect(Format.plural(2, "match", "matches") == "2 matches")
@@ -130,7 +128,6 @@ struct FormattingTests {
         #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 10, 21), now: now, calendar: calendar)) == "Tomorrow 9:00 PM")
         // Inside the week the day name leads; September 14, 2026 is a Monday.
         #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 14, 21), now: now, calendar: calendar)) == "Mon 9:00 PM")
-        // Further out the month leads, and the time is still spelled in full.
         let inDecember = flatSpaces(Format.tileTimestamp(date(2026, 12, 24, 21), now: now, calendar: calendar))
         #expect(inDecember.hasSuffix("9:00 PM"))
         #expect(inDecember.contains("Dec"))
@@ -296,14 +293,11 @@ struct FormattingTests {
     func pathChainWalksDown() {
         let roots = ["/tmp/src", "/other"]
 
-        // A deep path: the root plus one step per level below it.
         #expect(Format.pathChain(of: "/tmp/src/Documents/Reports", roots: roots)
             == ["/tmp/src", "/tmp/src/Documents", "/tmp/src/Documents/Reports"])
 
-        // The root itself is a single step.
         #expect(Format.pathChain(of: "/tmp/src", roots: roots) == ["/tmp/src"])
 
-        // A path outside every root yields nothing to walk.
         #expect(Format.pathChain(of: "/elsewhere/thing", roots: roots).isEmpty)
 
         // A root that is a prefix of another root's name must not match it.
@@ -330,7 +324,6 @@ struct FormattingTests {
         // "/" contains every absolute path: the naive prefix check
         // (`path.hasPrefix(root + "/")` → "//") matches nothing at all.
 
-        // The ancestor chain the restore browser re-opens walks from "/" too.
         #expect(Format.pathChain(of: "/etc/hosts", roots: ["/"]) == ["/", "/etc", "/etc/hosts"])
         #expect(Format.pathChain(of: "/", roots: ["/"]) == ["/"])
     }
@@ -342,10 +335,8 @@ struct FormattingTests {
         #expect(Format.pathChain(of: "/Users/x/f.txt", roots: ["/", "/Users/x"])
             == ["/Users/x", "/Users/x/f.txt"])
 
-        // Outside every narrower root, "/" still answers.
         #expect(Format.pathChain(of: "/etc/hosts", roots: ["/", "/Users/x"]) == ["/", "/etc", "/etc/hosts"])
 
-        // No root at all: nothing to chain.
         #expect(Format.pathChain(of: "/etc/hosts", roots: []) == [])
     }
 

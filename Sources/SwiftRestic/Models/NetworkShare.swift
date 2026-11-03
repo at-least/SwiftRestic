@@ -16,7 +16,6 @@ struct NetworkShare: Codable, Sendable, Hashable, Identifiable {
     var url: String
 }
 
-/// What reconnecting one share before a backup came to.
 struct ShareReconnect: Equatable, Sendable {
     /// Why not, in a clause that follows "Reconnecting “NAS” failed: ".
     enum Outcome: Equatable, Sendable {
@@ -35,7 +34,6 @@ struct ShareReconnect: Equatable, Sendable {
     var url: String
     var outcome: Outcome
 
-    /// Why it stayed away; nil when it was reconnected.
     var failureReason: String? {
         switch outcome {
         case .reconnected: nil
@@ -47,7 +45,6 @@ struct ShareReconnect: Equatable, Sendable {
         if case .refused = outcome { true } else { false }
     }
 
-    /// The run log's line.
     var logLine: String {
         guard let failureReason else { return "Reconnected the network share \(url) at /Volumes/\(volumeName)." }
         return "Could not reconnect the network share \(url): \(failureReason)."
@@ -55,8 +52,6 @@ struct ShareReconnect: Equatable, Sendable {
 }
 
 extension [ShareReconnect] {
-    /// Each share's reason by volume name — what a run's words read
-    /// (`RunRecord.skippedReason(sources:reconnectFailures:)`).
     var reasonsByVolume: [String: String] {
         var reasons: [String: String] = [:]
         for answer in self { reasons[answer.volumeName] = answer.failureReason }

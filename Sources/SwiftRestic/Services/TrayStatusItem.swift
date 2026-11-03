@@ -3,8 +3,6 @@ import Carbon
 import Foundation
 import Observation
 
-/// The tray, as a first-party AppKit status item.
-///
 /// Not SwiftUI's `MenuBarExtra`: a `.menu`-style label updates its image only
 /// through a `TimelineView`, and any `TimelineView` in its structure — even
 /// one in a branch that is not rendered — pegs the main thread at 100%
@@ -41,9 +39,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         refresh()
     }
 
-    // MARK: - Faces
-
-    /// The model state `iconState` reads.
     private func currentState() -> MenuBarStatus.IconState {
         MenuBarStatus.iconState(
             activity: model.activity,
@@ -131,8 +126,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             self.pulseTimer = nil
         }
     }
-
-    // MARK: - Menu
 
     /// Rebuilt on every open, so the lines are always the current state —
     /// no background menu maintenance at all.
@@ -351,7 +344,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// A pause submenu: one item per length, each carrying its length.
     private func pauseMenuItem(title: String, stopsRunningBackups: Bool) -> NSMenuItem {
         let submenu = NSMenu(title: title)
         submenu.autoenablesItems = false
@@ -372,8 +364,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         return item
     }
 
-    // MARK: - Actions
-
     @objc private func backUpNow(_ sender: NSMenuItem) {
         guard let planID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         model.runBackup(planID: planID)
@@ -385,7 +375,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         model.cancelBackup(planID: planID)
     }
 
-    /// Opens the window on Activity with the run the problem line names.
     @objc private func showProblem(_ sender: NSMenuItem) {
         guard let runID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         router.focusRun(runID)

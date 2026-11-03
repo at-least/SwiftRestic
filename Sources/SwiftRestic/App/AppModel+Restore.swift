@@ -3,11 +3,8 @@ import Foundation
 import UniformTypeIdentifiers
 
 extension AppModel {
-    // MARK: - Restore
-
     var isRestoring: Bool { restoreActivity != nil }
 
-    /// The restore progress reporter for the run the model is on right now.
     /// Progress fires from the runner's reader threads, so a hop can still be
     /// in flight when a cancelled restore unwinds — the token (rotated at
     /// unwind) is what keeps such a late hop from resurrecting the strip,
@@ -64,12 +61,6 @@ extension AppModel {
         }
     }
 
-    /// A picked selection's restore, once the destination sheet has its
-    /// directories, one per item in order: each item's node — the row's own,
-    /// else its kind in that backup from the index (`indexedNode`), else
-    /// listed by restic (`listedNode`) where the index has not read that
-    /// backup — then one item restores as a single item always has, several
-    /// together. A read that fails restores nothing and says why in a banner.
     func restore(
         _ selection: RestoreSelection,
         repositoryID: UUID,
@@ -110,15 +101,9 @@ extension AppModel {
         restore(repositoryID: repositoryID, items: items, overwrite: overwrite)
     }
 
-    /// Several items, each from its own backup, each into its directory —
-    /// one folder for all, or each back into its own parent: the backups in
-    /// the items' order, one restic call per folder of a backup and
-    /// directory (`RestoreBatch.groups`, `ResticService.restoreItems`). Each
-    /// call is a step of one run with a record of its own, naming its
-    /// backup; one banner names the lot. The caller has already dropped
-    /// items inside other selected folders and refused names that would
-    /// land twice in one directory (`RestoreSelection`,
-    /// `RestoreBatch.collidingNames`).
+    /// The caller has already dropped items inside other selected folders
+    /// and refused names that would land twice in one directory
+    /// (`RestoreSelection`, `RestoreBatch.collidingNames`).
     func restore(
         repositoryID: UUID,
         items: [(snapshotID: String, node: SnapshotNode, directory: URL)],
@@ -167,17 +152,12 @@ extension AppModel {
         }
     }
 
-    /// Several items as one subject — Activity's record, the progress
-    /// strip: the first by name, the rest counted.
     nonisolated static func itemsLabel(_ names: [String]) -> String {
         names.count == 1 ? names[0] : "\(names[0]) and \(Format.count(names.count - 1)) more"
     }
 
-    /// The banner a finished restore posts: where it landed — the item
-    /// itself, which Show in Finder selects — and, under Keep, what
-    /// restic left as it was. restic's
-    /// files_restored counts directories too, so only files_skipped means
-    /// kept. Under Replace a skipped file already matched the backup, which
+    /// restic's files_restored counts directories too, so only
+    /// files_skipped means kept. Under Replace a skipped file already matched the backup, which
     /// is not worth a line. "Backup", the restore surfaces' word: the
     /// Restore pane shows this banner too.
     nonisolated static func restoreBanner(
@@ -204,10 +184,6 @@ extension AppModel {
         )
     }
 
-    /// The banner a restore of several items posts: how many, where — the
-    /// folder they went into, or each item where it was backed up from —
-    /// and what Keep left as it was, counted as `restoreBanner` counts it.
-    /// Show in Finder selects every one of them.
     nonisolated static func itemsRestoreBanner(
         landings: [URL],
         directory: URL?,
@@ -242,17 +218,8 @@ extension AppModel {
         }
     }
 
-    /// Shared bookkeeping for every restore shape: one run at a time,
-    /// progress published, and each step's outcome written to the run
-    /// history either way — with the backup it read (its `snapshotID`), the
-    /// items (`sourcePath`, `sourcePaths`) and
-    /// where they land (`destinationPath`: the restored item itself, or the
-    /// folder several items go into), plus the step's
-    /// log. A step's `label` is its record's subject in Activity, its
-    /// `description` the progress strip's title. The steps run in order and
-    /// the first that fails or is cancelled ends the run: its banner says
-    /// how many items the steps before it restored, and `onSuccess` (handed
-    /// every step's summary) runs only when all of them succeeded.
+    /// A step's `label` is its record's subject in Activity, its
+    /// `description` the progress strip's title.
     private func beginRestore(
         repositoryID: UUID,
         steps: [RestoreStep],
@@ -271,8 +238,6 @@ extension AppModel {
             ))
             return
         }
-        // The strip's title for each step; "(2 of 3)" only when there are
-        // several.
         let titles = steps.enumerated().map { index, step in
             steps.count > 1 ? "\(step.description) (\(index + 1) of \(steps.count))…" : "\(step.description)…"
         }
@@ -309,10 +274,6 @@ extension AppModel {
         }, in: .restore)
     }
 
-    /// One step of a restore run: its record, built, sealed and appended
-    /// whatever happens, and its banner when it fails or is cancelled —
-    /// saying, in a run of several steps, how many items the earlier ones
-    /// restored.
     private func runRestoreStep(
         _ step: RestoreStep,
         repositoryID: UUID,
@@ -338,7 +299,6 @@ extension AppModel {
             guard let repository = repository(id: repositoryID) else {
                 throw ResticError.repositoryMissing
             }
-            // Its saved network share reconnected first, as for any read.
             let (service, context) = try await resticContext(for: repository)
             let summary = try await RunTranscript.$current.withValue(transcript) {
                 try await step.operation(service, context)
@@ -481,17 +441,10 @@ extension AppModel {
         return provider
     }
 
-    /// Dragging is possible but the drop can never land (no repository, no
-    /// binary) — named at the moment the drag begins, since the provider
-    /// itself has nothing to say.
     private func postDragImpossibleBanner(_ itemName: String, _ message: String) {
         post(Banner(title: "Could not restore “\(itemName)”", message: message, isError: true))
     }
 
-    /// The drag restore: restores one node into a fresh throwaway directory
-    /// and returns the restored item's URL, which the drag's promised-file
-    /// provider hands to Finder.
-    ///
     /// `nonisolated`, and handed everything it needs as values, because the
     /// promise's load handler runs *during* the drag session, while the
     /// main thread synchronously waits on it — any hop to the main actor
@@ -531,9 +484,8 @@ extension AppModel {
         return ResticService.restoredItemURL(for: node, in: destination)
     }
 
-    /// Everything a restic command needs, from pre-captured values, with no
-    /// main-actor dependency. One definition of the rules, shared by the
-    /// drag path above and the instance `context(for:)`.
+    /// One definition of the password rules, shared by the drag path above
+    /// and the instance `context(for:)`.
     nonisolated static func dragContext(
         repository: Repository,
         label: String,
@@ -602,8 +554,6 @@ extension AppModel {
         return ResticService.restoredItemURL(for: node, in: folder)
     }
 
-    /// Deletes a preview's copy and its folder — only ever a folder
-    /// `previewCopy` made.
     nonisolated static func removePreviewCopy(_ url: URL) throws {
         let folder = url.deletingLastPathComponent()
         precondition(folder.lastPathComponent.hasPrefix(previewPrefix), "not a preview copy: \(url.path)")
@@ -642,12 +592,9 @@ extension AppModel {
     }
 }
 
-/// One restic restore in a restore run, with what its run record says
-/// about it. See `AppModel.beginRestore(repositoryID:steps:onSuccess:)`.
 private struct RestoreStep {
     var label: String
     var description: String
-    /// The backup it reads, which its record names.
     var snapshotID: String
     var sourcePath: String?
     var sourcePaths: [String]?
@@ -658,8 +605,6 @@ private struct RestoreStep {
     var operation: @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?
 }
 
-/// How one step of a restore run ended: with restic's summary (which can
-/// itself be absent), or failed or cancelled, which ends the run.
 private enum RestoreStepOutcome {
     case succeeded(ResticSummary?)
     case stopped

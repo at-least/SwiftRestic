@@ -78,19 +78,14 @@ struct SnapshotDiffTests {
         ]
         let search = DiffChangeSearch(changes: changes)
 
-        // A mixed-case needle finds a mixed-case path.
         #expect(search.matches(category: nil, needle: "q3.pdf").map(\.path)
             == ["/Users/me/Reports/Q3.PDF"])
-        // The category gate composes with the needle.
         #expect(search.matches(category: .removed, needle: "USERS").map(\.path)
             == ["/Users/me/old.txt"])
         #expect(search.matches(category: .removed, needle: "q3.pdf").isEmpty)
-        // An empty or whitespace-only needle admits everything the category allows.
         #expect(search.matches(category: nil, needle: "   ").count == 3)
         #expect(search.matches(category: nil, needle: "").count == 3)
-        // A miss is empty, never a crash.
         #expect(search.matches(category: nil, needle: "zzz").isEmpty)
-        // The needle is matched as a substring anywhere in the path.
         #expect(search.matches(category: nil, needle: "reports/q3").count == 1)
     }
 }
@@ -115,7 +110,6 @@ struct DiffCandidateGroupingTests {
         // Input is newest first, so first sight of a month names the group.
         #expect(buckets[0].items.map(\.id) == ["f2", "f1"])
         #expect(buckets[1].items.map(\.id) == ["j1"])
-        // Distinct months carry distinct, non-empty labels.
         #expect(!buckets[0].label.isEmpty && !buckets[1].label.isEmpty)
         #expect(buckets[0].label != buckets[1].label)
     }
@@ -192,7 +186,6 @@ struct DiffCandidateGroupingTests {
 
         let shared = DiffCandidateGrouping.sharedDisplayedMinutes(in: [a, b, c])
         #expect(shared == [DiffCandidateGrouping.displayedMinute(a.time)])
-        // A lone candidate shares nothing; neither does a blank list.
         #expect(DiffCandidateGrouping.sharedDisplayedMinutes(in: [a]).isEmpty)
     }
 }

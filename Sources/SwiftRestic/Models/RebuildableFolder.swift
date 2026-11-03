@@ -40,8 +40,6 @@ struct RebuildableFolderRule: Hashable, Sendable {
         RebuildableFolderRule("Carthage", "Cartfile", "carthage bootstrap fetches it again"),
     ]
 
-    /// Each folder name with its manifests, in the list's order: what the
-    /// index is asked (`SnapshotIndex.foldersBesideManifests`).
     static var manifestsByFolder: [String: [String]] {
         var byFolder: [String: [String]] = [:]
         for rule in all { byFolder[rule.folder, default: []].append(rule.manifest) }
@@ -53,7 +51,6 @@ struct RebuildableFolderRule: Hashable, Sendable {
     }
 }
 
-/// One folder a backup holds that a rule matched.
 struct RebuildableFolder: Hashable, Sendable, Identifiable {
     /// As the backup recorded it.
     let path: String
@@ -61,11 +58,7 @@ struct RebuildableFolder: Hashable, Sendable, Identifiable {
 
     var id: String { path }
 
-    /// What a plan is offered of `found` (in path byte order): each folder
-    /// with its rule, less the ones the plan already skips by their path
-    /// however typed (`ResticService.excludedPaths`), or inside one, and the ones the user
-    /// chose to keep (`BackupPlan.keptRebuildableFolders`), and less any
-    /// inside another one offered, which answers for it. Nesting is cut
+    /// `found` is in path byte order. Nesting is cut
     /// last, so a kept folder's inner ones are offered on their own.
     static func offered(_ found: [FolderBesideManifest], to plan: BackupPlan) -> [RebuildableFolder] {
         let skipped = ResticService.excludedPaths(of: plan).map(\.path)

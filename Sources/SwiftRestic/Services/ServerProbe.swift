@@ -22,9 +22,8 @@ struct ServerProbe: Sendable {
         case unreachable(String)
     }
 
-    /// The repository's server answered or not; nil when there is nothing to
-    /// ask first (`httpTarget`, `sshTarget`). `environment` is what restic
-    /// runs with: the app's own, the repository's extra variables over it.
+    /// `environment` is what restic runs with: the app's own, the
+    /// repository's extra variables over it.
     var check: @Sendable (_ repository: Repository, _ environment: [String: String]) async -> Outcome?
 
     static let network = ServerProbe { repository, environment in
@@ -99,7 +98,7 @@ struct ServerProbe: Sendable {
     }
 
     /// `ssh -G`: the configuration ssh would use for the repository's host,
-    /// resolved without connecting. Nil if ssh says nothing usable.
+    /// resolved without connecting.
     private static func sshConfig(of repository: Repository) async -> String? {
         var arguments = ["-G"]
         if !repository.sftpPort.isEmpty { arguments += ["-p", repository.sftpPort] }
@@ -148,13 +147,11 @@ struct ServerProbe: Sendable {
         "it did not answer within \(Format.plural(seconds, "second"))"
     }
 
-    /// One TCP connection attempt, ended by its first verdict or `timeout`.
     static func connect(to target: Target, timeout: TimeInterval) async -> Outcome {
         guard let port = NWEndpoint.Port(rawValue: target.port) else { return .unreachable("no such port") }
         let connection = NWConnection(host: NWEndpoint.Host(target.host), port: port, using: .tcp)
         let queue = DispatchQueue(label: "com.newlix.SwiftRestic.server-probe")
         return await withCheckedContinuation { continuation in
-            // The state handler and the timer race to answer; the first wins.
             let answered = OSAllocatedUnfairLock(initialState: false)
             let answer: @Sendable (Outcome) -> Void = { outcome in
                 let first = answered.withLock { done in

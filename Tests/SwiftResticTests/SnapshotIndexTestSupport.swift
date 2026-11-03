@@ -3,10 +3,10 @@ import GRDB
 import SQLite3
 import Testing
 
-// Shared scaffolding for the SnapshotIndex suites. Every index here is
-// file-backed in its own temporary directory, so the tests run the
-// production configuration — DatabasePool, WAL, the pragmas and the writer's
-// TEMP tables — and never touch the user's Application Support folder.
+// Every index here is file-backed in its own temporary directory, so the
+// tests run the production configuration — DatabasePool, WAL, the pragmas
+// and the writer's TEMP tables — and never touch the user's Application
+// Support folder.
 
 /// One file-backed index in a fresh temporary directory, deleted with the
 /// fixture. `reopen()` closes and opens the file again: the TEMP tables and
@@ -35,14 +35,9 @@ final class IndexFixture {
     }
 }
 
-/// Scaffolding for the coordinator tests that run without restic: a
-/// temporary configuration folder (created here, deleted by `remove()`), a
-/// coordinator on it, snapshots of two plans, and the scripted
-/// `MockResticClient` standing in for `ls` and `diff`. Shared across the
-/// test files — the coordinator suites, the browse-cache suite, and the
-/// restic suite's drop and reset tests. The folder exists from `init`
-/// on, where a bare coordinator creates it only when its first store opens
-/// (`openStore`); nothing reads the difference.
+/// The folder exists from `init` on, where a bare coordinator creates it
+/// only when its first store opens (`openStore`); nothing reads the
+/// difference.
 struct CoordinatorScene {
     let root: URL
     let coordinator: IndexCoordinator
@@ -59,13 +54,10 @@ struct CoordinatorScene {
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// A snapshot of plan A (or B) at `seconds` past the epoch.
     static func snapshot(_ id: String, _ seconds: Int64, plan: String = IndexTestData.planA) throws -> Snapshot {
         try IndexTestData.snapshot(id, micros: seconds * 1_000_000, tags: [plan])
     }
 
-    /// `/data`, one file named after the snapshot, and one file every
-    /// snapshot holds.
     static func content(_ id: String) -> [String: Bool] {
         ["/data": true, "/data/\(id).txt": false, "/data/common.txt": false]
     }
@@ -91,7 +83,6 @@ struct CoordinatorScene {
     }
 }
 
-/// A path's content in one snapshot: path -> isDirectory.
 typealias IndexContent = [String: Bool]
 
 extension Dictionary where Key == String {
@@ -106,16 +97,11 @@ extension Dictionary where Key == String {
 }
 
 extension Sequence where Element == String {
-    /// The paths as `PathKey`s, to compare with a keyed read's keys.
     var pathKeys: Set<PathKey> { Set(map { PathKey($0) }) }
 }
 
-/// Every node a `walkSnapshot` delivered: as path → isDirectory, the content
-/// restic listed, and as `paths`, the order it streamed them. Collected
-/// under a lock because the callback runs on the runner's reader thread.
-/// The real-restic suite reads snapshots through it, the stub suite checks
-/// what a short stream still delivered, and the scripted client's order is
-/// pinned through it.
+/// Collected under a lock because the callback runs on the runner's reader
+/// thread.
 final class NodeCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String: Bool] = [:]
@@ -134,7 +120,6 @@ final class NodeCollector: @unchecked Sendable {
         return storage
     }
 
-    /// The paths in the order the walk delivered them.
     var paths: [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -201,7 +186,6 @@ final class StatementGate: @unchecked Sendable {
         }, context)
     }
 
-    /// On the index's one writer connection.
     static func onWriter(_ index: SnapshotIndex) throws -> StatementGate {
         let gate = StatementGate()
         index.pool.writeWithoutTransaction { gate.install(on: $0) }
@@ -277,7 +261,6 @@ final class WriterHold: @unchecked Sendable {
         return held
     }
 
-    /// True once the writer was handed back after `release`.
     var isFreed: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -409,11 +392,6 @@ enum IndexTestData {
         }.sorted(by: SnapshotIndex.bytesLess)
     }
 
-    /// The planner loop both `runToDone`s drive: to `.done` or `maxSteps`,
-    /// each full step as one chunk through `full`, each delta as a complete
-    /// diff through `delta` — its modified files from `revisions`, per
-    /// snapshot ID — falling back to `full` when that throws. Returns the
-    /// trace.
     static func runPlanner(
         _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int,
         next: () throws -> IndexStep,
@@ -448,7 +426,6 @@ enum IndexTestData {
 }
 
 extension SnapshotIndex {
-    /// One whole full read: `beginFull`, then the listing in one final chunk.
     func ingestWhole(_ snapshotID: String, _ entries: [IndexedEntry]) throws {
         try beginFull(snapshotID: snapshotID)
         try ingestFull(snapshotID: snapshotID, entries: entries, final: true)
@@ -469,9 +446,6 @@ extension SnapshotIndex {
         )
     }
 
-    /// Runs the planner to `.done`, feeding each step from `contents`: a
-    /// delta as a complete diff (falling back to the full route if it is
-    /// refused), a full step as one chunk. Returns the trace.
     @discardableResult
     func runToDone(
         _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int = 100
@@ -497,7 +471,6 @@ extension SnapshotIndex {
         }
     }
 
-    /// The IDs holding `path`, newest first — what most assertions compare.
     func versionIDs(_ path: String) async throws -> [String] {
         try await versions(ofPath: path).map(\.id)
     }
@@ -590,7 +563,6 @@ extension SnapshotIndex {
         }
     }
 
-    /// What `body`'s writes cost, by `writeCounters()` before and after.
     func cost(of body: () throws -> Void) throws -> WriteCounters {
         let before = try writeCounters()
         try body()
@@ -680,7 +652,6 @@ final class CheckedIndex {
         try fixture.reopen()
     }
 
-    /// `SnapshotIndex.runToDone`, every write checked.
     @discardableResult
     func runToDone(
         _ contents: [String: IndexContent], revisions: [String: [String: Int]] = [:], maxSteps: Int = 100,
@@ -695,7 +666,6 @@ final class CheckedIndex {
     }
 }
 
-/// An `ls` entry, for scripts that spell their streams by hand.
 func entry(_ path: String, _ isDirectory: Bool = false) -> IndexedEntry {
     IndexedEntry(path: path, isDirectory: isDirectory)
 }

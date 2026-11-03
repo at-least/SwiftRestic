@@ -1,9 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Apply Retention Now
-
-    /// The retention sheet's preview, for a saved plan.
     func previewRetention(planID: UUID) async throws -> RetentionPreview {
         guard let plan = plan(id: planID) else { throw ResticError.planMissing }
         return try await previewRetention(plan: plan)
@@ -38,10 +35,6 @@ extension AppModel {
         }
     }
 
-    /// A plan's run that is no backup (`QuietPlanRunSink`), in the plan's
-    /// own slot: nothing while quitting or while the slot is taken, the
-    /// busy banner while the repository is, and the slot unwound however
-    /// `perform` ends.
     func startQuietPlanRun(
         planID: UUID,
         work: PlanActivity.Work,
@@ -71,8 +64,6 @@ extension AppModel {
     }
 }
 
-// MARK: - The quiet runs' view of the model
-
 extension AppModel: QuietPlanRunSink {
     /// The record, and nothing else: no banner, no local notification and
     /// no channel alert (see `RetentionRunEngine`). How it went is the plan
@@ -86,12 +77,7 @@ extension AppModel: QuietPlanRunSink {
     }
 }
 
-// MARK: - Remove from Earlier Backups
-
 extension AppModel {
-    /// The paths the plan skips by name that its backups still hold, each
-    /// with the backups holding it, newest first — read from the index.
-    /// Throws when the index fails.
     func itemsInEarlierBackups(planID: UUID) async throws -> [EarlierBackupItem] {
         guard let plan = plan(id: planID), let repositoryID = plan.repositoryID else { return [] }
         var items: [EarlierBackupItem] = []
@@ -102,7 +88,6 @@ extension AppModel {
         return items
     }
 
-    /// Why Remove from Earlier Backups cannot start now; nil when it can.
     func removeFromEarlierBackupsBlocker(planID: UUID) -> String? {
         guard let plan = plan(id: planID), let repository = repository(id: plan.repositoryID) else {
             return BackupPlan.incompleteConfigurationReason
@@ -114,8 +99,6 @@ extension AppModel {
         return nil
     }
 
-    /// Removes `items` from every backup the plan made, in the plan's own
-    /// slot, guarded as Apply Retention Now is.
     func removeFromEarlierBackups(planID: UUID, items: [ExcludedPath]) {
         guard !items.isEmpty else { return }
         startQuietPlanRun(planID: planID, work: .removeFromEarlierBackups) { plan, repository, sink in

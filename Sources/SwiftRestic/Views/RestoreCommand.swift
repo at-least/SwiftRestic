@@ -20,15 +20,11 @@ extension FocusedValues {
 }
 
 extension View {
-    /// Publishes the pane's restore to File ▸ Restore while the pane is
-    /// on screen.
     func restoreCommand(_ command: RestoreCommand) -> some View {
         focusedSceneValue(\.restoreCommand, command)
     }
 }
 
-/// File ▸ Restore: whatever the pane on screen restores — its bottom bar's
-/// button's restore — greyed when it has nothing to.
 struct RestoreCommands: Commands {
     @FocusedValue(\.restoreCommand) private var command
 

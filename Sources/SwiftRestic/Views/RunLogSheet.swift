@@ -19,8 +19,6 @@ struct RunLogSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
-                // The one run-naming rule: the plan with its repository,
-                // the repository alone for a check or prune.
                 Text(RunRecordPresentation.logSheetTitle(
                     for: run,
                     plans: model.configuration.plans,

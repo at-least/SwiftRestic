@@ -13,14 +13,10 @@ import Foundation
 enum FileVersionChange: Equatable {
     /// The oldest version, or sizes still being read: nothing to say yet.
     case none
-    /// The size change from the version below, "+17 bytes" or "Same size".
     case size(String)
     /// No diff compared the two, and nothing read since tells them apart.
     case mayBeIdentical
 
-    /// The row's change, from the index's mark and the two versions' sizes
-    /// as the find read them — nil while unknown — and whether that find
-    /// is still running.
     static func between(
         since: ContentVersion.Since?,
         newerSize: Int64?,

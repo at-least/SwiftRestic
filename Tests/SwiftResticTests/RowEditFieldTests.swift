@@ -112,7 +112,6 @@ struct RowEditFieldTests {
         _ = await eventually(within: 2) { field.stringValue != long }
         #expect(field.stringValue == long)
 
-        // Editing ends; the same change lands.
         window.endEditing(for: field)
         host.rootView = EditRow(text: "final")
         _ = await eventually(within: 2) { field.stringValue == "final" }

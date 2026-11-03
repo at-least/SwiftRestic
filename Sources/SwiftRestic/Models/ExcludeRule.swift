@@ -67,10 +67,7 @@ enum ExcludeCategory: String, CaseIterable, Codable, Sendable {
     /// The developer switch's groups, in the categories' order.
     static let developerGroups: [ExcludeCategory] = Array(allCases.drop { $0 != .python })
 
-    /// The defaults' categories the plan editor's Finder & Trash switch
-    /// turns on and off.
     static let finderFiles: Set<ExcludeCategory> = [.finder]
-    /// The defaults' categories its app caches & system files switch does.
     static let systemFiles: Set<ExcludeCategory> = [.appState, .indexes, .drives, .startupDisk]
 }
 
@@ -96,7 +93,6 @@ struct ExcludeRule: Hashable, Sendable {
         self.isMarker = isMarker
     }
 
-    /// The rule as a list shows it: the pattern, or the marker's folders.
     var line: String { isMarker ? "Folders holding \(pattern)" : pattern }
 
     var label: String { "\(what) · \(why)" }

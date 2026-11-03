@@ -1,6 +1,5 @@
 import Foundation
 
-/// One restic command line plus the environment it needs.
 struct ResticInvocation: Sendable {
     var arguments: [String]
     var environment: [String: String] = [:]
@@ -56,7 +55,6 @@ struct ResticRunResult: Sendable {
     /// record reports this number instead of dropping the lines.
     var malformedCount: Int = 0
 
-    /// The fatal error restic reported, if it wrote one as JSON.
     var exitError: ResticExitError? {
         for message in messages.reversed() {
             if case let .exitError(error) = message { return error }
@@ -116,8 +114,6 @@ struct ResticRunResult: Sendable {
         return "rclone: " + words
     }
 
-    /// The words of one of rclone's own stderr lines at CRITICAL or ERROR
-    /// level, without the date and the level; nil for any other line.
     static func rcloneErrorWords(_ line: Substring) -> Substring? {
         for level in [" CRITICAL: ", " ERROR : "] {
             if let range = line.range(of: level) { return line[range.upperBound...] }
@@ -125,7 +121,6 @@ struct ResticRunResult: Sendable {
         return nil
     }
 
-    /// Non-fatal per-item errors, in order.
     var itemErrors: [ResticErrorMessage] {
         messages.compactMap { if case let .error(e) = $0 { e } else { nil } }
     }
@@ -167,8 +162,6 @@ actor ResticRunner {
 
     private var running: [UUID: ProcessBox] = [:]
 
-    /// Runs restic to completion.
-    ///
     /// - Parameter onMessage: called for every decoded NDJSON line as it arrives,
     ///   off the main actor.
     /// - Parameter onRawLine: called for every raw line of both streams before
@@ -354,12 +347,9 @@ actor ResticRunner {
         return result
     }
 
-    /// Terminates every running restic process. Used when the app quits.
     func terminateAll() {
         for box in running.values { box.terminate() }
     }
-
-    // MARK: - Capture
 
     /// stderr's decoded events are appended after stdout's, so a backup's
     /// per-item errors land after its summary. Order within each stream is
@@ -378,8 +368,6 @@ actor ResticRunner {
             malformedCount: stdout.malformedCount + stderr.malformedCount
         )
     }
-
-    // MARK: - Environment
 
     /// Keys the app itself owns: the repository location and every form of the
     /// password restic can read. Letting the environment override these would
@@ -428,8 +416,6 @@ actor ResticRunner {
         return env
     }
 
-    /// A reader's line callback that records into the run's transcript, or
-    /// none when no transcript is bound.
     private static func transcriptFeed(
         _ transcript: RunTranscript?,
         stream: RunTranscript.Stream
@@ -442,8 +428,6 @@ actor ResticRunner {
         String(text.suffix(limit)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-
-// MARK: - Sendable shims
 
 /// `Process` is safe to `terminate()` from another thread but is not annotated
 /// `Sendable`. A lock-guarded `@unchecked Sendable` shim — one of several
@@ -509,28 +493,24 @@ private final class ProcessBox: @unchecked Sendable {
         kill(identifier, SIGKILL)
     }
 
-    /// Marks the child as alive — called for every chunk read off either pipe.
     func ping() {
         lock.lock()
         lastActivity = ProcessInfo.processInfo.systemUptime
         lock.unlock()
     }
 
-    /// Seconds since the last chunk was read, in uptime terms.
     var idleInterval: TimeInterval {
         lock.lock()
         defer { lock.unlock() }
         return ProcessInfo.processInfo.systemUptime - lastActivity
     }
 
-    /// Whether the watchdog, rather than the user, ended this process.
     var timedOut: Bool {
         lock.lock()
         defer { lock.unlock() }
         return wasTimedOut
     }
 
-    /// Whether the stall cap, rather than the runtime cap, ended this process.
     var idleTimedOut: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -576,9 +556,6 @@ private final class ExitWaiter: @unchecked Sendable {
     }
 }
 
-/// Reads one pipe to EOF, splitting it into lines, until the pipe ends or
-/// `abandon()` is called.
-///
 /// Both pipes must be drained concurrently: restic will block on a full stderr
 /// buffer while we are still reading stdout, and the command would never finish.
 ///
@@ -685,9 +662,6 @@ private final class StreamReader: @unchecked Sendable {
 
                 let pipeFD = box.fileDescriptor
                 let wakeupFD = wakeup.fileHandleForReading.fileDescriptor
-                // Whatever one 64 KB read brings in gets line-split by
-                // `absorb`; both the running loop and the abandonment drain
-                // below go through it.
                 func absorb(_ chunk: Data) {
                     onActivity?()
                     buffer.append(chunk)
@@ -770,8 +744,6 @@ private final class FileHandleBox: @unchecked Sendable {
     private let handle: FileHandle
     init(_ handle: FileHandle) { self.handle = handle }
 
-    /// The descriptor behind the handle — `StreamReader.poll`s it alongside
-    /// the abandonment wakeup, then reads it raw below.
     var fileDescriptor: Int32 { handle.fileDescriptor }
 
     /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`:

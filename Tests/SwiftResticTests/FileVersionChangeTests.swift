@@ -1,10 +1,6 @@
 import Foundation
 import Testing
 
-/// What a file's version row says of the version below it: the size change
-/// where a diff cut the history or differing sizes settle a doubtful one,
-/// "may be identical" where a doubtful cut stays unsettled, and nothing
-/// otherwise — the oldest version, or no sizes to speak of yet.
 @MainActor
 @Suite("File version change")
 struct FileVersionChangeTests {

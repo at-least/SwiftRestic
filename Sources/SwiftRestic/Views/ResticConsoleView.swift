@@ -39,8 +39,6 @@ struct ResticConsoleView: View {
         }
     }
 
-    // MARK: - Sections
-
     private var historySidebar: some View {
         VStack(spacing: 0) {
             if model.console.history.isEmpty {
@@ -106,8 +104,7 @@ struct ResticConsoleView: View {
                             .textFieldStyle(.roundedBorder)
                             .onSubmit { console.run() }
                             // Terminal reflexes: ↑ walks into the history, ↓ walks
-                            // back out to what was being typed. The model owns the
-                            // walk; an .ignored lets the field keep its own handling.
+                            // back out to what was being typed.
                             .onKeyPress(.upArrow) {
                                 if let entry = console.recallPrevious(current: console.commandText) {
                                     console.commandText = entry

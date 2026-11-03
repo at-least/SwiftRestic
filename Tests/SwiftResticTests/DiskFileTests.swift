@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// A Files pane's line about the copy on this Mac: read with one lstat from
-/// a real temporary folder, and matched against the versions by size and
-/// modification time to restic's millisecond.
 @Suite("Disk file")
 struct DiskFileTests {
     private let modified = Date(timeIntervalSince1970: 1_791_206_980.7338095)
@@ -47,9 +44,7 @@ struct DiskFileTests {
             == "On this Mac: \(facts) — no version here matches it")
         // A version not yet read keeps "matches none" from being said.
         #expect(disk.line(versions: [(89, older), (nil, nil)], isReading: false) == "On this Mac: \(facts)")
-        // While the find runs, nothing.
         #expect(disk.line(versions: [(106, asRestic)], isReading: true) == nil)
-        // No version to compare with is no verdict either.
         #expect(disk.line(versions: [], isReading: false) == "On this Mac: \(facts)")
     }
 

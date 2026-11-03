@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Add or edit a repository, including the one-time `restic init`.
 struct RepositoryEditorSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -40,8 +39,6 @@ struct RepositoryEditorSheet: View {
     /// Whether the user picked a check depth: until then a new
     /// repository's depth follows its kind (`MaintenancePolicy.defaultCheckDepth`).
     @State private var depthChosen = false
-    /// What the user's own rclone offers, or `nil` until it is read, and
-    /// for any kind but rclone.
     @State private var rcloneSetup: RcloneSetup?
     /// Bumped when the app becomes active, so remotes set up in Terminal
     /// meanwhile appear without leaving the sheet.
@@ -84,13 +81,10 @@ struct RepositoryEditorSheet: View {
         // chosen. A saved one always has its location (Save requires it).
         isNew = repository.kind == .local && repository.localPath.isEmpty
         var repository = repository
-        // A new repository prunes by default and checks at its kind's depth;
-        // one being edited keeps what was saved for it.
         if isNew { repository.maintenance = .forNewRepository(kind: repository.kind) }
         _draft = State(initialValue: repository)
         self.onCreated = onCreated
         #if DEBUG
-        // Debug-only: lets a capture run land on the Hooks tab.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "repositoryHooks" {
             _tab = State(initialValue: .hooks)
         }
@@ -262,8 +256,6 @@ struct RepositoryEditorSheet: View {
         return false
     }
 
-    /// The share the folder is on (`model.shareRow`): nil off a share, and
-    /// for any kind but a folder.
     private var folderShare: (share: MountedShare, isSaved: Bool)? {
         draft.kind == .local ? model.shareRow(for: draft.resolvedLocalPath, mounted: mountedShare) : nil
     }
@@ -276,8 +268,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// The SSH note's first-contact step, with this repository's server
-    /// once its name is typed.
     private var firstContact: String {
         guard !draft.sftpHost.isEmpty else { return "connect once in Terminal with ssh and accept it." }
         let user = draft.sftpUser.isEmpty ? "" : "\(draft.sftpUser)@"
@@ -422,8 +412,6 @@ struct RepositoryEditorSheet: View {
         .formStyle(.grouped)
     }
 
-    // MARK: - Change Password
-
     /// The repository's own password changed in place: restic adds a key
     /// for the new one and removes the old, then the Keychain follows
     /// (`AppModel.changeRepositoryPassword`). Not the field above, which
@@ -460,8 +448,8 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// Why Change Password waits, or nil. restic needs the repository to
-    /// itself: under a backup's or a check's lock it fails at once (exit 11).
+    /// restic needs the repository to itself: under a backup's or a check's
+    /// lock it fails at once (exit 11).
     private var passwordChangeBlock: String? {
         if model.busyRepositoryIDs.contains(draft.id) {
             return BackupPlan.busyRepositoryReason
@@ -490,8 +478,6 @@ struct RepositoryEditorSheet: View {
             status = .failure(error.localizedDescription)
         }
     }
-
-    // MARK: - Fields
 
     private var kindPicker: some View {
         Picker("Type", selection: $draft.kind) {
@@ -544,8 +530,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// Where a new repository is: the parts restic's repository string is
-    /// made of, Azure's account, and GCS's project.
     @ViewBuilder
     private var whereFields: some View {
         switch draft.kind {
@@ -623,8 +607,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    // MARK: - Logic
-
     /// The footer's reason and the buttons' state are one derivation: a
     /// greyed button always has its reason beside it.
     private var canSubmit: Bool { missingRequirement == nil }
@@ -661,7 +643,6 @@ struct RepositoryEditorSheet: View {
         return nil
     }
 
-    /// The password field's prompt: what an empty field means.
     private var passwordPrompt: String {
         if isNew { return "Required" }
         if secretsReadFailed { return "Not read from Keychain" }
@@ -715,8 +696,6 @@ struct RepositoryEditorSheet: View {
         )
     }
 
-    /// What every surface calls the repository being edited — its location
-    /// as it stands in the form.
     private var draftLabel: String {
         draft.label(among: model.configuration.repositories)
     }
@@ -725,7 +704,6 @@ struct RepositoryEditorSheet: View {
         storedSecrets.map { !($0.password ?? "").isEmpty }
     }
 
-    /// Probes the repository, optionally running `restic init` when it is missing.
     @discardableResult
     private func test(initializeIfMissing: Bool) async -> Bool {
         isWorking = true
@@ -796,7 +774,6 @@ struct RepositoryEditorSheet: View {
         )
     }
 
-    /// What the chosen depth verifies, and what the structure alone does not.
     static func depthCaption(_ maintenance: MaintenancePolicy) -> String {
         switch maintenance.checkDepth {
         case .structure:

@@ -19,7 +19,6 @@ struct FolderVersionsView: View {
     let versions: [IndexVersion]
     /// The backup the pane opened at, when it has one to keep.
     @Binding var chosenID: String?
-    /// Opens an item of the listing in the tree, at the chosen backup.
     let onOpen: (FileNode, _ versionID: String) -> Void
 
     @State private var nodes: [SnapshotNode] = []
@@ -31,7 +30,6 @@ struct FolderVersionsView: View {
     /// when the index has not read both.
     @State private var changes: FolderChanges?
     @State private var changesError: String?
-    /// The restore waiting in the destination sheet.
     @State private var destinationRequest: RestoreDestinationRequest?
     @FocusState private var listIsFocused: Bool
 
@@ -163,7 +161,6 @@ struct FolderVersionsView: View {
         }
     }
 
-    /// Opens a gone item in the tree at the previous backup, which has it.
     private func openGone(_ item: RemovedItem, at previous: IndexVersion) {
         onOpen(
             FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: item.path, isDirectory: item.isDirectory),

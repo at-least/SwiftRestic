@@ -24,16 +24,12 @@ struct FileTreeTests {
         #expect(tree.rows.map(\.node.path) == ["/src", "/data"])
         #expect(tree.rows.allSatisfy { !$0.expanded && !$0.childrenLoaded })
 
-        // Expanding asks for the children; once loaded, expanding asks
-        // nothing more (the second toggle collapses), and collapsing then
-        // re-expanding asks again.
         #expect(tree.toggleExpanded(path: "/src") == "/src")
         tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
         #expect(tree.toggleExpanded(path: "/src") == nil)
         #expect(tree.toggleExpanded(path: "/src") == "/src")
         tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt"), dir("/src/sub")])
 
-        // Files never ask: they have no children to load.
         #expect(tree.toggleExpanded(path: "/src/a.txt") == nil)
     }
 
@@ -46,7 +42,6 @@ struct FileTreeTests {
         #expect(tree.rows.map(\.node.path) == ["/src", "/src/sub", "/src/a.txt", "/data"])
         #expect(tree.rows.first { $0.node.path == "/src/sub" }?.depth == 1)
         #expect(tree.rows.first { $0.node.path == "/data" }?.depth == 0)
-        // Directories start unexpanded-and-unloaded even when nested.
         #expect(tree.rows.first { $0.node.path == "/src/sub" }?.childrenLoaded == false)
     }
 
@@ -124,8 +119,6 @@ struct FileTreeTests {
         #expect(tree.toggleExpanded(path: "/src") == "/src")
     }
 
-    // MARK: - Left and Right, NSOutlineView's grammar
-
     @Test("Right opens a closed folder; files and open folders stay")
     func rightOpensClosedFolders() throws {
         var tree = FileTree(roots: [dir("/src"), dir("/data")])
@@ -138,7 +131,6 @@ struct FileTreeTests {
         #expect(tree.arrowStep(.right, from: "/src/a.txt") == .stay)
         #expect(tree.arrowStep(.right, from: "/src") == .stay)
 
-        // A nested folder opens the same way, and again after closing.
         _ = tree.toggleExpanded(path: "/src/sub")
         tree.replaceChildren(of: "/src/sub", nodes: [file("/src/sub/deep.txt")])
         _ = tree.toggleExpanded(path: "/src/sub")
@@ -160,10 +152,8 @@ struct FileTreeTests {
         #expect(tree.arrowStep(.left, from: "/src/a.txt") == .selectParent("/src"))
         #expect(tree.arrowStep(.left, from: "/src/sub/deep.txt") == .selectParent("/src/sub"))
         #expect(tree.arrowStep(.left, from: "/src/sub") == .collapse("/src/sub"))
-        // A closed top-level folder has nowhere to go.
         #expect(tree.arrowStep(.left, from: "/data") == .stay)
 
-        // Once closed, the nested folder steps up to its own parent.
         _ = tree.toggleExpanded(path: "/src/sub")
         #expect(tree.arrowStep(.left, from: "/src/sub") == .selectParent("/src"))
     }
@@ -171,7 +161,6 @@ struct FileTreeTests {
     @Test("a folder whose listing is still in flight counts as open")
     func inFlightFolderCountsAsOpen() throws {
         var tree = FileTree(roots: [dir("/src")])
-        // Expanded, its listing asked for and not yet landed.
         #expect(tree.toggleExpanded(path: "/src") == "/src")
 
         // It shows as open, so Left closes it — and a late listing is then
@@ -193,8 +182,6 @@ struct FileTreeTests {
         #expect(tree.rows.map(\.expanded) == [false])
         #expect(tree.arrowStep(.right, from: "/src") == .expand("/src"))
 
-        // Still open when the listing failed: closed back, and opening it
-        // again asks for the listing again.
         #expect(tree.toggleExpanded(path: "/src") == "/src")
         tree.collapse(path: "/src")
         #expect(tree.rows.map(\.expanded) == [false])

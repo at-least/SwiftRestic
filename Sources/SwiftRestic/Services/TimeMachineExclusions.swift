@@ -14,7 +14,6 @@ enum TimeMachineExclusions {
     /// permission to view it"); a Terminal that holds the grant reads them.
     static let preferencesFile = URL(fileURLWithPath: "/Library/Preferences/com.apple.TimeMachine.plist")
 
-    /// What a backup of one folder takes from the list.
     struct Reading: Equatable {
         /// The listed items inside the folder, spelled below the folder as
         /// given — what restic records and matches — each once, none inside
@@ -25,12 +24,10 @@ enum TimeMachineExclusions {
         var notes: [String] = []
     }
 
-    /// Why the list as a whole was not read.
     enum ListProblem: Error, Equatable {
         case needsFullDiskAccess
         case damaged
 
-        /// What the run's log says.
         var note: String {
             switch self {
             case .needsFullDiskAccess: "Time Machine’s list of excluded items can be read only with Full Disk Access, so the items listed there were backed up."
@@ -65,7 +62,6 @@ enum TimeMachineExclusions {
         for path in listed where isNear(path, folder: folder, realFolder: realFolder) {
             switch location(of: path) {
             case .absent:
-                // Not on disk: nothing to leave out.
                 continue
             case .unknown:
                 reading.notes.append("SwiftRestic couldn’t check “\(path)”, listed in Time Machine’s options, so it was backed up.")
@@ -129,7 +125,6 @@ enum TimeMachineExclusions {
 
     enum Location: Equatable {
         case found(String)
-        /// Not on disk.
         case absent
         /// On disk or not, the lookup failed (no permission on a folder
         /// above, a loop of links).

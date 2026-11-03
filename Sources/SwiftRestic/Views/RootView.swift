@@ -1,11 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// The root split view: composes the sidebar and detail child views and
-/// carries the app-level chrome — sheets and confirmations, notification
-/// observers, the toolbar's look, and the selection revalidation that
-/// keeps the landing pane truthful as the model changes.
-///
 /// The four per-concern chains below (`presented`, `observed`, `chrome`,
 /// `revalidate`) are each one modifier stack over the split view. They stay
 /// apart because one expression carrying the whole chain crosses the
@@ -27,7 +22,6 @@ struct RootView: View {
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
-    /// Apply Retention Now's sheet, for the plan it previews.
     @State private var retentionTarget: RetentionTarget?
     /// The Files views' levels, read once and shared by every page's Files
     /// tab: a level read for one is read for the next.
@@ -43,8 +37,7 @@ struct RootView: View {
     /// (`pendingCaptureRestore`).
     @State private var pendingCaptureGroupPane: CaptureGroupPane?
 
-    /// Debug-only: the group panes a capture run can photograph. The
-    /// adoptable group is the flow's landing, so it has its own value.
+    /// The adoptable group is the flow's landing, so it has its own value.
     private enum CaptureGroupPane {
         case adoptable
         case moved
@@ -89,7 +82,6 @@ struct RootView: View {
         .environment(filesTree)
     }
 
-    /// The sheets and confirmation dialogs that ride on the root split view.
     /// Its own chain for the type-check limit, like the others — see the
     /// type doc.
     private func presented<V: View>(over content: V) -> some View {
@@ -108,9 +100,8 @@ struct RootView: View {
             })
             .environment(model)
         }
-        // The adopt sheet, from a group's context menu or its page. Adopt's
-        // landing is the new plan's own page on its Backups tab — the
-        // click's whole result in one place: the history, now the plan's.
+        // Adopt's landing is the new plan's own page on its Backups tab —
+        // the click's whole result in one place: the history, now the plan's.
         .sheet(item: $adoptingPlan) { plan in
             PlanEditorSheet(
                 plan: plan,
@@ -142,16 +133,13 @@ struct RootView: View {
         }
     }
 
-    /// The toolbar's look and the banner announcements. No toolbar button
-    /// is app-wide: each pane carries its own verbs.
+    /// No toolbar button is app-wide: each pane carries its own verbs.
     private func chrome<V: View>(over content: V) -> some View {
         content
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: model.banners) { announceBanner(from: $0, to: $1) }
     }
 
-    /// Selection revalidation: the reactions that keep the landing pane and
-    /// the sidebar's highlight truthful as the model changes.
     private func revalidate<V: View>(over content: V) -> some View {
         content
         .onAppear {
@@ -258,8 +246,6 @@ struct RootView: View {
         Task { adoptingPlan = await model.adoptDraft(repositoryID: repositoryID, planID: planID) }
     }
 
-    /// ⌘B: run whichever plan the sidebar is on — when the Plan menu's
-    /// Back Up Now would be enabled for it (complete, idle, restic found).
     private func runSelectedPlan() {
         let state = model.planCommands(for: router.selection)
         guard state.canBackUp, let id = state.planID else { return }
@@ -267,8 +253,6 @@ struct RootView: View {
     }
 
     #if DEBUG
-    /// Debug-only: lets a capture run choose which pane to render.
-    ///
     /// Applied once the configuration has actually loaded — `onAppear` fires
     /// before `bootstrap()` finishes, when there is nothing to select yet.
     private func applyCapturePaneOverride() {
@@ -368,7 +352,6 @@ struct RootView: View {
         // fresh creator sees, not an existing plan.
         case "newPlan": editingPlan = BackupPlan()
         case "planRetention": editingPlan = model.configuration.plans.first
-        // The first plan's editor on its first tab, Excluding.
         case "planEditor": editingPlan = model.configuration.plans.first
         default: break
         }

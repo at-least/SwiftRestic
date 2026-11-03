@@ -115,7 +115,6 @@ struct ConfigStoreTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        // An earlier build's plan held a list of folders.
         let json = """
         {
           "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "name": "Home Disk",
@@ -148,8 +147,6 @@ struct ConfigStoreTests {
         #expect(loaded.decodeNotes.isEmpty)
         let plans = loaded.configuration.plans
 
-        // One plan per folder, each once, in the list's order, right where
-        // the list stood.
         #expect(plans.map(\.path) == [
             "/Users/me/Code", "/Users/me/Notes", "/Volumes/Archive SSD/Photos",
             "/Users/me/Music", "/Users/me/Movies", "",
@@ -179,8 +176,6 @@ struct ConfigStoreTests {
         }
         #expect(plans[3].id == UUID(uuidString: "5B0E7C2D-0000-4000-8000-000000000002"))
 
-        // Saved by this build: one path per plan, no list, and the split
-        // holds — the copies keep the ids they were given.
         try await store.save(loaded.configuration)
         let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
         let savedPlans = try #require(saved?["plans"] as? [[String: Any]])
@@ -322,7 +317,6 @@ struct TolerantDecodingTests {
             "/Library/Logs",
         ])
         #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles) == [".DS_Store", "~/.Trash"])
-        // The two switches cover every default between them.
         #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles.union(ExcludeCategory.systemFiles))
             == BackupPlan.defaultExcludes)
         // Whatever the path: a rule naming nothing under it matches nothing.
@@ -349,8 +343,6 @@ struct TolerantDecodingTests {
             #expect(object["skipDeveloperGroups"] as? [String] == groups.map(\.rawValue))
             #expect(object["excludeDeveloperFiles"] == nil)
         }
-        // A group this build does not know is dropped, the rest kept in
-        // the groups' order.
         let read = try decode(BackupPlan.self, #"{"skipDeveloperGroups":["rust","cobol","python"]}"#)
         #expect(read.developerGroups == [.python, .rust])
     }
@@ -377,11 +369,9 @@ struct TolerantDecodingTests {
         #expect(plan.developerGroups == [.python, .rust])
         #expect(plan.excludesToPass == [".DS_Store", "~/.Trash"]
             + BackupPlan.developerExcludes(groups: [.python, .rust]) + ["*.iso"])
-        // The list itself is the user's, whatever the switches do.
         #expect(plan.excludePatterns == ["*.iso", "**/.venv"])
         #expect(plan.withoutSwitchRules(plan.excludePatterns) == ["*.iso"])
 
-        // The developer switch: every group, or none.
         plan.setSkipsDeveloperFiles(true)
         #expect(plan.developerGroups == ExcludeCategory.developerGroups)
         plan.setSkipsDeveloperFiles(false)
@@ -400,7 +390,6 @@ struct TolerantDecodingTests {
         #expect(plan.skipsFinderFiles)
         #expect(!plan.skipsSystemFiles)
         #expect(plan.developerGroups == [.python])
-        // A group missing a rule a later build added still reads as ticked.
         plan.readSwitches(fromRecorded: Array(BackupPlan.developerExcludes.dropFirst()))
         #expect(plan.developerGroups == ExcludeCategory.developerGroups)
         #expect(!plan.skipsFinderFiles && !plan.skipsSystemFiles)
@@ -412,12 +401,10 @@ struct TolerantDecodingTests {
         func covers(_ pattern: String, _ source: String) -> Bool {
             ResticService.pattern(ResticService.expandTilde(pattern, home: home), covers: source)
         }
-        // The source itself, a folder above it, `*` within a component.
         #expect(covers("~/Library/Caches", "/Users/probe/Library/Caches"))
         #expect(covers("~/Library/Caches", "/Users/probe/Library/Caches/com.example"))
         #expect(covers("/Volumes/*/.Trashes", "/Volumes/T7/.Trashes"))
         #expect(covers("/System", "/System/Library"))
-        // Below the source, beside it, or unanchored: passed.
         #expect(!covers("~/Library/Caches", "/Users/probe"))
         #expect(!covers("~/Library/Caches", "/Users/probe/Library/Logs"))
         #expect(!covers("/Volumes/*/.Trashes", "/Volumes/T7"))
@@ -479,7 +466,6 @@ struct TolerantDecodingTests {
               "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
               "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes"]),
         ]
-        // Every group has its checkbox, in the list's order.
         #expect(groups.map(\.0) == ExcludeCategory.developerGroups)
         for (group, folders, home) in groups {
             #expect(BackupPlan.developerExcludes(groups: [group]) == folders + home, "\(group)")
@@ -498,8 +484,6 @@ struct TolerantDecodingTests {
         for rule in rules {
             #expect(!rule.what.isEmpty && !rule.why.isEmpty, "\(rule.pattern)")
         }
-        // The defaults sit outside the developer groups, every developer
-        // rule and marker inside one.
         #expect(ExcludeRule.defaults.allSatisfy { !ExcludeCategory.developerGroups.contains($0.category) })
         #expect((ExcludeRule.developer + ExcludeRule.developerMarkers)
             .allSatisfy { ExcludeCategory.developerGroups.contains($0.category) })
@@ -569,7 +553,6 @@ struct TolerantDecodingTests {
         ])
         #expect(plans[6].developerGroups == [.python])
 
-        // Saved with the switches' keys, and a second load changes nothing.
         try await store.save(loaded.configuration)
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         let saved = try #require((object["plans"] as? [[String: Any]])?.first)
@@ -608,7 +591,6 @@ struct TolerantDecodingTests {
         #expect(loaded.plans.map(\.excludePatterns) == [["*.iso"], ["*.iso"], ["*.iso"]])
         #expect(loaded.plans[0].excludesToPass == BackupPlan.developerExcludes + ["*.iso"])
 
-        // Saved under the new keys, read back as they stand.
         try await store.save(loaded)
         let reloaded = try await store.load().configuration
         #expect(reloaded.plans.map(\.developerGroups) == loaded.plans.map(\.developerGroups))
@@ -678,8 +660,6 @@ struct TolerantDecodingTests {
 
     @Test("a run record saved before logs and restore details decodes with safe defaults")
     func runRecordLogAndRestoreFieldsDefault() throws {
-        // A verbatim record from a build that stored none of the log and
-        // restore fields.
         let legacy = try decode(
             RunRecord.self,
             #"{"bytesProcessed":250000,"dataAdded":900,"filesChanged":1,"filesNew":0,"filesUnmodified":16,"finishedAt":"2026-09-25T18:00:10Z","hookMessages":[],"id":"44444444-4444-4444-8444-000000000005","itemErrorCount":0,"itemErrors":[],"kind":"backup","outcome":"succeeded","planID":"22222222-2222-4222-8222-222222222222","planName":"Documents","repositoryID":"11111111-1111-4111-8111-111111111111","snapshotID":"abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f","startedAt":"2026-09-25T18:00:00Z"}"#
@@ -737,7 +717,6 @@ struct TolerantDecodingTests {
         #expect(roundTripped.itemErrorTally == record.itemErrorTally)
         #expect(roundTripped.fullDiskAccessAtRun == .notGranted)
 
-        // A tally written without one of its counts keeps the other.
         let partial = try decode(RunRecord.self, #"{"kind":"backup","itemErrorTally":{"blockedByMacOS":2}}"#)
         #expect(partial.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 2, deniedByFilePermissions: 0))
     }
@@ -776,7 +755,6 @@ struct TolerantDecodingTests {
         #expect(loaded.configuration.settings.schedulePause == SchedulePause(until: until))
         #expect(loaded.configuration.plans.first?.pausedUntil == until.addingTimeInterval(3600))
 
-        // And the open-ended pause survives a round trip as open-ended.
         configuration.settings.schedulePause = SchedulePause(until: nil)
         try await store.save(configuration)
         #expect(try await store.load().configuration.settings.schedulePause == SchedulePause(until: nil))
@@ -896,7 +874,6 @@ struct TolerantDecodingTests {
         #expect(recorded.contains("weekday"))
         #expect(recorded.contains("intervalHours"))
 
-        // In-range values pass through without a word.
         let quiet = try decoder.decode(
             BackupPlan.self,
             from: Data(#"{"schedule":{"frequency":"daily","hour":8,"minute":30}}"#.utf8)
@@ -931,7 +908,6 @@ struct TolerantDecodingTests {
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")
     func wrongTypedValues() throws {
-        // keepLast is a string; keepDaily is untouched next to it.
         let plan = try decode(
             BackupPlan.self,
             #"{"path":"/Users/someone/Documents","retention":{"keepLast":"many"},"schedule":"not an object"}"#
@@ -1013,7 +989,6 @@ struct TolerantDecodingTests {
         try await store.save(AppConfiguration())
         try await store.save(AppConfiguration())
 
-        // Corrupt both the live file and .1: .2 still holds "Survivor".
         for name in ["config.json", "config.json.1"] {
             try Data("{ not json".utf8).write(to: directory.appendingPathComponent(name))
         }

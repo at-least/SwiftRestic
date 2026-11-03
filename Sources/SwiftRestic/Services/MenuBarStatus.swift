@@ -95,8 +95,6 @@ enum MenuBarStatus {
         hold != nil && state != .running
     }
 
-    /// The newest problem of the week's set that no later success has healed,
-    /// or nil — what `iconState` asks for and `problemLine` words.
     static func newestStandingProblem(runs: [RunRecord], now: Date = .now) -> RunRecord? {
         OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
             .filter { !OverviewMetrics.isHealed($0, in: runs) }
@@ -373,7 +371,6 @@ enum MenuBarStatus {
         }
     }
 
-    /// One line per repository whose check or prune is running.
     static func maintenanceLines(
         repositories: [Repository],
         maintenance: [UUID: MaintenanceActivity]
@@ -387,7 +384,7 @@ enum MenuBarStatus {
         }
     }
 
-    /// The restore, which is always at most one. `nil` while nothing restores.
+    /// The restore, which is always at most one.
     static func restoreLine(progress: OperationProgress?) -> RunningLine? {
         guard let progress else { return nil }
         let percent = Format.percent(progress.fraction)

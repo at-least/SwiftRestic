@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// What a run's log keeps of restic's words, and the caps that keep a
-/// pathological run from holding the app's memory hostage.
 @Suite("run transcript")
 struct RunTranscriptTests {
     private func output(_ transcript: RunTranscript, _ line: String, _ stream: RunTranscript.Stream) {

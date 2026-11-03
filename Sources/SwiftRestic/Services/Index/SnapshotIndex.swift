@@ -24,7 +24,6 @@ struct PlannedStep: Sendable, Equatable {
     var deadWindowEnd = false
 }
 
-/// One snapshot that holds a path — an element of a version list.
 struct IndexVersion: Sendable, Hashable, Identifiable {
     var id: String
     var time: Date
@@ -39,7 +38,6 @@ struct IndexChild: Sendable, Equatable {
     var path: String
     /// The kind in `newest`: a path can change kind over its history.
     var isDirectory: Bool
-    /// The newest indexed snapshot of the chain holding the path.
     var newest: IndexVersion
     /// Whether the chain's newest indexed snapshot holds it — false for an
     /// item a later backup no longer had: deleted, moved, or excluded since.
@@ -51,7 +49,6 @@ struct IndexChild: Sendable, Equatable {
 /// version list, where a file backed up daily for a year and edited twice
 /// is three versions, not 365.
 struct ContentVersion: Sendable, Equatable, Identifiable {
-    /// How a version follows the next older one.
     enum Since: Sendable, Equatable {
         /// A `restic diff` between two of their snapshots said the content
         /// changed (`M`).
@@ -146,8 +143,6 @@ extension Array where Element == ContentVersion {
     }
 }
 
-/// A folder `foldersBesideManifests` found, and the file beside it that
-/// says which tool made it.
 struct FolderBesideManifest: Sendable, Equatable {
     var path: String
     var manifest: String
@@ -283,7 +278,6 @@ struct SearchWithSummaries: Sendable, Equatable {
     /// The search's hits, ordered and limited as `searchPaths` orders and
     /// limits them.
     let hits: [SearchHit]
-    /// Each hit's summary, keyed by the hit's bytes (`PathKey`).
     let summaries: [PathKey: VersionSummary]
 }
 
@@ -448,8 +442,6 @@ final class SnapshotIndex: @unchecked Sendable {
     /// comes first, a rebuild's re-sent one included.
     private var appliedGeneration: UInt64?
 
-    // MARK: - Opening
-
     /// Whether an open failed because the file is no use as this index —
     /// another schema, or bytes SQLite cannot read as a database — which a
     /// rebuild fixes. Any other failure (a folder in the way, a full disk,
@@ -516,8 +508,6 @@ final class SnapshotIndex: @unchecked Sendable {
     func close() throws {
         try pool.close()
     }
-
-    // MARK: - Reconcile
 
     /// Aligns the snapshot table with a complete `restic snapshots` listing.
     ///
@@ -638,8 +628,6 @@ final class SnapshotIndex: @unchecked Sendable {
         return out + "\""
     }
 
-    // MARK: - Planner
-
     /// The next backfill step, read-only on a pool reader.
     ///
     /// Per chain with pending snapshots: a chain with no window offers a full
@@ -717,8 +705,6 @@ final class SnapshotIndex: @unchecked Sendable {
         guard let base else { return PlannedStep(step: .full(snapshotID: hash), deadWindowEnd: true) }
         return PlannedStep(step: .delta(snapshotID: hash, from: base))
     }
-
-    // MARK: - Reads
 
     /// The indexed snapshots holding `path`, newest first; equal times put
     /// the later arrival first. Only the exact spelling `restic ls` emits
@@ -800,7 +786,6 @@ final class SnapshotIndex: @unchecked Sendable {
             let blinds = try Int64.fetchAll(db.cachedStatement(sql: SQL.blindSeqs), arguments: [chainKey, low, high])
                 .sorted()
 
-            // Each snapshot's segment, and how each segment begins.
             var segment = Array(repeating: 0, count: held.count)
             var begins: [ContentVersion.Since?] = [nil]
             var nextEdit = 0
@@ -1233,8 +1218,6 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    // MARK: - Browse caches
-
     /// Caches one directory's `restic ls` answer. A snapshot is immutable, so
     /// a repeated capture is the same content and the first write stands. An
     /// empty directory is cached too — the explicit `[]` is what makes its
@@ -1284,7 +1267,6 @@ final class SnapshotIndex: @unchecked Sendable {
         try await cached(SQL.cacheListingGet, [snapshotID, ResticPath.normalized(directory)])
     }
 
-    /// The cached diff between two snapshots, or nil when none was captured.
     func diff(olderID: String, newerID: String) async throws -> [CachedDiffChange]? {
         try await cached(SQL.cacheDiffGet, [olderID, newerID])
     }
@@ -1303,7 +1285,6 @@ final class SnapshotIndex: @unchecked Sendable {
         return try payloads.mapValues { try JSONDecoder().decode(CachedListingNode.self, from: Data($0.utf8)) }
     }
 
-    /// The payload one cache row holds, decoded; nil when there is no row.
     private func cached<T: Decodable>(_ sql: String, _ key: [String]) async throws -> T? {
         let payload = try await pool.read { db in
             try String.fetchOne(db.cachedStatement(sql: sql), arguments: StatementArguments(key))
@@ -1332,9 +1313,6 @@ final class SnapshotIndex: @unchecked Sendable {
         String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
     }
 
-    // MARK: - Shared helpers
-
-    /// One `snap` row, as every write and snapshot-scoped read sees it.
     struct Target {
         var id: Int64
         var hash: String
@@ -1427,7 +1405,6 @@ final class SnapshotIndex: @unchecked Sendable {
     /// already, and the insert then yields to it.
     typealias Walk = [(key: [UInt8], id: Int64, created: Bool)]
 
-    /// The walk of "/": the root, which nothing creates.
     static var rootWalk: Walk { [([UInt8(ascii: "/")], rootID, false)] }
 
     /// The one component walk behind every path resolution — reads, a
@@ -1571,8 +1548,6 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    // MARK: - Test support
-
     /// Every statement the index prepares — the open-time schema probe and
     /// scripts, the connection pragmas and the test-support invariant checks
     /// aside —
@@ -1705,8 +1680,6 @@ final class SnapshotIndex: @unchecked Sendable {
 }
 
 extension Array {
-    /// Consecutive slices of at most `size` elements — the IN-list unit, and
-    /// the property test's random chunking of a streamed listing.
     func chunked(into size: Int) -> [[Element]] {
         stride(from: 0, to: count, by: size).map { Array(self[$0 ..< Swift.min($0 + size, count)]) }
     }

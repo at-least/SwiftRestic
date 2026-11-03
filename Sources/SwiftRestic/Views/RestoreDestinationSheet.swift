@@ -81,7 +81,6 @@ struct RestoreDestinationSheet: View {
     /// restoring into a vanished one would recreate its path (under
     /// /Volumes, for an unmounted disk).
     @State private var otherFolderChecked: Bool
-    /// The Replace pre-check or its alert is up.
     @State private var isConfirming = false
     /// The Replace pre-check, which Cancel and the sheet's closing stop: a
     /// look at a stalled mount can outlast the user's patience, and a
@@ -183,14 +182,11 @@ struct RestoreDestinationSheet: View {
         .onDisappear { confirmation?.cancel() }
     }
 
-    // MARK: - Wording
-
     private var itemName: String? {
         if case let .item(name, _, _) = request.subject { return name }
         return nil
     }
 
-    /// The several items, when there are several.
     private var items: [RestoreItem]? {
         if case let .items(items) = request.subject { return items }
         return nil
@@ -212,7 +208,6 @@ struct RestoreDestinationSheet: View {
         )
     }
 
-    /// The name the folder panel and the alerts use for what is restored.
     private var subjectName: String {
         switch request.subject {
         case let .item(name, _, _): "“\(name)”"
@@ -227,8 +222,6 @@ struct RestoreDestinationSheet: View {
         items.map { RestoreBatch.collidingNames($0.map(\.name)) } ?? []
     }
 
-    /// The folder Desktop or Other folder names right now, nil until there is
-    /// one (none chosen, the remembered one not yet checked).
     private var chosenFolder: URL? {
         switch kind {
         case .desktop: Self.desktop
@@ -237,10 +230,6 @@ struct RestoreDestinationSheet: View {
         }
     }
 
-    /// Where a restore would go right now — one directory per item
-    /// (`RestoreDestinationRequest.perform`) — or nil when the choice cannot
-    /// be used yet: no folder, not checked, not available, or two items that
-    /// would land on each other in it.
     private var directories: [URL]? {
         switch kind {
         case .desktop, .otherFolder:
@@ -320,10 +309,7 @@ struct RestoreDestinationSheet: View {
         (url.path as NSString).abbreviatingWithTildeInPath
     }
 
-    // MARK: - Actions
-
-    /// Whether the item can go back where it was — off the main actor,
-    /// like the remembered folder's look below.
+    /// Off the main actor, like the remembered folder's look below.
     private func checkOriginalLocation() async {
         let subject = request.subject
         original = await Task.detached(priority: .userInitiated) {
@@ -335,7 +321,6 @@ struct RestoreDestinationSheet: View {
         }.value
     }
 
-    /// Whether the remembered Other folder is still there.
     private func checkRememberedFolder() async {
         guard let folderPath = otherFolder?.path, !otherFolderChecked else { return }
         let folderExists = await Task.detached(priority: .userInitiated) {
@@ -358,8 +343,6 @@ struct RestoreDestinationSheet: View {
         kind = .otherFolder
     }
 
-    /// Keep starts at once. Replace first looks at what is actually at the
-    /// landings (off the main actor) and asks only when something is there.
     private func restore() {
         guard let directories else { return }
         // The choice as pressed: the radios stay live while Replace looks.

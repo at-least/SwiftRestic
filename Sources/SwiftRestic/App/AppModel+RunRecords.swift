@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Run records (shared by backup, maintenance and restore)
-
     /// Why a run was cancelled, for the run record: the user's own stop and the
     /// app quitting mid-run are different events worth telling apart.
     var cancellationMessage: String {
@@ -15,8 +13,6 @@ extension AppModel {
     func cancellationMessage(for planID: UUID) -> String {
         pauseStoppedPlanIDs.contains(planID) ? "Stopped by Pause Backups" : cancellationMessage
     }
-
-    // MARK: - Run logs
 
     /// `Logs/` beside `config.json` — so `SWIFTRESTIC_CONFIG_DIR` moves it
     /// with the configuration, and a capture or test run never writes the
@@ -55,15 +51,12 @@ extension AppModel {
         }.value
     }
 
-    /// A run's log text, read off the main actor; nil when the file is gone.
     func loadRunLog(_ run: RunRecord) async throws -> String? {
         let logs = runLogs
         let id = run.id
         return try await Task.detached(priority: .userInitiated) { try logs.read(id) }.value
     }
 
-    /// Where the drawer's snapshot row can take the user. Nil for a run
-    /// that names no snapshot.
     func snapshotLink(for run: RunRecord) -> RunSnapshotLink? {
         guard let snapshotID = run.snapshotID else { return nil }
         return RunSnapshotLink.resolve(
@@ -103,9 +96,9 @@ extension AppModel {
         }
     }
 
-    /// Wipes the run history, and the logs with it. The view-facing name
-    /// for the destructive action, so the mutation lives with its siblings
-    /// instead of a view reaching straight into the configuration.
+    /// The view-facing name for the destructive action, so the mutation
+    /// lives with its siblings instead of a view reaching straight into the
+    /// configuration.
     func clearRunHistory() {
         let cleared = configuration.runs.map(\.id)
         configuration.runs.removeAll()
@@ -120,8 +113,6 @@ extension AppModel {
         tasks.addBackground(Task.detached(priority: .utility) { logs.remove(ids) })
     }
 
-    /// Tells the configured webhooks and chat channels how the run went.
-    ///
     /// Awaited rather than detached so that quitting straight after a failed
     /// backup still gets the alert out; a failure to deliver is shown to the user
     /// but never written into the run record, which describes the backup itself.
@@ -157,9 +148,8 @@ extension AppModel {
         }
     }
 
-    /// Maps a finished run onto what notifications report. Static so the
-    /// mapping (outcome → stage, the sampled excerpts, the full warning
-    /// count) is testable without driving a whole run.
+    /// Static so the mapping (outcome → stage, the sampled excerpts, the
+    /// full warning count) is testable without driving a whole run.
     static func notificationEvent(for record: RunRecord, repositoryName: String) -> NotificationEvent {
         let stage: NotificationEvent.Stage
         switch record.outcome {
@@ -192,7 +182,6 @@ extension AppModel {
     }
 }
 
-/// Whether a run's snapshot can still be opened, and why not when it cannot.
 enum RunSnapshotLink: Equatable {
     case available(Snapshot)
     /// The listing is loaded and the snapshot is not in it: removed after
@@ -201,7 +190,6 @@ enum RunSnapshotLink: Equatable {
     case removed
     /// The listing is not loaded (or could not be read), so nobody knows.
     case unavailable
-    /// The repository is no longer set up in SwiftRestic.
     case repositoryGone
 
     /// Matched by full ID or short ID — a record names its snapshot however

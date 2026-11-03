@@ -10,9 +10,8 @@ struct RunLogVersions: Sendable, Equatable {
     /// restic's own `version` line.
     var restic: String
 
-    /// This build, this Mac, and the restic the app located. The bundle is
-    /// the one this code was built into — the app itself, or the test
-    /// bundle under xctest, whose main bundle is the runner's.
+    /// The bundle is the one this code was built into — the app itself, or
+    /// the test bundle under xctest, whose main bundle is the runner's.
     static func current(resticVersion: String) -> RunLogVersions {
         let info = Bundle(for: RunTranscript.self).infoDictionary
         var app = "SwiftRestic"
@@ -28,11 +27,9 @@ struct RunLogVersions: Sendable, Equatable {
     }
 }
 
-/// The plain-text log of one run: a header naming the versions and the
-/// run, every transcript entry with its time and a stream tag, and a footer
-/// with the verdict. restic's lines are written verbatim — the log is a
-/// diagnostic record of what restic printed, and exactness beats
-/// prettiness. The header names the repository by name and kind only, never
+/// restic's lines are written verbatim — the log is a diagnostic record of
+/// what restic printed, and exactness beats prettiness. The header names
+/// the repository by name and kind only, never
 /// by location, which can carry a host, a bucket or a user name — restic's
 /// own error lines may still name it, with a URL's password masked as `***`.
 enum RunLog {
@@ -153,7 +150,6 @@ struct RunLogStore: Sendable {
         try Data(text.utf8).write(to: url(for: id), options: .atomic)
     }
 
-    /// Nil when the run has no log file; any other failure throws.
     func read(_ id: UUID) throws -> String? {
         do {
             return try String(contentsOf: url(for: id), encoding: .utf8)
@@ -162,8 +158,7 @@ struct RunLogStore: Sendable {
         }
     }
 
-    /// The logs of runs leaving the history. A missing file is fine — not
-    /// every record has one.
+    /// A missing file is fine — not every record has one.
     func remove(_ ids: some Sequence<UUID>) {
         for id in ids {
             try? FileManager.default.removeItem(at: url(for: id))
@@ -173,7 +168,7 @@ struct RunLogStore: Sendable {
     /// Removes `<UUID>.log` files no record in `keeping` names, and only
     /// those last written before `cutoff` — a run finishing while the sweep
     /// walks the folder writes its log after the cutoff, before its record
-    /// reaches the history the caller read. Returns how many went.
+    /// reaches the history the caller read.
     @discardableResult
     func sweep(keeping: Set<UUID>, olderThan cutoff: Date) -> Int {
         let fileManager = FileManager.default

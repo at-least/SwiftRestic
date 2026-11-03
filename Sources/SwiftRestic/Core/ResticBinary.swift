@@ -9,7 +9,6 @@ import Foundation
 /// the app: fetching an executable from a GUI app is a signing and
 /// quarantine mess, so Homebrew owns it.
 struct ResticBinary: Sendable {
-    /// Searched in order; first hit wins.
     static let searchPaths: [String] = [
         "/opt/homebrew/bin/restic",
         "/usr/local/bin/restic",
@@ -26,7 +25,6 @@ struct ResticBinary: Sendable {
         URL(fileURLWithPath: path).resolvingSymlinksInPath().path.contains("/Cellar/restic/")
     }
 
-    /// Resolves the binary, preferring an explicit user override.
     static func locate(userOverride: String?) throws -> ResticBinary {
         if let userOverride, !userOverride.trimmingCharacters(in: .whitespaces).isEmpty {
             let url = URL(fileURLWithPath: userOverride)
@@ -46,7 +44,6 @@ struct ResticBinary: Sendable {
             return ResticBinary(url: URL(fileURLWithPath: candidate))
         }
 
-        // Last resort: whatever PATH we did inherit.
         if let fromPath = Self.onInheritedPath("restic") {
             return ResticBinary(url: URL(fileURLWithPath: fromPath))
         }
@@ -69,8 +66,6 @@ struct ResticBinary: Sendable {
     /// here is one restic cannot run (ResticCoreTests pins it).
     static let helperDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
 
-    /// Looks for a helper binary restic shells out to (currently only `rclone`).
-    ///
     /// Without this the failure surfaces as an opaque "command not found" buried
     /// in restic's stderr.
     static func locateHelper(named name: String) -> URL? {
@@ -93,9 +88,7 @@ struct ResticBinary: Sendable {
     }
 }
 
-/// Where the app's search for restic stands.
 enum ResticSearch {
-    /// Before the first search has answered.
     case searching
     /// The restic in use, and `restic version`'s answer.
     case found(ResticBinary, version: String)
@@ -118,7 +111,6 @@ struct ResticVersion: Comparable, Sendable {
 
     var isSupported: Bool { self >= Self.minimumSupported }
 
-    /// "0.19.1".
     var dotted: String { "\(major).\(minor).\(patch)" }
 
     static func < (a: ResticVersion, b: ResticVersion) -> Bool {

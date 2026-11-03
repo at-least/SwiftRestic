@@ -11,26 +11,20 @@ import Foundation
 /// stored shape.
 struct BackupHook: Identifiable, Codable, Sendable, Hashable {
     enum Event: String, Codable, Sendable, CaseIterable, Identifiable {
-        // Plan events.
         case beforeBackup
         case afterSuccess
         case afterWarning
         case afterFailure
-        /// Runs after every backup, whatever the outcome.
         case afterAny
 
-        // Repository events, around `check` and `prune`.
         case beforeMaintenance
         case afterMaintenanceSuccess
         case afterMaintenanceFailure
-        /// Runs after every check or prune, whatever the outcome.
         case afterAnyMaintenance
 
         var id: String { rawValue }
 
-        /// The events a plan's hooks can be attached to.
         static let backupEvents: [Event] = [.beforeBackup, .afterSuccess, .afterWarning, .afterFailure, .afterAny]
-        /// The events a repository's hooks can be attached to.
         static let maintenanceEvents: [Event] = [
             .beforeMaintenance, .afterMaintenanceSuccess, .afterMaintenanceFailure, .afterAnyMaintenance,
         ]
@@ -56,10 +50,9 @@ struct BackupHook: Identifiable, Codable, Sendable, Hashable {
     }
 
     enum FailureBehaviour: String, Codable, Sendable, CaseIterable, Identifiable {
-        /// Record the failure and carry on.
         case ignore
-        /// Do not start the backup, check or prune at all. The raw value keeps
-        /// its original spelling so existing configs still decode.
+        /// The raw value keeps its original spelling so existing configs
+        /// still decode.
         case abortBackup
 
         var id: String { rawValue }

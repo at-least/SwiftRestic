@@ -23,7 +23,6 @@ struct EarlierBackupsLine: View {
                 .controlSize(.small)
         }
         #if DEBUG
-        // Debug-only: lets a capture run open the sheet.
         .onAppear {
             if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "removeFromEarlierBackups" {
                 isConfirming = true
@@ -47,7 +46,6 @@ struct RemoveFromEarlierBackupsSheet: View {
 
     @State private var isIndexComplete = true
 
-    /// Every backup holding any of the items.
     private var backupCount: Int {
         Set(items.flatMap { $0.backups.map(\.id) }).count
     }

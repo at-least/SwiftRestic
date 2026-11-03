@@ -31,8 +31,6 @@ enum EditMenuTrim {
         }
     }
 
-    /// Removes the items, then any separator left first, last or beside
-    /// another.
     static func trim(_ menu: NSMenu) {
         let unwanted = menu.items.filter { removedIdentifiers.contains($0.identifier?.rawValue ?? "") }
         guard !unwanted.isEmpty else { return }

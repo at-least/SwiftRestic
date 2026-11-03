@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// A picked selection as the destination sheet shows it: what it restores,
-/// from how many backups, and how it names them — one rule for every
-/// surface that restores a selection.
 @Suite("Restore selection")
 struct RestoreSelectionTests {
     private let oct1 = Date(timeIntervalSince1970: 1_790_000_000)

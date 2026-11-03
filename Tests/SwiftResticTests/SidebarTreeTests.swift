@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The sidebar's shape, as the pure rules the view lays out: repositories at
-/// the top, each with its plans, the way to its first plan while it has
-/// none, and Other backups for whatever no plan of the repository made.
 @Suite("Sidebar tree")
 struct SidebarTreeTests {
     private func plan(_ name: String, in repository: UUID?) -> BackupPlan {
@@ -108,7 +105,6 @@ struct SidebarTreeTests {
         #expect(shelves.others.map { $0.snapshots.map(\.id) } == [["m1"], ["x1"], ["g1"]])
         #expect(shelves.hasOtherBackups)
 
-        // Every backup a plan of the repository made: no Other backups.
         let tidy = BackupShelves(listing: [d2, p1, d1], plans: [documents, photos], allPlans: [documents, photos])
         #expect(!tidy.hasOtherBackups)
         // A repository without plans: all of it is other, still by plan.
@@ -531,7 +527,6 @@ struct SidebarTreeTests {
         }
         let absolute = node("/Users/x/work/src/Music")
         let relative = node("/src/Music")
-        // First visit: the first root.
         #expect(FilesTree.rootToSelect(selected: nil, old: [], new: [relative]) == relative)
         #expect(FilesTree.rootToSelect(selected: nil, old: [], new: []) == nil)
         // The relative backup's root read before the index had read it, then again.

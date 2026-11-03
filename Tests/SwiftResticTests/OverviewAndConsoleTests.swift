@@ -19,7 +19,6 @@ struct OverviewMetricsTests {
             record.outcome = outcome
             return record
         }
-        // One unreadable file warns every daily run; one failure elsewhere.
         let warnings = (0 ..< 7).map { problem(documents, .backup, .completedWithErrors, hour: $0 * 24) }
         let failure = problem(code, .backup, .failed, hour: 30)
         let documentsFailed = problem(documents, .backup, .failed, hour: 20)
@@ -32,8 +31,6 @@ struct OverviewMetricsTests {
         #expect(Set(groups.map(\.newest.outcome)) == [.completedWithErrors, .failed])
         #expect(OverviewMetrics.problemGroups([]).isEmpty)
     }
-
-    // MARK: - Protection rows
 
     private func plan(_ name: String, repository: UUID?) -> BackupPlan {
         namedPlan(name, repositoryID: repository)
@@ -99,7 +96,6 @@ struct OverviewMetricsTests {
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isProtected == true)
-        // The failure row is the only failing one, and has no lastBackupAt.
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
         #expect(rows.first { $0.planName == "Failed" }?.lastBackupAt == nil)
     }
@@ -166,7 +162,6 @@ struct OverviewMetricsTests {
         let tick = Date.now
         let ago = { Format.ago($0, now: tick) }
 
-        // The same plan/snapshot state through each surface's derivation.
         func surfaces(_ plan: BackupPlan, newest: Snapshot?) -> (caption: String, row: String, line: String?, page: String) {
             let rows = OverviewMetrics.protectionRows(
                 plans: [plan],
@@ -223,7 +218,6 @@ struct OverviewMetricsTests {
         #expect(ranSurfaces.page == ranWords)
         #expect(ranSurfaces.line == "1 of 1 plan protected · Last backup \(ranWords)")
 
-        // "Never" only when there is truly nothing: no run, no snapshot.
         #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshot: nil) == nil)
     }
 
@@ -400,7 +394,6 @@ struct OverviewMetricsTests {
         #expect(plain?.text == "1 of 2 plans protected · Last backup 1 hour ago")
         #expect(plain?.showsResume == false)
 
-        // The hold's words are the hold's own summary, joined on.
         let end = utcDate("2026-09-05 14:00:00")
         let paused = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
@@ -531,12 +524,9 @@ struct OverviewMetricsTests {
             rows: [code, music, documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        // The count line stays as it was; the lines under it name the
-        // subject, a failed run's under the failure's glyph.
         #expect(summary?.text == "1 of 3 plans protected · Last backup 1 hour ago")
         #expect(summary?.failureLines == ["Code: Failed — 3 hours ago"])
         #expect(summary?.attentionLines == ["Music: No backups yet"])
-        // All protected: nothing to name.
         #expect(OverviewMetrics.protectionSummary(
             rows: [documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
@@ -648,7 +638,6 @@ struct OverviewMetricsTests {
         let tile = OverviewMetrics.snapshotsTile(total: 3, otherBackups: 0, repositoryHasPlans: true, snapshots: listing, subject: "of this plan")
         #expect(tile.value == "3 · since \(Format.day(oldest))")
         #expect(tile.help == "The oldest backup of this plan is from \(Format.timestamp(oldest))")
-        // Nothing listed: no moment to name.
         let empty = OverviewMetrics.snapshotsTile(total: 0, otherBackups: 0, repositoryHasPlans: true, snapshots: [], subject: "here")
         #expect(empty.value == "0")
         #expect(empty.help == nil)
@@ -744,7 +733,6 @@ struct CommandLineTokenizerTests {
     @Test("escapes and empty quoted arguments")
     func escapes() {
         #expect(CommandLineTokenizer.tokenize(#"ls /tmp/a\ b"#) == ["ls", "/tmp/a b"])
-        // An explicitly empty argument must survive as one.
         #expect(CommandLineTokenizer.tokenize(#"--tag """#) == ["--tag", ""])
         // A backslash is literal inside single quotes.
         #expect(CommandLineTokenizer.tokenize(#"'a\b'"#) == [#"a\b"#])

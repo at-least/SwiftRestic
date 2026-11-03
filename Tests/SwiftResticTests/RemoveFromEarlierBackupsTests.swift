@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Remove from Earlier Backups' pure parts: which of a plan's patterns name
-/// one path, and what restic's rewrite said.
 @Suite("Remove from earlier backups")
 struct RemoveFromEarlierBackupsTests {
     @Test("a pattern reads back as its one path only when nothing in it is a wildcard")
@@ -82,7 +80,6 @@ struct RemoveFromEarlierBackupsTests {
         let second = try #require(RunRecord.adoptingRewrites(first, listing: [try snapshot("a2", original: "a1")]))
         #expect(RunRecord.backupRunsBySnapshot(second)["a2"]?.id == run.id)
         #expect(second[0].rewrittenSnapshotIDs == ["a1", "a2"])
-        // Nothing new: nothing to write.
         #expect(RunRecord.adoptingRewrites(second, listing: [try snapshot("a2", original: "a1")]) == nil)
         #expect(RunRecord.adoptingRewrites(second, listing: [try snapshot("zz", original: "unknown")]) == nil)
         // Two links in one listing, the newer first.

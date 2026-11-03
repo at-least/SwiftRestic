@@ -1,6 +1,5 @@
 import Foundation
 
-/// One remote configured in the user's rclone installation.
 struct RcloneRemote: Sendable, Hashable {
     /// The name as it appears in `rclone listremotes` — without the trailing colon.
     var name: String

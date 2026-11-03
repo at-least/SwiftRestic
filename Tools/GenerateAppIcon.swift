@@ -13,8 +13,6 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// MARK: - Geometry helpers
-
 /// Apple's icon shape is a continuous-corner squircle, which `CGPath`'s circular
 /// `roundedRect` does not reproduce. Sample the superellipse directly.
 func squirclePath(in rect: CGRect, exponent: Double = 5) -> CGPath {
@@ -65,8 +63,6 @@ func color(_ hex: UInt32) -> CGColor {
         alpha: 1
     )
 }
-
-// MARK: - Drawing
 
 /// Glyph proportions, as fractions of the canvas.
 ///
@@ -135,7 +131,6 @@ func drawIcon(size: CGFloat, into context: CGContext) {
     let shape = CGRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
     let path = squirclePath(in: shape)
 
-    // Drop shadow beneath the tile.
     context.saveGState()
     if proportions.drawsShadow {
         context.setShadow(
@@ -236,7 +231,6 @@ func drawIcon(size: CGFloat, into context: CGContext) {
     }
 }
 
-// MARK: - Output
 
 func renderPNG(size: Int, to url: URL) throws {
     let context = CGContext(

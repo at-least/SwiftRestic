@@ -8,7 +8,6 @@ enum ChangeComparison: Equatable, Sendable {
     /// No earlier backup of these folders from this host: no diff runs, and
     /// the Change column stays blank.
     case firstBackup
-    /// `restic diff` against the baseline is running.
     case comparing(baseline: Snapshot)
     /// The diff finished: `changeCount` of the items this backup holds
     /// changed, zero meaning none.
@@ -38,7 +37,6 @@ struct ChangesInside: Equatable, Sendable {
 
     var total: Int { counts.values.reduce(0, +) }
 
-    /// "2 modified, 1 deleted" — the kinds present, in the diff's own order.
     var summary: String {
         ResticDiffChange.Category.allCases
             .compactMap { category in counts[category].map { "\(Format.count($0)) \(category.displayName.lowercased())" } }
@@ -76,7 +74,6 @@ struct RemovedItem: Hashable, Sendable {
     /// set on a "Not read:" line's items, nil on a removal.
     var reason: String? = nil
 
-    /// The last component; the root reads as "/".
     var name: String {
         let last = ResticPath.basename(of: path)
         return last.isEmpty ? path : last
@@ -91,8 +88,6 @@ struct RemovedItem: Hashable, Sendable {
 struct UnreadItems: Equatable, Sendable {
     var lines: [PathKey: String] = [:]
 
-    /// The unreadable item that is `path` or a folder above it, with
-    /// restic's line; nil when the run read it.
     func item(holding path: String) -> (path: String, line: String)? {
         guard !lines.isEmpty else { return nil }
         let path = ResticPath.normalized(path)
@@ -102,8 +97,6 @@ struct UnreadItems: Equatable, Sendable {
         return nil
     }
 
-    /// Why the run could not read `path`, in the app's words
-    /// (`RunRecordPresentation.unreadableReason`); nil when it read it.
     func reason(for path: String) -> String? {
         item(holding: path).map { RunRecordPresentation.unreadableReason(line: $0.line, path: $0.path) }
     }
@@ -117,8 +110,6 @@ struct RemovedNames: Equatable, Sendable {
 
     var items: [RemovedItem]
     var more: Int
-    /// "Deleted: ", or "Not read: " for what the backup's own run could
-    /// not read (`AppModel.unreadItems(inBackup:)`).
     var label: String
 
     init(_ all: [RemovedItem], label: String = "Deleted: ") {
@@ -139,20 +130,14 @@ struct RemovedNames: Equatable, Sendable {
 /// not "unchanged" — and otherwise its title's tooltip (`columnHelp`). Pure,
 /// so the wording is pinned by tests; the pane only lays it out.
 struct RestoreRecordHeading: Equatable, Sendable {
-    /// The name of the place the sidebar shows the backup — its plan, or
-    /// its group under Other backups — qualified when the name alone is
-    /// ambiguous (`BackupShelves.label(of:repositories:localHost:)`).
     var name: String
-    /// The record's moment. Kept apart from `name` so the view can truncate a
+    /// Kept apart from `name` so the view can truncate a
     /// long qualifier and never the day.
     var time: String
-    /// What the Change column compares against; the backup's ID is in
-    /// `detail`.
     var caption: String
     /// The tooltip: folders, host, who wrote them, and both full IDs — the
     /// open record called a backup, as every restore surface calls it.
     var detail: String
-    /// The comparison failed: the view adds a warning glyph.
     var isProblem: Bool
 
     init(record: Snapshot, label: SnapshotLineage.Label?, comparison: ChangeComparison?) {

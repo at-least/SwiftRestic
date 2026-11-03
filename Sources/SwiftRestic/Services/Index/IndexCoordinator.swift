@@ -24,8 +24,6 @@ import Foundation
 ///   and the order of the steps that close a file. The listing generations
 ///   live in the store, under its writer (`reconcile(listing:generation:)`).
 actor IndexCoordinator {
-    /// The configuration's folder, which the index lives inside (see
-    /// `indexDirectory`).
     let directory: URL
     /// Where the `<repository>.sqlite` files live: a folder of their own
     /// inside the configuration's, so the orphan sweep can own everything in
@@ -57,7 +55,6 @@ actor IndexCoordinator {
     /// The open stores, with the tombstones and in-flight counts that let
     /// the reads skip this actor.
     private let registry = StoreRegistry()
-    /// The browse-cache captures handed over and not yet written.
     private let cacheWrites = CacheWrites()
     private var backfillTasks: [UUID: Task<Void, Never>] = [:]
     /// Starts asked for while a pass ran, with the newest caller's service
@@ -82,8 +79,6 @@ actor IndexCoordinator {
         let base = directory ?? ConfigStore.defaultDirectory()
         self.directory = base
     }
-
-    // MARK: - Reconcile
 
     /// Feeds a fresh `restic snapshots` listing into the repository's index,
     /// then lets housekeeping reclaim what the listing's deaths stranded.
@@ -151,8 +146,6 @@ actor IndexCoordinator {
         }
         return taken
     }
-
-    // MARK: - Backfill
 
     /// Starts reading what the index has not read, unless the coordinator
     /// is shutting down. While a pass of the repository runs, the start
@@ -254,19 +247,15 @@ actor IndexCoordinator {
         backfillTasks[repositoryID] != nil
     }
 
-    /// How one step ended.
     private enum StepEnd {
         case landed
         /// The index turned the write down because the plan went stale.
         case refused
-        /// restic or the index failed the read.
         case failed
         /// The pass was cancelled mid-step; nothing was learned.
         case stopped
     }
 
-    /// How the delta route ended: the step's end, or why the diff cannot
-    /// build the target and the full route must.
     private enum DeltaEnd {
         case ended(StepEnd)
         case fallBack(DeltaFallback)
@@ -367,10 +356,6 @@ actor IndexCoordinator {
         try await Task.detached(priority: .utility) { try body() }.value
     }
 
-    // MARK: - Reads
-
-    /// The indexed snapshots holding one path within one chain — a plan's
-    /// tag — newest first, in SQL. The Files view's core question.
     nonisolated func versions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
     }
@@ -381,15 +366,10 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.children(ofPath: path, inChain: chainKey) }
     }
 
-    /// One path's content versions within one chain — the Files view's
-    /// version list.
     nonisolated func contentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
-    /// The folders the chain's newest indexed backup holds beside the file
-    /// that names the tool which made them — the plan page's offer to skip
-    /// them.
     nonisolated func foldersBesideManifests(
         _ manifests: [String: [String]],
         inChain chainKey: String,
@@ -398,8 +378,6 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.foldersBesideManifests(manifests, inChain: chainKey) }
     }
 
-    /// What changed directly under one folder between two backups of a
-    /// chain — a Files tab's folder against the backup before.
     nonisolated func changes(
         underPath path: String,
         inChain chainKey: String,
@@ -412,9 +390,6 @@ actor IndexCoordinator {
         }
     }
 
-    /// The Restore pane's search: basename hits across every indexed path —
-    /// instant, no restic walk — and which of them the open backup holds,
-    /// with their kind there, from one read of the index.
     nonisolated func searchWithMembership(
         matching query: String,
         inSnapshot snapshotID: String,
@@ -426,14 +401,10 @@ actor IndexCoordinator {
         }
     }
 
-    /// Find Files' search: the hits and each one's version summary, from
-    /// one read of the index.
     nonisolated func searchWithSummaries(matching query: String, repositoryID: UUID, limit: Int) async throws -> SearchWithSummaries {
         try await read(repositoryID) { try await $0.searchWithSummaries(matching: query, limit: limit) }
     }
 
-    /// A Files tab's search: basename hits within one chain, each as the
-    /// tree lists it, from one read of the index.
     nonisolated func search(
         matching query: String,
         inChain chainKey: String,
@@ -443,15 +414,10 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.search(matching: query, inChain: chainKey, limit: limit) }
     }
 
-    /// Which of `paths` a snapshot holds, each with its kind there — the
-    /// Restore pane's incomplete strip asks it of the backup before, and a
-    /// restore by path of the backup it restores from.
     nonisolated func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
         try await read(repositoryID) { try await $0.kinds(of: paths, inSnapshot: snapshotID) }
     }
 
-    /// Whether every listed snapshot has been read — the consumers' "the
-    /// index answers exactly" signal.
     nonisolated func isComplete(repositoryID: UUID) async throws -> Bool {
         try await read(repositoryID) { try await $0.isComplete() }
     }
@@ -470,8 +436,6 @@ actor IndexCoordinator {
         defer { registry.release(repositoryID) }
         return try await body(store)
     }
-
-    // MARK: - Browse caches
 
     /// The cached `restic ls` answer for one directory, or nil when nothing
     /// was captured — or when the cache itself failed. A miss is an
@@ -509,7 +473,6 @@ actor IndexCoordinator {
         }
     }
 
-    /// The cached diff between two snapshots, nil on miss or cache failure.
     nonisolated func cachedDiff(olderID: String, newerID: String, repositoryID: UUID) async -> [CachedDiffChange]? {
         await cacheAccess(repositoryID) { try await $0.diff(olderID: olderID, newerID: newerID) } ?? nil
     }
@@ -569,8 +532,6 @@ actor IndexCoordinator {
         defer { registry.release(repositoryID) }
         return try? await body(store)
     }
-
-    // MARK: - Lifecycle
 
     /// Closes and deletes a repository's index — the index exists only to
     /// serve its repository, so removal takes it along. The repository joins
@@ -640,8 +601,6 @@ actor IndexCoordinator {
         await cacheWritesSettled()
     }
 
-    // MARK: - Orphan files
-
     /// Deletes the index files of repositories the configuration does not
     /// name: a removal whose drop never ran (a crash, or a quit before the
     /// background lane drained), or a repository deleted from config.json by
@@ -682,8 +641,6 @@ actor IndexCoordinator {
         }
         return nil
     }
-
-    // MARK: - Store access
 
     /// The repository's store, counted in flight until the caller hands it
     /// back with `registry.release`. A reset in progress is waited out: the
@@ -747,7 +704,6 @@ actor IndexCoordinator {
 struct BackfillReport: Sendable, Equatable {
     /// Snapshots a full `restic ls` indexed, fallbacks included.
     var fulls = 0
-    /// Snapshots a `restic diff` indexed.
     var deltas = 0
     /// Diffs abandoned on a `T` line.
     var typeChange = 0
@@ -763,7 +719,6 @@ struct BackfillReport: Sendable, Equatable {
     var fullFailed = 0
     /// Steps the index turned down because the plan went stale mid-step.
     var refused = 0
-    /// Snapshots set aside as unreadable.
     var markedUnreadable = 0
 
     mutating func count(_ reason: IndexCoordinator.DeltaFallback) {
@@ -775,8 +730,6 @@ struct BackfillReport: Sendable, Equatable {
     }
 }
 
-/// One pass's memory: what to skip, what was refused, and how many passes
-/// each snapshot's full read has failed in.
 private struct BackfillPass {
     var skip: Set<String> = []
     var refusedSteps: Set<IndexStep> = []
@@ -815,7 +768,6 @@ private struct BackfillPass {
 }
 
 extension IndexStep {
-    /// The snapshot a step reads; nil for `.done`.
     fileprivate var target: String? {
         switch self {
         case let .full(snapshotID), let .delta(snapshotID, _): snapshotID
@@ -901,7 +853,6 @@ private final class StoreRegistry: @unchecked Sendable {
         for waiter in waiters { waiter.resume() }
     }
 
-    /// Returns once no caller is using the repository's store.
     func drained(_ repositoryID: UUID) async {
         await withCheckedContinuation { (waiter: CheckedContinuation<Void, Never>) in
             if !enqueueDrainWaiter(waiter, for: repositoryID) { waiter.resume() }
@@ -990,7 +941,6 @@ private final class CacheWrites: @unchecked Sendable {
         return closed
     }
 
-    /// Runs `body` in a task of its own, unless `close` came first.
     func start(_ body: @escaping @Sendable () async -> Void) {
         let ticket = UUID()
         lock.lock()
@@ -1080,8 +1030,6 @@ final class DeltaCollector: @unchecked Sendable {
         }
     }
 
-    /// The delta to apply, or `IncompleteStream.typeChange` when a `T` line
-    /// means there is none.
     func delta() throws -> (added: [IndexedEntry], removed: [IndexedEntry], modified: [IndexedEntry]) {
         lock.lock()
         defer { lock.unlock() }
@@ -1090,8 +1038,6 @@ final class DeltaCollector: @unchecked Sendable {
     }
 }
 
-/// Accumulates streamed `ls` paths and hands them to the store in chunks.
-///
 /// Thread confinement by lock: the restic stream's callbacks arrive on one
 /// background queue, while `finish` runs after the walk returns. The flush
 /// call is synchronous and transaction-per-chunk, so chunks recorded before
@@ -1181,7 +1127,6 @@ final class BackfillBuffer: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Records one non-final chunk; a failure is captured for `finish`.
     private func flushChunk(_ chunk: [IndexedEntry]) {
         lock.lock()
         let stopped = isCancelled || captured != nil

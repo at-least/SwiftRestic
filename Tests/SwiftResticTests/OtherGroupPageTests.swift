@@ -43,7 +43,6 @@ struct OtherGroupPageTests {
         #expect(page.newestAt == g2.time)
         #expect(page.oldestAt == g1.time)
         #expect(page.madeFrom == "mac")
-        // One line per folder set, the newest set first.
         #expect(page.folders == ["/Data/Projects", "/Data/Old"])
         #expect(page.excludes == ["node_modules", ".env", ".DS_Store"])
         // Plan tags are the group's plumbing, not a user tag.
@@ -124,15 +123,12 @@ struct OtherGroupPageTests {
         let orphaned = BackupShelves(listing: [g1], plans: [], allPlans: [])
         #expect(orphaned.orphanPlanGroup(planID)?.id == .plan(planID))
 
-        // The plan is configured for this repository: the backup shelves
-        // under it, the group is gone, and so is the page.
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.id = planID
         let shelved = BackupShelves(listing: [g1], plans: [plan], allPlans: [plan])
         #expect(shelved.orphanPlanGroup(planID) == nil)
         #expect(shelved.otherGroupPage(.plan(planID), repositories: [], localHost: "mac") == nil)
-        // An unknown UUID was never a group here.
         #expect(orphaned.orphanPlanGroup(UUID()) == nil)
     }
 
@@ -158,7 +154,6 @@ struct OtherGroupPageTests {
         let single = BackupShelves(listing: [l1], plans: [], allPlans: [])
         #expect(single.otherGroupPage(.lineage(key), repositories: [], localHost: "mac")?.explanation
             == "Made outside SwiftRestic, so it can’t be continued. Repository ▸ restic Console can give it a plan’s tag; tagging rewrites every backup’s ID.")
-        // Gone once no backup of it is left.
         let empty = BackupShelves(listing: [], plans: [], allPlans: [])
         #expect(empty.lineageGroup(key) == nil)
         #expect(empty.otherGroupPage(.lineage(key), repositories: [], localHost: "mac") == nil)

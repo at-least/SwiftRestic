@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Drives the real restic binary against a throwaway local repository.
-///
 /// These are the tests that would catch a change in restic's actual behaviour
 /// rather than only in the JSON lines the unit suites quote. They are skipped
 /// when restic is not installed so the suite still runs on a bare machine.
@@ -43,13 +41,10 @@ struct ResticUnderTestTests {
     }
 }
 
-/// The shared fixture of the real-restic suites: a throwaway local
-/// repository, an empty source tree the `plant` closure fills, and the
-/// service, context and plan wired to reach them. The repository is not
-/// initialized — each suite does that itself, so a test can pin the
-/// not-yet-a-repository state first. Each suite keeps its own prefix and
-/// password, so a leaked directory or a cross-suite password mixup stays
-/// attributable.
+/// The repository is not initialized — each suite does that itself, so a
+/// test can pin the not-yet-a-repository state first. Each suite keeps its
+/// own prefix and password, so a leaked directory or a cross-suite password
+/// mixup stays attributable.
 struct ResticFixture {
     var root: URL
     var sourceDirectory: URL
@@ -130,14 +125,12 @@ struct ResticIntegrationTests {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        // A repository that does not exist yet must report so rather than throw.
         #expect(try await fixture.service.repositoryExists(fixture.context, timeout: nil) == false)
 
         let repositoryID = try await fixture.service.initializeRepository(fixture.context)
         #expect(repositoryID != nil)
         #expect(try await fixture.service.repositoryExists(fixture.context, timeout: nil))
 
-        // Backup
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary?.snapshotID != nil)
@@ -179,7 +172,6 @@ struct ResticIntegrationTests {
         let restoredFile = fileDestination.appendingPathComponent("a.txt")
         #expect(try String(contentsOf: restoredFile, encoding: .utf8) == "hello world")
 
-        // Restoring a directory does the same for a subtree.
         let dirDestination = fixture.root.appendingPathComponent("restore-dir")
         let dirNode = try #require(children.first { $0.name == "sub" })
         let summary = try await fixture.service.restore(
@@ -280,12 +272,10 @@ struct ResticIntegrationTests {
         let paths = try await listing(of: newest.id)
         #expect(paths.contains(fixture.sourceDirectory.appendingPathComponent("a.txt").path))
         #expect(!paths.contains { $0.hasPrefix(fixture.sourceDirectory.appendingPathComponent("sub").path) })
-        // The other plan's backup is untouched.
         let other = try await fixture.service.snapshots(fixture.context, planID: otherPlan.id)
         #expect(other.count == 1)
         let otherPaths = try await listing(of: other[0].id)
         #expect(otherPaths.contains(fixture.sourceDirectory.appendingPathComponent("sub/b.txt").path))
-        // Nothing left to remove.
         #expect(try await fixture.service.rewrite(fixture.context, plan: plan, excluding: items.map(\.pattern)) == 0)
     }
 
@@ -471,12 +461,9 @@ struct ResticIntegrationTests {
         try holder.feed.fileHandleForWriting.close()
         await Self.waitForExit(holder.process, within: 120)
         #expect(!holder.process.isRunning, "the holder did not finish after its input ended")
-        // Nothing was removed — neither by the dry run nor by the refused forget.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }
 
-    /// The model over the fixture repository, with the history read in: what
-    /// the app runs when a repository page shows a group under Other backups.
     @MainActor
     private func adoptableModel(fixture: ResticFixture, repository: Repository) async throws -> AppModel {
         let model = AppModel(
@@ -601,7 +588,6 @@ struct ResticIntegrationTests {
         }
     }
 
-    /// Returns once the holder's lock file is in the repository.
     private static func holdLock(on fixture: ResticFixture) async throws -> LockHolder {
         let process = Process()
         process.executableURL = try ResticAvailability.binary().url
@@ -771,7 +757,6 @@ struct ResticIntegrationTests {
 
         try await fixture.service.changePassword(fixture.context, newPassword: "rotated")
 
-        // The old password no longer opens the repository: restic's exit 12.
         do {
             _ = try await fixture.service.snapshots(fixture.context)
             Issue.record("the old password still opened the repository")
@@ -780,7 +765,6 @@ struct ResticIntegrationTests {
             #expect(message.localizedCaseInsensitiveContains("password"))
         }
 
-        // The rotated one does, on the empty repository it is.
         var rotated = fixture.context
         rotated.password = "rotated"
         let snapshots = try await fixture.service.snapshots(rotated)
@@ -963,7 +947,6 @@ struct ResticIntegrationTests {
         #expect(second?.filesSkipped == 1)
     }
 
-    /// The fixture backed up, and its root folder's listing.
     private func backedUpChildren(_ fixture: ResticFixture) async throws -> (snapshotID: String, children: [SnapshotNode]) {
         _ = try await fixture.service.initializeRepository(fixture.context)
         let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
@@ -1527,7 +1510,6 @@ struct ResticMaintenanceTests {
         let after = try await service.stats(context)
         #expect(after.totalSize < before.totalSize)
 
-        // The repository must still be sound afterwards.
         let check = try await service.check(context, readDataSubset: .percent(100))
         #expect(check?.numErrors == 0)
     }
@@ -1651,7 +1633,6 @@ struct ResticDiffTests {
         let reversed = try await service.diff(context, olderID: newerID, newerID: olderID)
         #expect(reversed.changes.first { $0.path.hasSuffix("c.txt") }?.category == .removed)
 
-        // Comparing a snapshot with itself is a valid, empty result.
         let same = try await service.diff(context, olderID: newerID, newerID: newerID)
         #expect(same.changes.isEmpty)
         #expect(same.statistics?.changedFiles == 0)
@@ -1682,7 +1663,6 @@ struct ResticFindTests {
         _ = try await service.initializeRepository(context)
         _ = try await service.backup(context, plan: plan)
 
-        // Delete it and take another snapshot: the newest backup no longer has it.
         try FileManager.default.removeItem(at: secret)
         _ = try await service.backup(context, plan: plan)
 
@@ -1712,9 +1692,6 @@ struct ResticFindTests {
         #expect(try String(contentsOf: restored, encoding: .utf8) == "the codes")
     }
 
-    /// The Files view's version rows read one file's node in every backup
-    /// through its escaped path: exactly that file, whatever glob
-    /// characters its name holds, with its size in each backup.
     @Test("an escaped path finds exactly that file in every backup, with its size in each")
     func escapedPathFindsOneFile() async throws {
         let fixture = try makeResticFixture(prefix: "FindExact", password: "exact-test") { source in

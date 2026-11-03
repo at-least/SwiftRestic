@@ -1,10 +1,6 @@
 import Observation
 import SwiftUI
 
-/// The app's view state and window-level intents: which pane is selected,
-/// which sheet a menu command asked for, where Activity should land, and the
-/// main-window action the AppKit tray needs.
-///
 /// Not on `AppModel`: none of this is domain state — it is the navigation
 /// surface the views and the menu bar share, and pane switches would
 /// otherwise write through the same object the domains mutate. Intents
@@ -17,7 +13,6 @@ final class AppRouter {
     /// no sheet is already up — refused with a beep otherwise.
     enum Intent: Equatable {
         case newPlan
-        /// A new plan in this repository: a failure's fix.
         case newPlanIn(UUID)
         case newRepository
         case showFind
@@ -35,8 +30,6 @@ final class AppRouter {
         case pauseSchedule(UUID, PauseLength)
         case resumeSchedule(UUID)
         case editPlan(UUID)
-        /// A refused retention's fix (`RunFix.editPlanRetention`): the plan
-        /// editor, on its Retention tab.
         case editPlanRetention(UUID)
         case editRepository(UUID)
         case applyRetention(UUID)
@@ -48,7 +41,6 @@ final class AppRouter {
         case importSettings
     }
 
-    /// The pane the sidebar is showing.
     var selection: SidebarItem?
 
     /// The pending intent, if any. One slot, not a queue: a second request
@@ -124,7 +116,6 @@ final class AppRouter {
     /// has the focus.
     var searchFocus: SidebarItem?
 
-    /// ⇧⌘F on a plan's page: its Files tab, the search field focused.
     func searchFiles(on page: SidebarItem) {
         setTab(.files, of: page)
         searchFocus = page
@@ -135,7 +126,6 @@ final class AppRouter {
     /// while the app runs: coming back to Find Files finds it.
     var findQuery = ""
 
-    /// The repository Find Files searches. Transient.
     var findRepositoryID: UUID?
 
     /// A search Find Files runs as it arrives — Search All Backups's and a
@@ -143,10 +133,6 @@ final class AppRouter {
     /// answers. Find Files spends it.
     var findRunsOnArrival = false
 
-    /// Find Files, the pane: on `repositoryID`, with `query` in its field
-    /// when one is handed over (Search All Backups, a repository page's
-    /// Return) and run as it arrives when `run` says so — the field
-    /// focused, its "area dedicated to discovery", as the HIG puts it.
     func openFind(repositoryID: UUID?, query: String? = nil, run: Bool = false) {
         findRepositoryID = repositoryID
         if let query { findQuery = query }
@@ -204,11 +190,6 @@ final class AppRouter {
         pageTab = tab
     }
 
-    /// An item by version, from a backup that holds it — the Restore pane's
-    /// and Find Files' Show Versions: `page`, the plan's page whose Files tab
-    /// holds `record`'s history (`BackupShelves.versionsPage(of:)`), on
-    /// Files, the item selected with every folder above it open down from
-    /// the backed-up folder that holds it, and its pane opening at `record`.
     func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
         let chain = SnapshotIndex.chainKey(for: record)
         let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
@@ -223,10 +204,6 @@ final class AppRouter {
         selection = page
     }
 
-    /// Opens every folder above `item` in its chain's tree, down from the
-    /// deepest of `tops` — the backed-up folders the tree hangs from — that
-    /// holds it, so the tree lists the item's row: Show Versions, and a hit
-    /// picked in a Files tab's search. Nothing opens when no top holds it.
     func openFolders(above item: FileNode, from tops: [String]) {
         // The chain holds `item` itself last; the selection opens it.
         for folder in Format.pathChain(of: item.path, roots: tops).dropLast() {
@@ -234,7 +211,6 @@ final class AppRouter {
         }
     }
 
-    /// The toolbar picker's binding for one page.
     func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
         Binding(get: { self.tab(of: page) }, set: { self.setTab($0, of: page) })
     }
@@ -256,29 +232,20 @@ final class AppRouter {
         pendingIntent = intent
     }
 
-    /// Activity, landing on one run: the tray's problem line, a clicked
-    /// notification and the problem rows all take this route.
     func focusRun(_ id: RunRecord.ID) {
         activityFocusRunID = id
         selection = .activity
     }
 
-    /// The root view's consumption half: returns and clears whatever was
-    /// asked for.
     func takePendingIntent() -> Intent? {
         defer { pendingIntent = nil }
         return pendingIntent
     }
 
-    /// The one route into a backup's contents from outside its page's
-    /// Backups tab — the run drawer's Browse, a Files tab's Show in Backups,
-    /// a group's Show Backups: `page`, the one whose Backups tab lists the
-    /// record (`AppModel.page(ofBackup:in:)`), on that tab with the record
-    /// open, where the Change column, search, drag and whole-backup restore
-    /// all live, whichever button was pressed. A plain route clears an older
-    /// focus request rather than inheriting it, and the page's search: a
-    /// query left on its Backups tab, searched in another backup, would
-    /// stand over the record and the folder the route opens.
+    /// A plain route clears an older focus request rather than inheriting
+    /// it, and the page's search: a query left on its Backups tab, searched
+    /// in another backup, would stand over the record and the folder the
+    /// route opens.
     func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
@@ -346,18 +313,13 @@ final class AppRouter {
     }
 }
 
-/// A page's views — the toolbar's Overview | Backups | Files on a plan's
-/// page, Overview | Backups on a group's under Other backups
-/// (`SidebarItem.pageTabs`): its overview; its backups, each one's files
-/// beside the list; and its folders and files, each by version. Not the
-/// sidebar's, folded under their plan: a sidebar shows no more than two
-/// levels (HIG, Sidebars).
+/// Not the sidebar's, folded under their plan: a sidebar shows no more than
+/// two levels (HIG, Sidebars).
 enum PageTab: Hashable, CaseIterable {
     case overview
     case backups
     case files
 
-    /// The View menu's words for it, the toolbar segment's own.
     var menuTitle: String {
         switch self {
         case .overview: "Overview"

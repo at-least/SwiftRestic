@@ -1,9 +1,7 @@
 import Foundation
 
-/// Somewhere outside the Mac to tell about a run.
 struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable, CaseIterable, Identifiable {
-        /// A plain JSON POST with the whole event.
         case webhook
         case slack
         case discord
@@ -51,9 +49,8 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
 
     var isUsable: Bool { isEnabled && hasUsableURL }
 
-    /// Whether the URL is one the app posts to — http or https, never a
-    /// file or custom scheme. Send Test needs only this: a
-    /// webhook is tested before it is switched on.
+    /// Send Test needs only this: a webhook is tested before it is
+    /// switched on.
     var hasUsableURL: Bool {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
     }
@@ -85,7 +82,6 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
-/// What happened, in the terms a notification needs.
 struct NotificationEvent: Sendable, Equatable {
     enum Stage: String, Sendable, Equatable {
         case started, succeeded, warned, failed
@@ -119,7 +115,6 @@ struct NotificationEvent: Sendable, Equatable {
     var dataAdded: Int64 = 0
     var duration: TimeInterval = 0
 
-    /// One line suitable for a chat message or a Healthchecks log entry.
     var summary: String {
         // The subject follows the app's one run-naming rule: the plan with
         // its repository ("Documents (NAS)"). A check or prune reports the

@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// The split view's detail column: the app-level progress strips (a restore
-/// outlives the pane that started it; a missing restic greys every control),
-/// the pane switch over the sidebar selection, and the selection-revalidation
-/// `onChange`s that must fire in every pane state.
-///
 /// A real child view, split out of `RootView` so this stack type-checks on
 /// its own — the root's modifier chain sits at the compiler's type-check
 /// time limit. The sheet intents the panes raise are passed back as
@@ -21,15 +16,12 @@ struct RootDetailView: View {
     /// call site free of `#if` argument-list gymnastics.
     @Binding var pendingCaptureRestore: Bool
 
-    /// Opens the plan editor, with the repository preset when one is given.
     let onAddPlan: (_ repositoryID: UUID?) -> Void
     /// Opens the adopt sheet for an Other backups group — its page or the
     /// repository page's card — the root owns the presenting state, as for
     /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
-    /// "Search All Backups" — the Restore pane's, and a Files tab's with no
-    /// match: Find Files, prefilled.
     let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     var body: some View {
@@ -37,8 +29,7 @@ struct RootDetailView: View {
             // A restore outlives the pane that started it, so its progress is
             // an app-level fact: this strip sits above every pane, and the
             // menu bar line covers the window-closed case. Switching panes
-            // hands the progress over to this strip. The fallback names the
-            // work when no description has arrived.
+            // hands the progress over to this strip.
             RestoreProgressStrip(fallbackTitle: "Restoring…")
                 .padding(.horizontal, 16)
                 .padding(.top, 10)

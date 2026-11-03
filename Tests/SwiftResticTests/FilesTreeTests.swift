@@ -1,10 +1,6 @@
 import Foundation
 import Testing
 
-/// A Files tab's tree rows, as the pure rule the tree lays out: a
-/// level's entries, the open folders under them depth-first, a level not yet
-/// read as one status row, and a folder past the row cap as its first
-/// entries and one row that opens it.
 @MainActor
 @Suite("Files tree rows")
 struct FilesTreeTests {
@@ -27,7 +23,6 @@ struct FilesTreeTests {
         IndexChild(path: path, isDirectory: folder, newest: IndexVersion(id: newest, time: .now), isInNewest: newest == "s2")
     }
 
-    /// Each row as text: an entry's path at its depth, "more N", or "status".
     private func text(_ rows: [FilesTree.Row]) -> [String] {
         rows.map { row in
             switch row {
@@ -59,9 +54,7 @@ struct FilesTreeTests {
             "2 /Docs/Work/r.txt",
             "1 /Docs/a.txt",
         ])
-        // Closing Docs hides everything under it, open or not.
         #expect(text(FilesTree.rows(under: roots, open: [work, notes], states: states)) == ["0 /Docs"])
-        // A level with no state, or an empty one, is one status row.
         #expect(text(FilesTree.rows(under: node("/x"), open: [], states: [:])) == ["0 status /x"])
         #expect(text(FilesTree.rows(under: node("/x"), open: [], states: [node("/x"): level([])])) == ["0 status /x"])
     }
@@ -91,7 +84,6 @@ struct FilesTreeTests {
         #expect(FilesTree.row(showing: big, in: rows).map { text([$0]) } == ["0 /Big"])
         let pastCap = children[FilesTree.rowCap + 2]
         #expect(FilesTree.row(showing: pastCap, in: rows).map { text([$0]) } == ["1 more 5 of /Big"])
-        // A closed folder's item, and another chain's, have no row yet.
         #expect(FilesTree.row(showing: node("/Other/x", folder: false), in: rows) == nil)
         let elsewhere = FileNode(repositoryID: repositoryID, chainKey: "swiftrestic-plan-bbbb", path: pastCap.path, isDirectory: false)
         #expect(FilesTree.row(showing: elsewhere, in: rows) == nil)
@@ -128,8 +120,6 @@ struct FilesTreeTests {
         // In the scalar view: a Prepend character before the slash stays.
         #expect(ResticPath.parent(of: "/d\u{0600}/x") == "/d\u{0600}")
     }
-
-    // MARK: - The disk beside the backups
 
     @Test("a folder's rows are the disk's items, each not backed up only once the index has read every backup and found none of it, then what only the backups hold")
     func diskBesideTheBackups() {
@@ -189,12 +179,9 @@ struct FilesTreeTests {
         let rows = text(FilesTree.rows(under: docs, open: [], states: states))
         #expect(rows.count == FilesTree.rowCap + 1)
         #expect(rows.last == "0 more 2 of /Docs")
-        // A folder whose items are all gone is empty on this Mac.
         let empty: [FileNode: FilesTree.State] = [docs: .loaded(FilesTree.Level(entries: [gone], isComplete: true))]
         #expect(text(FilesTree.rows(under: docs, open: [], states: empty)) == ["0 status /Docs"])
 
-        // Show Deleted Items lists them after the folder's own, the cap
-        // counting them too.
         let shown = text(FilesTree.rows(under: docs, open: [], showsDeleted: true, states: states))
         #expect(shown.count == FilesTree.rowCap + 1)
         #expect(shown.last == "0 more 3 of /Docs")
@@ -230,11 +217,9 @@ struct FilesTreeTests {
         func reveal(_ path: String, folder: Bool = false, turn: UInt64 = 2) -> FilesTree.Reveal {
             FilesTree.reveal(node(path, folder: folder), under: roots, open: [data], states: states, turn: turn)
         }
-        // On this Mac: its row is there already.
         #expect(reveal("/Data", folder: true) == .nothing)
         #expect(reveal("/Data/Notes.md") == .nothing)
         #expect(reveal(nfd) == .nothing)
-        // Listed only as deleted, by its bytes.
         #expect(reveal("/Data/notes.md") == .showDeleted)
         #expect(reveal(nfc) == .showDeleted)
         // Under a deleted folder, whose level is not read while the toggle
@@ -242,9 +227,7 @@ struct FilesTreeTests {
         #expect(reveal("/Data/Drafts/draft1.txt") == .showDeleted)
         // Under a folder of this Mac left closed: folded away either way.
         #expect(reveal("/Data/Archive/old.txt") == .nothing)
-        // In no level, nothing to list.
         #expect(reveal("/Data/elsewhere.txt") == .nothing)
-        // Another chain's item is not this tab's.
         #expect(FilesTree.reveal(
             FileNode(repositoryID: repositoryID, chainKey: "swiftrestic-plan-bbbb", path: "/Data/notes.md", isDirectory: false),
             under: roots, open: [data], states: states, turn: 2
@@ -294,7 +277,6 @@ struct FilesTreeTests {
         await tree.keep([folder, away], model: model)
         #expect(reads.value == 2)
         #expect(tree.state(of: away) == .unavailable(.volumeAway(volume: "Gone"), diskGeneration: 0))
-        // Current: nothing is read again, the unlisted folder included.
         await tree.keep([folder, away], model: model)
         #expect(reads.value == 2)
 
@@ -388,7 +370,6 @@ struct FilesTreeTests {
             secrets: .inMemory([:])
         )
         let folder = node("/Data")
-        // A subfolder first, then more files than the tree lists.
         let files = (0 ..< FilesTree.rowCap + 5).map { node(String(format: "/Data/f%03d.txt", $0), folder: false) }
         // A file no backup holds has no versions to read.
         let unsaved = entry(node("/Data/zz-new.txt", folder: false), .notBackedUp)
@@ -457,8 +438,6 @@ struct FilesTreeTests {
         }
         #expect(level.entries == read.entries)
     }
-
-    // MARK: - Search
 
     @Test("a search's hits list by name as Finder sorts names, one name's by path, each the tree row it selects, dimmed when no longer on this Mac")
     func searchHitsOrder() {
@@ -529,7 +508,6 @@ struct FilesTreeTests {
         #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/a.txt", under: [documents]) == "Documents")
         // The root itself sits at its parent — no shorter line exists.
         #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents", under: [documents]) == tilde("/Users/me"))
-        // Outside every root: the tilde line.
         #expect(FilesSearchAnswer.folderLine(for: "/Volumes/Elsewhere/x.txt", under: [documents]) == tilde("/Volumes/Elsewhere"))
 
         // Two roots, one inside the other: the deepest holder wins, so the
@@ -544,13 +522,11 @@ struct FilesTreeTests {
     }
 }
 
-/// What a test's tree asked to read ahead, one list per level.
 @MainActor
 private final class WarmLog {
     var calls: [[FileNode]] = []
 }
 
-/// How many reads a test's level reader has answered.
 @MainActor
 private final class ReadCount {
     var value = 0

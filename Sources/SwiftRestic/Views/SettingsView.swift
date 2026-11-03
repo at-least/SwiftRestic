@@ -10,7 +10,6 @@ struct SettingsView: View {
     /// Arms the "you can strand the app" confirmation: menu bar item off and
     /// window closed leaves the scheduler running with no visible way back.
     @State private var isConfirmingMenuBarOff = false
-    /// The network share whose Remove asks first.
     @State private var removingShare: NetworkShare?
 
     /// The login switch's caption: what it means while off, in the plan
@@ -178,8 +177,6 @@ struct SettingsView: View {
                 }
             }
 
-            // Saved from the repository and plan editors, where a folder on
-            // a share asks for its password.
             if !model.configuration.settings.networkShares.isEmpty {
                 Section("Network shares") {
                     ForEach(model.configuration.settings.networkShares) { share in
@@ -213,7 +210,6 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    /// This Mac's own notifications; webhooks are the next pane's.
     private func notificationsTab(model: AppModel) -> some View {
         @Bindable var model = model
         return Form {
@@ -378,7 +374,6 @@ private struct FullDiskAccessStatusLabel: View {
 }
 
 
-/// Webhook, chat and dead-man's-switch destinations.
 struct NotificationChannelsTab: View {
     @Environment(AppModel.self) private var model
     @State private var selection: NotificationChannel.ID?

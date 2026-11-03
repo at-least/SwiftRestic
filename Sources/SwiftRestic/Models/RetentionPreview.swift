@@ -44,8 +44,6 @@ struct RetentionPreview: Sendable, Equatable {
         )
     }
 
-    /// The sheet's sentence: how many of the plan's snapshots go, which
-    /// ones by date, and how many stay.
     var summary: String {
         let total = kept.count + removed.count
         guard total > 0 else { return "This plan has no backups in the repository yet." }
@@ -74,8 +72,6 @@ struct RetentionPreview: Sendable, Equatable {
         return "With these rules, \(Format.plural(total, "backup")) would become \(kept.count)."
     }
 
-    /// The run record's Detail after the real forget: what went, and
-    /// whether its data went with it (the plan's "Also clean up").
     static func appliedSummary(removed: Int, pruned: Bool) -> String {
         guard removed > 0 else { return "No backups needed removing." }
         let snapshots = Format.plural(removed, "backup")

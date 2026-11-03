@@ -17,7 +17,6 @@ import Observation
 @MainActor
 @Observable
 final class FilesTree {
-    /// One child row of a level.
     struct Entry: Hashable, Identifiable {
         let node: FileNode
         let standing: Standing
@@ -25,7 +24,6 @@ final class FilesTree {
         var id: FileNode { node }
     }
 
-    /// Where an item stands between this Mac and the plan's backups.
     enum Standing: Hashable {
         /// On this Mac, and a backup of the plan holds it — or the index,
         /// still reading, has not read one that does yet.
@@ -71,7 +69,6 @@ final class FilesTree {
         case entry(Entry, depth: Int)
         /// The entries past `rowCap`, one row that opens the folder.
         case more(FileNode, count: Int, depth: Int)
-        /// A level still reading, unavailable, failed, or empty.
         case status(FileNode, depth: Int)
 
         var id: Self { self }
@@ -92,11 +89,7 @@ final class FilesTree {
     /// Which read each level's state is waiting on: a read whose `keep` was
     /// cancelled must not write over one a later `keep` started.
     private var readTokens: [FileNode: UUID] = [:]
-    /// Reads one level: the disk and the index (`level(of:model:)`), or a
-    /// test's own.
     private let read: @MainActor (FileNode, AppModel) async throws -> Level
-    /// Reads ahead the version rows of a level's files
-    /// (`AppModel.warmFileHistory`), or a test's own.
     private let warm: @MainActor ([FileNode], AppModel) -> Void
 
     init(
@@ -147,15 +140,10 @@ final class FilesTree {
         )
     }
 
-    /// The rows under `parent`, recursing into the open folders whose levels
-    /// are loaded.
     func rows(under parent: FileNode, open: Set<FileNode>, showsDeleted: Bool) -> [Row] {
         Self.rows(under: parent, open: open, showsDeleted: showsDeleted, states: states)
     }
 
-    /// `rows(under:open:showsDeleted:)` over given levels — the pure rule
-    /// the instance reads its own levels through. What only the backups
-    /// hold is left out unless Show Deleted Items asks for it.
     static func rows(
         under parent: FileNode,
         open: Set<FileNode>,
@@ -237,7 +225,6 @@ final class FilesTree {
                 guard read.diskGeneration >= turn else { return .wait }
                 level = read
             }
-            // The entry on the item's way: the item, or the folder above it.
             guard let next = level.entries.first(where: { ResticPath.holds($0.node.path, item.path) }) else {
                 // An index still reading may not have reached a backup
                 // that holds it.
@@ -249,8 +236,6 @@ final class FilesTree {
         }
     }
 
-    /// The levels the rows under `parent` need: `parent` and every open
-    /// folder shown under it.
     func needed(under parent: FileNode, open: Set<FileNode>, showsDeleted: Bool) -> [FileNode] {
         var nodes = [parent]
         for case let .entry(entry, _) in rows(under: parent, open: open, showsDeleted: showsDeleted)
@@ -345,8 +330,6 @@ final class FilesTree {
         }
     }
 
-    /// One level as the disk and the index answer it: the plan's folder at
-    /// the top, a folder's items below.
     static func level(of node: FileNode, model: AppModel) async throws -> Level {
         node.isRoots ? try await root(of: node, model: model) : try await folder(node, model: model)
     }
@@ -448,16 +431,12 @@ final class FilesTree {
         }
     }
 
-    /// The browser's order (`ResticService.sortedForBrowser`): folders
-    /// first, then names as Finder sorts them.
     nonisolated private static func sorted(_ entries: [Entry]) -> [Entry] {
         ResticService.sortedForBrowser(entries, name: { $0.node.name }, isDirectory: { $0.node.isDirectory })
     }
 }
 
 extension FilesTree.Entry {
-    /// The row's tooltip, the tree's and a search hit's: the item's whole
-    /// path, or for one marked, its standing.
     func help(notRead: String?) -> String {
         switch standing {
         case .onDisk: node.path
@@ -466,8 +445,6 @@ extension FilesTree.Entry {
         }
     }
 
-    /// The mark as VoiceOver reads it after the name, nil for an item on
-    /// this Mac that the backups hold.
     func spokenStanding(notRead: String?) -> String? {
         switch standing {
         case .onDisk: nil
@@ -476,8 +453,6 @@ extension FilesTree.Entry {
         }
     }
 
-    /// What the row's tag says beside the name, nil for an item on this
-    /// Mac that the backups hold.
     var tag: String? {
         switch standing {
         case .onDisk: nil
@@ -486,8 +461,6 @@ extension FilesTree.Entry {
         }
     }
 
-    /// For an item on this Mac no backup holds: that, and why — the row's
-    /// tooltip.
     static func notBackedUp(notRead: String?) -> String {
         "Not backed up. " + notBackedUpReason(notRead: notRead)
     }
@@ -501,7 +474,6 @@ extension FilesTree.Entry {
         notRead.map { "The newest backup could not read it (\($0))" } ?? "No backup of this plan holds it"
     }
 
-    /// For an item only the backups hold: when it was last backed up.
     static func deleted(lastBackedUp: Date) -> String {
         "Not on this Mac — last backed up \(Format.timestamp(lastBackedUp))"
     }
@@ -526,8 +498,6 @@ struct FilesLoadKey: Equatable {
     let rereads: Int
 }
 
-/// A Files tab's search answer — the chain's hits, or why there are none —
-/// with the search it answers.
 struct FilesSearchAnswer: Equatable {
     enum Outcome: Equatable {
         case hits([FilesTree.Entry])
@@ -540,7 +510,6 @@ struct FilesSearchAnswer: Equatable {
     /// Whether the index had read every backup of the repository when it
     /// answered: until then older backups' items may be missing.
     let isComplete: Bool
-    /// Whether the chain holds more hits than the list shows.
     let isTruncated: Bool
 
     /// The index's words while it has backups still to read — the Files
@@ -575,9 +544,6 @@ struct FilesSearchAnswer: Equatable {
             }
     }
 
-    /// What the hits' footer says, if anything: that the chain holds more
-    /// than the list shows (`searchTruncated`), or that the index can still
-    /// be missing matches (`searchStillReading`).
     @MainActor static func note(isTruncated: Bool, isComplete: Bool) -> String? {
         if isTruncated { return searchTruncated }
         return isComplete ? nil : searchStillReading

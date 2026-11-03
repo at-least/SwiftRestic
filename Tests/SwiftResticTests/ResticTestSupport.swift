@@ -1,7 +1,5 @@
 import Foundation
 
-// Test-only extension of ResticService, for the real-restic suites.
-
 extension ResticService {
     /// Restores an entire snapshot, keeping the original directory layout below
     /// `destinationDirectory`. No production surface offers a whole-backup

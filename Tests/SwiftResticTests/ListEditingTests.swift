@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The two editors' remove rule (`removeKeepingNeighbourSelected`): after a
-/// removal the selection moves to the row that took the removed one's
-/// place, else the last.
 @Suite("List editing")
 struct ListEditingTests {
     private struct Row: Identifiable, Equatable {

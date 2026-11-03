@@ -2,16 +2,10 @@ import Foundation
 import GRDB
 import Testing
 
-/// Backfill against the real restic binary: reconcile a listing of real
-/// snapshots, read them through `restic ls` and `restic diff` into the
-/// index, and check the answers against what restic itself lists. Skipped
-/// when restic is not installed, like the other integration suites.
 @Suite("index backfill", .serialized, .enabled(if: ResticAvailability.isInstalled))
 struct IndexBackfillTests {
     private static let password = "integration-test-password"
 
-    /// A local repository with one plan backing up `source`, in a fresh
-    /// temporary folder that `remove()` deletes.
     private struct Scene {
         let root: URL
         let source: URL
@@ -59,7 +53,6 @@ struct IndexBackfillTests {
         return Scene(root: root, source: source, repository: repository, plan: plan, context: context, service: service)
     }
 
-    /// One snapshot's every node straight from `restic ls`: path → isDirectory.
     /// The truth the index answers are checked against — nothing of the index
     /// is involved in building it.
     private func lsContent(_ scene: Scene, _ snapshotID: String) async throws -> [String: Bool] {
@@ -70,14 +63,6 @@ struct IndexBackfillTests {
         return collector.content
     }
 
-    /// The two searches the app runs, each answering its second question in
-    /// the same read — Find Files' hit with its summary (count and newest),
-    /// the Restore pane's membership with the kind in each snapshot — over
-    /// every path either snapshot holds, against `restic ls` itself; plus
-    /// the path-keyed oracles the tests hold them to: `versions` across every
-    /// chain (newest first), `contains` with the kind in each snapshot, and
-    /// search's kind. The app's per-chain `versions` read is checked where
-    /// a plan's chain is (`versions(ofPath:inChain:)`, further down).
     private func expectAnswersMatch(
         _ coordinator: IndexCoordinator,
         _ repositoryID: UUID,
@@ -99,7 +84,6 @@ struct IndexBackfillTests {
             let hit = hits.first(where: { $0.path == path })
             #expect(hit?.isDirectory == kind, "search kind of \(path)", sourceLocation: sourceLocation)
 
-            // Find Files' read: the same hit, with its summary beside it.
             let summarized = try await coordinator.searchWithSummaries(
                 matching: ResticPath.basename(of: path), repositoryID: repositoryID, limit: 200
             )
@@ -112,8 +96,6 @@ struct IndexBackfillTests {
         for snapshot in [newest, older] {
             let held = try await coordinator.kinds(of: paths, inSnapshot: snapshot.id, repositoryID: repositoryID)
             #expect(held == snapshot.content.byPathKey, "contains in \(snapshot.id)", sourceLocation: sourceLocation)
-            // The Restore pane's read: each path's kind in this snapshot,
-            // from its own search.
             for path in paths {
                 let found = try await coordinator.searchWithMembership(
                     matching: ResticPath.basename(of: path), inSnapshot: snapshot.id,
@@ -163,8 +145,6 @@ struct IndexBackfillTests {
         ).map(\.id) == [secondID, firstID])
         #expect(try await coordinator.versions(ofPath: stable, inChain: "swiftrestic-plan-other", repositoryID: repositoryID).isEmpty)
 
-        // The summaries agree with the single path, and leave a
-        // never-indexed path absent.
         let asked = [changed, stable, "/data/never.indexed"]
         let summaries = try await coordinator.versionSummaries(ofPaths: asked, repositoryID: repositoryID)
         let newestChanged = try #require(changedVersions.first)
@@ -254,7 +234,6 @@ struct IndexBackfillTests {
         try scene.write("now a file too", "link")
         let secondID = try await scene.backup()
 
-        // The collector refuses exactly that diff.
         let collector = DeltaCollector()
         try await scene.service.walkDiff(scene.context, olderID: firstID, newerID: secondID) { change in
             collector.consume(change)
@@ -272,8 +251,6 @@ struct IndexBackfillTests {
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: 2)
         await coordinator.runBackfill(repositoryID: repositoryID, service: scene.service, context: scene.context)
 
-        // The forward delta was tried, abandoned on the `T`, and the full
-        // route built the snapshot instead.
         let report = await coordinator.lastBackfillReport(repositoryID: repositoryID)
         #expect(report?.typeChange == 1)
         #expect(report?.deltas == 0)
@@ -376,7 +353,6 @@ struct IndexBackfillTests {
     }
 }
 
-/// A lock-guarded counter, for generation numbers handed out from a hook.
 private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
     private var value: UInt64
@@ -394,23 +370,18 @@ private final class Counter: @unchecked Sendable {
 }
 
 extension IndexCoordinator {
-    /// The indexed snapshots holding one path across every chain, newest
-    /// first: the store's oracle read, through the coordinator's lease.
     /// Test-only — the app always asks within a plan's chain
     /// (`versions(ofPath:inChain:repositoryID:)`).
     nonisolated func versions(ofPath path: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await read(repositoryID) { try await $0.versions(ofPath: path) }
     }
 
-    /// Per path: how many indexed snapshots hold it, and the newest — the
-    /// store's path-keyed oracle, through the coordinator's lease.
     /// Test-only — Find Files reads each hit's summary inside its search
     /// (`searchWithSummaries(matching:repositoryID:limit:)`).
     nonisolated func versionSummaries(ofPaths paths: [String], repositoryID: UUID) async throws -> [PathKey: VersionSummary] {
         try await read(repositoryID) { try await $0.versionSummaries(ofPaths: paths) }
     }
 
-    /// Basename search across every indexed path, the hits alone.
     /// Test-only — both searches the app runs answer their second question
     /// in the same read (`searchWithMembership`, `searchWithSummaries`).
     nonisolated func searchPaths(matching query: String, repositoryID: UUID, limit: Int) async throws -> [SearchHit] {
@@ -432,21 +403,15 @@ struct IndexCoordinatorTombstoneTests {
         await scene.reconcile([], 1)
 
         await coordinator.dropRepository(repositoryID: repositoryID)
-        // The path-keyed reads the tests hold the searches to: the
-        // summaries, and the membership in one backup.
         do {
             _ = try await coordinator.versionSummaries(ofPaths: ["/data/a"], repositoryID: repositoryID)
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {
-            // The answer a search must surface, never read as "no versions".
         }
         do {
             _ = try await coordinator.kinds(of: ["/data/a"], inSnapshot: "s1", repositoryID: repositoryID)
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {}
-        // The two searches the app runs, each reading that answer inside the
-        // search: Find Files' with its summaries, and the Restore pane's
-        // with the open backup's membership.
         do {
             _ = try await coordinator.searchWithSummaries(matching: "a", repositoryID: repositoryID, limit: 10)
             Issue.record("expected repositoryRemoved, got a result")
@@ -457,7 +422,6 @@ struct IndexCoordinatorTombstoneTests {
             )
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {}
-        // The caches read a removed repository as a miss, and recreate nothing.
         #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/", repositoryID: repositoryID) == nil)
         #expect(!FileManager.default.fileExists(atPath: coordinator.fileURL(for: repositoryID).path))
     }
@@ -468,7 +432,6 @@ struct IndexCoordinatorTombstoneTests {
         defer { scene.remove() }
         let file = scene.coordinator.fileURL(for: scene.repositoryID)
         try FileManager.default.createDirectory(at: scene.coordinator.indexDirectory, withIntermediateDirectories: true)
-        // A populated file of this schema, then stamped as another.
         let seeded = try SnapshotIndex(path: file.path)
         _ = try seeded.reconcile(listing: [try CoordinatorScene.snapshot("s1", 1)])
         try seeded.ingestWhole("s1", IndexTestData.ls(CoordinatorScene.content("s1")))
@@ -549,11 +512,9 @@ struct IndexCoordinatorGenerationTests {
         #expect(try await scene.versions(path) == ["newer", "older"])
         #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
 
-        // The same number again is not newer either.
         await scene.reconcile([older], 5)
         #expect(try await scene.versions(path) == ["newer", "older"])
 
-        // A genuinely newer listing that omits it is the truth: it lands.
         await scene.reconcile([older], 6)
         #expect(try await scene.versions(path) == ["older"])
     }
@@ -616,12 +577,6 @@ struct IndexCoordinatorGenerationTests {
 /// as a wrong Files view.
 @Suite("index coordinator read wrappers")
 struct IndexCoordinatorReadWrapperTests {
-    /// Two snapshots of one plan whose children under /data share nothing:
-    /// s1 holds a.txt and dir/ (with dir/x), s2 holds b.txt and x.txt. The
-    /// expected changes follow from the store-level semantics the
-    /// SnapshotIndexFilesTests suites pin: byte-sorted added and removed,
-    /// removedFolders for the removed children that were folders, and
-    /// modified/uncertain only for names both snapshots hold.
     private func makeScene() async throws -> (CoordinatorScene, IndexCoordinator, UUID) {
         let scene = try CoordinatorScene("SwiftResticReadWrappers")
         let client = MockResticClient().onListings([
@@ -651,9 +606,6 @@ struct IndexCoordinatorReadWrapperTests {
         #expect(forward?.modified.isEmpty == true)
         #expect(forward?.uncertain.isEmpty == true)
 
-        // The other way round, the sets swap and no removed child was a
-        // folder — the same shape `SnapshotIndexFilesTests.folderChanges`
-        // pins at the store level.
         let reverse = try await coordinator.changes(
             underPath: "/data", inChain: planA, from: "s2", to: "s1", repositoryID: repositoryID
         )
@@ -701,8 +653,6 @@ struct IndexCoordinatorReadWrapperTests {
     }
 }
 
-/// The launch sweep of orphaned index files, without restic: which files it
-/// deletes, and — the half that matters more — which it must never touch.
 @Suite("index orphan sweep")
 struct IndexOrphanSweepTests {
     @Test("only unconfigured UUID-named files in index/ go; the configuration folder's own .sqlite files stay")
@@ -720,7 +670,6 @@ struct IndexOrphanSweepTests {
         await coordinator.reconcile(repositoryID: configured, snapshots: [], generation: 1)
         await coordinator.reconcile(repositoryID: openButUnlisted, snapshots: [], generation: 1)
 
-        // An orphan with both sidecars, and names that are not index files.
         let orphan = UUID()
         let index = coordinator.indexDirectory
         // SQLite's own names for a database's files, spelled here rather than
@@ -746,7 +695,6 @@ struct IndexOrphanSweepTests {
         #expect(fileManager.fileExists(atPath: coordinator.fileURL(for: configured).path))
         #expect(fileManager.fileExists(atPath: coordinator.fileURL(for: openButUnlisted).path))
 
-        // No index folder yet: nothing to sweep, and nothing created.
         let empty = root.appendingPathComponent("fresh")
         let fresh = IndexCoordinator(directory: empty)
         await fresh.sweepOrphanFiles(configured: [])
@@ -912,7 +860,6 @@ struct IndexCoordinatorBackfillTests {
         let client = MockResticClient()
             .onListings(["a1": CoordinatorScene.content("a1"), "a2": CoordinatorScene.content("a2")])
             .onUnreadable(["a2"])
-        // Launch 1: a2 fails `unreadableAfter` passes and is set aside.
         let listing = [try CoordinatorScene.snapshot("a1", 10), try CoordinatorScene.snapshot("a2", 20)]
         await scene.reconcile(listing, 1)
         for _ in 0 ..< IndexCoordinator.unreadableAfter { await scene.backfill(client) }
@@ -1014,7 +961,6 @@ struct IndexCoordinatorBackfillTests {
         #expect(report?.deltas == 0 && report?.fulls == 0)
         #expect(try await scene.versions("/data/common.txt") == ["s1"])
 
-        // The same snapshot, read cleanly on a later pass, lands by its diff.
         _ = client.onMalformed([:])
         await scene.reconcile([try CoordinatorScene.snapshot("s1", 1), try CoordinatorScene.snapshot("s2", 2)], 3)
         await scene.backfill(client)
@@ -1179,11 +1125,8 @@ struct IndexCoordinatorBackfillTests {
         let report = await scene.report
         #expect(report?.fullFailed == 0)
         #expect(report?.fulls == 0)
-        // Nothing ran after the cancelled walk: no fallback, no next snapshot.
         #expect(client.walkCounts == ["s2": 1])
 
-        // Readable now, and still nothing is walked: the coordinator is
-        // shut down.
         _ = client.onHangingWalks([])
         await scene.coordinator.runBackfill(repositoryID: scene.repositoryID, service: client, context: scene.context)
         await scene.coordinator.startBackfill(repositoryID: scene.repositoryID, service: client, context: scene.context)
@@ -1232,8 +1175,6 @@ struct IndexCoordinatorBackfillTests {
     }
 }
 
-/// What a reset and the reads do to each other, and that the reads never
-/// need the actor.
 @Suite("index coordinator concurrency")
 struct IndexCoordinatorConcurrencyTests {
     @Test("N11: a reset waits for a running read, holds new reads at its gate, and leaves a healthy file")
@@ -1250,7 +1191,6 @@ struct IndexCoordinatorConcurrencyTests {
         await coordinator.cacheWritesSettled()
         #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/data", repositoryID: repositoryID) == [])
 
-        // A read that is running when the reset starts, held open.
         let entered = Flag()
         let release = Flag()
         let running = Task {
@@ -1367,7 +1307,6 @@ struct IndexCoordinatorConcurrencyTests {
             let hits = try await coordinator.searchPaths(matching: "f1", repositoryID: repositoryID, limit: 5)
             let summaries = try await coordinator.versionSummaries(ofPaths: ["/data/f7.txt"], repositoryID: repositoryID)
             let held = try await coordinator.kinds(of: ["/data/f7.txt"], inSnapshot: "s1", repositoryID: repositoryID)
-            // The two searches the app runs: the Restore pane's and Find Files'.
             let membership = try await coordinator.searchWithMembership(
                 matching: "f1", inSnapshot: "s1", repositoryID: repositoryID, limit: 5
             )
@@ -1394,7 +1333,6 @@ struct IndexCoordinatorConcurrencyTests {
         #expect(summarized.summaries["/data/f7.txt"]?.count == 1)
         #expect(complete)
         await reconcile.value
-        // The reconcile landed once the writer was free: s2 is pending now.
         #expect(try await !coordinator.isComplete(repositoryID: repositoryID))
     }
 
@@ -1507,7 +1445,6 @@ struct IndexCoordinatorConcurrencyTests {
         await reset.value
         let answered = await eventually(within: 10) { waitingDone.isSet }
         #expect(answered, "the read parked at the gate was not woken when the reset ended")
-        // It answered from the fresh, empty file.
         if answered { #expect(try await waiting.value.isEmpty) }
     }
 

@@ -1,8 +1,7 @@
 import Foundation
 
 extension AppModel {
-    /// Hands a freshly loaded listing to the index and keeps its backfill
-    /// moving. Everything here is best-effort: the index is a cache, and its
+    /// Everything here is best-effort: the index is a cache, and its
     /// failure never fails the refresh that fed it — the coordinator
     /// records the error and the app keeps reading snapshots through restic.
     ///
@@ -59,17 +58,12 @@ extension AppModel {
         return listingGeneration
     }
 
-    /// The backups of one chain — a plan's tag, or a lineage's key — that
-    /// hold one path, newest first, from the index. Throws when the index
-    /// fails: the Files view says so, rather than reading a broken index as
-    /// "no backup holds it".
+    /// Throws when the index fails: the Files view says so, rather than
+    /// reading a broken index as "no backup holds it".
     func indexedHolders(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
-    /// The folders the plan's newest indexed backup holds that a build tool
-    /// makes again (`RebuildableFolder`), less the ones it already skips by
-    /// path and the ones the user kept. Throws when the index fails.
     func rebuildableFolders(planID: UUID) async throws -> [RebuildableFolder] {
         guard let plan = plan(id: planID), let repositoryID = plan.repositoryID else { return [] }
         let found = try await indexCoordinator.foldersBesideManifests(
@@ -81,22 +75,19 @@ extension AppModel {
         return RebuildableFolder.offered(found, to: current)
     }
 
-    /// What one chain ever held directly under `path`, from the index. Throws
-    /// when the index fails: the Files view says so beside the fallback it
-    /// lists instead, rather than reading a broken index as an empty folder.
+    /// Throws when the index fails: the Files view says so beside the
+    /// fallback it lists instead, rather than reading a broken index as an
+    /// empty folder.
     func indexedChildren(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
         try await indexCoordinator.children(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
-    /// One path's content versions within one chain, from the index. Throws
-    /// when the index fails, as `indexedChildren` does.
     func indexedContentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await indexCoordinator.contentVersions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
-    /// What changed directly under one folder from one backup of its chain
-    /// to another, from the index — no restic. Nil when the index has not
-    /// read both; throws when it fails, as `indexedChildren` does.
+    /// Nil when the index has not read both; throws when it fails, as
+    /// `indexedChildren` does.
     func indexedChanges(
         underPath path: String,
         inChain chainKey: String,
@@ -109,7 +100,6 @@ extension AppModel {
         )
     }
 
-    /// Which of `paths` the snapshot holds, each with its kind there.
     func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
         try await indexCoordinator.kinds(of: paths, inSnapshot: snapshotID, repositoryID: repositoryID)
     }
@@ -268,7 +258,6 @@ extension AppModel {
     }
 }
 
-/// One comparison's marks for the restore browser's Change column.
 struct ChangeMarks: Equatable, Sendable {
     /// By bytes (`PathKey`), as every path map is: the NFC and NFD
     /// spellings of one name are two paths to restic, and a String key
@@ -299,8 +288,6 @@ private final class ChangeMap: @unchecked Sendable {
         storage[Self.key(change)] = change
     }
 
-    /// The key a change's row is stored under: the bytewise-normalized
-    /// path, a directory's trailing slash dropped (see `insert`).
     static func key(_ change: ResticDiffChange) -> PathKey { PathKey(ResticPath.normalized(change.path)) }
 
     var map: [PathKey: ResticDiffChange] {

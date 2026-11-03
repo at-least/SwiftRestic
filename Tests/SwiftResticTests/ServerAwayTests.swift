@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 
-/// A probe answer the test changes mid-run: the server going and coming.
 private actor ProbeAnswer {
     var current: ServerProbe.Outcome
     init(_ current: ServerProbe.Outcome) { self.current = current }
@@ -66,15 +65,12 @@ struct ServerAwayTests {
             let words = "“127.0.0.1” cannot be reached (connection refused)."
             #expect(model.snapshotListingOutcomes[repository.id] == .failed(words))
 
-            // The scheduler's first tick starts the due backup, which skips.
             await waitForRuns(1)
             let skipped = try #require(model.configuration.runs.first)
             #expect(skipped.outcome == .skipped)
             #expect(skipped.detailText == words)
             #expect(resticCommands().isEmpty, "restic ran: \(resticCommands())")
 
-            // The server back: the network's change reads the listing again and
-            // runs the plan whose backup it skipped.
             await answer.set(.reachable)
             await model.networkPathChanged()
             await waitForRuns(2)

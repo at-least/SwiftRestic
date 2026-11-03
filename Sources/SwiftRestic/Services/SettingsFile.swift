@@ -5,7 +5,6 @@ import Foundation
 /// one per read.
 struct SettingsFile: Hashable, Identifiable, Sendable {
     let id = UUID()
-    /// The file's name, as the confirmation and the banner say it.
     let name: String
     let configuration: AppConfiguration
 
@@ -63,7 +62,6 @@ struct SettingsFile: Hashable, Identifiable, Sendable {
 }
 
 extension AppConfiguration {
-    /// What Export Settings writes: everything but what stays with the Mac.
     var exported: AppConfiguration {
         var exported = self
         exported.keepMachineState(of: AppConfiguration())

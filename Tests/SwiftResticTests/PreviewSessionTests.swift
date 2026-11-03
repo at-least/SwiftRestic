@@ -1,10 +1,6 @@
 import Foundation
 import Testing
 
-/// The preview's copy lifecycle over real restic (`PreviewSession`): the
-/// file copied out of the repository into a temporary folder of its own,
-/// shown, and that folder deleted exactly once — whichever way the preview
-/// ends.
 @Suite("preview session", .serialized, .enabled(if: ResticAvailability.isInstalled))
 @MainActor
 struct PreviewSessionTests {
@@ -13,12 +9,9 @@ struct PreviewSessionTests {
         var model: AppModel
         var repository: Repository
         var snapshotID: String
-        /// The one file the backup holds.
         var fileNode: SnapshotNode
     }
 
-    /// A folder with one file; a plan of it that skips nothing, on a fresh
-    /// repository, backed up once; the model booted on it.
     private func makeScene() async throws -> Scene {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticPreviewSession-\(UUID().uuidString)")
@@ -59,7 +52,6 @@ struct PreviewSessionTests {
         return Scene(root: root, model: model, repository: repository, snapshotID: snapshot.id, fileNode: node)
     }
 
-    /// The preview copies still under the model's staging directory.
     private func previewFolders(in model: AppModel) -> [URL] {
         let contents = (try? FileManager.default.contentsOfDirectory(at: model.stagingDirectory, includingPropertiesForKeys: nil)) ?? []
         return contents.filter { $0.lastPathComponent.hasPrefix(AppModel.previewPrefix) }

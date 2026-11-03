@@ -34,7 +34,6 @@ struct SidebarView: View {
     @FocusState private var isFocused: Bool
 
     let onEditPlan: (BackupPlan) -> Void
-    /// Opens the plan editor, with the repository preset when one is given.
     let onNewPlan: (_ repositoryID: UUID?) -> Void
     let onEditRepository: (Repository) -> Void
     let onNewRepository: () -> Void
@@ -196,8 +195,6 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Repository
-
     /// The trunk: Arq's storage-location row, the target of its page. It
     /// never folds — its children are the next level of the tree, always in
     /// view.
@@ -274,8 +271,6 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Children
-
     @ViewBuilder
     private func childRows(_ child: SidebarChild, of repository: Repository, shelves: BackupShelves) -> some View {
         switch child {
@@ -323,8 +318,6 @@ struct SidebarView: View {
         .accessibilityLabel("New Backup Plan for “\(model.label(of: repository))”")
     }
 
-    // MARK: - Plans
-
     /// A plan: the row opens its page, whose Backups tab lists what it
     /// made here. A plan is its folder and wears one; a file wears it too,
     /// decoration whose SF label ("Move") would only mislead. The row pads
@@ -344,8 +337,6 @@ struct SidebarView: View {
         .tag(SidebarItem.plan(plan.id))
         .contextMenu { planContextMenu(plan) }
     }
-
-    // MARK: - Other backups
 
     /// The caption over the backups in the repository none of its plans
     /// made — another Mac's, the console's, a deleted plan's, or a plan's
@@ -637,7 +628,6 @@ private struct PlanSidebarRow: View {
 struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID
-    /// The plan whose page this is, when Back Up Now is on offer.
     let planID: UUID?
 
     var body: some View {

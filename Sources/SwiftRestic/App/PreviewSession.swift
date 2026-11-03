@@ -77,15 +77,13 @@ final class PreviewSession {
         }
     }
 
-    /// Stops a copy in flight, closes Quick Look and deletes the copy it
-    /// showed. Safe to call any number of times.
+    /// Safe to call any number of times.
     func end() {
         task?.cancel()
         task = nil
         closeShown()
     }
 
-    /// Closes Quick Look and deletes the copy it showed.
     private func closeShown() {
         url = nil
         if let copy {
@@ -115,8 +113,6 @@ final class PreviewSession {
 }
 
 extension View {
-    /// Shows `session`'s preview with Quick Look and deletes its copy when
-    /// the preview closes or the view goes.
     func previewSession(_ session: PreviewSession) -> some View {
         @Bindable var session = session
         return quickLookPreview($session.url)

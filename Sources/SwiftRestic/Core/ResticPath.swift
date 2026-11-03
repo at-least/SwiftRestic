@@ -20,7 +20,6 @@
 /// two names that differ only in Unicode normalization are two paths
 /// (`PathKey`).
 enum ResticPath {
-    /// The separator's one byte.
     static let separator = UInt8(ascii: "/")
 
     /// The spelling a path is keyed by: every trailing `/` stripped, except
@@ -83,13 +82,10 @@ enum ResticPath {
         return path.utf8.starts(with: insidePrefix(of: folder).utf8)
     }
 
-    /// What every path inside `folder` starts with: the folder and a
-    /// separator, the root alone for the root.
     static func insidePrefix(of folder: String) -> String {
         folder == "/" ? "/" : folder + "/"
     }
 
-    /// `name` inside `folder`.
     static func child(of folder: String, named name: String) -> String {
         insidePrefix(of: folder) + name
     }
@@ -119,8 +115,6 @@ extension String {
         return String(decoding: utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
     }
 
-    /// The string before `suffix`, cut by bytes; nil when it does not end
-    /// with it.
     func removingByteSuffix(_ suffix: String) -> String? {
         guard hasByteSuffix(suffix) else { return nil }
         return String(decoding: utf8.dropLast(suffix.utf8.count), as: UTF8.self)

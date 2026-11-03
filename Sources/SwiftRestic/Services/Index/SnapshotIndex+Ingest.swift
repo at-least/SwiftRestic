@@ -38,8 +38,6 @@ extension SnapshotIndex {
         var walk: Walk?
     }
 
-    // MARK: - Full route
-
     /// Starts the full-listing stream for `snapshotID`, ending any other: one
     /// stream at a time, and the stage belongs to it. The old stage's nodes
     /// that no run holds — a cancelled stream's, or one whose target died —
@@ -155,8 +153,6 @@ extension SnapshotIndex {
             throw IndexError.unknownSnapshot(target.hash)
         }
         if let lo = window.lo, let hi = window.hi {
-            // One step past either end of the window, as a delta extends it;
-            // inside it is `notAdjacent`.
             let forward: Bool
             if target.seq > hi {
                 forward = true
@@ -196,8 +192,6 @@ extension SnapshotIndex {
             try db.cachedStatement(sql: SQL.hkEnqueue).execute(arguments: [chainID, seq])
         }
     }
-
-    // MARK: - Delta route
 
     /// Builds `snapshotID` from a diff against `base`, in one transaction.
     /// `added` holds the target's paths absent from the base and `removed`
@@ -286,8 +280,6 @@ extension SnapshotIndex {
         }
     }
 
-    // MARK: - Quarantine
-
     /// Sets a pending snapshot aside (state 2) when the backfill cannot read
     /// it. The planner and the adjacency check see only state 0, so the
     /// window moves past it; no read claims it; `isComplete` stays false
@@ -310,8 +302,6 @@ extension SnapshotIndex {
         }
     }
 
-    // MARK: - The stage
-
     /// The snapshot whose stream the stage holds rows of, if any. It holds
     /// one snapshot's at most — `beginFull` clears another snapshot's before
     /// its session can stage a row, and only that session stages — so the
@@ -332,8 +322,6 @@ extension SnapshotIndex {
         try db.cachedStatement(sql: SQL.stageClear).execute()
         if queued { try collectNodes(db) }
     }
-
-    // MARK: - Shared write helpers
 
     private static func requireNoPending(_ db: Database, _ target: Target, between low: Int64, and high: Int64) throws {
         if try Bool.fetchOne(db.cachedStatement(sql: SQL.pendingBetween), arguments: [target.chainID, low, high]) == true {
@@ -358,8 +346,6 @@ extension SnapshotIndex {
         }
     }
 
-    // MARK: - Node writes
-
     /// Node-dictionary writes for one transaction. The FTS rows of every node
     /// it creates are written by one statement at the end (`indexNewNames`),
     /// keyed on the largest id before the first insert.
@@ -374,8 +360,6 @@ extension SnapshotIndex {
             lookup = try db.cachedStatement(sql: SQL.nodeLookup)
         }
 
-        /// The existing child `name` of `parent`, or nil: a lookup, never
-        /// a write.
         func existing(parent: Int64, name: String) throws -> Int64? {
             try Int64.fetchOne(lookup, arguments: [parent, name])
         }
@@ -436,9 +420,8 @@ extension SnapshotIndex {
         if let top = walk.last {
             return try nodes.child(parent: top.id, name: name, parentIsNew: top.created)
         }
-        // The parent is not on the stack: the walk starts over from the
-        // root, creating whatever is missing. A fresh memo, so each
-        // component's `created` comes from this very resolution.
+        // A fresh memo, so each component's `created` comes from this very
+        // resolution.
         var scratch: [[UInt8]: Int64] = [:]
         guard let fresh = try descend(String(decoding: parentKey, as: UTF8.self), memo: &scratch, step: {
             try nodes.child(parent: $0, name: $1, parentIsNew: $2)

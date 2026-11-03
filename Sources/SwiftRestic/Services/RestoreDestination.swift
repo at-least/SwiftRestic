@@ -14,7 +14,6 @@ enum RestoreOverwritePolicy: String, Sendable, CaseIterable {
     case keepExisting
     case replaceExisting
 
-    /// The `restic restore --overwrite` value.
     var resticValue: String {
         switch self {
         case .keepExisting: "never"
@@ -53,14 +52,12 @@ enum RestoreSubject: Sendable, Equatable {
     }
 }
 
-/// One of several items restored together.
 struct RestoreItem: Sendable, Equatable {
     var name: String
     var path: String
     var isDirectory: Bool
 }
 
-/// Whether the items can go back exactly where they were backed up from.
 enum OriginalLocation: Sendable, Equatable {
     /// Restore each item into its parent, `directories` (one per item, in
     /// order), and it lands at its own recorded path, `landings`.
@@ -160,8 +157,6 @@ enum RestoreDestinationRules {
         guard policy == .replaceExisting else { return [] }
         return landings.filter(exists)
     }
-
-    // MARK: - The file system's answers
 
     static func directoryExists(_ path: String) -> Bool {
         var isDirectory: ObjCBool = false

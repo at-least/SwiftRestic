@@ -31,9 +31,7 @@ struct FileVersionsView: View {
     /// would say "matches none" a moment before it matches.
     @State private var isReadingDetails = true
     @State private var destinationRequest: RestoreDestinationRequest?
-    /// The file as this Mac holds it now, read with the versions' details.
     @State private var disk: DiskFile?
-    /// Preview's copy and its Quick Look panel.
     @State private var previewer = PreviewSession()
     @FocusState private var listIsFocused: Bool
 
@@ -214,8 +212,6 @@ struct FileVersionsView: View {
         )
     }
 
-    /// What the pane says of the copy on this Mac, against the versions'
-    /// sizes and dates once the find has read them.
     private var diskLine: String? {
         disk?.line(
             versions: versions.map { version in (detail(of: version)?.size, detail(of: version)?.mtime) },
@@ -223,8 +219,6 @@ struct FileVersionsView: View {
         )
     }
 
-    /// A version's newest backup's node of the file, once the find has
-    /// answered.
     private func detail(of version: ContentVersion) -> SnapshotNode? {
         version.snapshots.first.flatMap { details[$0.id] }
     }
@@ -312,7 +306,6 @@ struct FileVersionsView: View {
 /// for a content several backups held, which backups.
 private struct FileVersionRow: View {
     let version: ContentVersion
-    /// The newest backup's node of the file, once the find has answered.
     let detail: SnapshotNode?
     /// The same for the version below, which the size change counts from.
     let olderDetail: SnapshotNode?

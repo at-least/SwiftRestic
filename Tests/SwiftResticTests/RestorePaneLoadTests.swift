@@ -9,7 +9,6 @@ struct RestorePaneLoadTests {
         case treeListed
     }
 
-    /// Records what the load did, in order.
     @MainActor
     private final class Recorder {
         var events: [Event] = []
@@ -20,8 +19,6 @@ struct RestorePaneLoadTests {
         try snapshotFixture(id: id, time: time, paths: ["/src"], includeShortID: true, hostname: "mac", tags: [])
     }
 
-    /// A comparison the test finishes when it chooses: what a slow
-    /// `restic diff` is to the load.
     private func heldCompare(
         _ recorder: Recorder
     ) -> (compare: @MainActor (Snapshot) async -> ChangeMarks, finish: (ChangeMarks) -> Void) {
@@ -49,8 +46,8 @@ struct RestorePaneLoadTests {
         }
     }
 
-    /// Lets the load run until the tree is listed, or gives up: a load that
-    /// waits for the comparison first never gets there while it is held.
+    /// Gives up: a load that waits for the comparison first never gets there
+    /// while it is held.
     private func untilTreeListed(_ recorder: Recorder) async {
         for _ in 0..<1000 where !recorder.events.contains(.treeListed) {
             await Task.yield()

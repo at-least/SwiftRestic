@@ -11,7 +11,6 @@ import Foundation
 /// repository's children one identity space: a bare `otherBackups` case
 /// makes one repository's node show up, empty, under the others too.
 enum SidebarChild: Hashable {
-    /// A plan.
     case plan(UUID)
     /// "New Backup Plan", only while the repository has no plan: the place
     /// its plans would be names the way to its first one.
@@ -22,7 +21,6 @@ enum SidebarChild: Hashable {
     case otherBackups(repositoryID: UUID)
 }
 
-/// The sidebar's shape, as rules apart from the view so they can be tested.
 enum SidebarTree {
     static func children(of repositoryID: UUID, in plans: [BackupPlan], hasOtherBackups: Bool) -> [SidebarChild] {
         let own = plans.filter { $0.repositoryID == repositoryID }.map { SidebarChild.plan($0.id) }
@@ -88,8 +86,6 @@ struct BackupShelves: Equatable {
         others.reduce(0) { $0 + $1.snapshots.count }
     }
 
-    /// The groups a repository's page offers to adopt: those with an
-    /// `adoptablePath(of:localHost:)`.
     func adoptableGroups(localHost: String) -> [OtherBackupsGroup] {
         others.filter { adoptablePath(of: $0, localHost: localHost) != nil }
     }

@@ -288,7 +288,6 @@ struct SwiftResticApp: App {
         }
         .windowResizability(.contentSize)
 
-        // Help ▸ SwiftRestic Help: the restic vocabulary the app assumes.
         Window("SwiftRestic Help", id: Self.helpWindowID) {
             ConceptsView()
         }

@@ -1,15 +1,11 @@
 import Foundation
 
-/// What the quit alert says, and which kind of alert it is: one that guards
-/// work in flight, or one that only informs about the schedule.
 struct QuitConfirmation: Equatable {
     var message: String
     var interruptsWork: Bool
 }
 
 extension AppModel {
-    // MARK: - Lifecycle
-
     /// Why quitting right now would interrupt restic work in flight — one
     /// full clause per kind of work, empty when the process is idle. The
     /// quit confirmation words itself from here, so the rule and its
@@ -285,7 +281,6 @@ extension AppModel {
         await flushSave()
     }
 
-    /// Finds the restic binary and reads its version, or records why it could not.
     func resolveBinary() async {
         do {
             // The locate probes stat every candidate path (and every PATH
@@ -313,7 +308,6 @@ extension AppModel {
         }
     }
 
-    /// The restic in use.
     var binary: ResticBinary? {
         guard case let .found(binary, _) = resticSearch else { return nil }
         return binary
@@ -321,21 +315,16 @@ extension AppModel {
 
     var isResticAvailable: Bool { binary != nil }
 
-    /// `restic version`'s answer for the restic in use; "" without one.
     var resticVersion: String {
         guard case let .found(_, version) = resticSearch else { return "" }
         return version
     }
 
-    /// What Settings says about the last search for restic.
     var binaryProblem: String? {
         guard case let .refused(_, problem) = resticSearch else { return nil }
         return problem
     }
 
-    /// Why no restic can run, in the words every other surface uses; nil
-    /// while one can. Before the first search answers, restic reads as
-    /// missing.
     var resticAbsence: ResticAbsence? {
         switch resticSearch {
         case .found: nil
@@ -344,16 +333,13 @@ extension AppModel {
         }
     }
 
-    /// A click that turns start at login on or off, wherever it comes from —
-    /// the Settings switch or the plan editor. Optimistic: the
-    /// mirror moves now, and the daemon's answer in `setStartsAtLogin`
-    /// confirms or corrects it.
+    /// Optimistic: the mirror moves now, and the daemon's answer in
+    /// `setStartsAtLogin` confirms or corrects it.
     func requestStartsAtLogin(_ enabled: Bool) {
         startsAtLogin = enabled
         Task { await setStartsAtLogin(enabled) }
     }
 
-    /// Registers or removes the login item, reporting whatever macOS says.
     /// The `SMAppService` calls are synchronous XPC round-trips to the
     /// background-task-management daemon, so each runs detached — a wedged
     /// daemon stalls a background task, not the main actor. Changes

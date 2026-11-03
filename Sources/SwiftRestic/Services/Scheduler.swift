@@ -35,8 +35,6 @@ enum ScheduleHold: Equatable, Sendable {
     }
 }
 
-/// Decides which plans are due to run.
-///
 /// Pure: the wall-clock timer lives in `AppModel`, so tests hand it a fixed
 /// `now`.
 enum Scheduler {
@@ -254,8 +252,6 @@ enum Scheduler {
         return "\(their) space is freed at the next cleanup, \(Format.timestamp(max(next, now)))."
     }
 
-    /// When `task` next runs: its due date, moved to a timed hold's end.
-    /// Nil when the task is off.
     static func nextMaintenanceDate(_ task: MaintenanceTask, of repository: Repository, hold: ScheduleHold?) -> Date? {
         repository.maintenance.nextDate(for: task, addedAt: repository.createdAt)
             .map { max($0, hold?.resumesAt ?? .distantPast) }

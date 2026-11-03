@@ -1,9 +1,6 @@
 import Foundation
 import Testing
 
-/// The projection's contract: for each non-zero rule the newest snapshot in
-/// each of the rule's most recent buckets survives, the newest `keepLast`
-/// always survive, and a snapshot that satisfies several rules survives once.
 @Suite("Retention projection")
 struct RetentionProjectionTests {
     private var utcCalendar: Calendar {

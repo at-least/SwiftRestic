@@ -10,8 +10,6 @@ struct PlanStatusTests {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
     private let repositoryID = UUID()
 
-    /// A daily plan the scheduler would run: named, pointed at an existing
-    /// repository, with a folder, last run an hour ago.
     private func completeDailyPlan() -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = repositoryID
@@ -20,8 +18,6 @@ struct PlanStatusTests {
         plan.lastRunAt = now.addingTimeInterval(-3600)
         return plan
     }
-
-    // MARK: - Next backup tile
 
     @Test("the plan editor's Next backup is the page's tile for the plan as Save would store it")
     func editorNextBackup() throws {
@@ -40,7 +36,6 @@ struct PlanStatusTests {
         #expect(face == PlanStatus.nextBackupTile(for: stored, existingRepositoryIDs: [repositoryID], now: now))
         #expect(face?.value != "Due now")
 
-        // The draft's schedule is what it shows: weekly moves the date.
         draft.schedule.frequency = .weekly
         #expect(PlanStatus.editorNextBackup(draft: draft, stored: stored, existingRepositoryIDs: [repositoryID], now: now)
             == PlanStatus.nextBackupTile(for: stored.merging(draft: draft), existingRepositoryIDs: [repositoryID], now: now))
@@ -95,8 +90,6 @@ struct PlanStatusTests {
 
     @Test("an enabled plan the scheduler skips reads Not scheduled, never a date")
     func skippedPlanTile() {
-        // A plan whose repository is gone, still enabled: the scheduler
-        // skips it.
         var orphaned = completeDailyPlan()
         orphaned.repositoryID = nil
         // The schedule still computes a date for it — the one the scheduler
@@ -113,7 +106,6 @@ struct PlanStatusTests {
                 == "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
         )
 
-        // A repository ID the configuration no longer holds is the same skip.
         let dangling = completeDailyPlan()
         #expect(
             PlanStatus.nextBackupTile(for: dangling, existingRepositoryIDs: [UUID()], now: now).value
@@ -261,7 +253,6 @@ struct PlanStatusTests {
         #expect(own.value == Format.tileTimestamp(later, now: now))
         #expect(own.help == Format.timestamp(later))
 
-        // The app-wide pause outlasts the plan's and sets the date.
         plan.pausedUntil = sooner
         let appWide = PlanStatus.nextBackupTile(
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: later), now: now
@@ -278,8 +269,6 @@ struct PlanStatusTests {
                 == "\(Format.timestamp(sooner)). \(ScheduleHold.onBattery.summary(now: now))"
         )
     }
-
-    // MARK: - Sidebar caption
 
     private func relative(_ date: Date) -> String { "5 minutes ago" }
 
@@ -352,7 +341,6 @@ struct PlanStatusTests {
         #expect(caption.outcome == .failed)
         #expect(caption.pauseNote == "Paused — \(plan.schedule.summary)")
 
-        // Unpaused, the problem stands alone.
         plan.isEnabled = true
         let unpaused = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: failed,
@@ -374,13 +362,11 @@ struct PlanStatusTests {
         #expect(openEnded == "Paused — \(plan.schedule.summary)")
         #expect(openEnded == PlanStatus.pauseCaption(for: plan, now: now, calendar: calendar))
 
-        // A timed pause: the sidebar's end, then the schedule it resumes.
         plan.isEnabled = true
         plan.pausedUntil = now.addingTimeInterval(3600)
         let end = Format.pauseEnd(now.addingTimeInterval(3600), now: now, calendar: calendar)
         #expect(PlanStatus.scheduleRow(for: plan, now: now, calendar: calendar) == "Paused until \(end) — \(plan.schedule.summary)")
 
-        // A manual plan switched off has no schedule to name.
         var manual = completeDailyPlan()
         manual.schedule.frequency = .manual
         manual.isEnabled = false
@@ -470,8 +456,6 @@ struct PlanStatusTests {
         )
         #expect(running == PlanCaption(text: "Backing up…", outcome: nil, pauseNote: nil))
     }
-
-    // MARK: - Status row
 
     private func run(_ outcome: RunRecord.Outcome) -> RunRecord {
         var run = RunRecord(kind: .backup, planID: UUID(), planName: "Documents", startedAt: now.addingTimeInterval(-60))
@@ -612,8 +596,6 @@ struct PlanStatusTests {
         #expect(summary.facts.isEmpty)
     }
 
-    // MARK: - Repository caption
-
     private func repository(kind: Repository.Kind, at path: String) -> Repository {
         var repository = Repository()
         repository.kind = kind
@@ -695,7 +677,6 @@ struct PlanLabelTests {
         #expect(homeFolder.label(among: [homeFolder]) == (NSHomeDirectory() as NSString).lastPathComponent)
         #expect(BackupPlan().label(among: []) == "Untitled Plan")
 
-        // Two Documents in one repository: each by its path.
         var mine = documents
         mine.path = NSHomeDirectory() + "/Documents"
         var drive = BackupPlan()
@@ -703,7 +684,6 @@ struct PlanLabelTests {
         drive.path = "/Volumes/Archive/Documents"
         #expect(mine.label(among: [mine, drive]) == "~/Documents")
         #expect(drive.label(among: [mine, drive]) == "/Volumes/Archive/Documents")
-        // In another repository the name is free again.
         var elsewhere = drive
         elsewhere.repositoryID = UUID()
         #expect(mine.label(among: [mine, elsewhere]) == "Documents")
@@ -761,7 +741,6 @@ struct RepositoryLabelTests {
         nasAgain.id = UUID()
         nasAgain.sftpPath = "/volume2/restic"
         #expect(nas.label(among: [nas, nasAgain]) == "sftp:nas.local:/volume1/restic")
-        // Another drive's folder of the same name is no twin.
         let other = local("/Volumes/Samsung/restic")
         #expect(t7.label(among: [t7, other]) == "T7")
         // A REST server's twins read as their URLs — without the login a URL

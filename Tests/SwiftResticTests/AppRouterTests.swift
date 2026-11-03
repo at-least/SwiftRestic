@@ -83,7 +83,6 @@ struct AppRouterTests {
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == "/D/Taxes")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
 
-        // A plain route afterwards clears an older focused ask.
         router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         router.showBackup("s2", on: page, repositoryID: repository)
         #expect(router.backupSelection[page] == "s2")
@@ -131,7 +130,6 @@ struct AppRouterTests {
         router.tabBinding(for: group).wrappedValue = .overview
         #expect(router.tab(of: plan) == .overview)
 
-        // A page with no tabs reads as its overview.
         #expect(router.tab(of: .activity) == .overview)
     }
 
@@ -175,11 +173,9 @@ struct AppRouterTests {
         #expect(router.selection == .findFiles)
         #expect(router.findRepositoryID == repository)
         #expect(router.searchFocus == .findFiles)
-        // ⇧⌘F keeps what was typed; nothing runs until asked.
         #expect(router.findQuery == "older")
         #expect(!router.findRunsOnArrival)
 
-        // Search All Backups hands its query over and asks for the run.
         router.openFind(repositoryID: repository, query: "invoice", run: true)
         #expect(router.findQuery == "invoice")
         #expect(router.findRunsOnArrival)
@@ -222,8 +218,6 @@ struct AppRouterTests {
         #expect(router.findRepositoryID == nil)
     }
 
-    // MARK: - Selection revalidation
-
     private func revalidated(
         _ selection: SidebarItem?,
         repositories: [Repository],
@@ -246,15 +240,12 @@ struct AppRouterTests {
         let second = namedRepository("Second")
         let kept = namedPlan("Documents", repositoryID: first.id)
 
-        // The plan itself still selected: no move.
         #expect(self.revalidated(.plan(kept.id), repositories: [first, second], plans: [kept]) == .plan(kept.id))
         #expect(self.revalidated(.repository(first.id), repositories: [first], plans: [kept]) == .repository(first.id))
 
-        // Deleted: the landing pane, the first repository's page.
         #expect(self.revalidated(.plan(UUID()), repositories: [first, second], plans: [kept]) == .repository(first.id))
         #expect(self.revalidated(.repository(UUID()), repositories: [first, second], plans: [kept]) == .repository(first.id))
 
-        // Nothing left at all: Welcome — no selection.
         #expect(self.revalidated(.plan(UUID()), repositories: [], plans: []) == nil)
         #expect(self.revalidated(.repository(UUID()), repositories: [], plans: []) == nil)
     }
@@ -282,7 +273,6 @@ struct AppRouterTests {
                                  repositories: [first, second], plans: [kept, moved])
             == .repository(second.id))
 
-        // The repository went with it: the landing.
         #expect(self.revalidated(.orphanPlan(repositoryID: UUID(), planID: moved.id),
                                  repositories: [first], plans: [kept])
             == .repository(first.id))

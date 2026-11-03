@@ -14,18 +14,15 @@ import Testing
 /// applying — turns a change-sized statement into a table scan without
 /// failing any answer; these pins fail instead.
 ///
-/// Rules: each statement's plan must contain its fragments, and any `SCAN`
-/// must name a table its rule allows. The allowed scans are the documented
-/// ones: the full compare's population read (`fullForwardClose`,
+/// The allowed scans: the full compare's population read (`fullForwardClose`,
 /// `fullReverseFreeze`) and a whole chain's death (`hkOrphanChainNodes`,
 /// the fill that queues its nodes) over `run`; the listing-sized reads of
 /// `snap` (`snapAll` per reconcile, `unreadableList` once per launch); the
-/// chain list; and the small or
-/// temporary tables (the one-row listing marker, the one stream's stage,
-/// the GC scratch list, the housekeeping queue, the cache owners, the FTS
-/// cursor). The floor — the
-/// same pins against SQLite 3.43.2 — is `Tools/sqlite-floor.sh`, a separate
-/// manual step, not part of `./build.sh test`.
+/// chain list; and the small or temporary tables (the one-row listing
+/// marker, the one stream's stage, the GC scratch list, the housekeeping
+/// queue, the cache owners, the FTS cursor). The floor — the same pins
+/// against SQLite 3.43.2 — is `Tools/sqlite-floor.sh`, a separate manual
+/// step, not part of `./build.sh test`.
 @Suite("snapshot index plans")
 struct SnapshotIndexPlanTests {
     struct Rule {
@@ -196,7 +193,6 @@ struct SnapshotIndexPlanTests {
             "SEARCH edit USING PRIMARY KEY (node_id=? AND chain_id=?)",
             "SEARCH chain USING COVERING INDEX sqlite_autoindex_chain_1 (key=?)",
         ]),
-        // One folder's children, each child's run at one seq by the run's key.
         "childrenAtSeq": Rule(contains: [
             "SEARCH n USING COVERING INDEX sqlite_autoindex_node_1 (parent=?)",
             "SEARCH r USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)",
@@ -219,7 +215,6 @@ struct SnapshotIndexPlanTests {
         ]),
         "searchFTS": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
-        // The FTS cursor, each hit's node by its key.
         "nodesNamed": Rule(
             contains: ["SCAN f VIRTUAL TABLE INDEX 0:M1", "SEARCH n USING INTEGER PRIMARY KEY (rowid=?)"], scans: ["f"]),
         "nodeAtSeq": Rule(contains: ["SEARCH run USING PRIMARY KEY (node_id=? AND chain_id=? AND first_seq<?)"]),
@@ -260,7 +255,6 @@ struct SnapshotIndexPlanTests {
         "cacheSweepOwner": Rule(contains: ["SEARCH cache_owner USING PRIMARY KEY (snapshot_id=?)"]),
     ]
 
-    /// What `rule` finds wrong with `plan`, or nothing.
     static func problems(_ plan: [String], _ rule: Rule) -> [String] {
         var found: [String] = []
         let text = plan.joined(separator: "\n")

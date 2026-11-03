@@ -1,7 +1,5 @@
 import Foundation
 
-/// A restic repository the app knows about.
-///
 /// Only non-secret configuration lives here — this struct is what gets written to
 /// `config.json`. The repository password and any provider secret key are held in
 /// the login Keychain and fetched at spawn time; see `KeychainStore`.
@@ -43,33 +41,27 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var kind: Kind = .local
     var createdAt: Date = .now
 
-    // local
     var localPath: String = ""
 
-    // sftp
     var sftpUser: String = ""
     var sftpHost: String = ""
     /// Blank for ssh's own port, 22; see `sftpCustomPort`.
     var sftpPort: String = ""
     var sftpPath: String = ""
 
-    // s3 / minio / wasabi
     var s3Endpoint: String = "s3.amazonaws.com"
     var s3Bucket: String = ""
     var s3Prefix: String = ""
     var s3AccessKeyID: String = ""
 
-    // b2
     var b2Bucket: String = ""
     var b2Prefix: String = ""
     var b2AccountID: String = ""
 
-    // azure
     var azureContainer: String = ""
     var azurePrefix: String = ""
     var azureAccountName: String = ""
 
-    // gcs
     var gcsBucket: String = ""
     var gcsPrefix: String = ""
     var gcsProjectID: String = ""
@@ -77,14 +69,12 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// stored here rather than in the Keychain.
     var gcsCredentialsPath: String = ""
 
-    // rest
     var restURL: String = ""
     /// The REST server's user. Its password is the provider secret, in the
     /// Keychain like every other backend's, so neither has to ride in the
     /// URL this file stores.
     var restUser: String = ""
 
-    // rclone
     var rcloneRemote: String = ""
     var rclonePath: String = ""
 
@@ -100,12 +90,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var uploadLimitKiBps: Int = 0
     var downloadLimitKiBps: Int = 0
 
-    /// Periodic `check` and `prune` for this repository.
     var maintenance = MaintenancePolicy()
     /// Shell commands run around this repository's check and prune.
     var hooks: [BackupHook] = []
-
-    // MARK: - Decoding
 
     /// Written by hand so a configuration saved by an older build still loads;
     /// see `KeyedDecodingContainer.value(_:default:)`.
@@ -204,17 +191,14 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return port
     }
 
-    /// The REST server's URL, without restic's `rest:` scheme prefix.
     var restServerURL: String {
         restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
     }
 
-    /// The rclone remote's name, without the colon rclone writes after it.
     var rcloneRemoteName: String {
         rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
     }
 
-    /// The name of the drive a local repository sits on; nil for other kinds.
     var driveVolumeName: String? {
         kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil
     }
@@ -226,7 +210,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         ResticService.expandTilde(localPath)
     }
 
-    /// Whether the required non-secret fields are filled in.
     var isConfigurationComplete: Bool {
         switch kind {
         case .local: return !localPath.isEmpty
@@ -243,11 +226,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// What every surface calls the repository — it has no name of its
     /// own: where it is, said short. A local folder on a drive is the
     /// drive's name (`VolumePresence.volumeName`, the name the drive-away
-    /// and drive-full words use), any other local folder its own name; SFTP
-    /// and a REST server their host; S3, B2 and Google Cloud Storage their
-    /// bucket; Azure its container; rclone its remote. When another of
+    /// and drive-full words use). When another of
     /// `repositories` would read the same, each reads as its location
-    /// (`displayLocation`). "Untitled Repository" while it has no location.
+    /// (`displayLocation`).
     /// Older builds stored a name; a configuration's key is
     /// ignored.
     func label(among repositories: [Repository]) -> String {
@@ -300,8 +281,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return merged
     }
 
-    /// The label the provider secret is shown under in the UI (`nil` when the
-    /// backend needs no second credential).
     var secretFieldLabel: String? {
         switch kind {
         case .local, .gcs, .rclone, .sftp: nil
@@ -312,7 +291,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// Environment variables carrying the provider secret, if any.
     func credentialEnvironment(secret: String?) -> [String: String] {
         var env: [String: String] = [:]
         switch kind {

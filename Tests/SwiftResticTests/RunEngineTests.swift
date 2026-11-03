@@ -1,18 +1,12 @@
 import Foundation
 import Testing
 
-/// The members all three engines' recording sinks share verbatim: the
-/// ordered log the sequencing assertions read, the delivered records, and
-/// the canned client and network answers. Each suite's `RecordingSink`
-/// subclasses it and adds only what its engine's protocol adds beyond
-/// `RunEngineSink` — the refresh members genuinely differ per engine and
-/// stay per-subclass.
+/// The refresh members genuinely differ per engine and stay per-subclass.
 @MainActor
 class EngineRecordingSink {
     var log: [String] = []
     var deliveredRecords: [RunRecord] = []
 
-    /// What `service()` answers; set by `serving(_:)`.
     var client = MockResticClient()
     func serving(_ client: MockResticClient) -> Self {
         self.client = client
@@ -30,7 +24,6 @@ class EngineRecordingSink {
         log.append("auth-noted")
     }
 
-    /// The canned answer to a reconnect; every ask is logged.
     var reconnectAnswer: [ShareReconnect] = []
 
     func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
@@ -38,7 +31,6 @@ class EngineRecordingSink {
         return reconnectAnswer
     }
 
-    /// The canned answer to a server probe; every ask is logged.
     var probeAnswer: ServerProbe.Outcome? = .reachable
 
     /// Runs inside the probe, in the run's task: a Stop landing while the
@@ -58,15 +50,12 @@ class EngineRecordingSink {
     }
 }
 
-/// The run engines' sequencing and outcome mapping, driven through a mock
-/// client and a recording sink. restic is mocked; hooks still run as real
-/// `/bin/sh` processes. The stub-shell and real-restic suites own everything
-/// below the `ResticClient` seam.
+/// restic is mocked; hooks still run as real `/bin/sh` processes. The
+/// stub-shell and real-restic suites own everything below the
+/// `ResticClient` seam.
 @MainActor
 @Suite("backup run engine")
 struct BackupRunEngineTests {
-    /// Records every sink call in order; the ordered log is what the
-    /// sequencing assertions read.
     final class RecordingSink: EngineRecordingSink, BackupRunEngine.Sink {
         var deliveredTranscripts: [RunTranscript.Contents] = []
 
@@ -100,7 +89,6 @@ struct BackupRunEngineTests {
             log.append("ping:\(event.stage)")
         }
 
-        /// Per refresh, whether it ran in a cancelled task.
         var refreshCancelled: [Bool] = []
         func refreshSnapshots(repositoryID: UUID) async {
             log.append("refresh")
@@ -122,7 +110,6 @@ struct BackupRunEngineTests {
             deliveredTranscripts.append(transcript)
         }
 
-        /// The notes the engine wrote into the delivered run's transcript.
         var deliveredNotes: [String] {
             deliveredTranscripts.flatMap { $0.entries.filter { $0.kind == .note }.map(\.text) }
         }
@@ -274,7 +261,6 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(!sink.log.contains { $0.hasPrefix("phase:applyingRetention") })
-        // The run itself still succeeded and was delivered.
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
     }
 
@@ -693,8 +679,6 @@ struct BackupRunEngineTests {
 
     @Test("the record's exit code is the first restic exit the transcript saw")
     func recordKeepsTheFirstExitCode() async throws {
-        // A partial backup, then a clean forget: the run's code is the
-        // backup's own, the first restic exit the transcript saw.
         let partial = RecordingSink()
         var outcome = successOutcome()
         outcome.exitCode = 3
@@ -848,7 +832,6 @@ struct MaintenanceRunEngineTests {
         #expect(scheduled.deliveredRecords.first?.checkRead == "part 3 of 12")
         #expect(scheduled.log.contains("advance-slice"))
 
-        // By hand: what was asked, the rotation left where it was.
         let (byHand, byHandClient) = await check(override: 5)
         #expect(byHandClient.checkSubsets == [.percent(5)])
         #expect(byHand.deliveredRecords.first?.checkRead == "5% of the data")
@@ -912,7 +895,6 @@ struct MaintenanceRunEngineTests {
         #expect(record.failureMessage == nil)
         #expect(!sink.log.contains { $0.hasPrefix("stamp") }, "log was \(sink.log)")
         #expect(sink.log.contains("drive-away"), "log was \(sink.log)")
-        // The hooks for any end ran, as for a skipped backup.
         #expect(!record.hookMessages.isEmpty)
     }
 
@@ -1078,7 +1060,6 @@ struct MaintenanceRunEngineTests {
         // The tail restic printed is the run's one-line answer, as the check
         // verdict is for a check.
         #expect(record.detailText == "removed 2 of 3 packs")
-        // Only prune ran: no check's slice was asked for or advanced.
         #expect(client.callLog == ["prune"])
         #expect(client.checkSubsets.isEmpty)
         #expect(!sink.log.contains("advance-slice"))
@@ -1116,14 +1097,11 @@ struct MaintenanceRunEngineTests {
     }
 }
 
-/// Apply Retention Now's run: a forget recorded under the plan, with no
-/// hooks, no run stamp and no alert beyond what the sink delivers.
 @MainActor
 @Suite("retention run engine")
 struct RetentionRunEngineTests {
-    /// Answers `service()` with the mock itself: this sink has nothing else
-    /// to keep apart from the log. Nothing here reads the delivered
-    /// transcripts, so unlike the other two sinks it keeps none.
+    /// Nothing here reads the delivered transcripts, so unlike the other
+    /// two sinks it keeps none.
     final class RecordingSink: EngineRecordingSink, RetentionRunEngine.Sink {
         init(client: MockResticClient) {
             super.init()

@@ -1,8 +1,6 @@
 import Foundation
 
 extension AppModel {
-    // MARK: - Running a backup
-
     /// `askedByUser` is false for the scheduler's and a mount's runs, which
     /// wait for a check or prune without a banner: no one clicked.
     func runBackup(planID: UUID, askedByUser: Bool = true) {
@@ -38,10 +36,9 @@ extension AppModel {
         }, in: .plan(planID))
     }
 
-    /// Retires a plan's run — its registry slot, run token, Pause-and-Stop
-    /// mark and strip. The unwind of every run in the plan's slot (backup
-    /// and Apply Retention Now alike) calls this, so the copies cannot
-    /// drift. Call only from the run's own task: `clear` while a cancelled
+    /// The unwind of every run in the plan's slot (backup and Apply
+    /// Retention Now alike) calls this, so the copies cannot drift. Call
+    /// only from the run's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
     /// `tasks.drain()` would no longer wait for its record.
     func unwindPlanRun(_ planID: UUID) {
@@ -95,8 +92,6 @@ extension AppModel {
         backupQueue.values.contains { $0.contains { $0.planID == planID } }
     }
 
-    /// Whether a plan's run — a backup, or Apply Retention Now's forget —
-    /// is in flight on the repository.
     private func planRunHolds(_ repositoryID: UUID) -> Bool {
         activity.values.contains { $0.repositoryID == repositoryID }
     }
@@ -178,8 +173,6 @@ extension AppModel {
     }
 }
 
-// MARK: - The backup engine's view of the model
-
 extension AppModel: BackupRunEngine.Sink {
     func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
         // Stop's word stays: an engine phase landing after it would offer
@@ -219,9 +212,6 @@ extension AppModel: BackupRunEngine.Sink {
         })
     }
 
-    /// Stores and announces a finished run: its log, history, the user
-    /// notification, and the external channels — and, for a Back Up Now
-    /// that was skipped, the in-app banner.
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
         var record = record
         // Probed as the run ends and recorded: the drawer's wording reads

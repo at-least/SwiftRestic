@@ -75,7 +75,6 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
 }
 
 extension SnapshotLineage {
-    /// How a group of backups is named among the others shown beside it.
     struct Label: Equatable, Sendable {
         var title: String
         /// What tells two groups apart when the title alone cannot: the
@@ -98,9 +97,7 @@ extension SnapshotLineage {
         /// count and the kind always read whole, and the qualifiers between
         /// them — a long hostname, a folder list — give way first.
         struct Caption: Equatable, Sendable {
-            /// "2 backups".
             var count: String
-            /// The qualifier's host and folders.
             var qualifiers: [String] = []
             /// Which kind of group it is, then the tag's last four hex digits
             /// when another group's caption still matches. Empty for a
@@ -174,7 +171,6 @@ extension SnapshotLineage {
         return folderTitle(lineage.key.paths)
     }
 
-    /// The folders' names, for a group no configured plan names.
     static func folderTitle(_ paths: [String]) -> String {
         let names = paths.map { ($0 as NSString).lastPathComponent }
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
@@ -207,9 +203,7 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
         case lineage(SnapshotLineage.Key)
     }
 
-    /// The plan whose tag every snapshot in `snapshots` carries.
     case plan(id: UUID, snapshots: [Snapshot])
-    /// The backups no plan tag marks, by lineage.
     case lineage(SnapshotLineage)
 
     var id: ID {
@@ -243,7 +237,6 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
         let planGroups = byPlan.map {
             OtherBackupsGroup.plan(id: $0.key, snapshots: $0.value.sorted(by: SnapshotLineage.newestFirst))
         }
-        // The untagged half through the one lineage builder.
         let lineageGroups = SnapshotLineage.grouping(rest).map(OtherBackupsGroup.lineage)
         return (planGroups + lineageGroups).sorted {
             SnapshotLineage.newestFirst($0.snapshots[0], $1.snapshots[0])
@@ -357,8 +350,6 @@ extension OtherBackupsGroup {
         }
     }
 
-    /// The plan's label when the group is a configured plan's, the newest
-    /// backup's folders otherwise.
     private static func title(of group: OtherBackupsGroup, plans: [BackupPlan]) -> String {
         if case let .plan(id, _) = group, let plan = plans.withID(id) {
             return plan.label(among: plans)
@@ -378,7 +369,6 @@ extension SnapshotLineage.Key {
 }
 
 extension Snapshot {
-    /// Which lineage this snapshot belongs to.
     var lineageKey: SnapshotLineage.Key {
         SnapshotLineage.Key(hostname: hostname, paths: paths.sorted())
     }
@@ -403,7 +393,6 @@ extension Snapshot {
         tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }
     }
 
-    /// The user's own tags: everything that is not a plan tag.
     var userTags: [String] {
         tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
     }

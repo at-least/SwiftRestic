@@ -8,13 +8,11 @@ import Testing
 @MainActor
 @Suite("network shares")
 struct NetworkShareTests {
-    /// What the stub mounter was asked, in order.
     private actor Mounts {
         var calls: [(url: String, password: String?)] = []
         func add(_ url: URL, _ password: String?) { calls.append((url.absoluteString, password)) }
     }
 
-    /// Holds every call to the stub mounter until the test opens it.
     private actor Gate {
         private var waiting: [CheckedContinuation<Void, Never>] = []
         private var isOpen = false
@@ -194,11 +192,9 @@ struct NetworkShareTests {
         let (model, _, volume) = try await makeModel(answer: .failed(EAUTH))
         let saved = MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)")
         let mounted = MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)")
-        // A saved share away: its row, as saved.
         var row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: nil))
         #expect(row.share == saved)
         #expect(row.isSaved)
-        // The same volume mounted now: the mounted one, still a saved share.
         row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: mounted))
         #expect(row.share == mounted)
         #expect(row.isSaved)
@@ -208,10 +204,7 @@ struct NetworkShareTests {
         row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: other))
         #expect(row.share == saved)
         #expect(row.isSaved)
-        // Off /Volumes there is no share row.
         #expect(model.shareRow(for: "/Users/me/Documents", mounted: mounted) == nil)
-        // The share is gone from the configuration: the mounted row says
-        // nothing is saved.
         model.configuration.settings.networkShares = []
         row = try #require(model.shareRow(for: "/Volumes/\(volume)/docs", mounted: mounted))
         #expect(row.share == mounted)
