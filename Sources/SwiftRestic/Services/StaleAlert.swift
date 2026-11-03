@@ -17,6 +17,8 @@ struct StalePlanAlert: Equatable, Sendable {
 /// it. Checked on the scheduler's tick after the pause guard: Pause Backups
 /// and the battery hold exempt everything, as they hold the runs.
 enum StaleAlert {
+    private static let day: TimeInterval = 86_400
+
     /// Settings' choices, in days; 0 is Off.
     static let choices = [0, 3, 7, 14]
 
@@ -25,8 +27,7 @@ enum StaleAlert {
     /// success, and a bare seven-day threshold would name it before every
     /// run.
     static func window(thresholdDays: Int, schedule: Schedule) -> TimeInterval {
-        let day: TimeInterval = 86400
-        return max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
+        max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 
     /// The plans to name now. Only plans the scheduler would start by
@@ -51,7 +52,7 @@ enum StaleAlert {
             else { return nil }
             let quiet = now.timeIntervalSince(last)
             guard quiet > window(thresholdDays: thresholdDays, schedule: plan.schedule) else { return nil }
-            return StalePlanAlert(planID: plan.id, lastBackupAt: last, days: Int(quiet / 86400))
+            return StalePlanAlert(planID: plan.id, lastBackupAt: last, days: Int(quiet / day))
         }
     }
 

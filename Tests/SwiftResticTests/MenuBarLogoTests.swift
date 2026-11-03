@@ -48,7 +48,7 @@ struct MenuBarLogoTests {
         #expect(attention.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
 
         // Pixel facts at 4x, coordinates in the 18pt canvas (y-up), the mark
-        // centred at (9, 9) with s = 28 (`MenuBarLogo.impliedSize`).
+        // centred at (9, 9).
         let rep = try render(attention, canvas: 18, scale: 4)
         let resting = try render(MenuBarLogo.image(), canvas: 18, scale: 4)
         func alpha(_ rep: NSBitmapImageRep, x: CGFloat, y: CGFloat) throws -> CGFloat {
@@ -56,7 +56,7 @@ struct MenuBarLogoTests {
                 .usingColorSpace(.deviceRGB)
             return try #require(color).alphaComponent
         }
-        let s: CGFloat = 28
+        let s = MenuBarLogo.impliedSize
         let barMiddle = 9 + (MenuBarLogo.exclamationBarTop + MenuBarLogo.exclamationBarBottom) / 2 * s
         try #expect(alpha(rep, x: 9, y: barMiddle) > 0.85, "the bar is solid ink")
         try #expect(alpha(rep, x: 9, y: 9 + MenuBarLogo.exclamationDotCenter * s) > 0.85, "the dot is solid ink")

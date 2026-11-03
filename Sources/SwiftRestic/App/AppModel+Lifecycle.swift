@@ -62,10 +62,10 @@ extension AppModel {
             existingRepositoryIDs: Set(configuration.repositories.map(\.id)),
             heldUntil: hold?.resumesAt
         ) else { return nil }
-        // Within 45 s either way `Format.relative` says "just now", which
+        // Inside the window `Format.relative` says "just now", which
         // cannot follow "is next due"; a run that close is due now, and the
         // next tick starts it.
-        let when = if next.date.timeIntervalSince(now) >= 45 {
+        let when = if next.date.timeIntervalSince(now) >= Format.justNowWindow {
             "is next due \(Format.relative(next.date))"
         } else if hold != nil {
             "is waiting to run"
@@ -271,7 +271,7 @@ extension AppModel {
 
         // Wait for the cancelled runs to finish unwinding. Their `catch` blocks
         // append a run record and set `lastRunAt`, and those edits only reach disk
-        // through a 400 ms debounced save that would never fire once the process
+        // through the debounced save, which would never fire once the process
         // exits — so quitting mid-backup would silently lose the run. The drain
         // also covers the in-flight start pings: a monitor must not be left
         // thinking the backup was never attempted.

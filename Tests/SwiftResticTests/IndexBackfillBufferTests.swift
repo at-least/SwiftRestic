@@ -50,18 +50,18 @@ struct IndexBackfillBufferTests {
             try recorder.record(paths, final)
         }
 
-        // The buffer's chunk size is 4000, and a full chunk flushes inside
-        // `append`. The first chunk lands; the second fails mid-stream —
+        // A full chunk flushes inside `append`. The first chunk lands; the second fails mid-stream —
         // not at finish — and a third full chunk plus a short remainder
         // follow it, so both later flush paths get their chance to run.
-        for index in 0..<4000 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
+        let chunk = SnapshotIndex.chunkSize
+        for index in 0..<chunk { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
         recorder.failFromNowOn()
-        for index in 4000..<12_010 { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
+        for index in chunk..<(3 * chunk + 10) { buffer.append(IndexedEntry(path: "/data/f\(index)", isDirectory: false)) }
 
         #expect(throws: (any Error).self) { try buffer.finish() }
-        #expect(recorder.attempted.map(\.count) == [4000, 4000])
+        #expect(recorder.attempted.map(\.count) == [chunk, chunk])
         #expect(recorder.attempted.allSatisfy { !$0.final })
-        #expect(recorder.recorded.map(\.count) == [4000])
+        #expect(recorder.recorded.map(\.count) == [chunk])
     }
 
     @Test("a clean finish sends the remainder as the final chunk: one transaction, coverage marked once")

@@ -38,7 +38,7 @@ enum MenuBarLogo {
     /// items. The tightest fit is not the ring (`radius + stroke / 2`) but
     /// the arrowhead's base corner: the ink stays inside the 18pt canvas with
     /// roughly 0.7–0.9pt of margin on every side.
-    private static let impliedSize: CGFloat = 28
+    static let impliedSize: CGFloat = 28
 
     /// At rest, both plates sit at their own settled alpha — no motion, just
     /// the stack. While running, the two plates take turns being the bright

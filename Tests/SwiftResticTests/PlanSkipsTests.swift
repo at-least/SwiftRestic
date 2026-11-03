@@ -85,3 +85,16 @@ struct PlanSkipsTests {
         }
     }
 }
+
+@Suite("Exclude categories")
+struct ExcludeCategoryTests {
+    // `developerGroups` is every case from `.python` on, so a case declared
+    // in the wrong place silently joins or leaves the developer switch.
+    @Test("the developer groups are exactly the developer rules' categories, the defaults' never among them")
+    func developerGroupsMatchTheRules() {
+        let developerCategories = Set((ExcludeRule.developer + ExcludeRule.developerMarkers).map(\.category))
+        let defaultCategories = Set(ExcludeRule.defaults.map(\.category))
+        #expect(Set(ExcludeCategory.developerGroups) == developerCategories)
+        #expect(defaultCategories.isDisjoint(with: ExcludeCategory.developerGroups))
+    }
+}

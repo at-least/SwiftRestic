@@ -164,7 +164,7 @@ extension AppModel {
         // it, and stamping would count the slot as done — the stopped run
         // would wait a whole period. Safe only because the pause holds the
         // scheduler meanwhile; a plain Stop has no pause behind it and
-        // stamps, or the next tick would restart the run within a minute.
+        // stamps, or the next tick would restart the run.
         if stamp == .nothing, pauseStoppedPlanIDs.contains(planID) { return }
         updatePlan(planID) { plan in
             plan.lastRunAt = date

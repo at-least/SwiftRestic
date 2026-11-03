@@ -3,19 +3,21 @@ import Foundation
 import Network
 
 extension AppModel {
+    static let schedulerTick: Duration = .seconds(60)
+
     func startScheduler() {
         schedulerTask?.cancel()
         schedulerTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.runDuePlans()
-                try? await Task.sleep(for: .seconds(60))
+                try? await Task.sleep(for: Self.schedulerTick)
             }
         }
     }
 
     /// One scheduler tick, awaited by the loop above so ticks never overlap
     /// (the debounced save's flush follows the same rule). Resuming, and a
-    /// pause running out, take effect here, within a minute: an extra tick
+    /// pause running out, take effect here, by the next tick: an extra tick
     /// started on Resume would break that rule.
     func runDuePlans() async {
         // First, so a lapsed pause stops being shown and stops holding in the

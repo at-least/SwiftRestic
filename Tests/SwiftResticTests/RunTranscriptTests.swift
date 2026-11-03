@@ -50,8 +50,8 @@ struct RunTranscriptTests {
             transcript.command(String(repeating: "x", count: 70_000))
         }
         transcript.exited(7)
-        // More lines than the ring holds: the exit entry is overwritten away.
-        for index in 0 ..< 250 {
+        // The exit entry is overwritten away.
+        for index in 0 ..< RunTranscript.tailEntryLimit + 50 {
             transcript.output("line \(index)", message: nil, stream: .stderr)
         }
 

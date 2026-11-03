@@ -6,6 +6,8 @@ import Foundation
 /// of them are Sendable across SDKs (these helpers also run on the
 /// notification broadcast's background task), so every use takes the lock.
 enum Format {
+    static let justNowWindow: TimeInterval = 45
+
     static func list(_ items: [String]) -> String {
         guard items.count > 1 else { return items.first ?? "" }
         return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
@@ -118,7 +120,7 @@ enum Format {
         // produces. Beyond that window the formatter gets the real date in
         // whichever direction it lies: clamping a future date down to now
         // renders a run an hour ahead as the nonsense "in 0 seconds".
-        if abs(date.timeIntervalSince(now)) < 45 { return "just now" }
+        if abs(date.timeIntervalSince(now)) < justNowWindow { return "just now" }
         relativeLock.lock()
         defer { relativeLock.unlock() }
         return relativeStamp.localizedString(for: date, relativeTo: now)

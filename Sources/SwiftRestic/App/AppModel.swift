@@ -295,7 +295,7 @@ final class AppModel {
     var isShuttingDown = false
     /// Silences the debounced save for one assignment — bootstrap writing back
     /// what it just loaded. The `configuration` didSet would otherwise
-    /// schedule a save 400 ms after launch: a rewrite the user never asked
+    /// schedule a save right after launch: a rewrite the user never asked
     /// for, and one that makes tolerant decoding's substituted defaults
     /// permanent before the banner explaining them has even been read.
     @ObservationIgnored var suppressConfigurationSave = false
@@ -362,12 +362,14 @@ final class AppModel {
         }
     }
 
+    static let saveDebounce: Duration = .milliseconds(400)
+
     /// Coalesces rapid edits (typing in a text field) into one write.
     private func scheduleSave() {
         guard !suppressConfigurationSave else { return }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await Task.sleep(for: Self.saveDebounce)
             guard !Task.isCancelled else { return }
             await self?.flushSave()
         }
