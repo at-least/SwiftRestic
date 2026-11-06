@@ -192,7 +192,15 @@ extension AppModel: BackupRunEngine.Sink {
     }
 
     func noteRepositoryAway(repositoryID: UUID, reason: String) {
-        snapshotListingOutcomes[repositoryID] = .failed(reason)
+        // A plain absence reads as the listing's own; a failed reconnect or a
+        // silent server keeps the run's words.
+        if let repository = repository(id: repositoryID), repository.kind == .local,
+           reason == RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
+        {
+            snapshotListingOutcomes[repositoryID] = driveAwayOutcome(repository)
+        } else {
+            snapshotListingOutcomes[repositoryID] = .failed(reason)
+        }
     }
 
     func addStartPing(_ event: NotificationEvent) {

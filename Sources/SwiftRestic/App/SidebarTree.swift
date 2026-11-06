@@ -34,11 +34,14 @@ enum SidebarTree {
         repositoryHasPlans ? "Other backups" : "Backups"
     }
 
-    /// Where the window lands at launch and after its pane disappears: the
-    /// first repository's page — each repository's page is its overview —
-    /// or the welcome when there is no repository.
-    static func landingSelection(repositories: [Repository]) -> SidebarItem? {
-        repositories.first.map { .repository($0.id) }
+    /// Where the window lands at launch and after its pane disappears: one
+    /// repository with one plan has one thing to show; otherwise the first
+    /// repository's page, its overview, or the welcome with no repository.
+    static func landingSelection(repositories: [Repository], plans: [BackupPlan]) -> SidebarItem? {
+        if repositories.count == 1, plans.count == 1, plans[0].repositoryID == repositories[0].id {
+            return .plan(plans[0].id)
+        }
+        return repositories.first.map { .repository($0.id) }
     }
 }
 

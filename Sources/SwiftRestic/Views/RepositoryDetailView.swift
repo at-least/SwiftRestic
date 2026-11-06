@@ -122,7 +122,7 @@ struct RepositoryDetailView: View {
             Text(tile.value)
                 .monospacedDigit()
                 .modifier(TileHelp(help: tile.help))
-        case let .failed(message):
+        case let .failed(message, _):
             Text("—").help(message)
         case .idle:
             Text("—").help(OverviewMetrics.listingIdleText)

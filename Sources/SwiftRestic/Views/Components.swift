@@ -514,18 +514,26 @@ struct SnapshotListingCaveat: View {
 
     var body: some View {
         switch outcome {
-        case let .failed(message):
+        case let .failed(message, fix):
             // The glyph carries the alarm and the words stay secondary:
             // a warning-coloured sentence at caption size is too
-            // low-contrast to read.
-            Label {
-                Text(OverviewMetrics.listingFailureText(message))
-                    .foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.warning)
+            // low-contrast to read. The whole message, where the rows have
+            // one line: its second sentence says what to do.
+            VStack(alignment: .leading, spacing: 6) {
+                Label {
+                    Text("Can’t read backups — \(message)")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                }
+                .font(.caption)
+                if let fix {
+                    RunFixButton(fix: fix)
+                        .controlSize(.small)
+                }
             }
-            .font(.caption)
         case .idle:
             Label(OverviewMetrics.listingIdleText, systemImage: "clock.arrow.circlepath")
                 .font(.caption)

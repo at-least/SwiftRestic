@@ -318,8 +318,8 @@ struct OverviewMetricsTests {
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: .now, relative: { _ in "4 minutes ago" }
         )
-        #expect(summary?.failureLines == ["Docs: \(sidebar.text)"])
-        #expect(summary?.attentionLines == [])
+        #expect(summary?.failureLines.map(\.text) == ["Docs: \(sidebar.text)"])
+        #expect(summary?.attentionLines.map(\.text) == [])
     }
 
     @Test("a run that completed with warnings still wrote a backup, so the plan stays protected")
@@ -496,11 +496,11 @@ struct OverviewMetricsTests {
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(summary?.text == "5 of 5 plans up to date · Last backup 1 hour ago")
-        #expect(summary?.attentionLines == [])
+        #expect(summary?.attentionLines.map(\.text) == [])
         // A protected plan backing up around an away drive is named in the
         // record's words, beside its held line if it has one.
-        #expect(summary?.skippedLines == ["Code: \(skipReason)"])
-        #expect(summary?.heldLines == ["Code: Not scheduled"])
+        #expect(summary?.skippedLines.map(\.text) == ["Code: \(skipReason)"])
+        #expect(summary?.heldLines.map(\.text) == ["Code: Not scheduled"])
 
         // An unprotected plan's line is its warning, never a second one.
         let exposed = ProtectionRow(plan: photos, among: [], stateText: "No backups yet", isKnown: true, isProtected: false, didFail: false)
@@ -509,8 +509,8 @@ struct OverviewMetricsTests {
             willNotRun: { byID[$0].flatMap(caption) },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(warned?.attentionLines == ["Photos: No backups yet"])
-        #expect(warned?.heldLines == [])
+        #expect(warned?.attentionLines.map(\.text) == ["Photos: No backups yet"])
+        #expect(warned?.heldLines.map(\.text) == [])
     }
 
     @Test("the Protection card names each plan that is not protected in the sidebar warning's words, and a run in flight")
@@ -534,12 +534,12 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(summary?.text == "1 of 3 plans up to date · Last backup 1 hour ago")
-        #expect(summary?.failureLines == ["Code: Failed — 3 hours ago"])
-        #expect(summary?.attentionLines == ["Music: No backups yet"])
+        #expect(summary?.failureLines.map(\.text) == ["Code: Failed — 3 hours ago"])
+        #expect(summary?.attentionLines.map(\.text) == ["Music: No backups yet"])
         #expect(OverviewMetrics.protectionSummary(
             rows: [documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
-        )?.attentionLines == [])
+        )?.attentionLines.map(\.text) == [])
 
         // A first backup in flight is news, not an alarm: the line says the
         // run in the sidebar's words, and names no exposed plan.
@@ -552,7 +552,7 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(running?.text == "0 of 1 plan up to date · Photos — Backing up…")
-        #expect(running?.attentionLines == [])
+        #expect(running?.attentionLines.map(\.text) == [])
         // Beside a last backup, the run comes before it.
         let both = OverviewMetrics.protectionSummary(
             rows: [photos, documents], listingLoaded: true, otherBackupsCount: 0,

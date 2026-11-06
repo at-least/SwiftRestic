@@ -175,6 +175,11 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return true
     }
 
+    func resticID(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> String {
+        record("resticID")
+        return "mock-restic-id"
+    }
+
     func unlock(_ context: RepositoryContext) async throws {
         record("unlock")
     }

@@ -6,11 +6,13 @@ import Foundation
 enum RunFix: Equatable {
     /// restic exit 12: the stored password does not open the repository.
     case editRepository(UUID)
-    /// restic exit 10: no repository is at its location — a folder moved
-    /// or renamed on a drive that is here (a drive that is away skips the
-    /// run instead). A repository's location is fixed, so where it is now
-    /// takes a new repository.
+    /// restic exit 10 on a server or in the cloud: no repository is at its
+    /// location. Those locations are fixed, so where it is now takes a new
+    /// repository.
     case addRepository
+    /// restic exit 10 on a disk, or a drive that never comes back under its
+    /// name: pick the folder it moved to (`AppModel.locateRepository`).
+    case locate(UUID)
     /// restic exit 11: a lock this app does not hold is in the way.
     case removeStaleLocks(UUID)
     /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
@@ -36,6 +38,7 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .editRepositoryShare: "Edit Repository…"
         case .addRepository: "Add Repository…"
+        case .locate: "Locate…"
         case .removeStaleLocks: "Unlock"
         case .newPlan: "New Backup Plan…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
@@ -47,7 +50,7 @@ enum RunFix: Equatable {
     /// nil where that message already says it.
     var help: String? {
         switch self {
-        case .editRepository, .addRepository, .newPlan, .pruneNow, .editPlanRetention: nil
+        case .editRepository, .addRepository, .locate, .newPlan, .pruneNow, .editPlanRetention: nil
         case .removeStaleLocks: "A lock no run here holds is in the way"
         case .editRepositoryShare: "The share’s saved password is in the repository editor"
         case .editPlanShare: "The share’s saved password is on the plan editor’s Excluding tab"
@@ -114,7 +117,8 @@ enum RunRecordPresentation {
         repositoryExists: Bool,
         repositoryBusy: Bool,
         planExists: Bool = true,
-        repositoryVolume: String? = nil
+        repositoryVolume: String? = nil,
+        repositoryIsLocal: Bool = false
     ) -> RunFix? {
         // A refused retention: after a backup the snapshot stands, so the run
         // is a warning, and the fix is offered all the same.
@@ -132,7 +136,9 @@ enum RunRecordPresentation {
         }
         if run.repositoryFull == true { return .pruneNow(repositoryID) }
         if run.exitCode == ResticError.wrongPasswordCode { return .editRepository(repositoryID) }
-        if run.exitCode == ResticError.repositoryMissingCode { return .addRepository }
+        if run.exitCode == ResticError.repositoryMissingCode {
+            return repositoryIsLocal ? .locate(repositoryID) : .addRepository
+        }
         let locked = run.exitCode == ResticError.repositoryLockedCode || run.failureMessage?.contains("already locked") == true
         return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
     }

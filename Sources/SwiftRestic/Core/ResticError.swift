@@ -231,8 +231,8 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// check before restic runs, and a run's failure after.
     static let rcloneMissing = "rclone is not installed. Install it with brew install rclone."
 
-    /// Exit 10's cause and fix. A repository's location is fixed, so where
-    /// it is now is a new repository, as a moved plan folder is a new plan.
+    /// Exit 10's cause and fix, for every kind of location; a disk's also
+    /// gets Locate beside it (`RunFix.locate`).
     static let noRepositoryAtLocation = "No repository is at its location — put it back, or add it where it is now as a new repository"
 
     static func knownExitCodeDescription(_ code: Int32) -> String? {

@@ -88,6 +88,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var maintenance = MaintenancePolicy()
 
+    /// restic's own ID for what is at this location (`restic cat config`),
+    /// recorded at the first listing that reads it: how Locate knows a moved
+    /// folder is this repository and not another. Nil until then.
+    var resticID: String?
+
     /// Written by hand so a configuration saved by an older build still loads;
     /// see `KeyedDecodingContainer.value(_:default:)`.
     init(from decoder: any Decoder) throws {
@@ -121,6 +126,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         extraEnvironment = c.value(.extraEnvironment, default: [:])
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
+        resticID = c.optional(.resticID)
     }
 
     init() {}
@@ -277,6 +283,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         merged.maintenance.lastCheckAt = maintenance.lastCheckAt
         merged.maintenance.lastPruneAt = maintenance.lastPruneAt
         merged.maintenance.nextCheckDataSlice = maintenance.nextCheckDataSlice
+        merged.resticID = resticID
         return merged
     }
 

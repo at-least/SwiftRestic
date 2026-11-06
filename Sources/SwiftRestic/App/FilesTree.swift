@@ -144,6 +144,26 @@ final class FilesTree {
         Self.rows(under: parent, open: open, showsDeleted: showsDeleted, states: states)
     }
 
+    /// The deleted items Show Deleted Items would add to the folders open
+    /// now, read from levels already in memory. Past a folder's `rowCap`
+    /// they stand in its "more items" row, uncounted.
+    static func hiddenDeletedCount(under parent: FileNode, open: Set<FileNode>, states: [FileNode: State]) -> Int {
+        rows(under: parent, open: open, showsDeleted: true, states: states).count { row in
+            if case let .entry(entry, _) = row, case .deleted = entry.standing { return true }
+            return false
+        }
+    }
+
+    /// A deleted file is the classic reason to open this tab, so the checkbox
+    /// says how many are behind it.
+    static func showDeletedTitle(hidden: Int) -> String {
+        switch hidden {
+        case 0: "Show Deleted Items"
+        case 1: "Show 1 Deleted Item"
+        default: "Show \(hidden) Deleted Items"
+        }
+    }
+
     static func rows(
         under parent: FileNode,
         open: Set<FileNode>,

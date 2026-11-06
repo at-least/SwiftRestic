@@ -5,6 +5,9 @@ import Foundation
 /// enable what another refuses.
 struct PlanCommandState: Equatable {
     var planID: UUID?
+    /// On a repository's page: the plans Back Up Now starts. Empty on a plan's,
+    /// where `planID` says.
+    var repositoryPlanIDs: [UUID] = []
     var canBackUp = false
     var backUpDisabledReason: String?
     var canStop = false
@@ -57,6 +60,14 @@ extension AppModel {
             state.canPauseBackups = !configuration.repositories.isEmpty
         }
 
+        if case let .repository(repositoryID) = selection {
+            let own = Set(plans(in: repositoryID).map(\.id))
+            state.repositoryPlanIDs = rows
+                .filter { own.contains($0.planID) && $0.action == .backUp && $0.isEnabled }
+                .map(\.planID)
+            state.canBackUp = !state.repositoryPlanIDs.isEmpty
+            return state
+        }
         guard case let .plan(id) = selection, plan(id: id) != nil else { return state }
         state.planID = id
         if let row = rows.first(where: { $0.planID == id }) {

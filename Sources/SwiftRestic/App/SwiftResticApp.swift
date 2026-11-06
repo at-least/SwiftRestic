@@ -274,7 +274,10 @@ struct SwiftResticApp: App {
                     .keyboardShortcut("f", modifiers: .command)
                     .disabled(!model.repositoryCommands(for: router.selection).canFind)
             }
-            RestoreCommands()
+            RestoreCommands(
+                canSearch: model.repositoryCommands(for: router.selection).canFind,
+                search: { ask(.showFind) }
+            )
             CommandGroup(replacing: .importExport) {}
             // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
             // toolbar button had been the one way back (the HIG's Split

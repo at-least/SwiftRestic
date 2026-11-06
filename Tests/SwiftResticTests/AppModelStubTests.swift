@@ -792,15 +792,12 @@ struct AppModelStubTests {
         // before it is kept, so the app never holds an uninitialised one.
         // The outcome is what the sidebar's row and the repository's pages
         // say, for as long as it lasts; no banner repeats it over every page.
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
         #expect(message.hasPrefix("Repository missing."), "message was \(message)")
-        // What to do, in exit 10's own terms (ResticError.noRepositoryAtLocation):
-        // a saved repository's location is fixed, so its settings can't
-        // repoint it — where it is now is a new repository.
-        #expect(message == "Repository missing. Is its disk connected? If it moved, put it back, or add it where it is now as a new repository.")
+        #expect(message == "Repository missing. Is its disk connected? If it moved, locate it.")
         #expect(AppModel.missingRepositoryReason(kind: .sftp)
             == "Repository missing. If it moved, put it back, or add it where it is now as a new repository.")
         #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
@@ -814,7 +811,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "plainfail")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
@@ -916,7 +913,10 @@ struct AppModelStubTests {
         await reading.value
         await harness.model.tasks.drain()
 
-        #expect(harness.model.snapshotListingOutcome(for: id) == .failed("“SwiftRestic Absent Drive” is not connected."))
+        #expect(harness.model.snapshotListingOutcome(for: id) == .failed(
+            "“SwiftRestic Absent Drive” is not connected. Connect it to read its backups.",
+            fix: .locate(id)
+        ))
 
         await harness.model.shutdown()
     }
@@ -938,7 +938,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "snaprows", password: nil)
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
@@ -956,7 +956,7 @@ struct AppModelStubTests {
 
         // The vanished case below, minus the earlier listing: a launch has
         // read nothing yet, and that must not turn "not there" into "empty".
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed outcome for a missing repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
@@ -986,7 +986,7 @@ struct AppModelStubTests {
         await harness.model.upsert(repository: broken, password: nil, providerSecret: nil)
         await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
 
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed outcome after the broken refresh")
             return
         }
@@ -1013,7 +1013,7 @@ struct AppModelStubTests {
         await harness.model.upsert(repository: vanished, password: nil, providerSecret: nil)
         await harness.model.refreshSnapshots(repositoryID: harness.repository.id)
 
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed outcome for a vanished repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
@@ -2060,14 +2060,15 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "wrongpassword")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        guard case let .failed(message) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record(
                 "expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))"
             )
             return
         }
-        #expect(message.contains("doesn’t open this repository"))
-        #expect(message.contains("check it in the repository editor"))
+        #expect(message == "This password doesn’t open “Stub Repo”.")
+        guard case let .failed(_, fix) = harness.model.snapshotListingOutcome(for: harness.repository.id) else { return }
+        #expect(fix == .editRepository(harness.repository.id), "trying again can't help")
 
         await harness.model.shutdown()
     }

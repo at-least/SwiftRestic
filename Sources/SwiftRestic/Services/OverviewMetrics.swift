@@ -64,6 +64,13 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     }
 }
 
+/// A line under the Protection summary, naming one plan; clicking it opens
+/// that plan.
+struct ProtectionLine: Equatable, Sendable {
+    let planID: UUID
+    let text: String
+}
+
 /// The repository page's Protection line: its text, and whether it ends
 /// with the hold's Resume. Data only — `OverviewMetrics.protectionSummary`
 /// derives it, so the counts and the words are pinned beside the rows they
@@ -78,25 +85,25 @@ struct ProtectionSummary: Equatable, Sendable {
     /// One line per plan whose last backup failed, in the sidebar warning's
     /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
     /// octagon that the plan's own row wears. Empty when none failed.
-    var failureLines: [String] = []
+    var failureLines: [ProtectionLine] = []
     /// One line per other plan that is not protected — no backup yet, no
     /// repository — in the sidebar warning's words ("Photos: No backups
     /// yet"), beside the warning triangle. With the failure lines, the
     /// count names its subject; both are empty when every plan is
     /// protected.
-    var attentionLines: [String] = []
+    var attentionLines: [ProtectionLine] = []
     /// One line per protected plan whose newest backup left an away
     /// drive's folders out, in the record's own words ("Journal: “Archive
     /// SSD” is not connected; the other folders were backed up.") —
     /// protected, since the rest is backed up, but not whole. Empty when
     /// every plan's newest backup read every folder.
-    var skippedLines: [String] = []
+    var skippedLines: [ProtectionLine] = []
     /// One line per protected plan that will not run by itself now — its
     /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
     /// — Sunday at 3:00 AM"), so "all protected" cannot hide a plan that has
     /// stopped. A pause is a choice, not a problem: the card gives these
     /// the pause glyph, not the warning's.
-    var heldLines: [String] = []
+    var heldLines: [ProtectionLine] = []
 }
 
 /// Derives the protection rows and the recent problems from the
@@ -294,7 +301,7 @@ enum OverviewMetrics {
                 plan: plan, among: plans, stateText: line, isKnown: true,
                 isProtected: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
             )
-        case let .failed(message):
+        case let .failed(message, _):
             return ProtectionRow(
                 plan: plan,
                 among: plans,
@@ -370,10 +377,10 @@ enum OverviewMetrics {
         // The sidebar warning's own join of the same rows (attentionMark), so
         // the card and the mark beside it cannot disagree — a failed run's
         // lines apart, under its glyph.
-        var failures: [String] = []
-        var attention: [String] = []
+        var failures: [ProtectionLine] = []
+        var attention: [ProtectionLine] = []
         for row in rows where row.isKnown && !row.isProtected && !row.isRunning {
-            let line = "\(row.planName): \(row.stateText)"
+            let line = ProtectionLine(planID: row.planID, text: "\(row.planName): \(row.stateText)")
             if row.problemOutcome == .failed {
                 if !failures.contains(line) { failures.append(line) }
             } else if !attention.contains(line) {
@@ -383,14 +390,14 @@ enum OverviewMetrics {
         // The protected plans that will not run by themselves
         // (`PlanStatus.willNotRunCaption`); an unprotected one's line above
         // already names it.
-        var held: [String] = []
+        var held: [ProtectionLine] = []
         // And the protected plans whose newest backup went around an away
         // drive (`partialSkip`: the record's words), which "protected"
         // alone would hide.
-        var skipped: [String] = []
+        var skipped: [ProtectionLine] = []
         for row in rows where row.isKnown && row.isProtected && !row.isRunning {
-            if let caption = willNotRun(row.planID) { held.append("\(row.planName): \(caption)") }
-            if let skip = partialSkip(row.planID) { skipped.append("\(row.planName): \(skip)") }
+            if let caption = willNotRun(row.planID) { held.append(ProtectionLine(planID: row.planID, text: "\(row.planName): \(caption)")) }
+            if let skip = partialSkip(row.planID) { skipped.append(ProtectionLine(planID: row.planID, text: "\(row.planName): \(skip)")) }
         }
         return ProtectionSummary(
             text: segments.joined(separator: " · "),

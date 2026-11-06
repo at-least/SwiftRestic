@@ -429,10 +429,9 @@ struct RepositoryEditorSheet: View {
     }
 
     /// Where the repository is, chosen only while it is new. A saved one is
-    /// that place — its label, its index and its history are all of it —
-    /// so its location reads as text, as a saved plan's path does, and
-    /// another place is another repository (Add Repository, exit 10's
-    /// fix). Fixed are the parts restic's repository string is made of and
+    /// that place, so its location reads as text, as a saved plan's path
+    /// does: a typed path could repoint it at another repository. A folder
+    /// that moved has Locate, which checks restic's ID. Fixed are the parts restic's repository string is made of and
     /// Azure's account, which holds the container; what reaches the place
     /// without being it — a key's ID, a project, a share's password —
     /// stays editable.

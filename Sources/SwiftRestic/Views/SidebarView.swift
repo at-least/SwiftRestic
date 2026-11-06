@@ -564,7 +564,7 @@ struct BackupsStatusRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else if case let .failed(message) = outcome {
+        } else if case let .failed(message, fix) = outcome {
             VStack(alignment: .leading, spacing: 4) {
                 // Orange only on the glyph, the words secondary — the
                 // plan rows' contrast rule.
@@ -578,10 +578,15 @@ struct BackupsStatusRow: View {
                         .lineLimit(2)
                 }
                 .font(.caption)
-                Button("Try Again") {
-                    Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                if let fix {
+                    RunFixButton(fix: fix)
+                        .controlSize(.small)
+                } else {
+                    Button("Try Again") {
+                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                    }
+                    .controlSize(.small)
                 }
-                .controlSize(.small)
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {

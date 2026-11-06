@@ -243,7 +243,7 @@ struct AppRouterTests {
 
         #expect(self.revalidated(.orphanPlan(repositoryID: UUID(), planID: moved.id),
                                  repositories: [first], plans: [kept])
-            == .repository(first.id))
+            == .plan(kept.id))
     }
 
     @Test("a selected lineage follows the same fall-back as a group")

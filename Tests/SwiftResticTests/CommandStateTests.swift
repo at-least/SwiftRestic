@@ -233,7 +233,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        for selection: SidebarItem? in [nil, .activity, .repository(repository.id),
+        for selection: SidebarItem? in [nil, .activity,
                                          .orphanPlan(repositoryID: repository.id, planID: UUID())] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")

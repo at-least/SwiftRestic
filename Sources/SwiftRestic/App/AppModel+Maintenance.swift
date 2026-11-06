@@ -41,7 +41,8 @@ extension AppModel {
             repositoryExists: repository != nil,
             repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false,
             planExists: plan(id: run.planID) != nil,
-            repositoryVolume: repository?.driveVolumeName
+            repositoryVolume: repository?.driveVolumeName,
+            repositoryIsLocal: repository?.kind == .local
         )
     }
 

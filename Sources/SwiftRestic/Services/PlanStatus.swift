@@ -359,7 +359,7 @@ enum PlanStatus {
     ) -> RepositoryCaption? {
         if !listing.isEmpty { return .count(listing.count) }
         if isLoading { return .reading }
-        if case let .failed(message) = outcome {
+        if case let .failed(message, _) = outcome {
             let line = Format.firstSentence(message)
             // Under the repository's own name, its drive's absence needs no
             // name again: the sentence the listing wrote for it

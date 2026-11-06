@@ -270,8 +270,12 @@ struct RootView: View {
 
     private func runSelectedPlan() {
         let state = model.planCommands(for: router.selection)
-        guard state.canBackUp, let id = state.planID else { return }
-        model.runBackup(planID: id)
+        guard state.canBackUp else { return }
+        if let id = state.planID {
+            model.runBackup(planID: id)
+        } else {
+            model.runBackups(planIDs: state.repositoryPlanIDs)
+        }
     }
 
     #if DEBUG
@@ -425,7 +429,9 @@ struct RootView: View {
         // Before the configuration is read there is nothing to decide from;
         // the `isBootstrapping` change handler picks the landing pane.
         guard router.selection == nil, !model.isBootstrapping else { return }
-        router.selection = SidebarTree.landingSelection(repositories: model.configuration.repositories)
+        router.selection = SidebarTree.landingSelection(
+            repositories: model.configuration.repositories, plans: model.configuration.plans
+        )
     }
 
     /// Applies one consumed intent. An ask arriving while a sheet is up is

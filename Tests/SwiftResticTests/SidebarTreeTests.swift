@@ -63,12 +63,19 @@ struct SidebarTreeTests {
         #expect(SidebarTree.otherBackupsTitle(repositoryHasPlans: false) == "Backups")
     }
 
-    @Test("the landing pane is the first repository's page, or the welcome when there is none")
+    @Test("one repository with one plan lands on the plan; otherwise the first repository's page, or the welcome")
     func landing() {
         let nas = repository("NAS")
         let b2 = repository("B2")
-        #expect(SidebarTree.landingSelection(repositories: [nas, b2]) == .repository(nas.id))
-        #expect(SidebarTree.landingSelection(repositories: []) == nil)
+        var only = BackupPlan()
+        only.repositoryID = nas.id
+        var second = BackupPlan()
+        second.repositoryID = nas.id
+        #expect(SidebarTree.landingSelection(repositories: [nas, b2], plans: [only]) == .repository(nas.id))
+        #expect(SidebarTree.landingSelection(repositories: [nas], plans: [only]) == .plan(only.id))
+        #expect(SidebarTree.landingSelection(repositories: [nas], plans: [only, second]) == .repository(nas.id))
+        #expect(SidebarTree.landingSelection(repositories: [nas], plans: []) == .repository(nas.id))
+        #expect(SidebarTree.landingSelection(repositories: [], plans: []) == nil)
     }
 
     @Test("a backup sits under the plan of the repository that made it, the rest under Other backups by plan or lineage")

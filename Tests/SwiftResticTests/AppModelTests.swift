@@ -669,16 +669,14 @@ struct AppModelTests {
         #expect(model.currentProblem(for: harness.plan.id) == nil)
 
         // The drive is here and the folder is not: restic's exit 10 stays
-        // a failure, and since a repository's location is fixed, the fix is
-        // a new repository where it is now.
+        // a failure, and the fix is finding where it went.
         model.configuration.repositories[index].localPath = harness.root.appendingPathComponent("moved").path
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let failed = try #require(model.configuration.runs.first)
         #expect(failed.outcome == .failed)
         #expect(failed.exitCode == 10)
-        #expect(RunRecordPresentation.fix(for: failed, repositoryExists: true, repositoryBusy: false)
-            == .addRepository)
+        #expect(model.fix(for: failed) == .locate(harness.repository.id))
 
         await model.shutdown()
     }
@@ -691,7 +689,10 @@ struct AppModelTests {
         let id = harness.repository.id
         let rows = model.snapshots[id]
         let banners = model.banners.count
-        let away = SnapshotListingOutcome.failed("“SwiftRestic Absent Drive” is not connected.")
+        let away = SnapshotListingOutcome.failed(
+            "“SwiftRestic Absent Drive” is not connected. Connect it to read its backups.",
+            fix: .locate(id)
+        )
         let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
         model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
 

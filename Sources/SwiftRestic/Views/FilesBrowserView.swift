@@ -250,7 +250,10 @@ struct FilesBrowserView: View {
     /// whatever it says.
     private var treeFooter: some View {
         @Bindable var router = router
-        return Toggle("Show Deleted Items", isOn: $router.filesShowsDeletedItems)
+        let hidden = router.filesShowsDeletedItems
+            ? 0
+            : FilesTree.hiddenDeletedCount(under: roots, open: router.openFolders, states: filesTree.states)
+        return Toggle(FilesTree.showDeletedTitle(hidden: hidden), isOn: $router.filesShowsDeletedItems)
             .toggleStyle(.checkbox)
             .help("Also list items deleted from this Mac that its backups still hold")
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -472,7 +475,11 @@ struct FilesBrowserView: View {
                 // opens it anew.
                 .id(FilesPaneIdentity(node: selected, opening: router.filesPaneOpenings))
         } else {
-            ContentUnavailableView("Select a folder or file", systemImage: "folder")
+            ContentUnavailableView(
+                "No File Selected",
+                systemImage: "doc",
+                description: Text("Select a file to see its earlier versions.")
+            )
         }
     }
 

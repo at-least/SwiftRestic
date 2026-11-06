@@ -186,6 +186,8 @@ struct FilesTreeTests {
         #expect(shown.count == FilesTree.rowCap + 1)
         #expect(shown.last == "0 more 3 of /Docs")
         #expect(text(FilesTree.rows(under: docs, open: [], showsDeleted: true, states: empty)) == ["0 /Docs/zz-old"])
+        #expect(FilesTree.hiddenDeletedCount(under: docs, open: [], states: empty) == 1)
+        #expect(FilesTree.hiddenDeletedCount(under: docs, open: [], states: states) == 0, "past the cap it stands in the more row")
         // Off at every launch.
         #expect(!AppRouter().filesShowsDeletedItems)
     }

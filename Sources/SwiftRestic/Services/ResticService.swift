@@ -170,6 +170,19 @@ struct ResticService: ResticClient {
         return nil
     }
 
+    func resticID(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> String {
+        let result = try await run(
+            context,
+            ResticInvocation(arguments: ["cat", "config", "--json"], timeout: timeout, retainFullOutput: true)
+        )
+        struct Config: Decodable { let id: String }
+        do {
+            return try JSONDecoder().decode(Config.self, from: Data(result.stdout.utf8)).id
+        } catch {
+            throw ResticError.malformedOutput(detail: "cat config: \(error.localizedDescription)")
+        }
+    }
+
     /// Cheap probe used to validate credentials when adding a repository.
     /// Returns `false` when the repository does not exist yet (exit code 10).
     func repositoryExists(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> Bool {

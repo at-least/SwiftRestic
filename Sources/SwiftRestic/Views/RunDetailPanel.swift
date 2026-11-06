@@ -277,6 +277,7 @@ struct RunDetailPanel: View {
 /// editor sheet, or the confirmed Unlock.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
+    @Environment(AppModel.self) private var model
     let fix: RunFix
 
     var body: some View {
@@ -287,12 +288,26 @@ struct RunFixButton: View {
             case let .removeStaleLocks(id): router.request(.confirm(.unlock(id)))
             case let .newPlan(id): router.request(.newPlanIn(id))
             case .addRepository: router.request(.newRepository)
+            case let .locate(id): locate(id)
             case let .editPlanShare(id): router.request(.editPlan(id))
             case let .editPlanRetention(id): router.request(.editPlanRetention(id))
             case let .pruneNow(id): router.request(.confirm(.prune(id)))
             }
         }
         .modifier(TileHelp(help: fix.help))
+    }
+
+    private func locate(_ id: UUID) {
+        guard let repository = model.repository(id: id),
+              let url = FilePicker.chooseDirectory(message: "Choose the folder “\(model.label(of: repository))” moved to")
+        else { return }
+        Task {
+            do {
+                try await model.locateRepository(id: id, atPath: url.path)
+            } catch {
+                model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, isError: true))
+            }
+        }
     }
 }
 

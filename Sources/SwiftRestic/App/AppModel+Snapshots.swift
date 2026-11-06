@@ -69,7 +69,7 @@ extension AppModel {
                 return
             }
             if await isDriveAway(repository) {
-                snapshotListingOutcomes[repositoryID] = .failed(RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
+                snapshotListingOutcomes[repositoryID] = driveAwayOutcome(repository)
                 return
             }
         }
@@ -131,6 +131,9 @@ extension AppModel {
             maintenanceAwaitingServer.remove(repositoryID)
             repositoriesMissingPassword.remove(repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
+            if repository.resticID == nil {
+                await recordResticID(of: repositoryID, service: service, context: context)
+            }
         } catch ResticError.cancelled {
             // A cancelled refresh is the user (or shutdown) stopping the app's
             // own work, not a repository that could not be read: no banner,
@@ -143,7 +146,8 @@ extension AppModel {
             guard configuration.repository(id: repositoryID) != nil else { return }
             repositoriesMissingPassword.insert(repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(
-                "Waiting for a repository password — add it in the repository editor to read this repository."
+                "No password is saved for “\(label(of: repository))”. Add it to read its backups.",
+                fix: .editRepository(repositoryID)
             )
         } catch let ResticError.commandFailed(code, _) where code == ResticError.repositoryMissingCode {
             // restic's "does not exist": the repository is not where it was
@@ -156,7 +160,18 @@ extension AppModel {
             guard configuration.repository(id: repositoryID) != nil else { return }
             // No banner: the sidebar's row and every page of the repository
             // say it, for as long as it lasts.
-            snapshotListingOutcomes[repositoryID] = .failed(Self.missingRepositoryReason(kind: repository.kind))
+            snapshotListingOutcomes[repositoryID] = .failed(
+                Self.missingRepositoryReason(kind: repository.kind),
+                fix: repository.kind == .local ? .locate(repositoryID) : .addRepository
+            )
+        } catch let ResticError.commandFailed(code, message) where code == ResticError.wrongPasswordCode {
+            // Trying again can't help: the password has to change.
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            noteAuthFailure(ResticError.commandFailed(exitCode: code, message: message), repositoryID: repositoryID)
+            snapshotListingOutcomes[repositoryID] = .failed(
+                "This password doesn’t open “\(label(of: repository))”.",
+                fix: .editRepository(repositoryID)
+            )
         } catch {
             // Keep whatever an earlier successful listing produced — stale
             // rows beside an error beat a blank card that reads as "nothing
@@ -174,14 +189,25 @@ extension AppModel {
         return snapshotListingOutcomes[repositoryID] ?? .idle
     }
 
+    /// A drive that is away, in two sentences: the sidebar shows the first
+    /// alone. Only a scheduled plan comes back by itself
+    /// (`runSkippedPlansAfterMount`). Locate is for a disk renamed: it never
+    /// mounts under the saved name.
+    func driveAwayOutcome(_ repository: Repository) -> SnapshotListingOutcome {
+        let next = plans(in: repository.id).contains(where: LoginItemAdvice.isScheduled)
+            ? "Connect it and backups continue on their own."
+            : "Connect it to read its backups."
+        return .failed(
+            RunRecord.skippedReason(sources: [repository.resolvedLocalPath]) + " " + next,
+            fix: .locate(repository.id)
+        )
+    }
+
     /// The listing's words for restic's exit 10 — no repository where this
     /// one is saved: two sentences, the sidebar showing the first alone.
-    /// What to do is exit 10's own (`ResticError.noRepositoryAtLocation`):
-    /// a saved repository's location is fixed, so its settings
-    /// can't repoint it, and where it is now is a new repository.
     nonisolated static func missingRepositoryReason(kind: Repository.Kind) -> String {
         kind == .local
-            ? "Repository missing. Is its disk connected? If it moved, put it back, or add it where it is now as a new repository."
+            ? "Repository missing. Is its disk connected? If it moved, locate it."
             : "Repository missing. If it moved, put it back, or add it where it is now as a new repository."
     }
 

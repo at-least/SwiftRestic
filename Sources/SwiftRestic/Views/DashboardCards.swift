@@ -3,11 +3,9 @@ import SwiftUI
 /// The repository page's Protection card: one line — how many of the
 /// repository's plans are protected, a run in flight, when its newest
 /// backup landed, and, while one is on, the app-wide hold's words with a
-/// Resume — then one line per plan that is not protected. The lines are
-/// static text by rule: no hover, no chevron, no destination — the plans
-/// they name sit in the sidebar beside it. Until the listing succeeds the
-/// card says why in the caveat's words instead; the plan-less page's
-/// prominent button stays either way.
+/// Resume — then one line per plan that is not protected, which opens that
+/// plan. Until the listing succeeds the card says why in the caveat's words
+/// instead; the plan-less page's prominent button stays either way.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -23,6 +21,7 @@ struct ProtectionCard: View {
     var body: some View {
         let plans = model.plans(in: repositoryID)
         let summary = model.protectionSummary(repositoryID: repositoryID, now: now)
+        let commands = model.planCommands(for: .repository(repositoryID))
         return Card("Protection") {
             VStack(alignment: .leading, spacing: 7) {
                 if let summary {
@@ -77,6 +76,13 @@ struct ProtectionCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } accessory: {
+            // The one verb this page's first glance asks for: ⌘B's, here.
+            if !plans.isEmpty {
+                Button("Back Up Now") { model.runBackups(planIDs: commands.repositoryPlanIDs) }
+                    .controlSize(.small)
+                    .disabled(!commands.canBackUp)
+            }
         }
     }
 
@@ -114,14 +120,20 @@ struct ProtectionCard: View {
         .help("Keep backing up from this Mac, with these backups as the history")
     }
 
-    private func captionLines(_ lines: [String], symbol: String, tint: some ShapeStyle) -> some View {
-        ForEach(lines, id: \.self) { line in
-            Label {
-                Text(line).foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: symbol).foregroundStyle(tint)
+    private func captionLines(_ lines: [ProtectionLine], symbol: String, tint: some ShapeStyle) -> some View {
+        ForEach(lines, id: \.text) { line in
+            Button {
+                router.selection = .plan(line.planID)
+            } label: {
+                Label {
+                    Text(line.text).foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: symbol).foregroundStyle(tint)
+                }
+                .font(.caption)
             }
-            .font(.caption)
+            .buttonStyle(.plain)
+            .help("Show this plan")
         }
     }
 }

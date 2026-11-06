@@ -208,6 +208,7 @@ enum SnapshotListingOutcome: Equatable {
     case loaded
     /// The last refresh could not read the repository. The message is what
     /// the surfaces show instead of a snapshot count, and stale rows (when a
-    /// previous listing succeeded) stay visible next to it.
-    case failed(String)
+    /// previous listing succeeded) stay visible next to it. `fix` is the one
+    /// action that helps; without one, trying again is all there is.
+    case failed(String, fix: RunFix? = nil)
 }

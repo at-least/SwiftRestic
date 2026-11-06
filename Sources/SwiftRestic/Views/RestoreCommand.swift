@@ -27,10 +27,16 @@ extension View {
 
 struct RestoreCommands: Commands {
     @FocusedValue(\.restoreCommand) private var command
+    /// The way in from anywhere, for someone who has lost a file and is on
+    /// no pane yet: Search. Off only with nothing to search.
+    let canSearch: Bool
+    let search: () -> Void
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Divider()
+            Button("Restore a File…", action: search)
+                .disabled(!canSearch)
             Button(command?.title ?? "Restore…") { command?.run() }
                 .disabled(command?.isEnabled != true)
         }

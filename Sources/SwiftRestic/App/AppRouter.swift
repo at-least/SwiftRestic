@@ -247,7 +247,7 @@ final class AppRouter {
         shelves: (UUID) -> BackupShelves,
         isResticAvailable: Bool
     ) -> SidebarItem? {
-        let landing = SidebarTree.landingSelection(repositories: repositories)
+        let landing = SidebarTree.landingSelection(repositories: repositories, plans: plans)
         switch selection {
         case .plan(let id) where !plans.contains { $0.id == id },
              .repository(let id) where !repositories.contains { $0.id == id }:

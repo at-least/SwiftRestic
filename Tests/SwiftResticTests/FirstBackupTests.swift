@@ -286,3 +286,214 @@ struct FindResticAgainTests {
         #expect(ResticAbsence.unusable.installCommand == nil && ResticAbsence.unusable.guidance == nil)
     }
 }
+
+@Suite("locating a moved repository")
+@MainActor
+struct LocateRepositoryTests {
+    private static let password = "pw"
+
+    private func makeModel() async throws -> (model: AppModel, root: URL, repository: Repository) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticLocate-\(UUID().uuidString)")
+            .resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var repository = Repository()
+        repository.localPath = root.appendingPathComponent("Old Home/repo").path
+        let model = AppModel(
+            store: ConfigStore(directory: root.appendingPathComponent("config")),
+            secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
+        )
+        model.resticSearch = .found(try ResticAvailability.binary(), version: "")
+        _ = try await ResticAvailability.service().initializeRepository(
+            RepositoryContext(repository: repository, password: Self.password, providerSecret: nil)
+        )
+        model.configuration.repositories = [repository]
+        return (model, root, repository)
+    }
+
+    private func move(_ repository: Repository, in root: URL) throws -> String {
+        let new = root.appendingPathComponent("New Home").path
+        try FileManager.default.moveItem(atPath: repository.localPath, toPath: new)
+        return new
+    }
+
+    @Test("the first listing records restic's ID, once, and an edit's draft can't lose it")
+    func listingRecordsTheID() async throws {
+        let (model, root, repository) = try await makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(repository.resticID == nil)
+        await model.refreshSnapshots(repositoryID: repository.id)
+        let recorded = try #require(model.repository(id: repository.id)?.resticID)
+        #expect(recorded.count == 64)
+        await model.upsert(repository: repository, password: nil, providerSecret: nil)
+        #expect(model.repository(id: repository.id)?.resticID == recorded)
+        await model.shutdown()
+    }
+
+    @Test("a config.json from before the ID decodes without one, and one with it keeps it")
+    func idDecodes() throws {
+        #expect(try JSONDecoder().decode(Repository.self, from: Data(#"{"localPath":"/a"}"#.utf8)).resticID == nil)
+        #expect(try JSONDecoder().decode(Repository.self, from: Data(#"{"resticID":"abc"}"#.utf8)).resticID == "abc")
+    }
+
+    @Test("a moved folder fails with Locate as its fix, and Locate brings every backup back")
+    func locateFindsTheMovedRepository() async throws {
+        let (model, root, repository) = try await makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.refreshSnapshots(repositoryID: repository.id)
+        let new = try move(repository, in: root)
+
+        await model.refreshSnapshots(repositoryID: repository.id)
+        guard case let .failed(_, fix) = model.snapshotListingOutcome(for: repository.id) else {
+            Issue.record("expected a failed listing")
+            return
+        }
+        #expect(fix == .locate(repository.id))
+
+        try await model.locateRepository(id: repository.id, atPath: new)
+        #expect(model.repository(id: repository.id)?.localPath == new)
+        await model.tasks.drain()
+        await model.refreshSnapshots(repositoryID: repository.id)
+        #expect(model.snapshotListingOutcome(for: repository.id) == .loaded)
+        await model.shutdown()
+    }
+
+    @Test("a folder holding another repository is refused and the location stays")
+    func locateRefusesAnotherRepository() async throws {
+        let (model, root, repository) = try await makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.refreshSnapshots(repositoryID: repository.id)
+        var other = Repository()
+        other.localPath = root.appendingPathComponent("Other").path
+        _ = try await ResticAvailability.service().initializeRepository(
+            RepositoryContext(repository: other, password: Self.password, providerSecret: nil)
+        )
+        await #expect(throws: LocateRefusal.differentRepository(name: model.label(of: repository))) {
+            try await model.locateRepository(id: repository.id, atPath: other.localPath)
+        }
+        #expect(model.repository(id: repository.id)?.localPath == repository.localPath)
+        await model.shutdown()
+    }
+
+    @Test("an empty folder, the wrong password and another location's path are each refused by name")
+    func locateRefusals() async throws {
+        let (model, root, repository) = try await makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.refreshSnapshots(repositoryID: repository.id)
+        let name = model.label(of: repository)
+
+        let empty = root.appendingPathComponent("Empty").path
+        try FileManager.default.createDirectory(atPath: empty, withIntermediateDirectories: true)
+        await #expect(throws: LocateRefusal.noRepository) {
+            try await model.locateRepository(id: repository.id, atPath: empty)
+        }
+
+        var locked = Repository()
+        locked.localPath = root.appendingPathComponent("Locked").path
+        _ = try await ResticAvailability.service().initializeRepository(
+            RepositoryContext(repository: locked, password: "another", providerSecret: nil)
+        )
+        await #expect(throws: LocateRefusal.wrongPassword(name: name)) {
+            try await model.locateRepository(id: repository.id, atPath: locked.localPath)
+        }
+
+        var twin = Repository()
+        twin.localPath = root.appendingPathComponent("Twin").path
+        model.configuration.repositories.append(twin)
+        await #expect(throws: LocateRefusal.alreadySetUp(other: model.label(of: twin))) {
+            try await model.locateRepository(id: repository.id, atPath: twin.localPath)
+        }
+        #expect(model.repository(id: repository.id)?.localPath == repository.localPath)
+        await model.shutdown()
+    }
+
+    @Test("a repository never read here can't be proved the same, so Locate says to add it instead")
+    func locateRefusesWithoutAnID() async throws {
+        let (model, root, repository) = try await makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let new = try move(repository, in: root)
+        await #expect(throws: LocateRefusal.neverRead(name: model.label(of: repository))) {
+            try await model.locateRepository(id: repository.id, atPath: new)
+        }
+        #expect(model.repository(id: repository.id)?.localPath == repository.localPath)
+    }
+
+    @Test("exit 10 on a disk offers Locate; on a server, a new repository")
+    func fixFollowsTheKind() {
+        var run = RunRecord(kind: .backup, planID: UUID(), planName: "p", repositoryID: UUID())
+        run.outcome = .failed
+        run.exitCode = ResticError.repositoryMissingCode
+        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryBusy: false, repositoryIsLocal: true)
+            == .locate(run.repositoryID!))
+        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryBusy: false, repositoryIsLocal: false)
+            == .addRepository)
+        #expect(RunFix.locate(UUID()).title == "Locate…")
+    }
+
+    @Test("a drive away says what comes next, truthfully for a Manually plan")
+    func driveAwayWords() {
+        let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticLocateWords-\(UUID().uuidString)")), secrets: .inMemory())
+        var repository = Repository()
+        repository.localPath = "/Volumes/Archive SSD/restic"
+        var plan = BackupPlan()
+        plan.path = "/a"
+        plan.repositoryID = repository.id
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+        #expect(model.driveAwayOutcome(repository) == .failed(
+            "“Archive SSD” is not connected. Connect it and backups continue on their own.", fix: .locate(repository.id)
+        ))
+        model.configuration.plans[0].schedule.frequency = .manual
+        #expect(model.driveAwayOutcome(repository) == .failed(
+            "“Archive SSD” is not connected. Connect it to read its backups.", fix: .locate(repository.id)
+        ))
+    }
+}
+
+@Suite("Back Up Now on a repository's page")
+@MainActor
+struct RepositoryBackUpNowTests {
+    @Test("it reaches every plan that can start, and a repository with none stays grey")
+    func repositoryCommands() {
+        let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticBackUpNow-\(UUID().uuidString)")), secrets: .inMemory())
+        model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
+        var repository = Repository()
+        repository.localPath = "/r"
+        var empty = Repository()
+        empty.localPath = "/e"
+        var plan = BackupPlan()
+        plan.path = "/a"
+        plan.repositoryID = repository.id
+        model.configuration.repositories = [repository, empty]
+        model.configuration.plans = [plan]
+
+        let state = model.planCommands(for: .repository(repository.id))
+        #expect(state.canBackUp && state.repositoryPlanIDs == [plan.id])
+        #expect(state.planID == nil && !state.canStop && !state.canEdit && !state.canDelete)
+        #expect(!model.planCommands(for: .repository(empty.id)).canBackUp)
+    }
+
+    @Test("each line under the summary names the plan it opens")
+    func linesOpenTheirPlan() {
+        var plan = BackupPlan()
+        plan.path = "/Users/u/Music"
+        let row = ProtectionRow(plan: plan, among: [plan], stateText: "No backups yet", isKnown: true, isProtected: false, didFail: false)
+        let summary = OverviewMetrics.protectionSummary(
+            rows: [row], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil, now: .now
+        )
+        #expect(summary?.attentionLines == [ProtectionLine(planID: plan.id, text: "Music: No backups yet")])
+    }
+}
+
+@Suite("Show Deleted Items' count")
+@MainActor
+struct ShowDeletedTitleTests {
+    @Test("the checkbox says how many are behind it")
+    func title() {
+        #expect(FilesTree.showDeletedTitle(hidden: 0) == "Show Deleted Items")
+        #expect(FilesTree.showDeletedTitle(hidden: 1) == "Show 1 Deleted Item")
+        #expect(FilesTree.showDeletedTitle(hidden: 3) == "Show 3 Deleted Items")
+    }
+}

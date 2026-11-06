@@ -384,13 +384,16 @@ struct PlanDetailView: View {
                             : PlanStatus.noneFromThisPlanFact
                     )
                     .foregroundStyle(.secondary)
-                case .failed:
+                case let .failed(_, fix):
                     Text("—")
-                    Button("Try Again") {
-                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                    // A known fix sits on the caveat; trying again can't help.
+                    if fix == nil {
+                        Button("Try Again") {
+                            Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                        }
+                        .controlSize(.small)
+                        .disabled(model.loadingSnapshots.contains(repositoryID))
                     }
-                    .controlSize(.small)
-                    .disabled(model.loadingSnapshots.contains(repositoryID))
                 case .idle:
                     Text("—")
                 }
