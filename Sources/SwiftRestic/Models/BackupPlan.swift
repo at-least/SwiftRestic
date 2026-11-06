@@ -15,8 +15,6 @@ struct Schedule: Codable, Sendable, Hashable {
     }
 
     var frequency: Frequency = .daily
-    /// Used when `frequency == .hourly`.
-    var intervalHours: Int = 4
     var hour: Int = 2
     var minute: Int = 0
     /// 1 = Sunday, matching `Calendar.component(.weekday:)`.
@@ -27,10 +25,6 @@ struct Schedule: Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         frequency = c.value(.frequency, default: .daily)
-        // The editor's own range (1...24): only a hand-edited config exceeds
-        // it, and a huge value would overflow `intervalHours * 3600` on the
-        // scheduler's next tick.
-        intervalHours = DecodeNotes.clamped(c.value(.intervalHours, default: 4), 1...24, "schedule.intervalHours")
         // An "hour": 25 would match no wall-clock time — the plan would
         // silently never run.
         hour = DecodeNotes.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
@@ -47,7 +41,7 @@ struct Schedule: Codable, Sendable, Hashable {
     func summary(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
         switch frequency {
         case .manual: return "Manually"
-        case .hourly: return intervalHours == 1 ? "Every hour" : "Every \(intervalHours) hours"
+        case .hourly: return "Every hour"
         case .daily: return "Daily at \(timeOfDay(calendar: calendar, locale: locale))"
         case .weekly:
             var named = calendar
@@ -76,7 +70,7 @@ struct Schedule: Codable, Sendable, Hashable {
     var interval: TimeInterval? {
         switch frequency {
         case .manual: nil
-        case .hourly: TimeInterval(max(1, intervalHours) * 3600)
+        case .hourly: 3600
         case .daily: 86_400
         case .weekly: 7 * 86_400
         }
@@ -344,13 +338,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
-    /// The schedule's switch: off is Pause Schedule's "Until I Resume" and
-    /// the editor's "Run on schedule" switch.
-    var isEnabled: Bool = true
-    /// A timed Pause Schedule's end. The schedule holds while it lies ahead
-    /// and resumes by itself once it passes — `isScheduleActive(at:)` reads
-    /// the date, so nothing has to be written for the pause to end.
-    var pausedUntil: Date?
     var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
@@ -387,11 +374,14 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, repositoryID, path, excludePatterns, excludeCaches, oneFileSystem, tags, schedule, retention
-        case isEnabled, pausedUntil, hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
+        case hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
         case developerGroups = "skipDeveloperGroups"
         case skipsFinderFiles, skipsSystemFiles, skipsTimeMachineExclusions
         case keptRebuildableFolders
     }
+
+    /// Read, never written: a plan an older build switched off stays stopped.
+    private enum LegacyKeys: String, CodingKey { case isEnabled }
 
     init() {}
 
@@ -405,8 +395,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         tags = c.value(.tags, default: [])
         schedule = c.value(.schedule, default: Schedule())
         retention = c.value(.retention, default: RetentionPolicy())
-        isEnabled = c.value(.isEnabled, default: true)
-        pausedUntil = c.optional(.pausedUntil)
+        if try !decoder.container(keyedBy: LegacyKeys.self).value(.isEnabled, default: true) {
+            schedule.frequency = .manual
+        }
         hooks = c.value(.hooks, default: [])
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
@@ -546,21 +537,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
-    func activePauseEnd(at now: Date) -> Date? {
-        guard let pausedUntil, pausedUntil > now else { return nil }
-        return pausedUntil
-    }
-
-    /// Whether the scheduler may start this plan by itself: switched on and
-    /// not inside a timed pause. The one schedule-state predicate — the
-    /// scheduler and every Pause/Resume control read it, so a timed pause
-    /// is a pause everywhere.
-    func isScheduleActive(at now: Date) -> Bool {
-        isEnabled && activePauseEnd(at: now) == nil
-    }
-
-    func runsOnSchedule(at now: Date) -> Bool {
-        isScheduleActive(at: now) && schedule.frequency != .manual && isConfigurationComplete
+    var runsOnSchedule: Bool {
+        schedule.frequency != .manual && isConfigurationComplete
     }
 
     func dueSlot(at now: Date, calendar: Calendar = .current) -> Date? {
@@ -569,19 +547,13 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// The stored plan wins over the editor's draft for the model-written
     /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
-    /// quiet-plan alert's mark, the folders the plan page was told to keep,
-    /// and a timed pause's end, which the scheduler's tick clears once it
-    /// passes —
-    /// a stale draft must not erase the plan's last success or bring back a
-    /// pause that has ended.
-    /// Everything else comes from the draft; a new model-written field joins
-    /// this list, or the next save reverts it to the draft. (`isEnabled`
-    /// stays the draft's: it is the editor's own "Run on schedule" switch.)
+    /// quiet-plan alert's mark and the folders the plan page was told to keep.
+    /// A new model-written field joins this list, or the next save reverts it
+    /// to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
-        merged.pausedUntil = pausedUntil
         merged.staleAlertedFor = staleAlertedFor
         merged.keptRebuildableFolders = keptRebuildableFolders
         return merged

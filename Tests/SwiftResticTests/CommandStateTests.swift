@@ -119,25 +119,7 @@ struct CommandStateTests {
         #expect(model.busyRepositoryIDs.isEmpty)
     }
 
-    @Test("a removed plan's stopping run is not stopped again by Pause and Stop, so its record keeps Remove Plan's words")
-    func removedPlansRunIsNotPauseStopped() async {
-        let model = makeModel()
-        let repository = makeRepository("Home NAS")
-        let photos = makePlan("Photos", on: repository)
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [photos]
-        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
-            try? await Task.sleep(for: .seconds(60))
-        }
-        model.deletePlan(id: photos.id)
-        #expect(model.activity[photos.id]?.phase == .cancelling)
-        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
-        #expect(!model.pauseStoppedPlanIDs.contains(photos.id))
-        #expect(model.cancellationMessage(for: photos.id) == "Cancelled")
-        await model.tasks.drain()
-    }
-
-    @Test("a phase the engine writes after Stop keeps the strip stopping, so Pause and Stop leaves the run to Stop's words")
+    @Test("a phase the engine writes after Stop keeps the strip stopping")
     func stopOutlivesLaterPhases() {
         let model = makeModel()
         let repository = makeRepository("Home NAS")
@@ -149,8 +131,6 @@ struct CommandStateTests {
         model.cancelBackup(planID: photos.id)
         model.setActivityPhase(.backingUp, for: photos.id)
         #expect(model.activity[photos.id]?.phase == .cancelling)
-        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
-        #expect(!model.pauseStoppedPlanIDs.contains(photos.id))
         // A forget launched after the Stop still takes the lock until its
         // child dies.
         model.setActivityPhase(.applyingRetention, for: photos.id)
@@ -332,9 +312,8 @@ struct CommandStateTests {
                                          .orphanPlan(repositoryID: repository.id, planID: UUID())] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
-            #expect(!state.canBackUp && !state.canStop && !state.canEdit && !state.canToggleSchedule)
+            #expect(!state.canBackUp && !state.canStop && !state.canEdit)
             #expect(!state.canDelete)
-            #expect(state.scheduleTitle == "Pause Schedule")
             #expect(state.stopTitle == "Stop Backup")
             // Back Up All Plans Now is not about the selection.
             #expect(state.canBackUpAll)
@@ -343,45 +322,8 @@ struct CommandStateTests {
 
         let idle = model.planCommands(for: .plan(plan.id))
         #expect(idle.planID == plan.id)
-        #expect(idle.canBackUp && idle.canEdit && idle.canToggleSchedule && idle.canDelete)
+        #expect(idle.canBackUp && idle.canEdit && idle.canDelete)
         #expect(!idle.canStop)
-        #expect(idle.scheduleTitle == "Pause Schedule")
-        #expect(idle.isScheduleActive)
-
-        // Both kinds of pause read Resume: switched off, and a timed pause
-        // still running — isScheduleActive(at:) is the one predicate.
-        plan.isEnabled = false
-        model.configuration.plans = [plan]
-        let off = model.planCommands(for: .plan(plan.id))
-        #expect(off.scheduleTitle == "Resume Schedule")
-        #expect(!off.isScheduleActive)
-        #expect(off.canToggleSchedule)
-
-        plan.isEnabled = true
-        plan.pausedUntil = .now.addingTimeInterval(3600)
-        model.configuration.plans = [plan]
-        let timed = model.planCommands(for: .plan(plan.id))
-        #expect(timed.scheduleTitle == "Resume Schedule")
-        #expect(!timed.isScheduleActive)
-        #expect(timed.canToggleSchedule)
-
-        plan.pausedUntil = .now.addingTimeInterval(-60)
-        model.configuration.plans = [plan]
-        #expect(model.planCommands(for: .plan(plan.id)).scheduleTitle == "Pause Schedule")
-
-        // A manual plan has no schedule to pause; switched off, its Resume
-        // is the editor's switch and stays offered.
-        plan.pausedUntil = nil
-        plan.schedule.frequency = .manual
-        model.configuration.plans = [plan]
-        let manual = model.planCommands(for: .plan(plan.id))
-        #expect(manual.scheduleTitle == "Pause Schedule")
-        #expect(!manual.canToggleSchedule)
-        plan.isEnabled = false
-        model.configuration.plans = [plan]
-        let manualOff = model.planCommands(for: .plan(plan.id))
-        #expect(manualOff.scheduleTitle == "Resume Schedule")
-        #expect(manualOff.canToggleSchedule)
     }
 
     @Test("Stop follows the plan's run and says which work it stops")
@@ -450,7 +392,7 @@ struct CommandStateTests {
         let state = model.planCommands(for: .plan(plan.id))
         #expect(!state.canBackUp)
         #expect(!state.canBackUpAll)
-        #expect(state.canEdit && state.canDelete && state.canToggleSchedule)
+        #expect(state.canEdit && state.canDelete)
 
         let repositoryState = model.repositoryCommands(for: .repository(repository.id))
         #expect(!repositoryState.canMaintain)
@@ -646,22 +588,18 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
         let idle = model.planCommands(for: nil)
         #expect(idle.canPauseBackups && !idle.backupsPaused)
-        #expect(!idle.canPauseAndStopBackups)
-        model.activity[plan.id] = PlanActivity(of: plan)
-        #expect(model.planCommands(for: nil).canPauseAndStopBackups)
 
         model.pauseBackups(for: .untilResumed)
         let paused = model.planCommands(for: nil)
         #expect(paused.backupsPaused)
-        #expect(!paused.canPauseBackups && !paused.canPauseAndStopBackups)
+        #expect(!paused.canPauseBackups)
         model.resumeBackups()
         #expect(!model.planCommands(for: nil).backupsPaused)
 
-        // The battery's hold still offers a pause that outlasts it.
-        model.configuration.settings.pauseOnBattery = true
-        model.isOnBattery = true
-        let battery = model.planCommands(for: nil)
-        #expect(!battery.backupsPaused && battery.canPauseBackups)
+        // A metered network's hold still offers a pause that outlasts it.
+        model.isOnMeteredNetwork = true
+        let metered = model.planCommands(for: nil)
+        #expect(!metered.backupsPaused && metered.canPauseBackups)
     }
 
     @Test("every confirmation names its target, and a gone target asks nothing")

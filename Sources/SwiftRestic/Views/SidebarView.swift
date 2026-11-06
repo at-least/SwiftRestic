@@ -150,23 +150,6 @@ struct SidebarView: View {
             Button("Back Up Now") { model.runBackup(planID: plan.id) }
         }
         Button("Edit Plan…") { onEditPlan(plan) }
-        // The Schedule card's pair, word for word, read from the same
-        // command state the Plan menu reads — a rule added there shows up
-        // here instead of drifting. The row's caption says the pause while
-        // the schedule is held; manual runs stay possible either way, and a
-        // manual plan has no schedule to pause — no item either, as the
-        // card has no control.
-        if !commands.isScheduleActive {
-            Button(commands.scheduleTitle) { model.resumePlanSchedule(id: plan.id) }
-        } else if commands.canToggleSchedule {
-            Menu("Pause Schedule") {
-                ForEach(PauseLength.allCases) { length in
-                    Button(length.menuTitle) {
-                        model.pausePlanSchedule(id: plan.id, for: length)
-                    }
-                }
-            }
-        }
         Divider()
         Button("Remove Plan", role: .destructive) { onDeletePlan(plan) }
     }
@@ -572,17 +555,6 @@ private struct PlanSidebarRow: View {
                     .accessibilityLabel(caption.text)
                 }
                 .font(.caption)
-                // A paused plan whose problem took the line above: the pause
-                // gets its own, so neither state hides the other — on screen
-                // or to VoiceOver.
-                if let pauseNote = caption.pauseNote {
-                    Text(pauseNote)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(pauseNote)
-                }
             }
             // State trails identity, the sidebar's one reading rule —
             // Activity's badge follows it too. A trailing marker takes only
@@ -594,9 +566,7 @@ private struct PlanSidebarRow: View {
 
     /// A row wears state, never identity, and at its trailing edge,
     /// vertically centred on the row. In rank: the in-flight spinner,
-    /// the Mail dot for a problem the user has not seen. A paused plan
-    /// wears nothing — its caption already says "Paused — …" or
-    /// "Paused until …".
+    /// the Mail dot for a problem the user has not seen.
     @ViewBuilder
     private var marker: some View {
         if model.isRunning(planID: plan.id) {

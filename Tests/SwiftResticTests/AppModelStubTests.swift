@@ -23,7 +23,6 @@ struct AppModelStubTests {
     private func makeHarness(
         mode: String,
         password: String? = "test-password",
-        maxRunHistory: Int? = nil,
         planHooks: [BackupHook] = [],
         channels: [NotificationChannel] = [],
         // Never the real NetFS: a saved share's reconnect is refused.
@@ -67,7 +66,6 @@ struct AppModelStubTests {
         configuration.plans = [plan]
         configuration.settings.resticPathOverride = stub.url.path
         configuration.settings.notificationChannels = channels
-        if let maxRunHistory { configuration.settings.maxRunHistory = maxRunHistory }
 
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
@@ -180,32 +178,6 @@ struct AppModelStubTests {
         let quickForget = try #require(lines.firstIndex { $0.contains(" forget ") && $0.contains(ResticService.planTag(quick.id)) })
         let heldBackup = try #require(lines.firstIndex { $0.contains(" backup ") && $0.contains(held.path) })
         #expect(quickForget < heldBackup, "\(lines)")
-
-        await model.shutdown()
-    }
-
-    @Test("Pause and Stop drops the plans waiting for their turn: they never start")
-    func pauseAndStopDropsTheQueue() async throws {
-        let harness = try await makeHarness(mode: "holdbackup")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-        let held = try addHeldPlan(to: harness, first: true)
-        let waiting = harness.plan
-
-        model.backUpAllPlans()
-        #expect(model.isRunning(planID: held.id))
-        #expect(model.isQueued(waiting.id))
-        #expect(try await backupStarts(of: held.path, in: harness), "the held backup never started")
-
-        model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
-        await model.waitForRun(planID: held.id)
-        #expect(!model.isQueued(waiting.id))
-        #expect(!model.isRunning(planID: waiting.id))
-        #expect(model.configuration.runs.allSatisfy { $0.planID != waiting.id })
-        // The same match finds the backup that did run.
-        let backups = try invocations(harness).filter { $0.contains(" backup ") }
-        #expect(backups.contains { $0.contains(held.path) })
-        #expect(!backups.contains { $0.contains(waiting.path) })
 
         await model.shutdown()
     }
@@ -325,6 +297,30 @@ struct AppModelStubTests {
 
         #expect(model.activity.isEmpty, "the pause still holds the run")
         #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == last)
+
+        await model.shutdown()
+    }
+
+    @Test("on a metered network a due plan to a disk runs; one to the cloud waits, says so, and still alerts")
+    func meteredTickHoldsOnlyTheNetworkPlan() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        let last = Date.now.addingTimeInterval(-10 * 86400)
+        model.configuration.plans[index].schedule.frequency = .hourly
+        model.configuration.plans[index].lastRunAt = nil
+        model.configuration.plans[index].lastSuccessAt = last
+        model.isOnMeteredNetwork = true
+
+        model.configuration.repositories[0].kind = .s3
+        await model.runDuePlans()
+        #expect(model.activity.isEmpty, "the metered network holds the cloud plan")
+        #expect(model.plan(id: harness.plan.id)?.staleAlertedFor == last, "the alert fires through the hold")
+
+        model.configuration.repositories[0].kind = .local
+        await model.runDuePlans()
+        #expect(model.activity[harness.plan.id] != nil, "a disk on this Mac never waits for a network")
 
         await model.shutdown()
     }
@@ -1086,10 +1082,10 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("the run history is capped at twenty even when every run succeeds")
+    @Test("the run history is capped at its limit even when every run succeeds")
     func runHistoryIsCapped() async throws {
-        // maxRunHistory only raises the floor of 20, so 5 is still capped at 20.
-        let harness = try await makeHarness(mode: "default", maxRunHistory: 5)
+        let harness = try await makeHarness(mode: "default")
+        harness.model.activityHistoryLimit = 20
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         for _ in 0 ..< 22 {
@@ -1835,7 +1831,6 @@ struct AppModelStubTests {
         // removal below can only be deletePlan's own doing.
         let removed = harness.plan.id
         harness.model.problemsSeenAt[removed] = .now
-        harness.model.pauseStoppedPlanIDs.insert(removed)
         harness.model.activity[removed] = PlanActivity(of: harness.plan)
         harness.model.planProgress[removed] = OperationProgress()
         harness.model.backupRunTokens[removed] = UUID()
@@ -1852,7 +1847,6 @@ struct AppModelStubTests {
         // The same bookkeeping as Delete Plan, so the two ways a plan goes
         // cannot drift apart.
         #expect(harness.model.problemsSeenAt[removed] == nil)
-        #expect(!harness.model.pauseStoppedPlanIDs.contains(removed))
         #expect(harness.model.activity[removed] == nil)
         #expect(harness.model.planProgress[removed] == nil)
         #expect(harness.model.backupRunTokens[removed] == nil)
@@ -1886,44 +1880,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("Pause and Stop leaves the stopped slot due and says why; a later plain Stop stamps as before")
-    func pauseAndStopKeepsSlotDue() async throws {
-        let harness = try await makeHarness(mode: "hang-backup")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let planID = harness.plan.id
-        // Whole seconds, two hours back: the slot the stopped run was filling.
-        let earlier = Date(timeIntervalSince1970: (Date.now.timeIntervalSince1970 - 7200).rounded(.down))
-        harness.model.configuration.plans[0].lastRunAt = earlier
-
-        harness.model.runBackup(planID: planID)
-        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
-        harness.model.pauseBackups(for: .oneHour, stoppingRunningBackups: true)
-        await harness.model.waitForRun(planID: planID)
-
-        // restic cannot resume a backup, so the stopped one must run again
-        // once the pause ends: the slot stays unstamped.
-        #expect(harness.model.plan(id: planID)?.lastRunAt == earlier)
-        let stopped = try #require(harness.model.configuration.runs.first)
-        #expect(stopped.outcome == .cancelled)
-        #expect(stopped.failureMessage == "Stopped by Pause Backups")
-        if case .paused = harness.model.scheduleHold {} else {
-            Issue.record("the hold was \(String(describing: harness.model.scheduleHold))")
-        }
-
-        // The mark belongs to that one run: a later plain Stop stamps.
-        harness.model.resumeBackups()
-        #expect(await StubRestic.processVanishes(matching: harness.stub.sleepMarker, within: 10))
-        harness.model.runBackup(planID: planID)
-        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
-        harness.model.cancelBackup(planID: planID)
-        await harness.model.waitForRun(planID: planID)
-        let stamped = try #require(harness.model.plan(id: planID)?.lastRunAt)
-        #expect(stamped > earlier)
-        #expect(harness.model.configuration.runs.first?.failureMessage == "Cancelled")
-
-        await harness.model.shutdown()
-    }
-
     @Test("plain Pause Backups lets a running backup finish")
     func pauseLeavesRunningBackupAlone() async throws {
         let harness = try await makeHarness(mode: "hang-backup")
@@ -1938,7 +1894,6 @@ struct AppModelStubTests {
         // pause that stopped it whenever the unwind outlasted the wait.
         let phase = harness.model.activity[planID]?.phase
         #expect(phase != nil && phase != .cancelling, "phase was \(String(describing: phase))")
-        #expect(!harness.model.pauseStoppedPlanIDs.contains(planID))
         try await Task.sleep(for: .milliseconds(300))
         #expect(harness.model.isRunning(planID: planID))
         #expect(harness.model.configuration.runs.isEmpty)
@@ -2046,8 +2001,6 @@ struct AppModelStubTests {
         file.repositories = [harness.repository]
         file.plans = [harness.plan]
         harness.model.importSettings(SettingsFile(name: "SwiftRestic Settings.json", configuration: file))
-        // Stopped as Stop stops it, so Pause and Stop does not take the
-        // unwinding run as its own.
         #expect(harness.model.activity[harness.plan.id]?.phase == .cancelling)
         await harness.model.waitForRun(planID: harness.plan.id)
 
@@ -2680,8 +2633,8 @@ struct AppModelStubTests {
 
     @Test("trimming the history deletes the trimmed runs' logs")
     func trimmedRunsLoseTheirLogs() async throws {
-        // maxRunHistory only raises the floor of 20, so 5 is still capped at 20.
-        let harness = try await makeHarness(mode: "default", maxRunHistory: 5)
+        let harness = try await makeHarness(mode: "default")
+        harness.model.activityHistoryLimit = 20
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         for _ in 0 ..< 22 {

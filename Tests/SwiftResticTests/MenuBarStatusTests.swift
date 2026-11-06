@@ -342,8 +342,7 @@ struct MenuBarStatusTests {
             return plan
         }
         let code = plan("Code")
-        var photos = plan("Photos")
-        photos.isEnabled = false
+        let photos = plan("Photos")
         let quiet = plan("Quiet")
         var failed = RunRecord(planName: "Code")
         failed.planID = code.id
@@ -353,10 +352,9 @@ struct MenuBarStatusTests {
         let plans = [code, photos, quiet]
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
             == ["Code: Failed — 2 hours ago"])
-        #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago)
-            == ["Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+        #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
         #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
-            == ["Photos: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+            == ["Photos: Failed — 2 hours ago"])
         #expect(MenuBarStatus.newsLines(for: quiet, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
 
@@ -364,7 +362,7 @@ struct MenuBarStatusTests {
             plans: [code, photos, quiet], repositories: [home], activity: [:], resticAbsence: nil,
             problem: { $0 == code.id ? failed : nil }, now: now, relative: Self.ago
         )
-        #expect(groups.first?.newsLines == ["Code: Failed — 2 hours ago", "Photos: \(PlanStatus.pauseCaption(for: photos, now: now)!)"])
+        #expect(groups.first?.newsLines == ["Code: Failed — 2 hours ago"])
     }
 
     @Test("Back Up Now waits while its repository is locked exclusively, and says why")
@@ -695,7 +693,7 @@ struct MenuBarStatusTests {
         let nightly = plan(name: "Nightly")
         // On battery with the setting on, a "Next:" headline would lie: the
         // scheduler will not fire it.
-        #expect(MenuBarStatus.headline(activity: [:], hold: .onBattery, plans: [], repositories: [], nextRun: (nightly, future)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], hold: .onMeteredNetwork, plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(
             MenuBarStatus.headline(activity: [:], hold: nil, plans: [], repositories: [], nextRun: (nightly, future))
@@ -717,7 +715,6 @@ struct MenuBarStatusTests {
                 == "Backups paused until tomorrow"
         )
         #expect(ScheduleHold.paused(until: nil).summary(now: now, calendar: calendar) == "Backups paused until you resume")
-        #expect(ScheduleHold.onBattery.summary(now: now, calendar: calendar) == "Backups paused on battery power")
         #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups paused on a metered network")
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
@@ -915,17 +912,17 @@ struct MenuBarStatusTests {
 
     @Test("the icon dims for a hold only while nothing runs, and says why")
     func heldIconDimsAndSpeaks() {
-        #expect(MenuBarStatus.appearsHeld(state: .idle, hold: .onBattery))
+        #expect(MenuBarStatus.appearsHeld(state: .idle, hold: .onMeteredNetwork))
         #expect(MenuBarStatus.appearsHeld(state: .problem, hold: .paused(until: nil)))
-        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .onBattery))
+        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .onMeteredNetwork))
         #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .paused(until: nil)))
         #expect(!MenuBarStatus.appearsHeld(state: .idle, hold: nil))
 
         let paused = MenuBarStatus.accessibilityDescription(for: .idle, hold: .paused(until: nil))
         #expect(paused.contains("paused"), "was \(paused)")
         #expect(paused.hasPrefix("SwiftRestic"))
-        let problemOnBattery = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onBattery)
-        #expect(problemOnBattery.contains("attention") && problemOnBattery.contains("power"), "was \(problemOnBattery)")
+        let problemHeld = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onMeteredNetwork)
+        #expect(problemHeld.contains("attention") && problemHeld.contains("metered"), "was \(problemHeld)")
         // No hold: today's words, spelled out so a default argument cannot
         // make the comparison trivially true.
         #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil) == "SwiftRestic")

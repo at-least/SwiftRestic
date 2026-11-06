@@ -25,16 +25,13 @@ enum LoginItemAdvice {
         return .startAtLogin
     }
 
-    /// Whether the scheduler runs this plan by itself at all. A timed pause
-    /// still counts: it ends by itself, and the schedule behind it dies
-    /// with the process like any other.
+    /// Whether the scheduler runs this plan by itself at all.
     static func isScheduled(_ plan: BackupPlan) -> Bool {
-        plan.isEnabled && plan.schedule.frequency != .manual
+        plan.schedule.frequency != .manual
     }
 
     /// The plan editor's offer: only when saving turns a schedule on — a
-    /// new scheduled plan, or a manual or paused one whose draft is
-    /// scheduled. An ordinary edit of a plan already on its schedule says
+    /// new scheduled plan, or a manual one whose draft is scheduled. An ordinary edit of a plan already on its schedule says
     /// nothing; Settings' switch carries the steady state.
     static func editorOffer(
         draft: BackupPlan,

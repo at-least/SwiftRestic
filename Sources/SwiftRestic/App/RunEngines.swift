@@ -108,9 +108,9 @@ extension RunEngineSink {
 enum BackupRunEngine {
     @MainActor
     protocol Sink: RunEngineSink {
-        /// Why this plan's run was cancelled, for its record: the user's
-        /// Stop, Pause and Stop, or the app quitting.
-        func cancellationMessage(for planID: UUID) -> String
+        /// Why a run was cancelled, for its record: the user's Stop or the
+        /// app quitting.
+        var cancellationMessage: String { get }
         /// What every surface calls the plan (`AppModel.label(of:)`): the
         /// run's record, hooks and notifications say it.
         func label(of plan: BackupPlan) -> String
@@ -327,12 +327,12 @@ enum BackupRunEngine {
                     }
                     transcript.note("Retention removed \(Format.plural(removed, "backup"))")
                 } catch where ResticError.isCancellation(error) {
-                    // The user's stop — "Stop Applying Retention" in the Plan
-                    // menu or the tray, Pause and Stop, or a quit — recorded
+                    // The user's stop, "Stop Applying Retention" in the Plan
+                    // menu or the tray, or a quit: recorded
                     // as every stop is, never as the lock failure below. The
                     // snapshot stands and is already stamped, so nothing
                     // stamps the run again.
-                    record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+                    record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
                     transcript.note("Retention stopped")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
@@ -384,7 +384,7 @@ enum BackupRunEngine {
             }
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {
-            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
             // The repository's disk full: said plainly, with what the run left
             // behind — restic's line, naming a pack file by its hash, stays in
             // the log — and Clean Up Now as its fix (`repositoryFull`): on a
@@ -720,7 +720,7 @@ private func failIfRepositoryAway(
 /// broadcasts, which these runs must not.
 @MainActor
 protocol QuietPlanRunSink: RunEngineSink {
-    func cancellationMessage(for planID: UUID) -> String
+    var cancellationMessage: String { get }
     /// What every surface calls the plan (`AppModel.label(of:)`).
     func label(of plan: BackupPlan) -> String
     /// Stores the run, and announces it nowhere: the plan page and
@@ -763,7 +763,7 @@ private func performQuietPlanRun(
             record.detailText = detail
         }
     } catch {
-        record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage(for: plan.id))
+        record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
         failed(error, &record)
         sink.noteAuthFailure(error, repositoryID: repository.id)
     }

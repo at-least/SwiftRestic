@@ -444,15 +444,15 @@ struct OverviewMetricsTests {
             + ScheduleHold.paused(until: end).summary(now: utcDate("2026-09-05 11:00:00")))
         #expect(paused?.showsResume == true)
 
-        // Only the user's own pause gets the button; the battery's ends by
-        // plugging in.
-        let onBattery = OverviewMetrics.protectionSummary(
+        // Only the user's own pause gets the button: a metered network's hold
+        // ends with the network.
+        let onMetered = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
-            willNotRun: { _ in nil }, hold: .onBattery, now: utcDate("2026-09-05 11:00:00"),
+            willNotRun: { _ in nil }, hold: .onMeteredNetwork, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
-        #expect(onBattery?.text == "1 of 2 plans up to date · Last backup 1 hour ago · Backups paused on battery power")
-        #expect(onBattery?.showsResume == false)
+        #expect(onMetered?.text == "1 of 2 plans up to date · Last backup 1 hour ago · Backups paused on a metered network")
+        #expect(onMetered?.showsResume == false)
 
         // One plan spells its own noun; no plan with a backup yet omits the
         // moment entirely rather than promising "Never".
@@ -479,31 +479,27 @@ struct OverviewMetricsTests {
         let now = utcDate("2026-09-05 11:00:00")
         var photos = plan("Photos", repository: repository)
         photos.schedule.frequency = .weekly
-        photos.isEnabled = false
         var documents = plan("Documents", repository: repository)
         documents.path = "/Users/someone/Documents"
         documents.schedule.frequency = .daily
-        documents.pausedUntil = utcDate("2026-09-05 13:00:00")
         // Its repository is gone, so the scheduler never runs it.
         var code = plan("Code", repository: UUID())
         code.schedule.frequency = .hourly
         var manual = plan("Archive", repository: repository)
         manual.path = "/Users/someone/Archive"
         manual.schedule.frequency = .manual
-        manual.isEnabled = false
         var running = plan("Music", repository: repository)
         running.path = "/Users/someone/Music"
         running.schedule.frequency = .daily
         let plans = [photos, documents, code, manual, running]
 
-        // The sidebar's pause words, "Not scheduled" for a plan the
-        // scheduler skips; a manual plan never runs by itself, paused or not.
+        // "Not scheduled" for a plan the scheduler skips; a manual plan never
+        // runs by itself.
         func caption(_ plan: BackupPlan) -> String? {
             PlanStatus.willNotRunCaption(for: plan, existingRepositoryIDs: [repository], now: now)
         }
-        #expect(caption(photos) == PlanStatus.pauseCaption(for: photos, now: now))
-        #expect(caption(photos) == "Paused — \(photos.schedule.summary)")
-        #expect(caption(documents) == PlanStatus.pauseCaption(for: documents, now: now))
+        #expect(caption(photos) == nil)
+        #expect(caption(documents) == nil)
         #expect(caption(code) == "Not scheduled")
         #expect(caption(manual) == nil)
         #expect(caption(running) == nil)
@@ -527,11 +523,7 @@ struct OverviewMetricsTests {
         // A protected plan backing up around an away drive is named in the
         // record's words, beside its held line if it has one.
         #expect(summary?.skippedLines == ["Code: \(skipReason)"])
-        #expect(summary?.heldLines == [
-            "Photos: Paused — \(photos.schedule.summary)",
-            "Documents: \(PlanStatus.pauseCaption(for: documents, now: now) ?? "")",
-            "Code: Not scheduled",
-        ])
+        #expect(summary?.heldLines == ["Code: Not scheduled"])
 
         // An unprotected plan's line is its warning, never a second one.
         let exposed = ProtectionRow(plan: photos, among: [], stateText: "No backups yet", isKnown: true, isProtected: false, didFail: false)

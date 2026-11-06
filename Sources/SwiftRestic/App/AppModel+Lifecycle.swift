@@ -41,13 +41,12 @@ extension AppModel {
     ///
     /// A backup in flight is not the run missed: the quit cancels it, and
     /// the cancel stamps its slot as run (`markPlanRun`, at the run's
-    /// start), so the plan's next slot is. Pause and Stop's runs keep their
-    /// slot due, since that stamp skips them.
+    /// start), so the plan's next slot is.
     func quitScheduleNotice(now: Date = .now) -> String? {
         guard !startsAtLogin else { return nil }
         let hold = scheduleHold(now: now)
         let plansAfterQuit = configuration.plans.map { plan in
-            guard let run = activity[plan.id], run.work == .backup, !pauseStoppedPlanIDs.contains(plan.id) else { return plan }
+            guard let run = activity[plan.id], run.work == .backup else { return plan }
             var plan = plan
             plan.lastRunAt = max(plan.lastRunAt ?? .distantPast, run.startedAt)
             return plan

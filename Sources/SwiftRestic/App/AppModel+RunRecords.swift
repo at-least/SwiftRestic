@@ -7,13 +7,6 @@ extension AppModel {
         isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Cancelled"
     }
 
-    /// A backup's cancellation, which Pause and Stop words for itself: the
-    /// run did not fail and nobody pressed its Stop — the pause ended it,
-    /// and it runs again when the pause does.
-    func cancellationMessage(for planID: UUID) -> String {
-        pauseStoppedPlanIDs.contains(planID) ? "Stopped by Pause Backups" : cancellationMessage
-    }
-
     /// `Logs/` beside `config.json` — so `SWIFTRESTIC_CONFIG_DIR` moves it
     /// with the configuration, and a capture or test run never writes the
     /// real one.
@@ -85,7 +78,7 @@ extension AppModel {
         // Counted while the backups before it are still here: the cap below
         // can trim them.
         configuration.runs = RunRecord.fillingProblemStretches(configuration.runs)
-        let limit = max(20, configuration.settings.maxRunHistory)
+        let limit = activityHistoryLimit
         if configuration.runs.count > limit {
             // Past the cap by count, except what a standing problem still
             // reads (`OverviewMetrics.standingProblemIDs`).

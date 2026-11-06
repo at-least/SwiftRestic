@@ -593,20 +593,6 @@ struct PlanEditorSheet: View {
 
     private var scheduleTab: some View {
         Form {
-            // The schedule's on/off lives with the schedule. Off, the
-            // pickers below stay editable: a paused plan's times can still
-            // be changed, and saving keeps the pause.
-            Toggle("Run on schedule", isOn: $draft.isEnabled)
-                .editorSwitches()
-            // A timed Pause Schedule leaves the switch on; without this line
-            // the editor would read as if the plan were running on schedule.
-            if draft.isEnabled, let end = draft.activePauseEnd(at: now) {
-                Text("Paused until \(Format.pauseEnd(end)) — scheduled runs resume by themselves then.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             Picker("How often", selection: $draft.schedule.frequency) {
                 ForEach(Schedule.Frequency.allCases) { frequency in
                     Text(frequency.displayName).tag(frequency)
@@ -626,12 +612,7 @@ struct PlanEditorSheet: View {
                         .foregroundStyle(.secondary)
                 }
             case .hourly:
-                // The summary's own words: "Every hour", "Every 4 hours".
-                Stepper(
-                    draft.schedule.summary,
-                    value: $draft.schedule.intervalHours,
-                    in: 1 ... 24
-                )
+                EmptyView()
             case .daily:
                 timeOfDayPicker
             case .weekly:
@@ -650,7 +631,7 @@ struct PlanEditorSheet: View {
                 draft: draft,
                 stored: model.plan(id: draft.id),
                 existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-                hold: model.scheduleHold,
+                hold: model.scheduleHold(repositoryID: draft.repositoryID, now: now),
                 isBackingUp: model.activity[draft.id]?.work == .backup,
                 now: now
             ) {

@@ -1,7 +1,6 @@
 import Foundation
 
-/// How long a pause lasts — the three choices every pause menu offers, the
-/// tray's app-wide Pause Backups and a plan's own Pause Schedule alike.
+/// How long Pause Backups lasts.
 enum PauseLength: String, CaseIterable, Identifiable, Sendable {
     case oneHour
     case untilTomorrow

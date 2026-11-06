@@ -57,19 +57,17 @@ struct SchedulingTests {
     func hourlyFirstRun() {
         var schedule = Schedule()
         schedule.frequency = .hourly
-        schedule.intervalHours = 4
         let now = utcDate("2026-09-05 12:00:00")
         #expect(schedule.nextRunDate(after: nil, now: now) == now)
     }
 
-    @Test("an hourly plan waits the full interval after a run")
+    @Test("an hourly plan waits an hour after a run")
     func hourlyInterval() {
         var schedule = Schedule()
         schedule.frequency = .hourly
-        schedule.intervalHours = 4
         let lastRun = utcDate("2026-09-05 08:00:00")
-        let next = schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 09:00:00"))
-        #expect(next == utcDate("2026-09-05 12:00:00"))
+        let next = schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 08:30:00"))
+        #expect(next == utcDate("2026-09-05 09:00:00"))
     }
 
     /// A clock set ahead stamps the run in the future; corrected, the stamp
@@ -187,9 +185,7 @@ struct SchedulingTests {
             plan.repositoryID = repositoryID
             // A plan is called by its path's last component: the name ends it.
             plan.path = path.isEmpty ? "" : path + "/" + name
-            plan.isEnabled = enabled
-            plan.schedule.frequency = .hourly
-            plan.schedule.intervalHours = 1
+            plan.schedule.frequency = enabled ? .hourly : .manual
             plan.lastRunAt = nil
             return plan
         }
@@ -215,7 +211,6 @@ struct SchedulingTests {
         plan.repositoryID = missingRepositoryID
         plan.path = "/tmp/orphaned"
         plan.schedule.frequency = .hourly
-        plan.schedule.intervalHours = 1
 
         let now = utcDate("2026-09-05 12:00:00")
         // The repository set is empty, as if the repository was deleted out from
@@ -245,9 +240,7 @@ struct SchedulingTests {
             plan.repositoryID = repositoryID
             // A plan is called by its path's last component: the name ends it.
             plan.path = path.isEmpty ? "" : path + "/" + name
-            plan.isEnabled = enabled
-            plan.schedule.frequency = .hourly
-            plan.schedule.intervalHours = 1
+            plan.schedule.frequency = enabled ? .hourly : .manual
             plan.lastRunAt = lastRunAt
             return plan
         }
@@ -277,7 +270,6 @@ struct SchedulingTests {
         plan.repositoryID = repositoryID
         plan.path = "/tmp/waiting"
         plan.schedule.frequency = .hourly
-        plan.schedule.intervalHours = 1
 
         let now = utcDate("2026-09-05 12:00:00")
         let existing: Set<UUID> = [repositoryID]
@@ -358,89 +350,34 @@ struct PauseSchedulingTests {
         return plan
     }
 
-    @Test("a timed plan pause holds the plan until it ends, then the missed slot runs")
-    func timedPlanPauseHoldsThenCatchesUp() throws {
-        // A daily slot missed inside a plan pause. The scheduler reads the
-        // machine's calendar, so the dates are chosen to hold in any zone:
-        // the last run is 25 hours before `now`, so some 02:00 slot has
-        // passed uncovered whatever the offset.
-        var plan = dailyPlan(lastRunAt: utcDate("2026-09-24 02:00:00"))
-        plan.pausedUntil = utcDate("2026-09-25 09:00:00")
-        let existing: Set<UUID> = [repositoryID]
-
-        #expect(Scheduler.duePlans(in: [plan], now: utcDate("2026-09-25 03:00:00"), existingRepositoryIDs: existing).isEmpty)
-        #expect(
-            Scheduler.duePlans(in: [plan], now: utcDate("2026-09-25 09:00:30"), existingRepositoryIDs: existing)
-                .map(\.id) == [plan.id]
-        )
-        let upcoming = try #require(
-            Scheduler.upcomingRuns(in: [plan], now: utcDate("2026-09-25 03:00:00"), existingRepositoryIDs: existing).first
-        )
-        #expect(upcoming.date == utcDate("2026-09-25 09:00:00"))
-    }
-
-    @Test("a lapsed pause is inert, and a switched-off plan stays off whatever its pause date says")
-    func lapsedOrOverruledPause() {
-        let now = utcDate("2026-09-25 12:00:00")
-        let existing: Set<UUID> = [repositoryID]
-        let plain = dailyPlan(lastRunAt: utcDate("2026-09-24 02:00:00"))
-        var lapsed = plain
-        lapsed.pausedUntil = utcDate("2026-09-25 11:00:00")
-
-        #expect(
-            Scheduler.duePlans(in: [lapsed], now: now, existingRepositoryIDs: existing).map(\.id)
-                == Scheduler.duePlans(in: [plain], now: now, existingRepositoryIDs: existing).map(\.id)
-        )
-        #expect(Scheduler.duePlans(in: [lapsed], now: now, existingRepositoryIDs: existing).count == 1)
-        #expect(
-            Scheduler.upcomingRuns(in: [lapsed], now: now, existingRepositoryIDs: existing).first?.date
-                == Scheduler.upcomingRuns(in: [plain], now: now, existingRepositoryIDs: existing).first?.date
-        )
-
-        var off = plain
-        off.isEnabled = false
-        off.pausedUntil = utcDate("2026-09-25 13:00:00")
-        #expect(Scheduler.duePlans(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
-        #expect(Scheduler.duePlans(in: [off], now: utcDate("2026-09-25 14:00:00"), existingRepositoryIDs: existing).isEmpty)
-        #expect(Scheduler.upcomingRuns(in: [off], now: now, existingRepositoryIDs: existing).isEmpty)
-    }
-
-    @Test("the app-wide hold: a live pause wins, battery holds only when asked, a lapsed pause holds nothing")
+    @Test("the hold: a live pause wins, a metered network holds only what would use it, a lapsed pause holds nothing")
     func scheduleHoldPrecedence() {
         let now = utcDate("2026-09-25 12:00:00")
         let inAnHour = now.addingTimeInterval(3600)
 
         #expect(
-            Scheduler.hold(pause: SchedulePause(until: inAnHour), pauseOnBattery: true, isOnBattery: true, now: now)
+            Scheduler.hold(pause: SchedulePause(until: inAnHour), isOnMeteredNetwork: true, repositoryUsesNetwork: true, now: now)
                 == .paused(until: inAnHour)
         )
         #expect(
-            Scheduler.hold(pause: SchedulePause(until: nil), pauseOnBattery: false, isOnBattery: false, now: now)
+            Scheduler.hold(pause: SchedulePause(until: nil), isOnMeteredNetwork: false, repositoryUsesNetwork: false, now: now)
                 == .paused(until: nil)
         )
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: true, now: now) == .onBattery)
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: true, now: now) == nil)
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: false, now: now) == nil)
-        // A metered network holds only when asked, after a pause and the
-        // battery.
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: false,
-                               pauseOnMeteredNetwork: true, isOnMeteredNetwork: true, now: now) == .onMeteredNetwork)
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: false, isOnBattery: false,
-                               pauseOnMeteredNetwork: false, isOnMeteredNetwork: true, now: now) == nil)
-        #expect(Scheduler.hold(pause: nil, pauseOnBattery: true, isOnBattery: true,
-                               pauseOnMeteredNetwork: true, isOnMeteredNetwork: true, now: now) == .onBattery)
+        #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: true, repositoryUsesNetwork: true, now: now) == .onMeteredNetwork)
+        #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: true, repositoryUsesNetwork: false, now: now) == nil)
+        #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: false, repositoryUsesNetwork: true, now: now) == nil)
         #expect(
             Scheduler.hold(
                 pause: SchedulePause(until: now.addingTimeInterval(-1)),
-                pauseOnBattery: true,
-                isOnBattery: false,
+                isOnMeteredNetwork: false,
+                repositoryUsesNetwork: true,
                 now: now
             ) == nil
         )
 
         #expect(ScheduleHold.paused(until: inAnHour).resumesAt == inAnHour)
         #expect(ScheduleHold.paused(until: nil).resumesAt == nil)
-        #expect(ScheduleHold.onBattery.resumesAt == nil)
+        #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 
     @Test("a timed app-wide hold pushes every upcoming run to its end; an open-ended one leaves dates raw")
@@ -450,7 +387,6 @@ struct PauseSchedulingTests {
         let existing: Set<UUID> = [repositoryID]
         var first = dailyPlan(name: "First", lastRunAt: utcDate("2026-09-23 02:00:00"))
         first.schedule.frequency = .hourly
-        first.schedule.intervalHours = 1
         let second = dailyPlan(name: "Second", lastRunAt: utcDate("2026-09-23 02:00:00"))
 
         let held = Scheduler.upcomingRuns(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)
@@ -466,12 +402,6 @@ struct PauseSchedulingTests {
         let raw = Scheduler.upcomingRuns(in: [first, second], now: now, existingRepositoryIDs: existing, heldUntil: nil)
         #expect(raw.count == 2)
         #expect(raw.allSatisfy { $0.date < now })
-
-        // A plan's own pause that ends later than the app-wide one wins.
-        var later = second
-        later.pausedUntil = now.addingTimeInterval(7200)
-        let clamped = Scheduler.upcomingRuns(in: [later], now: now, existingRepositoryIDs: existing, heldUntil: heldUntil)
-        #expect(clamped.first?.date == now.addingTimeInterval(7200))
     }
 
     @Test("pause lengths end where their names say, across DST and a zone with no midnight")
@@ -627,9 +557,7 @@ struct UpcomingRunTests {
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = path.isEmpty ? "" : path + "/" + name
-        plan.isEnabled = enabled
-        plan.schedule.frequency = frequency
-        plan.schedule.intervalHours = 1
+        plan.schedule.frequency = enabled ? frequency : .manual
         plan.schedule.hour = 2
         plan.lastRunAt = lastRun
         return plan
@@ -904,12 +832,12 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
         // In flight: "Running now", ahead of hold, drive and server — the
         // stamp lands when restic finishes.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: true, awaitingServer: false, isRunning: true, now: now) == "Running now")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: true, awaitingServer: false, isRunning: true, now: now) == "Running now")
         // Not due yet, the date stands while a run is in flight.
         #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, isRunning: true, now: now) == Format.timestamp(prune))
         // The hold holds checks and prunes too: due, but not now.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Waiting")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now) == "Waiting")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: false, awaitingServer: false, now: now) == "Waiting")
         // A timed hold moves it to the end, where the scheduler picks it up.
         let end = utcDate("2026-09-10 01:00:00")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
@@ -918,7 +846,7 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(prune))
         #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onBattery, driveAway: false, awaitingServer: false, now: now)
+        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(prune))
 
         let off = self.repository { $0.maintenance.checkEnabled = false }
@@ -947,7 +875,7 @@ struct MaintenanceSchedulingTests {
         // Due: it waits for the drive, not "Due now" — under a hold too,
         // which the drive would outlast.
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onBattery, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
+        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
         // Not due yet: its date, as for any repository.
         repository.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
         #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(utcDate("2026-09-16 12:00:00")))
@@ -973,9 +901,6 @@ struct MaintenanceSchedulingTests {
 
         var hourly = Schedule()
         hourly.frequency = .hourly
-        hourly.intervalHours = 4
-        #expect(hourly.summary == "Every 4 hours")
-        hourly.intervalHours = 1
         #expect(hourly.summary == "Every hour")
 
         // The time's words are the Mac's (`summaryFollowsTheClock` pins
@@ -1406,8 +1331,7 @@ struct LoginItemTests {
             var plan = BackupPlan()
             plan.repositoryID = UUID()
             plan.path = "/tmp"
-            plan.schedule.frequency = frequency
-            plan.isEnabled = enabled
+            plan.schedule.frequency = enabled ? frequency : .manual
             return plan
         }
         func offer(

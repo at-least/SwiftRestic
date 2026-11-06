@@ -296,9 +296,7 @@ struct SwiftResticApp: App {
 
     /// An ask for the root view, which also opens the window: an intent
     /// parked while no window exists would otherwise ambush a later open.
-    /// RootView refuses it — with a beep — while any sheet is up, where a
-    /// Pause Schedule would be undone by the plan editor's save
-    /// (`BackupPlan.merging(draft:)` keeps the draft's `isEnabled`).
+    /// RootView refuses it, with a beep, while any sheet is up.
     private func ask(_ intent: AppRouter.Intent) {
         router.request(intent)
         openWindow(id: Self.mainWindowID)
@@ -329,17 +327,6 @@ struct SwiftResticApp: App {
                 if let id = p.planID { ask(.editPlan(id)) }
             }
             .disabled(!p.canEdit)
-            // The Schedule card's pair, lengths and all.
-            if p.isScheduleActive {
-                lengthsMenu(p.scheduleTitle, isEnabled: p.canToggleSchedule) { length in
-                    if let id = p.planID { ask(.pauseSchedule(id, length)) }
-                }
-            } else {
-                Button(p.scheduleTitle) {
-                    if let id = p.planID { ask(.resumeSchedule(id)) }
-                }
-                .disabled(!p.canToggleSchedule)
-            }
 
             Divider()
 
@@ -352,8 +339,7 @@ struct SwiftResticApp: App {
 
     /// The SwiftRestic menu's backup items, under Settings: they act on
     /// every plan, not the sidebar's selection, so they stay out of the Plan
-    /// menu. The tray's app-wide pause, here too: the menu bar item can be
-    /// hidden. Direct calls, as the tray's: no editor holds a draft of these
+    /// menu. Direct calls, as the tray's: no editor holds a draft of these
     /// settings.
     private var appMenu: some Commands {
         CommandGroup(after: .appSettings) {
@@ -368,10 +354,6 @@ struct SwiftResticApp: App {
                 lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
                     model.pauseBackups(for: length)
                 }
-            }
-            // Never the default: a stopped backup starts over.
-            lengthsMenu("Pause and Stop Running Backups", isEnabled: p.canPauseAndStopBackups) { length in
-                model.pauseBackups(for: length, stoppingRunningBackups: true)
             }
         }
     }

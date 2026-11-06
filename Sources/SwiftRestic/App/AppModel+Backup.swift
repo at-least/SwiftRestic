@@ -46,9 +46,6 @@ extension AppModel {
         // The token retires with the strip, so a hop from this run drops
         // from here on — the same rule as restore's unwind.
         backupRunTokens[planID] = nil
-        // Pause and Stop's mark belongs to this run alone: left behind,
-        // a later plain Stop of the plan would skip its stamp too.
-        pauseStoppedPlanIDs.remove(planID)
         activity[planID] = nil
         planProgress[planID] = nil
         reconcileSleepAssertion()
@@ -106,14 +103,14 @@ extension AppModel {
     /// Starts the next plan in each queue whose repository no plan's run
     /// holds now — called as every run unwinds. A plan that does not start
     /// (removed meanwhile, the app quitting, its repository locked) gives
-    /// its turn to the next. A catch-up nobody asked for waits out the
-    /// app-wide hold as the scheduler's runs do, and is dropped meanwhile:
+    /// its turn to the next. A catch-up nobody asked for waits out a hold as
+    /// the scheduler's runs do, and is dropped meanwhile:
     /// a later mount or its next slot brings it back.
     private func startQueuedBackups() {
         for repositoryID in Array(backupQueue.keys) where !planRunHolds(repositoryID) {
             while let next = backupQueue[repositoryID]?.first {
                 removeFromBackupQueue(next.planID)
-                guard next.askedByUser || scheduleHold == nil else { continue }
+                guard next.askedByUser || scheduleHold(repositoryID: repositoryID) == nil else { continue }
                 runBackup(planID: next.planID, askedByUser: next.askedByUser)
                 if planRunHolds(repositoryID) { break }
             }
@@ -159,13 +156,6 @@ extension AppModel {
     }
 
     func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp) {
-        // A backup Pause and Stop ended leaves its slot unstamped, so the
-        // scheduler runs it again once the pause ends: restic cannot resume
-        // it, and stamping would count the slot as done — the stopped run
-        // would wait a whole period. Safe only because the pause holds the
-        // scheduler meanwhile; a plain Stop has no pause behind it and
-        // stamps, or the next tick would restart the run.
-        if stamp == .nothing, pauseStoppedPlanIDs.contains(planID) { return }
         updatePlan(planID) { plan in
             plan.lastRunAt = date
             if stamp == .whole { plan.lastSuccessAt = date }
@@ -176,7 +166,7 @@ extension AppModel {
 extension AppModel: BackupRunEngine.Sink {
     func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID) {
         // Stop's word stays: an engine phase landing after it would offer
-        // Stop again, and Pause and Stop would take the run as its own.
+        // Stop again.
         if activity[planID]?.phase != .cancelling { activity[planID]?.phase = phase }
         activity[planID]?.isInRetentionStep = phase == .applyingRetention
     }

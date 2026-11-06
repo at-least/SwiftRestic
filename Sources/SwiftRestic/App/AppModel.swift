@@ -152,26 +152,17 @@ final class AppModel {
     /// Bundle.main in a test is the xctest runner inside Xcode, which the live
     /// check counts as installed when Xcode sits in /Applications.
     @ObservationIgnored var installableLocationProbe: @Sendable () -> Bool = { LoginItem.isInInstallableLocation }
-    /// Whether the Mac ran on battery at the last scheduler tick — sampled
-    /// every tick whether or not the battery setting is on, so the hold's
-    /// words are right the moment the setting is switched on, and written
-    /// only when it changes, so the tray's observation does not fire every
-    /// minute.
-    var isOnBattery = false
     /// Whether the network is one macOS reports as expensive or
-    /// constrained (`startNetworkMonitor`), written only when it changes —
-    /// the battery flag's rule.
+    /// constrained (`startNetworkMonitor`), written only when it changes so
+    /// the tray's observation does not fire needlessly.
     var isOnMeteredNetwork = false
     @ObservationIgnored var networkMonitor: NWPathMonitor?
     /// The last network path seen — whether it is up, through which
     /// interfaces — so only a change calls `networkPathChanged`.
     @ObservationIgnored var networkSignature: String?
     @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
-    /// Plans whose running backup Pause and Stop ended. Such a run is
-    /// recorded as stopped by the pause and leaves its slot unstamped, so
-    /// it runs again when the pause ends. Each run's unwind removes its
-    /// plan, so a later plain Stop of the same plan stamps as usual.
-    @ObservationIgnored var pauseStoppedPlanIDs: Set<UUID> = []
+    /// How many runs Activity keeps; a standing problem is kept past it.
+    @ObservationIgnored var activityHistoryLimit = 300
     /// Transient messages shown at the top of the detail panes, newest first.
     /// A queue rather than a single slot: an unread error must not be erased
     /// by the next message — a failing-repository refresh, a finished restore

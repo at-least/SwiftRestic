@@ -1,23 +1,20 @@
 import Foundation
 
-/// What is holding every scheduled run back, app-wide: the user's Pause
-/// Backups, or the battery while "Pause scheduled backups on battery power"
-/// is on. One value, so the tray, a repository's page, Settings and the plan page
-/// say the same thing the scheduler does.
+/// What holds a scheduled run back: the user's Pause Backups, for every run,
+/// or a metered network, for runs that would use it. One value, so the tray,
+/// a repository's page, Settings and the plan page say what the scheduler does.
 enum ScheduleHold: Equatable, Sendable {
     /// Pause Backups; `until` is `nil` for Until I Resume.
     case paused(until: Date?)
-    case onBattery
-    /// The network macOS reports as expensive or constrained, while the
-    /// setting asks to wait for another.
+    /// The network macOS reports as expensive or constrained.
     case onMeteredNetwork
 
-    /// When the hold lifts by itself, if it does — the date every held run
-    /// moves to. The battery's end cannot be known ahead.
+    /// When the hold lifts by itself, if it does: the date every held run
+    /// moves to.
     var resumesAt: Date? {
         switch self {
         case let .paused(until): until
-        case .onBattery, .onMeteredNetwork: nil
+        case .onMeteredNetwork: nil
         }
     }
 
@@ -27,8 +24,6 @@ enum ScheduleHold: Equatable, Sendable {
             "Backups paused until \(Format.pauseEnd(until, now: now, calendar: calendar))"
         case .paused(until: nil):
             "Backups paused until you resume"
-        case .onBattery:
-            "Backups paused on battery power"
         case .onMeteredNetwork:
             "Backups paused on a metered network"
         }
@@ -52,40 +47,34 @@ enum Scheduler {
         newestBackupOutcome: [UUID: RunRecord.Outcome],
         running: Set<UUID>,
         sourcesExist: (BackupPlan) async -> Bool,
-        repositoryReachable: (BackupPlan) async -> Bool,
-        now: Date
+        repositoryReachable: (BackupPlan) async -> Bool
     ) async -> [UUID] {
         var due: [UUID] = []
         // The disk is read only for a plan the cheap checks leave.
         for plan in plans
-            where plan.runsOnSchedule(at: now) && !running.contains(plan.id) && newestBackupOutcome[plan.id] == .skipped
+            where plan.runsOnSchedule && !running.contains(plan.id) && newestBackupOutcome[plan.id] == .skipped
         {
             if await sourcesExist(plan), await repositoryReachable(plan) { due.append(plan.id) }
         }
         return due
     }
 
-    /// The app-wide hold in force at `now`: a live pause wins, then the
-    /// battery, then a metered network — each only while its setting asks
-    /// for it. A pause whose end has
-    /// passed holds nothing, even before the tick clears it.
+    /// What holds a run at `now`: a live pause, whatever the repository; else
+    /// a metered network, for a repository that would use it. A pause whose
+    /// end has passed holds nothing, even before the tick clears it.
     static func hold(
         pause: SchedulePause?,
-        pauseOnBattery: Bool,
-        isOnBattery: Bool,
-        pauseOnMeteredNetwork: Bool = false,
-        isOnMeteredNetwork: Bool = false,
+        isOnMeteredNetwork: Bool,
+        repositoryUsesNetwork: Bool,
         now: Date = .now
     ) -> ScheduleHold? {
         if let pause, pause.isActive(at: now) { return .paused(until: pause.until) }
-        if pauseOnBattery, isOnBattery { return .onBattery }
-        if pauseOnMeteredNetwork, isOnMeteredNetwork { return .onMeteredNetwork }
+        if isOnMeteredNetwork, repositoryUsesNetwork { return .onMeteredNetwork }
         return nil
     }
 
-    /// Plans that should start now, most overdue first. A plan inside its
-    /// own timed pause waits, and the slot it missed stays due for when the
-    /// pause ends. (The app-wide hold is the tick's own early return.)
+    /// Plans that should start now, most overdue first. (The app-wide pause is
+    /// the tick's own early return.)
     ///
     /// - Parameters:
     ///   - existingRepositoryIDs: repositories in the configuration. A plan
@@ -114,7 +103,7 @@ enum Scheduler {
         var startingRepositoryIDs = Set<UUID>()
         return plans
             .compactMap { plan -> (plan: BackupPlan, repositoryID: UUID, due: Date)? in
-                guard plan.runsOnSchedule(at: now),
+                guard plan.runsOnSchedule,
                       let repositoryID = plan.repositoryID, existingRepositoryIDs.contains(repositoryID),
                       !busyPlanIDs.contains(plan.id), !busyRepositoryIDs.contains(repositoryID),
                       let due = plan.dueSlot(at: now, calendar: calendar)
@@ -208,9 +197,8 @@ enum Scheduler {
     }
 
     /// A repository page's Next check or Next cleanup, as the scheduler will
-    /// start it: the app-wide hold holds upkeep too, so a timed hold moves
-    /// the date to its end and a due task under an open-ended one (Until I
-    /// Resume, the battery) reads "Waiting", as a due plan's Next backup
+    /// start it: a hold holds upkeep too, so a timed hold moves the date to its
+    /// end and a due task under an open-ended one reads "Waiting", as a due plan's Next backup
     /// value does — never "Due now". A due task already in flight reads
     /// "Running now", ahead of hold, drive and server: the stamp lands only
     /// when restic finishes. A due task whose local repository's
@@ -257,18 +245,17 @@ enum Scheduler {
             .map { max($0, hold?.resumesAt ?? .distantPast) }
     }
 
-    /// Every enabled, complete plan's next run date, in plan order — what
+    /// Every complete plan's next run date, in plan order: what
     /// `nextScheduledRun` and the plan page's Next backup value read. Its
     /// rules must stay those `duePlans` starts a run by, or a surface
-    /// announces a run the scheduler will never fire. Dates are raw: the surfaces label a past
-    /// one "Due now" — "Waiting" under a hold, "Running now" while its
-    /// backup is in flight; only `nextScheduledRun` clamps to `now`.
+    /// announces a run the scheduler will never fire. Dates are raw: the
+    /// surfaces label a past one "Due now" ("Waiting" under a hold, "Running
+    /// now" while its backup is in flight); only `nextScheduledRun` clamps to
+    /// `now`.
     ///
-    /// A pause with an end moves a date to that end, where the scheduler
-    /// will pick the run up: the plan's own timed pause, and `heldUntil`,
-    /// the app-wide hold's end. The later of the two wins. The enumeration
-    /// stays ungated by default — a paused schedule is still a schedule, and
-    /// only the displays of what will actually fire pass the hold.
+    /// `heldUntil`, a timed pause's end, moves a date to that end, where the
+    /// scheduler will pick the run up. Ungated by default: only the displays
+    /// of what will actually fire pass it.
     static func upcomingRuns(
         in plans: [BackupPlan],
         now: Date = .now,
@@ -276,7 +263,7 @@ enum Scheduler {
         heldUntil: Date? = nil
     ) -> [(plan: BackupPlan, date: Date)] {
         plans
-            .filter { $0.isEnabled && $0.isConfigurationComplete }
+            .filter(\.isConfigurationComplete)
             .compactMap { plan -> (BackupPlan, Date)? in
                 guard let repositoryID = plan.repositoryID,
                       existingRepositoryIDs.contains(repositoryID)
@@ -284,11 +271,11 @@ enum Scheduler {
                 guard let date = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now) else { return nil }
                 // The clamp matches the scheduler's first firing within one
                 // 60 s tick.
-                return (plan, max(date, plan.activePauseEnd(at: now) ?? .distantPast, heldUntil ?? .distantPast))
+                return (plan, max(date, heldUntil ?? .distantPast))
             }
     }
 
-    /// The soonest upcoming run across all enabled plans, for the menu bar.
+    /// The soonest upcoming run across all plans, for the menu bar.
     /// A plan whose repository no longer exists is never listed: counting down
     /// to a run that can never start is a lie.
     static func nextScheduledRun(

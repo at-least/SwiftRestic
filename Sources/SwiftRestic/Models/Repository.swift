@@ -203,6 +203,13 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil
     }
 
+    /// Every kind but a local folder, and a local folder on a saved network
+    /// share.
+    func usesNetwork(shares: [NetworkShare]) -> Bool {
+        guard kind == .local else { return true }
+        return driveVolumeName.map { volume in shares.contains { $0.volumeName == volume } } ?? false
+    }
+
     /// The local path with `~` expanded — the form every file-system
     /// consumer (restic, the volume read) needs; `localPath` keeps the form
     /// the user typed.

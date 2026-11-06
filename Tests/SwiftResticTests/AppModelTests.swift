@@ -58,7 +58,6 @@ struct AppModelTests {
         plan.path = sourceDirectory.path
         plan.skipNothing()
         plan.schedule.frequency = frequency
-        plan.schedule.intervalHours = 1
         plan.retention = retention
 
         var configuration = AppConfiguration()
@@ -1308,7 +1307,7 @@ struct SnapshotRunLookupTests {
     @Test("the model keeps each snapshot's backup run in step with the history")
     func modelKeepsSnapshotRunsInStep() {
         let model = makeModel("SwiftResticSnapshotRuns").model
-        model.configuration.settings.maxRunHistory = 20
+        model.activityHistoryLimit = 20
 
         let wrote = backup("s1")
         model.append(record: wrote)
@@ -1403,12 +1402,12 @@ struct UpsertStampTests {
 
         // A draft taken before that run is saved with an unrelated edit.
         var staleDraft = plan
-        staleDraft.schedule.intervalHours = 7
+        staleDraft.schedule.hour = 7
         model.upsert(plan: staleDraft)
 
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
-        #expect(model.configuration.plans[0].schedule.intervalHours == 7)
+        #expect(model.configuration.plans[0].schedule.hour == 7)
     }
 
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
@@ -1427,33 +1426,6 @@ struct UpsertStampTests {
         model.markPlanRun(plan.id, at: failed, wrote: .nothing)
         #expect(model.configuration.plans[0].lastRunAt == failed)
         #expect(model.configuration.plans[0].lastSuccessAt == whole)
-    }
-
-    @Test("a stale plan draft keeps the plan's timed pause")
-    func planPauseSurvivesStaleUpsert() {
-        let model = makeModel("SwiftResticUpsert").model
-        var plan = BackupPlan()
-        plan.repositoryID = UUID()
-        plan.path = "/tmp"
-        model.upsert(plan: plan)
-
-        // Paused while the editor held its copy, as pausePlanSchedule does.
-        let until = Date(timeIntervalSince1970: 1_790_400_000)
-        model.configuration.plans[0].pausedUntil = until
-
-        var staleDraft = plan
-        staleDraft.schedule.intervalHours = 7
-        model.upsert(plan: staleDraft)
-        #expect(model.configuration.plans[0].pausedUntil == until)
-        #expect(model.configuration.plans[0].schedule.intervalHours == 7)
-
-        // The tick cleared the lapsed pause meanwhile; a draft still carrying
-        // it must not bring it back.
-        model.configuration.plans[0].pausedUntil = nil
-        var lapsedDraft = plan
-        lapsedDraft.pausedUntil = until
-        model.upsert(plan: lapsedDraft)
-        #expect(model.configuration.plans[0].pausedUntil == nil)
     }
 
     @Test("a stale repository draft keeps the check and prune stamps")
@@ -1491,22 +1463,9 @@ struct PausingTests {
         return plan
     }
 
-    @Test("plan pauses, the app-wide pause and the battery hold reach the model's hold; lapsed pauses clear themselves")
+    @Test("Pause Backups reaches the model's hold; a lapsed pause clears itself")
     func pauseModelSemantics() {
         let model = makeModel("SwiftResticPausing").model
-        let nightly = plan("Nightly")
-        model.upsert(plan: nightly)
-        let now = Date(timeIntervalSince1970: 1_790_400_000)
-
-        model.pausePlanSchedule(id: nightly.id, for: .oneHour, now: now)
-        #expect(model.configuration.plans[0].isEnabled)
-        #expect(model.configuration.plans[0].pausedUntil == now.addingTimeInterval(3600))
-        model.pausePlanSchedule(id: nightly.id, for: .untilResumed, now: now)
-        #expect(!model.configuration.plans[0].isEnabled)
-        #expect(model.configuration.plans[0].pausedUntil == nil)
-        model.resumePlanSchedule(id: nightly.id)
-        #expect(model.configuration.plans[0].isEnabled)
-        #expect(model.configuration.plans[0].pausedUntil == nil)
 
         #expect(model.scheduleHold == nil)
         model.pauseBackups(for: .untilResumed)
@@ -1515,30 +1474,54 @@ struct PausingTests {
         #expect(model.scheduleHold == nil)
         #expect(model.configuration.settings.schedulePause == nil)
 
-        model.configuration.settings.pauseOnBattery = true
-        model.isOnBattery = true
-        #expect(model.scheduleHold == .onBattery)
-        model.isOnBattery = false
-        #expect(model.scheduleHold == nil)
-
-        // The tick's sweep clears exactly what lapsed.
-        let lapsedPlan = plan("Lapsed")
-        let livePlan = plan("Live")
-        model.upsert(plan: lapsedPlan)
-        model.upsert(plan: livePlan)
         let later = Date.now.addingTimeInterval(7200)
         model.configuration.settings.schedulePause = SchedulePause(until: later.addingTimeInterval(-60))
-        model.configuration.plans[1].pausedUntil = later.addingTimeInterval(-1)
-        model.configuration.plans[2].pausedUntil = later.addingTimeInterval(3600)
         model.expireLapsedPauses(now: later)
         #expect(model.configuration.settings.schedulePause == nil)
-        #expect(model.configuration.plans[1].pausedUntil == nil)
-        #expect(model.configuration.plans[2].pausedUntil == later.addingTimeInterval(3600))
         // An open-ended pause never lapses.
         model.configuration.settings.schedulePause = SchedulePause(until: nil)
         model.expireLapsedPauses(now: later)
         #expect(model.configuration.settings.schedulePause == SchedulePause(until: nil))
     }
+
+    @Test("a metered network holds only what would use it, and a pause still holds everything")
+    func meteredNetworkHoldsNetworkRepositoriesOnly() {
+        let model = makeModel("SwiftResticMetered").model
+        var disk = Repository()
+        disk.kind = .local
+        disk.localPath = "/Volumes/Archive SSD/Backups"
+        var share = Repository()
+        share.kind = .local
+        share.localPath = "/Volumes/NAS/Backups"
+        var cloud = Repository()
+        cloud.kind = .s3
+        model.configuration.repositories = [disk, share, cloud]
+        model.configuration.settings.networkShares = [NetworkShare(volumeName: "NAS", url: "smb://me@nas.local/NAS")]
+        var onDisk = BackupPlan()
+        onDisk.repositoryID = disk.id
+        onDisk.path = "/Users/someone/Documents"
+        model.configuration.plans = [onDisk]
+
+        #expect(model.overallScheduleHold == nil)
+        model.isOnMeteredNetwork = true
+        #expect(model.scheduleHold == nil, "the tick must still run for a disk on this Mac")
+        #expect(model.scheduleHold(repositoryID: disk.id) == nil)
+        #expect(model.scheduleHold(repositoryID: share.id) == .onMeteredNetwork)
+        #expect(model.scheduleHold(repositoryID: cloud.id) == .onMeteredNetwork)
+        // Only the disk has a plan, so nothing the tray could name waits.
+        #expect(model.overallScheduleHold == nil)
+
+        var toCloud = onDisk
+        toCloud.id = UUID()
+        toCloud.repositoryID = cloud.id
+        model.configuration.plans = [onDisk, toCloud]
+        #expect(model.overallScheduleHold == .onMeteredNetwork)
+
+        model.pauseBackups(for: .untilResumed)
+        #expect(model.scheduleHold(repositoryID: disk.id) == .paused(until: nil))
+        #expect(model.overallScheduleHold == .paused(until: nil))
+    }
+
 }
 
 /// The scheduler lives in the app's process, so a schedule dies with it. What
@@ -1603,7 +1586,6 @@ struct StartAtLoginSurfaceTests {
         // Seconds away is due now too: the relative phrase for it is
         // "just now", and "is next due just now" is no sentence.
         model.configuration.plans[0].schedule.frequency = .hourly
-        model.configuration.plans[0].schedule.intervalHours = 1
         model.configuration.plans[0].lastRunAt = now.addingTimeInterval(-3600 + 30)
         let imminent = try #require(model.quitScheduleNotice(now: now))
         #expect(imminent.hasPrefix("Documents (NAS) is due now."))
@@ -1641,25 +1623,13 @@ struct StartAtLoginSurfaceTests {
         let pausedDue = try #require(model.quitScheduleNotice(now: now))
         #expect(pausedDue.hasPrefix("Backups paused until you resume. Documents (NAS) is waiting to run."))
 
-        model.resumeBackups()
-        model.configuration.settings.pauseOnBattery = true
-        model.isOnBattery = true
-        model.configuration.plans[0].lastRunAt = now
-        let battery = try #require(model.quitScheduleNotice(now: now))
-        #expect(battery.hasPrefix(
-            "Backups paused on battery power. Documents (NAS) is next due \(Format.relative(next))."
-        ))
-        model.configuration.plans[0].lastRunAt = nil
-        let batteryDue = try #require(model.quitScheduleNotice(now: now))
-        #expect(batteryDue.hasPrefix("Backups paused on battery power. Documents (NAS) is waiting to run."))
-
         // Only a hold in force at `now` counts.
-        model.isOnBattery = false
+        model.resumeBackups()
         let clear = try #require(model.quitScheduleNotice(now: now))
         #expect(clear.hasPrefix("Documents (NAS) is due now."))
     }
 
-    @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it — unless Pause and Stop ended it")
+    @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it")
     func runInFlightIsNotTheMissedRun() throws {
         let (model, plan) = makeModelWithPlan()
         let now = anchorToRealClock(model)
@@ -1670,14 +1640,6 @@ struct StartAtLoginSurfaceTests {
         let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: startedAt, now: now))
         let running = try #require(model.quitScheduleNotice(now: now))
         #expect(running.hasPrefix("Documents (NAS) is next due \(Format.relative(next))."))
-
-        // Pause and Stop leaves the slot unstamped, so it runs again when
-        // the pause ends: that end is the date.
-        model.pauseBackups(for: .oneHour, now: now)
-        model.pauseStoppedPlanIDs.insert(plan.id)
-        let end = try #require(model.configuration.settings.schedulePause?.until)
-        let stopped = try #require(model.quitScheduleNotice(now: now))
-        #expect(stopped.contains("Documents (NAS) is next due \(Format.relative(end))."))
     }
 }
 
@@ -2097,14 +2059,14 @@ struct ConfigurationSaveTests {
 
         let saves = (1 ... 3).map { index in
             Task { @MainActor in
-                model.configuration.settings.maxRunHistory = 100 + index
+                model.configuration.settings.resticPathOverride = "/bin/restic\(index)"
                 await model.flushSave()
             }
         }
         for save in saves { await save.value }
 
         let saved = try await ConfigStore(directory: root).load().configuration
-        #expect(saved.settings.maxRunHistory == 103)
+        #expect(saved.settings.resticPathOverride == "/bin/restic3")
     }
 
     @Test("a configuration write that fails is announced, and does not latch the unreadable state")
@@ -2140,7 +2102,7 @@ extension ConfigurationSaveTests {
             .appendingPathComponent("SwiftResticSaveDuringLoad-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         var stored = AppConfiguration()
-        stored.settings.maxRunHistory = 50
+        stored.settings.resticPathOverride = "/stored"
         stored.runs = (0 ..< 200_000).map { RunRecord(kind: .backup, planName: "Plan \($0)") }
         try await ConfigStore(directory: root).save(stored)
 
@@ -2148,15 +2110,15 @@ extension ConfigurationSaveTests {
         let boot = Task { await model.bootstrap() }
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.configuration.runs.isEmpty, "the load finished before the edit; the test proves nothing")
-        model.configuration.settings.maxRunHistory = 7
+        model.configuration.settings.resticPathOverride = "/edited"
         await model.flushSave()
         // Read at once: bootstrap's own saves, if any, are debounced.
         struct Settings: Decodable {
-            struct Values: Decodable { let maxRunHistory: Int }
+            struct Values: Decodable { let resticPathOverride: String }
             let settings: Values
         }
         let live = try Data(contentsOf: root.appendingPathComponent("config.json"))
-        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.maxRunHistory == 50)
+        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.resticPathOverride == "/stored")
         await boot.value
     }
 }
@@ -2447,7 +2409,6 @@ struct OrphanPlanPurgeLaunchTests {
             plan.repositoryID = repositoryID
             plan.path = root.path
             plan.schedule.frequency = .manual
-            plan.isEnabled = repositoryID == repository.id
             return plan
         }
         let folder = Folder(
@@ -2549,7 +2510,7 @@ struct UnreadableConfigurationTests {
             return (names, try names.map { try Data(contentsOf: configDirectory.appendingPathComponent($0)) })
         }
         let before = try snapshot()
-        model.configuration.settings.maxRunHistory = 111
+        model.configuration.settings.resticPathOverride = "/edited"
         await model.flushSave()
         let after = try snapshot()
         #expect(after.names == before.names, "a save changed the configuration files")
@@ -2772,7 +2733,7 @@ struct IndexCompletenessTests {
 struct RunHistoryTrimTests {
     private func model() -> AppModel {
         let model = makeModel("SwiftResticTrim").model
-        model.configuration.settings.maxRunHistory = 20
+        model.activityHistoryLimit = 20
         return model
     }
 

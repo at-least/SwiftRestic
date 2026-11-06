@@ -69,11 +69,11 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
 /// derives it, so the counts and the words are pinned beside the rows they
 /// come from.
 struct ProtectionSummary: Equatable, Sendable {
-    /// "2 of 2 plans up to date · Last backup 1 hour ago" — the app-wide
-    /// hold's own words joined on while one is on.
+    /// "2 of 2 plans up to date · Last backup 1 hour ago", with the hold's own
+    /// words joined on while one is on.
     var text: String
     /// The hold is the user's own Pause Backups, so the line ends with a
-    /// Resume; the battery's ends by plugging in, and has no button.
+    /// Resume.
     var showsResume: Bool
     /// One line per plan whose last backup failed, in the sidebar warning's
     /// words ("Code: Failed — 3 hours ago"), beside the failed run's red

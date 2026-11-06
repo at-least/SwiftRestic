@@ -3,13 +3,7 @@ import Foundation
 struct AppSettings: Codable, Sendable, Hashable {
     /// Explicit path to the restic binary; empty means "search the usual places".
     var resticPathOverride: String = ""
-    var showMenuBarExtra: Bool = true
     var notifyOnSuccess: Bool = false
-    var maxRunHistory: Int = 300
-    var pauseOnBattery: Bool = false
-    /// Skip scheduled runs while the network is metered — one macOS reports
-    /// as expensive or constrained.
-    var pauseOnMeteredNetwork: Bool = false
     /// The tray's Pause Backups, while it holds: every scheduled backup,
     /// check and prune waits. `nil` when nothing is paused.
     var schedulePause: SchedulePause?
@@ -28,11 +22,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
         resticPathOverride = c.value(.resticPathOverride, default: resticPathOverride)
-        showMenuBarExtra = c.value(.showMenuBarExtra, default: showMenuBarExtra)
         notifyOnSuccess = c.value(.notifyOnSuccess, default: notifyOnSuccess)
-        maxRunHistory = c.value(.maxRunHistory, default: maxRunHistory)
-        pauseOnBattery = c.value(.pauseOnBattery, default: pauseOnBattery)
-        pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: pauseOnMeteredNetwork)
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
@@ -87,14 +77,7 @@ struct AppConfiguration: Codable, Sendable {
     /// was set for; the settings no longer write it, so it moves once.
     private mutating func moveAppWideRateLimits(upload: Int, download: Int) {
         guard upload > 0 || download > 0 else { return }
-        let shares = Set(settings.networkShares.map(\.volumeName))
-        for index in repositories.indices {
-            let repository = repositories[index]
-            if repository.kind == .local,
-               VolumePresence.volumeName(of: repository.resolvedLocalPath).map(shares.contains) != true
-            {
-                continue
-            }
+        for index in repositories.indices where repositories[index].usesNetwork(shares: settings.networkShares) {
             if upload > 0 { repositories[index].uploadLimitKiBps = upload }
             if download > 0 { repositories[index].downloadLimitKiBps = download }
         }

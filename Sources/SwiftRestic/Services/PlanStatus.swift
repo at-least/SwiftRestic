@@ -25,14 +25,11 @@ struct TileFace: Equatable, Sendable {
 
 /// What a plan's sidebar row says under its name.
 struct PlanCaption: Equatable, Sendable {
-    /// The row's news: the running phase, a standing problem, the pause,
-    /// the last backup or the schedule.
+    /// The row's news: the running phase, a standing problem, the last backup
+    /// or the schedule.
     var text: String
     /// The standing problem's outcome, whose glyph leads `text`.
     var outcome: RunRecord.Outcome?
-    /// The pause, on a line of its own, when a standing problem took the
-    /// first one — so neither state hides the other.
-    var pauseNote: String?
     /// A shorter spelling of `text` for a column too narrow for it —
     /// "Warnings — 2 days ago" for "Completed with warnings — 2 days ago" —
     /// tried before the middle cut that reads "Completed with…ings". Nil
@@ -223,8 +220,8 @@ enum PlanStatus {
     /// Save would store it — the stored plan's run stamps and pause under
     /// the draft's schedule (`merging(draft:)`) — so the editor cannot
     /// promise a run the page will not show once saved. Nil where the tab
-    /// already speaks: a manual or switched-off schedule, a timed pause
-    /// (its own line), and a setup the footer says is incomplete.
+    /// already speaks: a manual schedule, and a setup the footer says is
+    /// incomplete.
     static func editorNextBackup(
         draft: BackupPlan,
         stored: BackupPlan?,
@@ -234,20 +231,18 @@ enum PlanStatus {
         now: Date = .now
     ) -> TileFace? {
         let plan = stored?.merging(draft: draft) ?? draft
-        guard plan.runsOnSchedule(at: now) else { return nil }
+        guard plan.runsOnSchedule else { return nil }
         return nextBackupTile(
             for: plan, existingRepositoryIDs: existingRepositoryIDs, hold: hold, isBackingUp: isBackingUp, now: now
         )
     }
 
     /// The plan page's Next backup value, from `Scheduler.upcomingRuns`, so
-    /// the page cannot show a date nothing will fire at. A paused plan says so instead of "Manually" — a paused
-    /// manual one without promising a schedule to resume; an enabled plan
-    /// the scheduler skips — an incomplete setup, or a repository it cannot
-    /// find — says it is not scheduled. A timed pause, the plan's own or the
-    /// app-wide `hold`, moves the date to its end; under an open-ended hold
-    /// a due run reads "Waiting", never "Due now". A due slot whose backup
-    /// is in flight reads "Running now".
+    /// the page cannot show a date nothing will fire at. A plan the scheduler
+    /// skips (an incomplete setup, or a repository it cannot find) says it is
+    /// not scheduled. A timed `hold` moves the date to its end; under an
+    /// open-ended one a due run reads "Waiting", never "Due now". A due slot
+    /// whose backup is in flight reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
@@ -255,19 +250,6 @@ enum PlanStatus {
         isBackingUp: Bool = false,
         now: Date = .now
     ) -> TileFace {
-        guard plan.isEnabled else {
-            // A manual plan has no schedule for Resume to bring back.
-            if plan.schedule.frequency == .manual {
-                return TileFace(
-                    value: "Paused",
-                    help: "This plan has no schedule to resume — it runs only when you click Back Up Now"
-                )
-            }
-            return TileFace(
-                value: "Paused",
-                help: "Scheduled runs are paused (\(plan.schedule.summary)). Click Resume to start them again — Back Up Now still works"
-            )
-        }
         guard plan.schedule.frequency != .manual else {
             // The row asks when; "Manually" answered how. The schedule row
             // above it keeps the word.
@@ -293,91 +275,45 @@ enum PlanStatus {
         if let hold, next <= now {
             let when = switch hold {
             case .paused: "once backups resume"
-            case .onBattery: "once this Mac is on power again"
             case .onMeteredNetwork: "once this Mac is on another network"
             }
             return TileFace(value: "Waiting", help: "This plan is due and runs \(when)")
         }
-        let pauseEnd = plan.activePauseEnd(at: now)
-        var namesHold = hold != nil
-        if let pauseEnd, let holdEnd = hold?.resumesAt {
-            // Both timed, and both read "paused until": naming both would
-            // say one pause twice with two times. The later end is the
-            // date, so that pause is the one named — on a tie the app-wide
-            // one, which covers the plan's. A hold with no end (the
-            // battery, Until I Resume) sets no date and stays named. The
-            // plan's own pause is named nowhere here: the Schedule row
-            // above the value states it.
-            namesHold = pauseEnd <= holdEnd
-        }
         var help = Format.timestamp(next)
-        if namesHold, let hold {
+        if let hold {
             help += ". \(hold.summary(now: now))"
         }
         return TileFace(value: Format.tileTimestamp(next, now: now), help: help)
     }
 
-    /// The pause as the sidebar words it, `nil` while the schedule runs: a
-    /// timed pause names its end, an open-ended one the schedule it holds —
-    /// a manual plan's none, since it has no schedule to hold ("Paused",
-    /// as its Next backup value says, never "Paused — Manually").
-    static func pauseCaption(for plan: BackupPlan, now: Date = .now, calendar: Calendar = .current) -> String? {
-        if !plan.isEnabled {
-            return plan.schedule.frequency == .manual ? "Paused" : "Paused — \(plan.schedule.summary)"
-        }
-        if let end = plan.activePauseEnd(at: now) {
-            return "Paused until \(Format.pauseEnd(end, now: now, calendar: calendar))"
-        }
-        return nil
-    }
-
     /// Why a scheduled plan will not run by itself now, for the Protection
-    /// card: its pause in the sidebar's words, else "Not scheduled" when
-    /// the scheduler skips it (the sidebar's and Next backup's word). Nil
-    /// while it will, and for a manual plan, which never does — paused or
-    /// not, that is its chosen mode.
+    /// card: "Not scheduled" when the scheduler skips it (the sidebar's and
+    /// Next backup's word). Nil while it will, and for a manual plan, which
+    /// never does: that is its chosen mode.
     static func willNotRunCaption(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
-        now: Date = .now,
-        calendar: Calendar = .current
+        now: Date = .now
     ) -> String? {
         guard plan.schedule.frequency != .manual else { return nil }
-        if let pause = pauseCaption(for: plan, now: now, calendar: calendar) { return pause }
         if Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty {
             return "Not scheduled"
         }
         return nil
     }
 
-    /// The plan page's Schedule row: the sidebar's pause words, with
-    /// the schedule named under a pause — the row is where the schedule is
-    /// stated, so it never drops it. An open-ended pause's caption already
-    /// names it (a manual plan's has none); a timed one's names only its
-    /// end, so the schedule it resumes follows.
-    static func scheduleRow(for plan: BackupPlan, now: Date = .now, calendar: Calendar = .current) -> String {
-        guard let pause = pauseCaption(for: plan, now: now, calendar: calendar) else {
-            return plan.schedule.summary
-        }
-        guard plan.isEnabled else { return pause }
-        return "\(pause) — \(plan.schedule.summary)"
-    }
-
     /// A plan's sidebar caption. In rank: a run in flight's phase; a turn
     /// waited for behind another plan's run (`AppModel.runBackups`); a
     /// standing problem, named for as long as it stands, seen or not; the
-    /// pause; the last backup; the schedule. A problem and a pause are both
-    /// news, so a paused plan with a standing problem gets both — the
-    /// problem first, beside its glyph, the pause on a line of its own. The
-    /// last backup is `lastBackupAt`'s one moment, so history a plan
-    /// arrived with counts here as well. A plan with no backup that the
-    /// scheduler skips — no folder or file, or a repository it cannot find — reads
-    /// "Not scheduled", as its Next backup value does, rather than a
-    /// schedule it will not keep.
+    /// last backup; the schedule. The last backup is `lastBackupAt`'s one
+    /// moment, so history a plan arrived with counts here as well. A plan with
+    /// no backup that the scheduler skips (no folder or file, or a repository
+    /// it cannot find) reads "Not scheduled", as its Next backup value does,
+    /// rather than a schedule it will not keep.
     ///
-    /// The caption carries no next run: the sidebar says only the last
-    /// backup, and a plan's next run stays with the surfaces that act on
-    /// it — the plan page's Next backup value, the tray and Settings.
+    /// The caption carries no next run: a plan's next run stays with the
+    /// surfaces that act on it, the plan page's Next backup value, the tray
+    /// and Settings.
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,
@@ -386,7 +322,6 @@ enum PlanStatus {
         latestSnapshot: Snapshot? = nil,
         existingRepositoryIDs: Set<UUID>,
         now: Date = .now,
-        calendar: Calendar = .current,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> PlanCaption {
         if let activity {
@@ -395,20 +330,15 @@ enum PlanStatus {
         if isQueued {
             return PlanCaption(text: "Waiting for another backup…")
         }
-        let pause = pauseCaption(for: plan, now: now, calendar: calendar)
         if let problem {
             let when = relative(problem.finishedAt)
             return PlanCaption(
                 text: "\(problem.outcome.displayName) — \(when)",
                 outcome: problem.outcome,
-                pauseNote: pause,
                 // The one outcome whose words outgrow the column; the glyph
                 // beside them carries the severity either way.
                 shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
             )
-        }
-        if let pause {
-            return PlanCaption(text: pause)
         }
         if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshot: latestSnapshot) {
             return PlanCaption(text: "Last backup \(relative(lastBackupAt))")

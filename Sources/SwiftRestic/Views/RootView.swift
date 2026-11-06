@@ -418,9 +418,7 @@ struct RootView: View {
     /// Applies one consumed intent. An ask arriving while a sheet is up is
     /// dropped with a beep — macOS's "not now" — since two sheets cannot
     /// present at once, and because the main menu stays live under a sheet:
-    /// a Pause Schedule under the plan editor would be undone by its save
-    /// (`merging(draft:)` keeps the draft's `isEnabled`), a Remove from
-    /// SwiftRestic would leave the editor saving against a repository
+    /// a Remove from SwiftRestic would leave the editor saving against a repository
     /// that is gone. The panes' own sheets (Compare, a restore's
     /// destination) are invisible from here, so AppKit is asked: SwiftUI
     /// presents every sheet as the window's attached sheet. Each ask is
@@ -463,15 +461,6 @@ struct RootView: View {
             runSelectedPlan()
         case let .stopPlan(id):
             if model.planCommands(for: .plan(id)).canStop { model.cancelBackup(planID: id) }
-        case let .pauseSchedule(id, length):
-            let state = model.planCommands(for: .plan(id))
-            if state.canToggleSchedule, state.isScheduleActive {
-                model.pausePlanSchedule(id: id, for: length)
-            }
-        case let .resumeSchedule(id):
-            if !model.planCommands(for: .plan(id)).isScheduleActive {
-                model.resumePlanSchedule(id: id)
-            }
         case let .editPlan(id):
             editingPlan = model.plan(id: id)
         case let .editPlanRetention(id):

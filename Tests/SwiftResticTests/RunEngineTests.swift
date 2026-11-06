@@ -60,7 +60,7 @@ struct BackupRunEngineTests {
         var deliveredTranscripts: [RunTranscript.Contents] = []
 
         /// Per plan, so a test can tell the engine asked about its own run.
-        func cancellationMessage(for planID: UUID) -> String { "cancelled \(planID)" }
+        var cancellationMessage: String { "cancelled in test" }
         func label(of plan: BackupPlan) -> String { plan.label(among: [plan]) }
 
         /// Runs inside each phase write, in the run's task: a Stop landing
@@ -318,9 +318,7 @@ struct BackupRunEngineTests {
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
-        // The sink says why, for this plan: Pause and Stop words a stopped
-        // run differently from the user's own Stop.
-        #expect(record.failureMessage == "cancelled \(plan.id)")
+        #expect(record.failureMessage == "cancelled in test")
         #expect(record.hookMessages.isEmpty, "messages were \(record.hookMessages)")
         #expect(
             !FileManager.default.fileExists(atPath: failureRan.path),
@@ -384,7 +382,7 @@ struct BackupRunEngineTests {
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
-        #expect(record.failureMessage == "cancelled \(plan.id)")
+        #expect(record.failureMessage == "cancelled in test")
         #expect(client.callLog.isEmpty, "restic was asked: \(client.callLog)")
         #expect(!sink.log.contains("ping:started"), "log was \(sink.log)")
         #expect(!sink.log.contains("phase:backingUp"), "log was \(sink.log)")
@@ -441,7 +439,7 @@ struct BackupRunEngineTests {
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome), itemErrors \(record.itemErrors)")
-        #expect(record.failureMessage == "cancelled \(plan.id)")
+        #expect(record.failureMessage == "cancelled in test")
         #expect(!record.itemErrors.contains { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }, "itemErrors were \(record.itemErrors)")
         #expect(sink.deliveredNotes.contains("Retention stopped"), "notes were \(sink.deliveredNotes)")
         // The snapshot was written before the stop: it keeps its record and

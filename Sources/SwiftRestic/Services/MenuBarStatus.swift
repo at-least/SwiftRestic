@@ -271,7 +271,7 @@ enum MenuBarStatus {
         var rows: [PlanRow]
         /// The plans' news under the verbs: with the window closed the tray
         /// is the only surface, and one plan's failure must not hide
-        /// another's, nor a paused plan go unsaid.
+        /// another's.
         var newsLines: [String] = []
 
         /// The Protection line where no submenu title names the repository.
@@ -287,8 +287,8 @@ enum MenuBarStatus {
         groups.count > 1
     }
 
-    /// A plan's lines in its repository's submenu: news only — a standing
-    /// problem, then a pause — in the sidebar caption's words, joined to the
+    /// A plan's lines in its repository's submenu: news only, a standing
+    /// problem, in the sidebar caption's words, joined to the
     /// plan's label as the sidebar warning and the Protection card join them
     /// ("Code: Failed — 3 hours ago"). A quiet plan says nothing (success is
     /// quiet); a running plan's line already leads the menu. The menu's top
@@ -303,8 +303,7 @@ enum MenuBarStatus {
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [String] {
         guard activity == nil else { return [] }
-        let hasPause = PlanStatus.pauseCaption(for: plan, now: now) != nil
-        guard problem != nil || hasPause else { return [] }
+        guard problem != nil else { return [] }
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: nil,
@@ -313,8 +312,7 @@ enum MenuBarStatus {
             now: now,
             relative: relative
         )
-        return ([caption.text] + [caption.pauseNote].compactMap { $0 })
-            .map { "\(plan.label(among: plans)): \($0)" }
+        return ["\(plan.label(among: plans)): \(caption.text)"]
     }
 
     static func planGroups(

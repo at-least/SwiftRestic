@@ -10,14 +10,10 @@ struct PlanCommandState: Equatable {
     var canStop = false
     var stopTitle = "Stop Backup"
     var canEdit = false
-    var scheduleTitle = "Pause Schedule"
-    var isScheduleActive = true
-    var canToggleSchedule = false
     var canDelete = false
     var canBackUpAll = false
     var backupsPaused = false
     var canPauseBackups = false
-    var canPauseAndStopBackups = false
 }
 
 struct RepositoryCommandState: Equatable {
@@ -41,7 +37,7 @@ struct ConfirmationCopy: Equatable {
 }
 
 extension AppModel {
-    func planCommands(for selection: SidebarItem?, now: Date = .now) -> PlanCommandState {
+    func planCommands(for selection: SidebarItem?) -> PlanCommandState {
         var state = PlanCommandState()
         // One rule for every Back Up Now and every Stop: the tray's.
         let rows = MenuBarStatus.planRows(
@@ -55,10 +51,9 @@ extension AppModel {
             state.backupsPaused = true
         } else {
             state.canPauseBackups = !configuration.repositories.isEmpty
-            state.canPauseAndStopBackups = state.canPauseBackups && !activity.isEmpty
         }
 
-        guard case let .plan(id) = selection, let plan = plan(id: id) else { return state }
+        guard case let .plan(id) = selection, plan(id: id) != nil else { return state }
         state.planID = id
         if let row = rows.first(where: { $0.planID == id }) {
             state.canBackUp = row.action == .backUp && row.isEnabled
@@ -68,9 +63,6 @@ extension AppModel {
         state.stopTitle = MenuBarStatus.stopTitle(for: activity[id]?.phase)
         state.canEdit = true
         state.canDelete = true
-        state.isScheduleActive = plan.isScheduleActive(at: now)
-        state.scheduleTitle = state.isScheduleActive ? "Pause Schedule" : "Resume Schedule"
-        state.canToggleSchedule = !state.isScheduleActive || plan.schedule.frequency != .manual
         return state
     }
 

@@ -60,15 +60,12 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// brings the face back.
     private func refresh() {
         let state = currentState()
-        statusItem.isVisible = model.configuration.settings.showMenuBarExtra
-        applyFace(for: state, hold: model.scheduleHold, resticAbsence: model.resticAbsence)
+        applyFace(for: state, hold: model.overallScheduleHold, resticAbsence: model.resticAbsence)
         armPulse(for: state)
 
         withObservationTracking {
             _ = currentState()
-            _ = model.configuration.settings.showMenuBarExtra
-            _ = model.isOnBattery
-            _ = model.isOnMeteredNetwork
+            _ = model.overallScheduleHold
             _ = model.resticAbsence
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
@@ -128,7 +125,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         menu.removeAllItems()
 
         let hasNoRepositories = model.configuration.repositories.isEmpty
-        let hold = model.scheduleHold
+        let hold = model.overallScheduleHold
         // The failure line leads, unless nothing is set up yet and
         // an old failure from a since-removed repository would talk over the
         // setup question — the same yield MenuBarStatus defines. The subject
@@ -256,14 +253,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             menu.addItem(resume)
             menu.addItem(.separator())
         } else if !hasNoRepositories {
-            // A battery-only hold still offers the pause: the user may want
-            // one that outlasts plugging in.
-            menu.addItem(pauseMenuItem(title: "Pause Backups", stopsRunningBackups: false))
-            // Only while a backup runs, and never the default: a stopped
-            // backup starts over — restic cannot resume one.
-            if !model.activity.isEmpty {
-                menu.addItem(pauseMenuItem(title: "Pause and Stop Running Backups", stopsRunningBackups: true))
-            }
+            // A metered network's hold still offers the pause: the user may
+            // want one that outlasts it.
+            menu.addItem(pauseMenuItem(title: "Pause Backups"))
             menu.addItem(.separator())
         }
 
@@ -343,13 +335,13 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         return item
     }
 
-    private func pauseMenuItem(title: String, stopsRunningBackups: Bool) -> NSMenuItem {
+    private func pauseMenuItem(title: String) -> NSMenuItem {
         let submenu = NSMenu(title: title)
         submenu.autoenablesItems = false
         for length in PauseLength.allCases {
             let item = NSMenuItem(
                 title: length.menuTitle,
-                action: stopsRunningBackups ? #selector(pauseAndStopBackups(_:)) : #selector(pauseBackups(_:)),
+                action: #selector(pauseBackups(_:)),
                 keyEquivalent: ""
             )
             item.target = self
@@ -383,11 +375,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     @objc private func pauseBackups(_ sender: NSMenuItem) {
         guard let length = (sender.representedObject as? String).flatMap(PauseLength.init(rawValue:)) else { return }
         model.pauseBackups(for: length)
-    }
-
-    @objc private func pauseAndStopBackups(_ sender: NSMenuItem) {
-        guard let length = (sender.representedObject as? String).flatMap(PauseLength.init(rawValue:)) else { return }
-        model.pauseBackups(for: length, stoppingRunningBackups: true)
     }
 
     @objc private func resumeBackups() {

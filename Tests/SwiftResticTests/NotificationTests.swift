@@ -492,7 +492,7 @@ struct RepeatedProblemNotificationTests {
             secrets: .inMemory(),
             defaults: defaults
         )
-        if let limit { model.configuration.settings.maxRunHistory = limit }
+        if let limit { model.activityHistoryLimit = limit }
         return model
     }
 

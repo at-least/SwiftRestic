@@ -27,8 +27,6 @@ final class AppRouter {
         // the consume re-checks planCommands(for: router.selection) the same
         // way.
         case stopPlan(UUID)
-        case pauseSchedule(UUID, PauseLength)
-        case resumeSchedule(UUID)
         case editPlan(UUID)
         case editPlanRetention(UUID)
         case editRepository(UUID)

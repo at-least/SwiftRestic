@@ -47,8 +47,6 @@ struct AppRouterTests {
         #expect(router.takePendingIntent() == .confirm(.prune(b)))
 
         for intent: AppRouter.Intent in [
-            .pauseSchedule(plan, .oneHour),
-            .resumeSchedule(plan),
             .stopPlan(plan),
             .editPlan(plan),
             .editRepository(a),
@@ -57,7 +55,6 @@ struct AppRouterTests {
             router.request(intent)
             #expect(router.takePendingIntent() == intent)
         }
-        #expect(AppRouter.Intent.pauseSchedule(plan, .oneHour) != .pauseSchedule(plan, .untilResumed))
         #expect(CommandConfirmation.check(a).id == .check(a))
     }
 

@@ -30,8 +30,8 @@ struct ProtectionCard: View {
                 if let summary {
                     HStack(spacing: 8) {
                         Text(summary.text)
-                        // The one in-window Resume, and only the user's own
-                        // pause has one — the battery's ends by plugging in.
+                        // Only the user's own pause has one: a metered
+                        // network's hold ends with the network.
                         if summary.showsResume {
                             Spacer(minLength: 8)
                             Button("Resume") { model.resumeBackups() }

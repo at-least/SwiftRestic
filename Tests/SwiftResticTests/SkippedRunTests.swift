@@ -141,11 +141,9 @@ struct SkippedRunTests {
         let stillGone = plan()
         let failedLast = plan()
         let manual = plan(.manual)
-        var paused = plan()
-        paused.isEnabled = false
         let running = plan()
         let repositoryAway = plan()
-        let plans = [back, stillGone, failedLast, manual, paused, running, repositoryAway]
+        let plans = [back, stillGone, failedLast, manual, running, repositoryAway]
         let newest: [UUID: RunRecord.Outcome] = Dictionary(uniqueKeysWithValues: plans.map {
             ($0.id, $0.id == failedLast.id ? .failed : .skipped)
         })
@@ -154,8 +152,7 @@ struct SkippedRunTests {
             newestBackupOutcome: newest,
             running: [running.id],
             sourcesExist: { $0.id != stillGone.id },
-            repositoryReachable: { $0.id != repositoryAway.id },
-            now: now
+            repositoryReachable: { $0.id != repositoryAway.id }
         )
         #expect(due == [back.id])
     }

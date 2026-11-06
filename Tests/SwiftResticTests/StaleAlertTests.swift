@@ -49,17 +49,14 @@ struct StaleAlertTests {
         #expect(StaleAlert.window(schedule: plan(.weekly, lastSuccessDaysAgo: nil).schedule) == 8 * day)
     }
 
-    @Test("a paused plan is still named; manual, incomplete and running plans are not")
+    @Test("a scheduled plan is named; manual, incomplete and running plans are not")
     func exemptions() {
-        var off = plan(lastSuccessDaysAgo: 20)
-        off.isEnabled = false
-        var timed = plan(lastSuccessDaysAgo: 20)
-        timed.pausedUntil = now.addingTimeInterval(3600)
+        let scheduled = plan(lastSuccessDaysAgo: 20)
         let manual = plan(.manual, lastSuccessDaysAgo: 20)
         var incomplete = plan(lastSuccessDaysAgo: 20)
         incomplete.path = ""
         let running = plan(lastSuccessDaysAgo: 20)
-        #expect(due([off, timed, manual, incomplete, running], running: [running.id]).map(\.planID) == [off.id, timed.id])
+        #expect(due([scheduled, manual, incomplete, running], running: [running.id]).map(\.planID) == [scheduled.id])
     }
 
     @Test("a config from before the switches went still loads, and a saved Off has no effect")

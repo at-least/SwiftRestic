@@ -23,9 +23,7 @@ extension AppModel {
         // First, so a lapsed pause stops being shown and stops holding in the
         // same tick.
         expireLapsedPauses(now: .now)
-        let onBattery = await Self.sampleOnBattery()
-        if isOnBattery != onBattery { isOnBattery = onBattery }
-        // A hold stops what is scheduled, backups and upkeep alike; work
+        // A pause stops what is scheduled, backups and upkeep alike; work
         // already running is not touched, and Back Up Now never comes through
         // here. Without restic every run would fail at its first restic call
         // for a cause the window's banner and the menu bar already state.
@@ -33,7 +31,7 @@ extension AppModel {
 
         // After the starts: a plan this tick just started is running, so it
         // is not named for the stretch its run is about to end. Not behind
-        // the hold: nothing else says a paused plan has gone quiet.
+        // the pause: nothing else says a held plan has gone quiet.
         alertQuietPlans(now: .now)
     }
 
@@ -46,7 +44,7 @@ extension AppModel {
         // backup, which will simply still be due on the next tick. A
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
-        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(awaitingDrive)
+        var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(awaitingDrive).union(repositoriesWaitingForNetwork)
         // A server out of reach holds its upkeep only: a backup due to it
         // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(
@@ -83,39 +81,37 @@ extension AppModel {
         return maintenanceAwaitingDrive
     }
 
-    /// The battery check is a synchronous IOKit round-trip to powerd — quick,
-    /// but still IPC; it runs detached so the tick decides on the main actor
-    /// without paying it there.
-    private nonisolated static func sampleOnBattery() async -> Bool {
-        #if DEBUG
-        // Live checks cannot unplug the Mac. Gated on the throwaway-config
-        // override, like the password seam, so a stale variable in a
-        // developer's shell cannot hold a normal debug run's backups.
-        let environment = ProcessInfo.processInfo.environment
-        if environment["SWIFTRESTIC_CONFIG_DIR"] != nil {
-            switch environment["SWIFTRESTIC_POWER_SOURCE"] {
-            case "battery": return true
-            case "ac": return false
-            default: break
-            }
-        }
-        #endif
-        return await Task.detached(priority: .utility) { PowerState.isOnBattery }.value
-    }
-
+    /// Pause Backups, the one hold on every run. Stops the scheduler's tick.
     var scheduleHold: ScheduleHold? {
         scheduleHold(now: .now)
     }
 
     func scheduleHold(now: Date) -> ScheduleHold? {
-        Scheduler.hold(
+        Scheduler.hold(pause: configuration.settings.schedulePause, isOnMeteredNetwork: false, repositoryUsesNetwork: false, now: now)
+    }
+
+    /// What holds this repository's scheduled runs: `scheduleHold`, or a
+    /// metered network if it would use it. A disk on this Mac never waits for
+    /// a network.
+    func scheduleHold(repositoryID: UUID?, now: Date = .now) -> ScheduleHold? {
+        let usesNetwork = repository(id: repositoryID).map { $0.usesNetwork(shares: configuration.settings.networkShares) } ?? false
+        return Scheduler.hold(
             pause: configuration.settings.schedulePause,
-            pauseOnBattery: configuration.settings.pauseOnBattery,
-            isOnBattery: isOnBattery,
-            pauseOnMeteredNetwork: configuration.settings.pauseOnMeteredNetwork,
             isOnMeteredNetwork: isOnMeteredNetwork,
+            repositoryUsesNetwork: usesNetwork,
             now: now
         )
+    }
+
+    /// The tray's and Settings' words: the pause, or the metered network while
+    /// it holds any plan back.
+    var overallScheduleHold: ScheduleHold? {
+        if let hold = scheduleHold { return hold }
+        return configuration.plans.lazy.compactMap { self.scheduleHold(repositoryID: $0.repositoryID) }.first
+    }
+
+    private var repositoriesWaitingForNetwork: Set<UUID> {
+        Set(configuration.repositories.map(\.id).filter { scheduleHold(repositoryID: $0) == .onMeteredNetwork })
     }
 
     /// Watches for volumes mounting: a plan skipped because its drive was
@@ -151,7 +147,7 @@ extension AppModel {
         }
     }
 
-    func runSkippedPlansAfterMount(now: Date = .now) async {
+    func runSkippedPlansAfterMount() async {
         guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         var newest: [UUID: RunRecord.Outcome] = [:]
         // Newest first.
@@ -159,7 +155,7 @@ extension AppModel {
             if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
         }
         let planIDs = await Scheduler.catchUpAfterMount(
-            plans: configuration.plans,
+            plans: configuration.plans.filter { scheduleHold(repositoryID: $0.repositoryID) == nil },
             newestBackupOutcome: newest,
             running: runningPlanIDs,
             // Off the main actor, as every presence read: a stalled share
@@ -171,8 +167,7 @@ extension AppModel {
             repositoryReachable: { plan in
                 guard let repository = self.configuration.repository(id: plan.repositoryID) else { return false }
                 return await !self.isDriveAway(repository)
-            },
-            now: now
+            }
         )
         // As at the start: the reads are awaited, and a pause or a quit can
         // land meanwhile.
@@ -182,15 +177,15 @@ extension AppModel {
     }
 
     /// Follows the network for the metered-network hold: macOS's own
-    /// "expensive" (cellular and the like) and "constrained" flags on the
-    /// current path, watched whether or not the setting is on, so the hold
-    /// is right the moment it is switched on. UNVERIFIED (never tried on a
-    /// real hotspot): that macOS flags one as expensive; the hold itself
-    /// was checked through the debug override below.
+    /// "expensive" (cellular and the like) and "constrained" (Low Data Mode)
+    /// flags on the current path. UNVERIFIED (never tried on a real hotspot):
+    /// that macOS flags one as expensive; the hold itself was checked through
+    /// the debug override below.
     func startNetworkMonitor() {
         #if DEBUG
         // Live checks cannot switch networks. Gated on the throwaway-config
-        // override, like the power-source seam.
+        // override, like the password seam, so a stale variable in a
+        // developer's shell cannot hold a normal debug run's backups.
         let environment = ProcessInfo.processInfo.environment
         if environment["SWIFTRESTIC_CONFIG_DIR"] != nil, let network = environment["SWIFTRESTIC_NETWORK"] {
             isOnMeteredNetwork = network == "metered"
@@ -226,38 +221,22 @@ extension AppModel {
     }
 
     /// Pause Backups: holds every scheduled backup, check and prune for
-    /// `length`. Backups already running finish — restic cannot suspend a
-    /// backup, and a stopped one starts over — unless the user chose Pause
-    /// and Stop, which stops them and leaves their slots due for when the
-    /// pause ends. Maintenance, restores and console work are never stopped.
-    /// Pause and Stop drops the plans waiting for their turn too
-    /// (`runBackups`).
-    func pauseBackups(for length: PauseLength, stoppingRunningBackups: Bool = false, now: Date = .now) {
+    /// `length`. Backups already running finish: restic cannot suspend a
+    /// backup, and a stopped one starts over.
+    func pauseBackups(for length: PauseLength, now: Date = .now) {
         configuration.settings.schedulePause = SchedulePause(until: length.end(from: now))
-        guard stoppingRunningBackups else { return }
-        backupQueue.removeAll()
-        // A run the user already stopped keeps that Stop's meaning.
-        for (planID, run) in activity where run.phase != .cancelling {
-            pauseStoppedPlanIDs.insert(planID)
-            cancelBackup(planID: planID)
-        }
     }
 
     func resumeBackups() {
         configuration.settings.schedulePause = nil
     }
 
-    /// Clears the pause dates that have passed. Nothing depends on it — a
-    /// lapsed date already holds nothing — but the write is what redraws
-    /// every surface still showing the pause.
+    /// Clears a pause date that has passed. Nothing depends on it, since a
+    /// lapsed date already holds nothing, but the write is what redraws every
+    /// surface still showing the pause.
     func expireLapsedPauses(now: Date) {
         if let pause = configuration.settings.schedulePause, !pause.isActive(at: now) {
             configuration.settings.schedulePause = nil
-        }
-        for index in configuration.plans.indices {
-            if let until = configuration.plans[index].pausedUntil, until <= now {
-                configuration.plans[index].pausedUntil = nil
-            }
         }
     }
 

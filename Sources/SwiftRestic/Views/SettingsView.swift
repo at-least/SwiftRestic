@@ -7,9 +7,6 @@ struct SettingsView: View {
     @AppStorage("lastSettingsPane") private var lastSettingsPane = 0
     @State private var isConfirmingCacheCleanup = false
     @Environment(AppModel.self) private var model
-    /// Arms the "you can strand the app" confirmation: menu bar item off and
-    /// window closed leaves the scheduler running with no visible way back.
-    @State private var isConfirmingMenuBarOff = false
     @State private var removingShare: NetworkShare?
 
     /// The login switch's caption: what it means while off, in the plan
@@ -33,7 +30,7 @@ struct SettingsView: View {
         // accommodates the size of the current pane", no pane scrolling.
         TabView(selection: $lastSettingsPane) {
             generalTab(model: model)
-                .frame(width: Self.width, height: 670)
+                .frame(width: Self.width, height: 470)
                 .tag(0)
                 .tabItem { Label("General", systemImage: "gearshape") }
             notificationsTab(model: model)
@@ -49,17 +46,6 @@ struct SettingsView: View {
                 .frame(width: Self.width, height: 380)
                 .tag(3)
                 .tabItem { Label("restic", systemImage: "terminal") }
-        }
-        .confirmationDialog(
-            "Turn off the menu bar item?",
-            isPresented: $isConfirmingMenuBarOff,
-            titleVisibility: .visible
-        ) {
-            Button("Turn Off") {
-                model.configuration.settings.showMenuBarExtra = false
-            }
-        } message: {
-            Text("Backups keep running with the window closed, and SwiftRestic opens again only when you launch it.")
         }
         .confirmationDialog(
             "Remove “\(removingShare?.url ?? "")” from SwiftRestic?",
@@ -113,26 +99,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Menu bar") {
-                Toggle(
-                    "Show SwiftRestic in the menu bar",
-                    isOn: Binding(
-                        get: { model.configuration.settings.showMenuBarExtra },
-                        set: { newValue in
-                            if newValue {
-                                model.configuration.settings.showMenuBarExtra = true
-                            } else {
-                                isConfirmingMenuBarOff = true
-                            }
-                        }
-                    )
-                )
-                ExpandableCaption(
-                    summary: "Shows what’s running, and opens SwiftRestic after its window is closed.",
-                    detail: "The icon pulses while work is in progress (held still with Reduce Motion), dims while backups are paused, and wears a warning mark until a failed or warned run is resolved."
-                )
-            }
-
             Section("Scheduling") {
                 Toggle("Start SwiftRestic at login", isOn: Binding(
                     get: { model.startsAtLogin },
@@ -153,12 +119,9 @@ struct SettingsView: View {
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
                 }
 
-                Toggle("Pause scheduled backups on battery power", isOn: $model.configuration.settings.pauseOnBattery)
-                Toggle("Pause scheduled backups on a metered network", isOn: $model.configuration.settings.pauseOnMeteredNetwork)
-                    .help("macOS counts cellular and Low Data Mode as metered. Back Up Now still runs")
                 // Held, the next run is whenever the hold lifts — say why
                 // instead of a date the scheduler will not keep.
-                if let hold = model.scheduleHold {
+                if let hold = model.overallScheduleHold {
                     LabeledContent("Next backup", value: hold.summary())
                 } else if let next = model.nextScheduledRun {
                     // The plan with its repository, the tray headline's
@@ -196,16 +159,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("History") {
-                Stepper(value: $model.configuration.settings.maxRunHistory, in: 20 ... 2000, step: 20) {
-                    LabeledContent("Items kept in Activity", value: "\(model.configuration.settings.maxRunHistory)")
-                }
-                // The trim's exemption (`OverviewMetrics.standingProblemIDs`).
-                Text("Unresolved problems are kept longer.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .formStyle(.grouped)
     }

@@ -100,43 +100,6 @@ struct PlanDetailView: View {
         }
     }
 
-    /// Pause and Resume, the Schedule card's verb — bare, the card names
-    /// what they act on; the menus keep Pause Schedule and Resume Schedule
-    /// (the user's call). A click on Pause keeps its one-click open-ended
-    /// pause; the arrow offers the timed lengths. A manual plan has no
-    /// schedule to pause and shows none: its Schedule row already says
-    /// "Manually".
-    @ViewBuilder
-    private func scheduleControl(_ plan: BackupPlan) -> some View {
-        if !plan.isScheduleActive(at: now) {
-            Button("Resume") {
-                model.resumePlanSchedule(id: plan.id)
-            }
-            .help(resumeHelp(plan))
-        } else if plan.schedule.frequency != .manual {
-            Menu("Pause") {
-                ForEach(PauseLength.allCases) { length in
-                    Button(length.menuTitle) {
-                        model.pausePlanSchedule(id: plan.id, for: length)
-                    }
-                }
-            } primaryAction: {
-                model.pausePlanSchedule(id: plan.id, for: .untilResumed)
-            }
-            .help("Stop scheduled runs until you resume — Back Up Now still works")
-        }
-    }
-
-    /// A manual plan switched off — the editor's "Run on schedule" switch —
-    /// has no schedule for Resume to bring back, as its Next backup value
-    /// says; the help must not promise one.
-    private func resumeHelp(_ plan: BackupPlan) -> String {
-        if plan.schedule.frequency == .manual {
-            return "Turn “Run on schedule” back on"
-        }
-        return "Run this plan on its schedule again"
-    }
-
     /// The running-operation strip, as its own view: it reads this plan's
     /// activity and progress here, so a restic progress tick re-renders the
     /// strip instead of the whole pane — `content`'s cards never rerun per
@@ -362,39 +325,29 @@ struct PlanDetailView: View {
     }
 
     /// When the plan runs: its schedule, and the scheduler's own answer for
-    /// the next run — so a paused plan reads "Paused" and one it skips never
-    /// shows a date; the full form is the tooltip, the short one leaving out
-    /// the date when it is today or tomorrow — with the pause in its corner.
+    /// the next run, so one it skips never shows a date; the full form is the
+    /// tooltip, the short one leaving out the date when it is today or
+    /// tomorrow.
     private func scheduleCard(_ plan: BackupPlan) -> some View {
         let next = PlanStatus.nextBackupTile(
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-            hold: model.scheduleHold,
+            hold: model.scheduleHold(repositoryID: plan.repositoryID, now: now),
             isBackingUp: model.activity[plan.id]?.work == .backup,
             now: now
         )
-        let schedule = PlanStatus.scheduleRow(for: plan)
+        let schedule = plan.schedule.summary
         return Card("Schedule") {
             DetailGrid {
                 // The card's title labels this line, as the Backups card's
                 // does its count.
                 Text(schedule)
                     .accessibilityLabel("Schedule: \(schedule)")
-                // With the schedule switched off the row above reads
-                // "Paused — Daily at 2:00 AM" and Next backup could only
-                // repeat "Paused" (`nextBackupTile`); a timed pause keeps
-                // the row, which says when backups resume.
-                if plan.isEnabled {
-                    DetailRow("Next backup") {
-                        Text(next.value)
-                            .modifier(TileHelp(help: next.help))
-                    }
+                DetailRow("Next backup") {
+                    Text(next.value)
+                        .modifier(TileHelp(help: next.help))
                 }
             }
-        } accessory: {
-            scheduleControl(plan)
-                .controlSize(.small)
-                .fixedSize()
         }
     }
 

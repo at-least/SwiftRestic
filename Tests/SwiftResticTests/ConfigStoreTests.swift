@@ -167,7 +167,7 @@ struct ConfigStoreTests {
             #expect(copy.repositoryID == original.repositoryID)
             #expect(copy.excludePatterns == ["*.log"])
             #expect(copy.tags == ["work"])
-            #expect(copy.isEnabled == false)
+            #expect(copy.schedule.frequency == .manual)
             #expect(copy.schedule == original.schedule)
             #expect(copy.retention == original.retention)
             #expect(copy.lastRunAt == original.lastRunAt)
@@ -721,9 +721,34 @@ struct TolerantDecodingTests {
         #expect(partial.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 2, deniedByFilePermissions: 0))
     }
 
+    @Test("a plan an older build switched off stays stopped; its timed pause and hour count are ignored")
+    func oldPlanPauseFieldsDecode() throws {
+        let off = try decode(BackupPlan.self, #"{"path":"/a","isEnabled":false,"schedule":{"frequency":"daily"}}"#)
+        #expect(off.schedule.frequency == .manual)
+        #expect(!off.runsOnSchedule)
+
+        let on = try decode(BackupPlan.self, #"{"path":"/a","repositoryID":"7A1B0C2D-0000-4000-8000-000000000001","isEnabled":true,"pausedUntil":"2099-01-01T00:00:00Z","schedule":{"frequency":"hourly","intervalHours":12}}"#)
+        #expect(on.schedule.frequency == .hourly)
+        #expect(on.schedule.interval == 3600)
+        #expect(on.runsOnSchedule)
+
+        // `retention` keeps an `isEnabled` of its own, so the plan's top-level keys.
+        let written = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(on)) as? [String: Any])
+        #expect(written["isEnabled"] == nil && written["pausedUntil"] == nil)
+        let schedule = try #require(written["schedule"] as? [String: Any])
+        #expect(schedule["intervalHours"] == nil)
+    }
+
+    @Test("settings an older build saved are ignored")
+    func oldSettingsDecode() throws {
+        let settings = try decode(AppSettings.self, #"{"pauseOnBattery":true,"pauseOnMeteredNetwork":true,"showMenuBarExtra":false,"maxRunHistory":20,"notifyOnSuccess":true}"#)
+        #expect(settings.notifyOnSuccess)
+        let written = try String(decoding: JSONEncoder().encode(settings), as: UTF8.self)
+        #expect(!written.contains("pauseOn") && !written.contains("showMenuBarExtra") && !written.contains("maxRunHistory"))
+    }
+
     @Test("pause fields round-trip; missing reads as not paused; an unreadable pause date reads as not paused, never as forever")
     func pauseFieldsDecodeFailSafe() async throws {
-        #expect(try decode(BackupPlan.self, #"{"name":"Docs"}"#).pausedUntil == nil)
         #expect(try decode(AppSettings.self, "{}").schedulePause == nil)
         // An empty pause is the stored form of Until I Resume: no end.
         #expect(try decode(AppSettings.self, #"{"schedulePause":{}}"#).schedulePause == SchedulePause(until: nil))
@@ -744,16 +769,12 @@ struct TolerantDecodingTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ConfigStore(directory: directory)
         let until = Date(timeIntervalSince1970: 1_790_400_000)
-        var plan = BackupPlan()
-        plan.pausedUntil = until.addingTimeInterval(3600)
         var configuration = AppConfiguration()
-        configuration.plans = [plan]
         configuration.settings.schedulePause = SchedulePause(until: until)
         try await store.save(configuration)
         let loaded = try await store.load()
         #expect(loaded.decodeNotes.isEmpty)
         #expect(loaded.configuration.settings.schedulePause == SchedulePause(until: until))
-        #expect(loaded.configuration.plans.first?.pausedUntil == until.addingTimeInterval(3600))
 
         configuration.settings.schedulePause = SchedulePause(until: nil)
         try await store.save(configuration)
@@ -852,27 +873,10 @@ struct TolerantDecodingTests {
         #expect(plan.schedule.hour == 23)
         #expect(plan.schedule.minute == 59)
         #expect(plan.schedule.weekday == 7)
-        // A huge interval would trap the scheduler's `intervalHours * 3600`
-        // the next time it ticks; zero renders "Every 0 hours".
-        let hourly = try DecodeNotes.$current.withValue(notes) {
-            try decoder.decode(
-                BackupPlan.self,
-                from: Data(#"{"schedule":{"frequency":"hourly","intervalHours":9000000000000000}}"#.utf8)
-            )
-        }
-        #expect(hourly.schedule.intervalHours == 24)
-        // The clamped plan schedules without trapping.
-        _ = hourly.schedule.nextRunDate(after: nil, now: Date.now)
-        let zeroPlan = try decoder.decode(
-            BackupPlan.self,
-            from: Data(#"{"schedule":{"frequency":"hourly","intervalHours":0}}"#.utf8)
-        )
-        #expect(zeroPlan.schedule.intervalHours == 1)
         let recorded = notes.notes.joined(separator: " · ")
         #expect(recorded.contains("hour"))
         #expect(recorded.contains("minute"))
         #expect(recorded.contains("weekday"))
-        #expect(recorded.contains("intervalHours"))
 
         let quiet = try decoder.decode(
             BackupPlan.self,
