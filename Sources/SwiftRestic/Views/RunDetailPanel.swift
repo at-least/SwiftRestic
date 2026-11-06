@@ -123,7 +123,7 @@ struct RunDetailPanel: View {
             exitRow
         default:
             repositoryRow
-            // A check's verdict, or what Apply Retention Now removed —
+            // A check's verdict, or what a retention run removed:
             // Copy Details' Result line.
             if run.kind == .check || run.kind == .forget || run.kind == .rewrite, let result = run.detailText {
                 DetailRow("Result") {

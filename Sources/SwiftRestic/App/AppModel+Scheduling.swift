@@ -25,24 +25,15 @@ extension AppModel {
         expireLapsedPauses(now: .now)
         let onBattery = await Self.sampleOnBattery()
         if isOnBattery != onBattery { isOnBattery = onBattery }
-        // Pause Backups and the battery hold everything scheduled — backups
-        // and upkeep alike. Work already running is not touched, and Back Up
-        // Now never comes through here.
-        guard scheduleHold == nil else { return }
+        // A hold stops what is scheduled, backups and upkeep alike; work
+        // already running is not touched, and Back Up Now never comes through
+        // here. Without restic every run would fail at its first restic call
+        // for a cause the window's banner and the menu bar already state.
+        if scheduleHold == nil, isResticAvailable { await startDueWork() }
 
-        // Without restic every run would fail at its first restic call — a
-        // Failed record, a banner and a notification per slot, backups and
-        // upkeep alike — for a cause the window's banner and the menu bar
-        // already state.
-        if isResticAvailable { await startDueWork() }
-
-        // After the guard: a hold exempts every plan from the quiet-plan
-        // alert, as it holds their runs. After the starts: a plan this tick
-        // just started is running, so it is not named for the stretch its
-        // run is about to end — a pause lapsing, or a Mac back from a long
-        // sleep, would otherwise hear of the very plan starting. A missing
-        // restic starts nothing, so the alert still names what it leaves
-        // unprotected.
+        // After the starts: a plan this tick just started is running, so it
+        // is not named for the stretch its run is about to end. Not behind
+        // the hold: nothing else says a paused plan has gone quiet.
         alertQuietPlans(now: .now)
     }
 

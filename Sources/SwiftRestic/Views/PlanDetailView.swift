@@ -353,9 +353,6 @@ struct PlanDetailView: View {
                 // starts at the card's edge, left of their values.
                 snapshotsValue(plan, snapshots: snapshots)
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-                // Applying it now is Plan ▸ Apply Retention Now (and the
-                // sidebar row's menu); what it will keep is the editor's
-                // Retention tab.
                 DetailRow("Retention", plan.retention.summary)
             }
         } accessory: {

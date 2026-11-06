@@ -229,8 +229,7 @@ struct ResticIntegrationTests {
             keepDaily: 0,
             keepWeekly: 0,
             keepMonthly: 0,
-            keepYearly: 0,
-            runPrune: false
+            keepYearly: 0
         )
         let removed = try await fixture.service.forget(fixture.context, plan: plan)
         #expect(removed == 2)
@@ -302,7 +301,7 @@ struct ResticIntegrationTests {
         var plan = fixture.plan
         plan.retention = RetentionPolicy(
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0, runPrune: false
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
 
         // Every deletion refused, as an append-only server's 403 refuses
@@ -429,8 +428,7 @@ struct ResticIntegrationTests {
         var plan = fixture.plan
         plan.retention = RetentionPolicy(
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0,
-            runPrune: true
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
 
         // A backup of its own holds a lock while the preview runs — the
@@ -565,12 +563,12 @@ struct ResticIntegrationTests {
         #expect(!draft.retention.isEnabled)
         draft.retention = RetentionPolicy(
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0, runPrune: false
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
         let preview = try await model.previewRetention(plan: draft)
         #expect(preview.kept.count == 1)
         #expect(preview.removed.count == 1)
-        #expect(preview.adoptionLine == "With these rules, 2 backups would become 1.")
+        #expect(preview.outcomeLine == "With these rules, 2 backups would become 1.")
         // A dry run over an unsaved plan removed nothing.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
     }

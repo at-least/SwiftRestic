@@ -100,48 +100,18 @@ struct RetentionPreviewTests {
         }
     }
 
-    @Test("the sheet's summary and the record's detail say what retention did")
-    func summaryAndAppliedWording() throws {
-        let oldest = try Self.snapshot(String(repeating: "1", count: 64), "2026-09-21T10:00:00+08:00")
-        let middle = try Self.snapshot(String(repeating: "2", count: 64), "2026-09-22T10:00:00+08:00")
-        let newest = try Self.snapshot(String(repeating: "3", count: 64), "2026-09-23T10:00:00+08:00")
-
-        #expect(RetentionPreview(kept: [], removed: []).summary
-            == "This plan has no backups in the repository yet.")
-        #expect(RetentionPreview(kept: [newest], removed: []).summary
-            == "Nothing to remove — this plan’s only backup is within its rules.")
-        #expect(RetentionPreview(kept: [newest, middle, oldest], removed: []).summary
-            == "Nothing to remove — all 3 of this plan’s backups are within its rules.")
-        #expect(RetentionPreview(kept: [newest], removed: [oldest]).summary
-            == "1 of this plan’s 2 backups would be removed: the one from \(Format.timestamp(oldest.time)). 1 would stay.")
-        #expect(RetentionPreview(kept: [newest], removed: [middle, oldest]).summary
-            == "2 of this plan’s 3 backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(middle.time)). 1 would stay.")
-
-        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: false) == "No backups needed removing.")
-        #expect(RetentionPreview.appliedSummary(removed: 0, pruned: true) == "No backups needed removing.")
-        #expect(RetentionPreview.appliedSummary(removed: 2, pruned: false)
-            == "Removed 2 backups. Their data stays until the next cleanup.")
-        #expect(RetentionPreview.appliedSummary(removed: 1, pruned: true)
-            == "Removed 1 backup and freed its space.")
-        #expect(RetentionPreview.appliedSummary(removed: 1, pruned: false)
-            == "Removed 1 backup. Its data stays until the next cleanup.")
-        #expect(RetentionPreview.appliedSummary(removed: 2, pruned: true)
-            == "Removed 2 backups and freed their space.")
-    }
-
     @Test("the preview's command differs from the real forget only by its dry-run flags")
     func previewArgumentsDifferFromForgetOnlyByDryRunFlags() {
-        var plan = BackupPlan()
-        plan.retention.runPrune = true
+        let plan = BackupPlan()
 
         let preview = ResticService.forgetArguments(plan: plan, dryRun: true)
         let apply = ResticService.forgetArguments(plan: plan, dryRun: false)
 
         #expect(preview.contains("--dry-run"))
         #expect(preview.contains("--no-lock"))
-        // A dry run must never prune: restic would prune for real.
+        // Cleanup is the repository's: forget never prunes.
         #expect(!preview.contains("--prune"))
-        #expect(apply.contains("--prune"))
+        #expect(!apply.contains("--prune"))
         // restic refuses --no-lock on a real forget (exit 1).
         #expect(!apply.contains("--no-lock"))
         #expect(!apply.contains("--dry-run"))

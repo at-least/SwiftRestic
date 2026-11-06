@@ -32,7 +32,6 @@ final class AppRouter {
         case editPlan(UUID)
         case editPlanRetention(UUID)
         case editRepository(UUID)
-        case applyRetention(UUID)
         case confirm(CommandConfirmation)
         /// File ▸ Export Settings and Import Settings: their panels wait
         /// out an open sheet too — an import would replace what its editor

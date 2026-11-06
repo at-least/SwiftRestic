@@ -557,16 +557,16 @@ struct AdoptionPreviewLineTests {
 
     @Test("a thinning policy says what the history becomes; a keeping one says it all stays")
     func lineShapes() {
-        #expect(RetentionPreview(kept: [snapshot("b")], removed: [snapshot("a")]).adoptionLine
+        #expect(RetentionPreview(kept: [snapshot("b")], removed: [snapshot("a")]).outcomeLine
             == "With these rules, 2 backups would become 1.")
-        #expect(RetentionPreview(kept: [snapshot("c"), snapshot("b")], removed: [snapshot("a")]).adoptionLine
+        #expect(RetentionPreview(kept: [snapshot("c"), snapshot("b")], removed: [snapshot("a")]).outcomeLine
             == "With these rules, 3 backups would become 2.")
-        #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).adoptionLine
+        #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).outcomeLine
             == "All 2 backups would stay.")
-        #expect(RetentionPreview(kept: [snapshot("a")], removed: []).adoptionLine
+        #expect(RetentionPreview(kept: [snapshot("a")], removed: []).outcomeLine
             == "The backup would stay.")
         // Nothing to judge: the honest empty, not a claim of survival.
-        #expect(RetentionPreview(kept: [], removed: []).adoptionLine
+        #expect(RetentionPreview(kept: [], removed: []).outcomeLine
             == "This plan has no backups in the repository yet.")
     }
 }

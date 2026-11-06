@@ -1,12 +1,10 @@
 import Foundation
 import Observation
 
-/// The retention dry-run's state, shared by the two surfaces that each held
-/// an equal copy — the adopt sheet's preview and Apply Retention Now's: the
-/// answer, the failure that replaces it, the spinner, and Try Again's count.
-/// Each view keeps its own task key and re-runs `load` from `.task(id:)`, so
-/// a cancelled attempt — a newer key, or the sheet closing — leaves the
-/// state to its successor.
+/// The retention dry-run's state: the answer, the failure that replaces it,
+/// the spinner, and Try Again's count. The view keeps its own task key and
+/// re-runs `load` from `.task(id:)`, so a cancelled attempt, a newer key or
+/// the sheet closing, leaves the state to its successor.
 @MainActor
 @Observable
 final class RetentionPreviewLoad {

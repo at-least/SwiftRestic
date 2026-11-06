@@ -15,12 +15,6 @@ struct PlanEditorSheet: View {
     /// the repository, and what to leave out is the next question.
     @State private var tab: Tab = .files
     @FocusState private var isPathFocused: Bool
-    /// The retention tab's projection, computed off the render path under
-    /// `RetentionProjection.key`: the simulation walks up to 30,000
-    /// synthetic runs with Calendar decomposition — tens of milliseconds at
-    /// the stepper maxima, too slow to re-run as body state on every sheet
-    /// re-render (every keystroke, every stepper click).
-    @State private var projection: RetentionProjection.Outcome?
     /// Set by the footer's Start at Login, so the line confirms the click
     /// where the offer stood. It follows the optimistic flip, as the
     /// Settings switch does: if the daemon answers otherwise, the mirror
@@ -729,70 +723,45 @@ struct PlanEditorSheet: View {
     }
 
     private var retentionTab: some View {
-        Form {
-            Toggle("Apply retention after each backup", isOn: $draft.retention.isEnabled)
-                .editorSwitches()
-
-            // The adopt draft starts here off, and the consequence of turning
-            // it on is not the editor's usual one: the plan's tag is shared
-            // with every Mac that ever ran it, so its rules reach each Mac's
-            // backups of it at the next run.
-            if mode == .adopt {
-                Text("Turning retention on applies to every Mac’s backups of this plan at the next run.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if draft.retention.isEnabled {
-                // The question people actually have, in the words they'd
-                // answer it with. The six buckets are the machinery that
-                // delivers the answer, so they live in the disclosure below.
+        // Restic's answer once there is a history to judge, which a plan
+        // not yet run has not: the old simulation could disagree with it.
+        let showsPreview = mode != .new
+            && draft.retention.isSafeToRun
+            && model.latestSnapshot(in: draft.repositoryID, planID: draft.id) != nil
+        return Form {
+            Section {
                 Picker("Keep backups", selection: retentionChoice) {
-                    ForEach(RetentionPolicy.Reach.allCases) { choice in
+                    ForEach(retentionChoices) { choice in
                         Text(choice.displayName).tag(choice)
                     }
                 }
-                // Retention's own follow-up, so it sits under it and goes
-                // with it.
-                Toggle(isOn: $draft.retention.runPrune) {
-                    Text("Also clean up")
-                    Text("Frees the space removed backups held. Much slower.")
+                // The adopt draft keeps everything, and the consequence of
+                // changing that is not the editor's usual one: the plan's tag
+                // is shared with every Mac that ever ran it.
+                if mode == .adopt {
+                    Text("Removing old backups applies to every Mac’s backups of this plan at the next run.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .editorSwitches()
             }
 
             Section {
                 Text(draft.retention.summary)
-                if mode != .adopt, draft.retention.isEnabled, let projection {
-                    // Retention is where users decide what gets deleted; the
-                    // bucket arithmetic is impossible to eyeball, so project
-                    // the outcome instead of restating the rules. Not in
-                    // adopt mode: the dry run below answers from the real
-                    // history, where this simulation can disagree with it.
-                    Label(
-                        "≈ \(Format.plural(projection.keptSnapshots, "backup")) would stay, reaching back about \(Format.plural(projection.historyDays, "day")) on this schedule.",
-                        systemImage: "chart.bar.doc.horizontal"
-                    )
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                if mode == .adopt, draft.retention.isEnabled, draft.retention.isSafeToRun {
-                    AdoptRetentionPreview(draft: draft)
-                }
-                // Says the count only where no line on the tab already has
-                // it: under the projection it anchors "≈ 41 would stay",
-                // an adopting safe policy the dry run's answer counts, and
-                // otherwise this is the tab's only count.
-                if mode != .adopt || !draft.retention.isEnabled || !draft.retention.isSafeToRun,
-                   let repositoryID = draft.repositoryID,
-                   case .loaded = model.snapshotListingOutcome(for: repositoryID)
+                if showsPreview {
+                    RetentionOutcomePreview(draft: draft)
+                } else if let repositoryID = draft.repositoryID,
+                          case .loaded = model.snapshotListingOutcome(for: repositoryID)
                 {
                     let count = model.shelves(for: repositoryID).backupCount(ofPlan: draft.id)
                     if count > 0 {
                         LabeledContent("Current backups", value: Format.count(count))
                     }
+                }
+                if mode == .editing, draft.retention != initial?.retention, draft.retention.isSafeToRun {
+                    Text("These rules take effect at the next backup.")
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
@@ -804,77 +773,42 @@ struct PlanEditorSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            if draft.retention.isEnabled {
-                DisclosureGroup("Custom rules") {
-                    keepStepper("Latest", value: $draft.retention.keepLast, max: 100)
-                    keepStepper("Hourly", value: $draft.retention.keepHourly, max: 168)
-                    keepStepper("Daily", value: $draft.retention.keepDaily, max: 365)
-                    keepStepper("Weekly", value: $draft.retention.keepWeekly, max: 260)
-                    keepStepper("Monthly", value: $draft.retention.keepMonthly, max: 120)
-                    keepStepper("Yearly", value: $draft.retention.keepYearly, max: 50)
-                }
-            }
         }
         .formStyle(.grouped)
-        .task(id: RetentionProjection.key(policy: draft.retention, schedule: draft.schedule)) {
-            await computeProjection()
-        }
     }
 
-    /// Re-runs only under `RetentionProjection.key` — a change to the inputs
-    /// the simulation reads — and lands its answer back on the main actor.
-    /// The cancellation guard keeps a slow simulation whose inputs were
-    /// replaced mid-flight (a stepper held down) from overwriting the newer
-    /// one's answer.
-    private func computeProjection() async {
-        let policy = draft.retention
-        let schedule = draft.schedule
-        let outcome = await Task.detached(priority: .userInitiated) {
-            RetentionProjection.project(policy: policy, schedule: schedule)
-        }.value
-        guard !Task.isCancelled else { return }
-        projection = outcome
+    /// Custom is on the list only for a plan that opened with one, so its
+    /// rules can be read and gone back to; nothing writes a new one.
+    private var retentionChoices: [RetentionPolicy.Reach] {
+        let isCustom = RetentionPolicy.Reach(policy: initial?.retention ?? draft.retention) == .custom
+            || RetentionPolicy.Reach(policy: draft.retention) == .custom
+        return RetentionPolicy.Reach.allCases.filter { $0 != .custom || isCustom }
     }
 
-    /// The reach question and the bucket machinery, kept in sync on the model
-    /// (`RetentionPolicy.Reach`), where matching and writing are testable.
-    /// Custom only exists because a hand-edited policy needs a name; selecting
-    /// the Custom row itself changes nothing.
     private var retentionChoice: Binding<RetentionPolicy.Reach> {
         Binding(
             get: { RetentionPolicy.Reach(policy: draft.retention) },
             set: { choice in
-                guard choice != .custom else { return }
-                choice.apply(to: &draft.retention)
+                if choice == .custom, let initial {
+                    draft.retention = initial.retention
+                } else {
+                    choice.apply(to: &draft.retention)
+                }
             }
         )
     }
-
-    private func keepStepper(_ title: String, value: Binding<Int>, max: Int) -> some View {
-        Stepper(value: value, in: 0 ... max) {
-            LabeledContent(title, value: value.wrappedValue == 0 ? "Off" : "\(value.wrappedValue)")
-        }
-    }
 }
 
-/// The adopt sheet's dry run over the draft itself: restic's own answer, not
-/// RetentionProjection's simulation, because the question here is about
-/// backups that already exist — what the rules the user just turned on would
-/// leave of the history being adopted. `previewRetention(planID:)` cannot
-/// serve this sheet (the plan is not saved yet), so the draft travels to
-/// `forget --dry-run --no-lock` directly: no lock taken, nothing removed.
-private struct AdoptRetentionPreview: View {
+/// The dry run over the draft itself: `forget --dry-run --no-lock`, no lock
+/// taken and nothing removed. A failure stays here and never blocks Save.
+private struct RetentionOutcomePreview: View {
     @Environment(AppModel.self) private var model
-    /// The sheet's live draft; the repository is locked in adopt mode, and
-    /// the plan tag is the group's own UUID.
     let draft: BackupPlan
 
     @State private var load = RetentionPreviewLoad()
 
-    /// What the preview depends on: the rules, and the newest backup the
-    /// rules would judge — a backup landing while the sheet is open changes
-    /// the answer, so it re-runs — plus Try Again.
+    /// The rules, and the newest backup they would judge: one landing while
+    /// the sheet is open changes the answer. Plus Try Again.
     private struct PreviewKey: Hashable {
         var retention: RetentionPolicy
         var newestSnapshotID: String?
@@ -901,16 +835,10 @@ private struct AdoptRetentionPreview: View {
                 onRetry: { load.requestRetry() }
             )
             if load.failure == nil, let result = load.result {
-                // The glyph is decoration beside a sentence that says it all;
-                // no alarm colour — a dry run has not failed anything.
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .accessibilityHidden(true)
-                    Text(result.adoptionLine)
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(result.outcomeLine)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .task(id: previewKey) {

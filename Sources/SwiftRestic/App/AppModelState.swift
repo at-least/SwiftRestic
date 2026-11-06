@@ -32,9 +32,8 @@ struct PlanActivity: Sendable, Equatable {
     /// the work it names still runs then.
     enum Work: Sendable, Equatable {
         case backup
-        /// No backup: however it ends — a quit's cancel included — it
-        /// stamps no slot as run. Nor does the removal below.
-        case applyRetention
+        /// No backup: however it ends, a quit's cancel included, it stamps no
+        /// slot as run.
         case removeFromEarlierBackups
     }
 

@@ -20,8 +20,8 @@ enum MenuBarStatus {
     /// Which face the icon wears right now. Every kind of restic work counts
     /// as running — the menu bar is the only surface that exists when the
     /// window is closed, so work invisible there is invisible everywhere.
-    /// A problem is `newestStandingProblem`'s: the seven-day window, less
-    /// what a later successful backup healed.
+    /// A problem is what `verdict` would lead with: restic missing, a run's
+    /// standing problem, or a plan that needs attention.
     static func iconState(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
@@ -29,12 +29,17 @@ enum MenuBarStatus {
         isConsoleRunning: Bool,
         hasNoRepositories: Bool,
         runs: [RunRecord],
+        rows: [ProtectionRow] = [],
+        resticAbsence: ResticAbsence? = nil,
         now: Date = .now
     ) -> IconState {
         let isRunning = !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
         if isRunning { return .running }
         if hasNoRepositories { return .unconfigured }
-        return newestStandingProblem(runs: runs, now: now) == nil ? .idle : .problem
+        let isHealthy = resticAbsence == nil
+            && newestStandingProblem(runs: runs, now: now) == nil
+            && OverviewMetrics.needingAttention(rows).isEmpty
+        return isHealthy ? .idle : .problem
     }
 
     /// What the icon draws for a state: the app's own line drawing (see
@@ -73,7 +78,7 @@ enum MenuBarStatus {
         case .unconfigured: "SwiftRestic, no repository set"
         case .idle: "SwiftRestic"
         case .running: "SwiftRestic, work in progress"
-        case .problem: "SwiftRestic, a recent run had a problem"
+        case .problem: "SwiftRestic, needs attention"
         }
         var clauses: [String] = []
         if let hold {
@@ -239,10 +244,9 @@ enum MenuBarStatus {
         }
     }
 
-    /// The Plan menu's Stop for this phase of a plan's run: a forget —
-    /// Apply Retention Now's, or a backup's own retention step, whose
-    /// snapshot is already written — and Remove from Earlier Backups'
-    /// rewrite are no backup. The tray's row passes `planName`.
+    /// The Plan menu's Stop for this phase of a plan's run: a backup's own
+    /// retention step, whose snapshot is already written, and Remove from
+    /// Earlier Backups' rewrite are no backup. The tray's row passes `planName`.
     static func stopTitle(for phase: PlanActivity.Phase?, planName: String? = nil) -> String {
         let quoted = planName.map { "“\($0)”" }
         switch phase {
@@ -260,7 +264,7 @@ enum MenuBarStatus {
     struct PlanGroup: Equatable {
         var repositoryID: UUID
         var title: String
-        /// The repository page's Protection line ("3 of 3 plans protected ·
+        /// The repository page's Protection line ("3 of 3 plans up to date ·
         /// Last backup 3 hours ago"), so the tray answers "did my backups
         /// run?" with the window closed. Nil until the listing has loaded.
         var protection: String?
@@ -405,32 +409,47 @@ enum MenuBarStatus {
     enum TrayLine: Equatable {
         /// Greyed status text.
         case status(String)
-        /// The problem sentence — the menu's one line that goes somewhere
+        /// The problem sentence: the menu's one line that goes somewhere
         /// (Show in Activity), so it carries the run it names.
         case problem(text: String, runID: UUID)
     }
 
-    /// The tray's leading lines, in the order a menu open reads them:
-    /// restic missing, the hold, the problem sentence, the named Protection
-    /// line when no submenu carries it, then the idle headline or the running
-    /// lines (which replace it). Pure, so the order is pinned by tests;
-    /// `TrayStatusItem` renders.
-    static func trayLines(
-        missing: String?,
-        holdSummary: String?,
+    /// "Am I safe?" in one line: the worst thing wrong, or that nothing is.
+    /// Nil where neither is known yet, because no plan can be vouched for
+    /// while a listing is still being read or a first backup runs, and while
+    /// nothing is set up, where the headline says what to do.
+    static func verdict(
+        rows: [ProtectionRow],
+        resticAbsence: ResticAbsence?,
+        hasNoRepositories: Bool,
         problemLine: String?,
-        problemID: UUID?,
+        problemID: UUID?
+    ) -> TrayLine? {
+        if let missing = resticMissingLine(resticAbsence) { return .status(missing) }
+        guard !hasNoRepositories else { return nil }
+        if let problemLine, let problemID { return .problem(text: problemLine, runID: problemID) }
+        if let worst = OverviewMetrics.needingAttention(rows).first {
+            return .status("\(worst.planName): \(worst.stateText)")
+        }
+        guard !rows.isEmpty, rows.allSatisfy(\.isProtected) else { return nil }
+        return .status(allUpToDateLine)
+    }
+
+    static let allUpToDateLine = "All plans up to date"
+
+    /// The tray's leading lines, in the order a menu open reads them: the
+    /// verdict, the hold, the named Protection line when no submenu carries
+    /// it, then the idle headline or the running lines (which replace it).
+    static func trayLines(
+        verdict: TrayLine?,
+        holdSummary: String?,
         labeledProtection: String?,
         headline: String?,
         running: [RunningLine]
     ) -> [TrayLine] {
         var lines: [TrayLine] = []
-        // While backups are held, that nothing is being backed up is the
-        // news, so the hold leads — above the problem line. A missing restic
-        // holds them too, and no pause lifts that one.
-        if let missing { lines.append(.status(missing)) }
+        if let verdict { lines.append(verdict) }
         if let holdSummary { lines.append(.status(holdSummary)) }
-        if let problemLine, let problemID { lines.append(.problem(text: problemLine, runID: problemID)) }
         if let labeledProtection { lines.append(.status(labeledProtection)) }
         if let headline { lines.append(.status(headline)) }
         else { lines += running.map { .status($0.text) } }

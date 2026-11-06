@@ -903,7 +903,25 @@ struct TolerantDecodingTests {
             "“retention.keepLast” -1 is out of range — read as 0",
             "“retention.keepDaily” -7 is out of range — read as 0",
         ])
-        #expect(RetentionProjection.project(policy: plan.retention, schedule: plan.schedule) != nil)
+    }
+
+    @Test("a plan that freed space itself leaves its repository's cleanup on, and only then")
+    func runPruneTurnsOnCleanup() throws {
+        let repository = UUID()
+        let other = UUID()
+        func plan(_ repository: UUID, retention: String) -> String {
+            #"{"id": "\#(UUID().uuidString)", "repositoryID": "\#(repository.uuidString)", "path": "/x", "retention": \#(retention)}"#
+        }
+        let json = """
+        {"repositories": [{"id": "\(repository.uuidString)", "kind": "local", "localPath": "/a"},
+                          {"id": "\(other.uuidString)", "kind": "local", "localPath": "/b"}],
+         "plans": [\(plan(repository, retention: #"{"isEnabled": true, "keepDaily": 3, "runPrune": true}"#)),
+                   \(plan(other, retention: #"{"isEnabled": true, "keepDaily": 3, "runPrune": false}"#))]}
+        """
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: Data(json.utf8))
+        #expect(configuration.repository(id: repository)?.maintenance.pruneEnabled == true)
+        #expect(configuration.repository(id: other)?.maintenance.pruneEnabled == false)
+        #expect(configuration.plans.first?.retention.keepDaily == 3)
     }
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")

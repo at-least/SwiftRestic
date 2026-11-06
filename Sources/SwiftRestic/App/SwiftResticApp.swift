@@ -340,10 +340,6 @@ struct SwiftResticApp: App {
                 }
                 .disabled(!p.canToggleSchedule)
             }
-            Button("Apply Retention Now") {
-                if let id = p.planID { ask(.applyRetention(id)) }
-            }
-            .disabled(!p.canApplyRetention)
 
             Divider()
 

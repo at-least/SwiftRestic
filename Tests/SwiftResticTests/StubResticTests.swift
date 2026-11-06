@@ -1252,9 +1252,7 @@ struct StubResticTests {
     func forgetPreviewRunsALockFreeDryRun() async throws {
         let fixture = try makeFixture(mode: "default")
         defer { cleanUp(fixture.root) }
-        var plan = fixture.plan
-        // Also clean up is on: the real forget would prune, the preview must not.
-        plan.retention.runPrune = true
+        let plan = fixture.plan
 
         let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
         // The default arm answers "[]": nothing kept, nothing removed.

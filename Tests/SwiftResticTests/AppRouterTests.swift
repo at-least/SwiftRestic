@@ -47,7 +47,6 @@ struct AppRouterTests {
         #expect(router.takePendingIntent() == .confirm(.prune(b)))
 
         for intent: AppRouter.Intent in [
-            .applyRetention(plan),
             .pauseSchedule(plan, .oneHour),
             .resumeSchedule(plan),
             .stopPlan(plan),

@@ -1,10 +1,7 @@
 import Foundation
 
-/// What a plan's retention rules would do right now: the snapshots
-/// `restic forget --dry-run` would remove and the ones it would keep, read
-/// from restic's own answer rather than projected, so the confirmation shows
-/// exactly the snapshots the real forget will evaluate (Apply Retention
-/// Now).
+/// What a plan's retention rules would do right now, read from restic's own
+/// `forget --dry-run` answer rather than projected.
 struct RetentionPreview: Sendable, Equatable {
     var kept: [Snapshot]
     /// Newest first, like every other snapshot list.
@@ -44,39 +41,14 @@ struct RetentionPreview: Sendable, Equatable {
         )
     }
 
-    var summary: String {
-        let total = kept.count + removed.count
-        guard total > 0 else { return "This plan has no backups in the repository yet." }
-        guard let newest = removed.first, let oldest = removed.last else {
-            return kept.count == 1
-                ? "Nothing to remove — this plan’s only backup is within its rules."
-                : "Nothing to remove — all \(kept.count) of this plan’s backups are within its rules."
-        }
-        let stay = "\(kept.count) would stay."
-        if removed.count == 1 {
-            return "1 of this plan’s \(total) backups would be removed: the one from \(Format.timestamp(newest.time)). \(stay)"
-        }
-        return "\(removed.count) of this plan’s \(total) backups would be removed, from \(Format.timestamp(oldest.time)) to \(Format.timestamp(newest.time)). \(stay)"
-    }
-
-    /// The adopt sheet's one line: what the rules the user just turned on
-    /// would leave of the history being adopted. No applying can follow from
-    /// the sheet, so unlike `summary` the line never counts removals — only
-    /// what the history would become.
-    var adoptionLine: String {
+    /// What the rules would leave of the plan's history. A count, since the
+    /// editor's rules are not applied yet: nothing has been removed.
+    var outcomeLine: String {
         let total = kept.count + removed.count
         guard total > 0 else { return "This plan has no backups in the repository yet." }
         if removed.isEmpty {
             return total == 1 ? "The backup would stay." : "All \(Format.plural(total, "backup")) would stay."
         }
         return "With these rules, \(Format.plural(total, "backup")) would become \(kept.count)."
-    }
-
-    static func appliedSummary(removed: Int, pruned: Bool) -> String {
-        guard removed > 0 else { return "No backups needed removing." }
-        let snapshots = Format.plural(removed, "backup")
-        return pruned
-            ? "Removed \(snapshots) and freed \(removed == 1 ? "its" : "their") space."
-            : "Removed \(snapshots). \(removed == 1 ? "Its" : "Their") data stays until the next cleanup."
     }
 }

@@ -642,11 +642,6 @@ struct RepeatedProblemNotificationTests {
         #expect(model.configuration.runs.first?.skipCount == 2)
         #expect(stored(goneAgain, in: model)?.problemStretch == 2)
         #expect(!model.wantsNotification(for: goneAgain))
-
-        model.configuration.settings.notifyOnFailure = false
-        let silenced = failed(360, exit: 12, message: "Fatal: wrong password or no key found")
-        model.append(record: silenced)
-        #expect(!model.wantsNotification(for: silenced))
     }
 
     @MainActor

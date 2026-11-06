@@ -761,16 +761,10 @@ struct ResticService: ResticClient {
     /// preview can never evaluate different rules from the forget it
     /// previews. The dry run adds `--no-lock`: without it a dry forget
     /// needs the exclusive lock (exit 11 while a backup holds its shared
-    /// one), and restic refuses `--no-lock` on a real forget (exit 1). A
-    /// dry run never prunes: `--prune` would prune for real.
+    /// one), and restic refuses `--no-lock` on a real forget (exit 1).
     static func forgetArguments(plan: BackupPlan, dryRun: Bool) -> [String] {
-        var args = ["forget", "--json", "--tag", planTag(plan.id)] + plan.retention.forgetArguments
-        if dryRun {
-            args += ["--dry-run", "--no-lock"]
-        } else if plan.retention.runPrune {
-            args.append("--prune")
-        }
-        return args
+        let args = ["forget", "--json", "--tag", planTag(plan.id)] + plan.retention.forgetArguments
+        return dryRun ? args + ["--dry-run", "--no-lock"] : args
     }
 
     /// Applies a plan's retention policy. Refuses to run when the policy has no
@@ -815,7 +809,7 @@ struct ResticService: ResticClient {
     }
 
     /// What the plan's retention would remove right now, without removing
-    /// it or locking the repository — Apply Retention Now's preview, safe
+    /// it or locking the repository — the plan editor's preview, safe
     /// to run beside a backup. The same refusal as `forget`: a policy with
     /// no rule previews nothing rather than "everything".
     func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {

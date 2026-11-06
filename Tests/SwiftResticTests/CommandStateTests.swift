@@ -68,10 +68,9 @@ struct CommandStateTests {
             == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
     }
 
-    @Test("a stopped Apply Retention Now or Remove from Earlier Backups keeps the repository's backups waiting until it unwinds")
+    @Test("a stopped Remove from Earlier Backups keeps the repository's backups waiting until it unwinds")
     func stoppedQuietRunKeepsTheLock() async {
         let cases: [(PlanActivity.Work, String)] = [
-            (.applyRetention, "“Home NAS” is applying retention for “Photos” — backups wait until it finishes."),
             (.removeFromEarlierBackups, "“Home NAS” is removing items from earlier backups of “Photos” — backups wait until it finishes."),
         ]
         for (work, reason) in cases {
@@ -127,7 +126,7 @@ struct CommandStateTests {
         let photos = makePlan("Photos", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [photos]
-        model.startQuietPlanRun(planID: photos.id, work: .applyRetention) { _, _, _ in
+        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
             try? await Task.sleep(for: .seconds(60))
         }
         model.deletePlan(id: photos.id)
@@ -168,12 +167,12 @@ struct CommandStateTests {
         let photos = makePlan("Photos", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [documents, photos]
-        model.startQuietPlanRun(planID: photos.id, work: .applyRetention) { _, _, _ in
+        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
             try? await Task.sleep(for: .seconds(60))
         }
         model.configuration.plans[1].path = "/tmp/Pictures"
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is applying retention for “Pictures” — backups wait until it finishes.")
+            == "“Home NAS” is removing items from earlier backups of “Pictures” — backups wait until it finishes.")
         model.cancelBackup(planID: photos.id)
         await model.tasks.drain()
     }
@@ -257,14 +256,6 @@ struct CommandStateTests {
         #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
     }
 
-    @Test("the retention preview for a plan that is gone throws, never a made-up answer")
-    func previewRetentionOfAMissingPlanThrows() async throws {
-        let model = makeModel()
-        await #expect(throws: ResticError.planMissing) {
-            _ = try await model.previewRetention(planID: UUID())
-        }
-    }
-
     @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
     func backUpAllQueuesBehindAPlansRun() {
         let model = makeModel()
@@ -342,7 +333,7 @@ struct CommandStateTests {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
             #expect(!state.canBackUp && !state.canStop && !state.canEdit && !state.canToggleSchedule)
-            #expect(!state.canApplyRetention && !state.canDelete)
+            #expect(!state.canDelete)
             #expect(state.scheduleTitle == "Pause Schedule")
             #expect(state.stopTitle == "Stop Backup")
             // Back Up All Plans Now is not about the selection.
@@ -352,8 +343,7 @@ struct CommandStateTests {
 
         let idle = model.planCommands(for: .plan(plan.id))
         #expect(idle.planID == plan.id)
-        #expect(idle.canBackUp && idle.canEdit && idle.canToggleSchedule && idle.canApplyRetention && idle.canDelete)
-        #expect(idle.retentionBlocker == nil)
+        #expect(idle.canBackUp && idle.canEdit && idle.canToggleSchedule && idle.canDelete)
         #expect(!idle.canStop)
         #expect(idle.scheduleTitle == "Pause Schedule")
         #expect(idle.isScheduleActive)
@@ -435,8 +425,8 @@ struct CommandStateTests {
         #expect(trayRow()?.title == "Stop “Docs” Backup")
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Backup")
 
-        // Apply Retention Now's forget, or a backup's own retention step
-        // (its snapshot is already written): Stop ends the forget, and both
+        // A backup's own retention step (its snapshot is already written):
+        // Stop ends the forget, and both
         // surfaces say so.
         model.activity[plan.id]?.phase = .applyingRetention
         #expect(trayRow()?.title == "Stop Applying Retention to “Docs”")
@@ -460,8 +450,6 @@ struct CommandStateTests {
         let state = model.planCommands(for: .plan(plan.id))
         #expect(!state.canBackUp)
         #expect(!state.canBackUpAll)
-        #expect(!state.canApplyRetention)
-        #expect(state.retentionBlocker == "restic is missing.")
         #expect(state.canEdit && state.canDelete && state.canToggleSchedule)
 
         let repositoryState = model.repositoryCommands(for: .repository(repository.id))
@@ -629,42 +617,19 @@ struct CommandStateTests {
         let planB = makePlan("B", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [planA, planB]
-        let busy = "The repository is in use by a backup or maintenance job — try again when it finishes."
 
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
         let maintaining = model.repositoryCommands(for: .repository(repository.id))
         #expect(!maintaining.canMaintain)
         #expect(maintaining.canEdit && maintaining.canRemove)
-        let heldA = model.planCommands(for: .plan(planA.id))
-        #expect(!heldA.canApplyRetention)
-        #expect(heldA.retentionBlocker == busy)
 
         model.maintenance[repository.id] = nil
         model.activity[planB.id] = PlanActivity(of: planB)
-        #expect(!model.planCommands(for: .plan(planA.id)).canApplyRetention)
-        #expect(model.planCommands(for: .plan(planA.id)).retentionBlocker == busy)
         #expect(!model.repositoryCommands(for: .plan(planA.id)).canMaintain)
         model.activity[planB.id] = nil
-        #expect(model.planCommands(for: .plan(planA.id)).canApplyRetention)
-
-        var off = planA
-        off.retention.isEnabled = false
-        model.configuration.plans = [off, planB]
-        #expect(model.planCommands(for: .plan(planA.id)).retentionBlocker == "Retention is off for this plan.")
-
-        var zero = planA
-        zero.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 0, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
-        )
-        model.configuration.plans = [zero, planB]
-        #expect(model.planCommands(for: .plan(planA.id)).retentionBlocker
-            == "Every retention rule is off, so there is nothing to apply.")
 
         let unset = makePlan("Unset", on: nil)
         model.configuration.plans = [unset]
-        #expect(model.planCommands(for: .plan(unset.id)).retentionBlocker
-            == "This plan needs a repository and a folder or file to back up")
         #expect(!model.planCommands(for: .plan(unset.id)).canBackUp)
         #expect(model.planCommands(for: .plan(unset.id)).backUpDisabledReason
             == "This plan needs a repository and a folder or file to back up")
@@ -722,10 +687,6 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
-        model.activity[plan.id]?.work = .applyRetention
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Applying retention will be stopped.") == true)
-        #expect(model.quitInterruptions == ["Retention is being applied."])
         model.activity[plan.id]?.work = .removeFromEarlierBackups
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             .hasPrefix("Removing items from earlier backups will be stopped.") == true)

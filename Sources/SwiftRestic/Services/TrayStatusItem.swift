@@ -46,18 +46,18 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isRestoring: model.isRestoring,
             isConsoleRunning: model.console.isRunning,
             hasNoRepositories: model.configuration.repositories.isEmpty,
-            runs: model.configuration.runs
+            runs: model.configuration.runs,
+            rows: model.protectionRows(for: model.configuration.plans, now: .now),
+            resticAbsence: model.resticAbsence
         )
     }
 
     /// The observed inputs are the ones `iconState`, the hold and the
     /// VoiceOver words read, the clock aside: a problem ageing out of the
-    /// attention window waits for
-    /// the next configuration write. The configuration is observed whole — run-record appends
-    /// included, which the attention face reads, and the hold's pause and
-    /// battery setting; the battery reading is
-    /// written only when it changes; a pause running out is cleared by the
-    /// scheduler's tick, and that write is what brings the face back.
+    /// attention window waits for the next configuration write, and a plan
+    /// going overdue is that write, the quiet-plan alert's mark on the plan.
+    /// A pause running out is cleared by the scheduler's tick, and that write
+    /// brings the face back.
     private func refresh() {
         let state = currentState()
         statusItem.isVisible = model.configuration.settings.showMenuBarExtra
@@ -65,12 +65,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         armPulse(for: state)
 
         withObservationTracking {
-            _ = model.activity
-            _ = model.maintenance
-            _ = model.restoreActivity
-            _ = model.console.isRunning
-            _ = model.configuration.repositories.isEmpty
-            _ = model.configuration.runs.isEmpty
+            _ = currentState()
             _ = model.configuration.settings.showMenuBarExtra
             _ = model.isOnBattery
             _ = model.isOnMeteredNetwork
@@ -180,10 +175,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             lines.append(restore)
         }
         for line in MenuBarStatus.trayLines(
-            missing: MenuBarStatus.resticMissingLine(model.resticAbsence),
+            verdict: MenuBarStatus.verdict(
+                rows: model.protectionRows(for: model.configuration.plans, now: .now),
+                resticAbsence: model.resticAbsence,
+                hasNoRepositories: hasNoRepositories,
+                problemLine: problemLine,
+                problemID: problemRunID
+            ),
             holdSummary: hold?.summary(),
-            problemLine: problemLine,
-            problemID: problemRunID,
             // With no submenu to carry it, the one Protection line joins the
             // status lines, named.
             labeledProtection: showsSubmenus ? nil : groups.first?.labeledProtection,

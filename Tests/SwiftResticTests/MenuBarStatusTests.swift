@@ -31,14 +31,14 @@ struct MenuBarStatusTests {
         onNAS.repositoryID = nas.id
         var onSSD = plan(name: "Photos")
         onSSD.repositoryID = ssd.id
-        let summary = ProtectionSummary(text: "2 of 2 plans protected · Last backup 1 hour ago", showsResume: false)
+        let summary = ProtectionSummary(text: "2 of 2 plans up to date · Last backup 1 hour ago", showsResume: false)
         let groups = MenuBarStatus.planGroups(
             plans: [onNAS, onSSD], repositories: [nas, ssd], activity: [:], resticAbsence: nil,
             protection: { id in id == nas.id ? summary : nil }
         )
         // In a submenu the title already names the repository.
-        #expect(groups.map(\.protection) == ["2 of 2 plans protected · Last backup 1 hour ago", nil])
-        #expect(groups[0].labeledProtection == "Home NAS — 2 of 2 plans protected · Last backup 1 hour ago")
+        #expect(groups.map(\.protection) == ["2 of 2 plans up to date · Last backup 1 hour ago", nil])
+        #expect(groups[0].labeledProtection == "Home NAS — 2 of 2 plans up to date · Last backup 1 hour ago")
         #expect(groups[1].labeledProtection == nil)
     }
 
@@ -293,7 +293,7 @@ struct MenuBarStatusTests {
         // distinction between them.
         #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured).contains("no repository"))
         #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
-        #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("problem"))
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("attention"))
         #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured)
             != MenuBarStatus.accessibilityDescription(for: .problem))
     }
@@ -722,34 +722,29 @@ struct MenuBarStatusTests {
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 
-    @Test("the tray's leading lines keep their order: missing, hold, problem, Protection when flat, and the running lines only where no headline stands")
+    @Test("the tray's leading lines keep their order: verdict, hold, Protection when flat, and the running lines only where no headline stands")
     func trayLineOrder() {
         let runID = UUID()
         let running = [MenuBarStatus.RunningLine(id: "documents", text: "Documents — 40%")]
 
         #expect(
             MenuBarStatus.trayLines(
-                missing: "restic is missing — backups are on hold",
+                verdict: .problem(text: "Documents failed 2 hours ago", runID: runID),
                 holdSummary: "Backups paused until 3:40 PM",
-                problemLine: "Documents failed 2 hours ago",
-                problemID: runID,
                 labeledProtection: nil,
                 headline: nil,
                 running: running
             ) == [
-                .status("restic is missing — backups are on hold"),
-                .status("Backups paused until 3:40 PM"),
                 .problem(text: "Documents failed 2 hours ago", runID: runID),
+                .status("Backups paused until 3:40 PM"),
                 .status("Documents — 40%"),
             ]
         )
 
         #expect(
             MenuBarStatus.trayLines(
-                missing: nil,
+                verdict: nil,
                 holdSummary: nil,
-                problemLine: nil,
-                problemID: nil,
                 labeledProtection: nil,
                 headline: "Next: Documents — in an hour",
                 running: running
@@ -758,15 +753,71 @@ struct MenuBarStatusTests {
 
         #expect(
             MenuBarStatus.trayLines(
-                missing: nil,
+                verdict: .status(MenuBarStatus.allUpToDateLine),
                 holdSummary: nil,
-                problemLine: nil,
-                problemID: nil,
-                labeledProtection: "Home NAS — 2 of 2 plans protected",
+                labeledProtection: "Home NAS — 2 of 2 plans up to date",
                 headline: "No backups scheduled",
                 running: running
-            ) == [.status("Home NAS — 2 of 2 plans protected"), .status("No backups scheduled")]
+            ) == [
+                .status(MenuBarStatus.allUpToDateLine),
+                .status("Home NAS — 2 of 2 plans up to date"),
+                .status("No backups scheduled"),
+            ]
         )
+    }
+
+    private func protectionRow(
+        _ name: String, isKnown: Bool = true, isProtected: Bool, didFail: Bool = false, isRunning: Bool = false,
+        stateText: String = "state"
+    ) -> ProtectionRow {
+        var plan = BackupPlan()
+        plan.path = "/\(name)"
+        return ProtectionRow(
+            plan: plan, among: [plan], stateText: stateText, isKnown: isKnown,
+            isProtected: isProtected, didFail: didFail, isRunning: isRunning
+        )
+    }
+
+    @Test("the verdict leads with the worst thing wrong, and says all is well only when every plan is known to be")
+    func verdict() {
+        let runID = UUID()
+        func verdict(
+            _ rows: [ProtectionRow], absence: ResticAbsence? = nil, noRepositories: Bool = false, problem: String? = nil
+        ) -> MenuBarStatus.TrayLine? {
+            MenuBarStatus.verdict(
+                rows: rows, resticAbsence: absence, hasNoRepositories: noRepositories,
+                problemLine: problem, problemID: problem == nil ? nil : runID
+            )
+        }
+        let fine = protectionRow("Fine", isProtected: true)
+        let overdue = protectionRow("Old", isProtected: false, stateText: "Not backed up for 9 days")
+
+        #expect(verdict([fine]) == .status("All plans up to date"))
+        #expect(verdict([overdue, fine]) == .status("Old: Not backed up for 9 days"))
+        #expect(verdict([overdue], problem: "Check on NAS failed") == .problem(text: "Check on NAS failed", runID: runID))
+        #expect(verdict([fine], absence: .missing) == .status("restic is missing — backups are on hold"))
+        // A listing still being read, or a first backup running: nobody can vouch yet.
+        #expect(verdict([fine, protectionRow("Reading", isKnown: false, isProtected: false)]) == nil)
+        #expect(verdict([protectionRow("First", isProtected: false, isRunning: true)]) == nil)
+        #expect(verdict([]) == nil)
+        #expect(verdict([], noRepositories: true) == nil)
+    }
+
+    @Test("the icon warns for what the verdict warns about, a hold included, and running still wins")
+    func iconFollowsTheVerdict() {
+        func state(rows: [ProtectionRow], absence: ResticAbsence? = nil, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
+            MenuBarStatus.iconState(
+                activity: activity, maintenance: [:], isRestoring: false, isConsoleRunning: false,
+                hasNoRepositories: false, runs: [], rows: rows, resticAbsence: absence
+            )
+        }
+        let fine = protectionRow("Fine", isProtected: true)
+        #expect(state(rows: [fine]) == .idle)
+        #expect(state(rows: [fine], absence: .missing) == .problem)
+        #expect(state(rows: [protectionRow("Old", isProtected: false)]) == .problem)
+        #expect(state(rows: [protectionRow("Gone", isKnown: false, isProtected: false, didFail: true)]) == .problem)
+        #expect(state(rows: [protectionRow("Reading", isKnown: false, isProtected: false)]) == .idle)
+        #expect(state(rows: [protectionRow("Old", isProtected: false)], activity: [UUID(): activity()]) == .running)
     }
 
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")
@@ -874,11 +925,11 @@ struct MenuBarStatusTests {
         #expect(paused.contains("paused"), "was \(paused)")
         #expect(paused.hasPrefix("SwiftRestic"))
         let problemOnBattery = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onBattery)
-        #expect(problemOnBattery.contains("problem") && problemOnBattery.contains("power"), "was \(problemOnBattery)")
+        #expect(problemOnBattery.contains("attention") && problemOnBattery.contains("power"), "was \(problemOnBattery)")
         // No hold: today's words, spelled out so a default argument cannot
         // make the comparison trivially true.
         #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil) == "SwiftRestic")
-        #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, a recent run had a problem")
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, needs attention")
         #expect(MenuBarStatus.accessibilityDescription(for: .running, hold: nil) == "SwiftRestic, work in progress")
 
         // Restic missing has no face of its own; its words join the label

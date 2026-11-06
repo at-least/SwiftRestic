@@ -69,7 +69,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
 /// derives it, so the counts and the words are pinned beside the rows they
 /// come from.
 struct ProtectionSummary: Equatable, Sendable {
-    /// "2 of 2 plans protected · Last backup 1 hour ago" — the app-wide
+    /// "2 of 2 plans up to date · Last backup 1 hour ago" — the app-wide
     /// hold's own words joined on while one is on.
     var text: String
     /// The hold is the user's own Pause Backups, so the line ends with a
@@ -175,8 +175,8 @@ enum OverviewMetrics {
     /// same plan finished after it — the next run fixed it. A run skipped
     /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a
     /// failed check, prune, forget or restore is not fixed by a backup going
-    /// through, and Apply Retention Now records its forget under the plan's
-    /// ID, so its success heals nothing. The sidebar's standing problem and
+    /// through. A retention run older builds recorded under the plan's ID
+    /// heals nothing. The sidebar's standing problem and
     /// the menu bar's face both go by this.
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
@@ -221,10 +221,9 @@ enum OverviewMetrics {
     }
 
     /// The rows whose plan is not protected and should be: an unreadable
-    /// listing, a plan known to have no backup, or one whose last backup
-    /// failed. A repository's sidebar row wears a warning for these, since
-    /// the badge and the menu bar count failed runs only, and an unreadable
-    /// repository has none.
+    /// listing, a plan known to have no backup, one past the quiet window, or
+    /// one whose last backup failed. A repository's sidebar row and the menu
+    /// bar's face wear a warning for these.
     static func needingAttention(_ rows: [ProtectionRow]) -> [ProtectionRow] {
         rows.filter { $0.severityRank <= 1 }
     }
@@ -251,6 +250,7 @@ enum OverviewMetrics {
         isChecking: (UUID) -> Bool,
         activity: (_ planID: UUID) -> PlanActivity?,
         standingProblem: (_ planID: UUID) -> RunRecord?,
+        now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [ProtectionRow] {
         // Swift's sort is stable: plan order breaks ties inside each rank.
@@ -263,6 +263,7 @@ enum OverviewMetrics {
                     repositoryHasSnapshots: repositoryHasSnapshots,
                     listingOutcome: listingOutcome,
                     isChecking: isChecking,
+                    now: now,
                     relative: relative
                 )
                 // The sidebar caption's top ranks, in its words
@@ -306,6 +307,7 @@ enum OverviewMetrics {
         repositoryHasSnapshots: (UUID) -> Bool,
         listingOutcome: (UUID) -> SnapshotListingOutcome,
         isChecking: (UUID) -> Bool,
+        now: Date,
         relative: (Date) -> String
     ) -> ProtectionRow {
         guard let repositoryID = plan.repositoryID else {
@@ -321,6 +323,7 @@ enum OverviewMetrics {
         case .loaded:
             let line: String
             var moment: Date?
+            var isOverdue = false
             if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshot: latest) {
                 // The sidebar's words and formatter, and the one moment
                 // every surface's "Last backup" counts from
@@ -328,7 +331,10 @@ enum OverviewMetrics {
                 // rounds 1 h 43 min up to "2 hours ago", where
                 // Format.relative says "1 hour ago".
                 moment = stamped
-                line = "Last backup \(relative(stamped))"
+                isOverdue = StaleAlert.isOverdue(plan, lastBackupAt: stamped, now: now)
+                line = isOverdue
+                    ? "Not backed up for \(Format.plural(StaleAlert.wholeDays(since: stamped, now: now), "day"))"
+                    : "Last backup \(relative(stamped))"
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No backups yet"
             } else {
@@ -340,7 +346,7 @@ enum OverviewMetrics {
             }
             return ProtectionRow(
                 plan: plan, among: plans, stateText: line, isKnown: true,
-                isProtected: latest != nil, didFail: false, lastBackupAt: moment
+                isProtected: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
             )
         case let .failed(message):
             return ProtectionRow(
@@ -400,10 +406,10 @@ enum OverviewMetrics {
             // in neither number.
             let known = rows.filter(\.isKnown)
             segments = [
-                "\(known.filter(\.isProtected).count) of \(Format.plural(known.count, "plan")) protected"
+                "\(known.filter(\.isProtected).count) of \(Format.plural(known.count, "plan")) up to date"
             ]
             // A run in flight, in the sidebar caption's phase words: during a
-            // first backup "0 of 1 plan protected" alone would read as an
+            // first backup "0 of 1 plan up to date" alone would read as an
             // alarm while the remedy is under way.
             segments += rows.filter(\.isRunning).map { "\($0.planName) — \($0.stateText)" }
             if let newest = rows.compactMap(\.lastBackupAt).max() {

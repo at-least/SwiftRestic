@@ -713,8 +713,8 @@ private func failIfRepositoryAway(
     }
 }
 
-/// The model surface of a plan's run that is no backup — Apply Retention
-/// Now's and Remove from Earlier Backups': the backup engine's sink, minus
+/// The model surface of a plan's run that is no backup, Remove from Earlier
+/// Backups': the backup engine's sink, minus
 /// everything a backup has and these runs do not. Delivery has its own
 /// name: AppModel's `deliver(record:plan:transcript:)` notifies and
 /// broadcasts, which these runs must not.
@@ -772,28 +772,6 @@ private func performQuietPlanRun(
     if record.exitCode == nil { record.exitCode = contents.firstExitCode }
     await sink.deliverQuietly(record: record, plan: plan, transcript: contents)
     sink.scheduleSnapshotRefresh(repositoryID: repository.id)
-}
-
-/// Apply Retention Now's run: the plan's `forget`, outside a backup. It
-/// runs in the plan's own slot — so Stop, the sidebar's spinner, quitting
-/// and the busy repository all work as for a backup — but it is not one:
-/// no hooks (`forget` has none of its own; inside a backup the plan's
-/// after-backup hooks cover it), no run stamp, and
-/// nothing past the in-app banner and the Activity record. A manual,
-/// attended run needs no alert, and a "succeeded" ping would reset a
-/// Healthchecks dead-man's switch for a run that backed nothing up.
-@MainActor
-enum RetentionRunEngine {
-    typealias Sink = QuietPlanRunSink
-
-    static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
-        await performQuietPlanRun(.forget, plan: plan, repository: repository, sink: sink) { service, context in
-            let removed = try await service.forget(context, plan: plan)
-            return RetentionPreview.appliedSummary(removed: removed, pruned: plan.retention.runPrune)
-        } failed: { error, record in
-            if case let ResticError.snapshotsNotRemoved(_, refused, _) = error { record.retentionRefused = refused }
-        }
-    }
 }
 
 /// Remove from Earlier Backups' run: `restic rewrite --forget` of the plan's

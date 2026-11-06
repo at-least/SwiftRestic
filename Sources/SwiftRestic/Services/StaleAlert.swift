@@ -13,46 +13,46 @@ struct StalePlanAlert: Equatable, Sendable {
 
 /// The quiet-plan alert. Every other problem surface is driven by a run
 /// record, and a plan whose drive is unplugged at every slot, or whose
-/// slots the Mac sleeps through, writes none — so nothing would ever say
-/// it. Checked on the scheduler's tick after the pause guard: Pause Backups
-/// and the battery hold exempt everything, as they hold the runs.
+/// slots the Mac sleeps through, writes none. A pause writes none either, so
+/// the alert fires through it: paused is exactly how a plan gets forgotten.
 enum StaleAlert {
     private static let day: TimeInterval = 86_400
 
-    /// Settings' choices, in days; 0 is Off.
-    static let choices = [0, 3, 7, 14]
+    static let thresholdDays = 7
 
     /// The threshold, or one schedule interval and a day when that is
     /// longer: a weekly plan is due again exactly seven days after its last
     /// success, and a bare seven-day threshold would name it before every
     /// run.
-    static func window(thresholdDays: Int, schedule: Schedule) -> TimeInterval {
+    static func window(schedule: Schedule) -> TimeInterval {
         max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 
-    /// The plans to name now. Only plans the scheduler would start by
-    /// itself — switched on, not inside a timed pause, scheduled, set up —
-    /// and not running: a paused or manual plan is quiet by the user's
-    /// choice. `latestSnapshotTimes`: each plan's newest snapshot, for a
-    /// plan whose history has no run of its own (the one derivation of a
-    /// plan's last backup, `PlanStatus.lastBackupAt`); a plan with neither
-    /// has no moment to count from and is not named.
+    /// A manual plan made no promise to keep, so it is never overdue.
+    static func isOverdue(_ plan: BackupPlan, lastBackupAt: Date, now: Date) -> Bool {
+        plan.schedule.frequency != .manual && now.timeIntervalSince(lastBackupAt) > window(schedule: plan.schedule)
+    }
+
+    static func wholeDays(since moment: Date, now: Date) -> Int {
+        Int(now.timeIntervalSince(moment) / day)
+    }
+
+    /// `latestSnapshotTimes`: each plan's newest snapshot, for a plan whose
+    /// history has no run of its own (`PlanStatus.lastBackupAt`); a plan with
+    /// neither has no moment to count from and is not named.
     static func due(
         plans: [BackupPlan],
         latestSnapshotTimes: [UUID: Date],
-        thresholdDays: Int,
         running: Set<UUID>,
         now: Date
     ) -> [StalePlanAlert] {
-        guard thresholdDays > 0 else { return [] }
-        return plans.compactMap { plan in
-            guard plan.runsOnSchedule(at: now), !running.contains(plan.id),
+        plans.compactMap { plan in
+            guard plan.isConfigurationComplete, !running.contains(plan.id),
                   let last = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshotTimes[plan.id]),
-                  plan.staleAlertedFor != last
+                  plan.staleAlertedFor != last,
+                  isOverdue(plan, lastBackupAt: last, now: now)
             else { return nil }
-            let quiet = now.timeIntervalSince(last)
-            guard quiet > window(thresholdDays: thresholdDays, schedule: plan.schedule) else { return nil }
-            return StalePlanAlert(planID: plan.id, lastBackupAt: last, days: Int(quiet / day))
+            return StalePlanAlert(planID: plan.id, lastBackupAt: last, days: wholeDays(since: last, now: now))
         }
     }
 

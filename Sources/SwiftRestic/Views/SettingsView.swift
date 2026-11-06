@@ -216,22 +216,7 @@ struct SettingsView: View {
             // The pane's title names it; no section heading repeats it.
             Section {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                // What it gates (`AppModel.notify(about:)`), in the
-                // webhooks' own event words.
-                Toggle("Notify when a backup fails or completes with warnings", isOn: $model.configuration.settings.notifyOnFailure)
-                // `RunRecord.problemStretch`: the rule said where it is set.
-                Text("A failure that repeats with the same cause notifies once.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                // A plan that never runs writes no failure to notify about:
-                // an unplugged drive at every slot, a Mac asleep through them.
-                Picker("Notify when a scheduled plan has not backed up for", selection: $model.configuration.settings.staleAlertDays) {
-                    ForEach(StaleAlert.choices, id: \.self) { days in
-                        Text(days == 0 ? "Never" : Format.plural(days, "day")).tag(days)
-                    }
-                }
-                Text("Once, until the plan backs up again. Paused and manual plans are left out.")
+                Text("SwiftRestic always tells you when a backup fails, or when a scheduled plan has not backed up for \(StaleAlert.thresholdDays) days. A failure that repeats with the same cause notifies once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

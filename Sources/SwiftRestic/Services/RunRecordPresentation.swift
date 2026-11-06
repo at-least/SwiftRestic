@@ -264,8 +264,7 @@ enum RunRecordPresentation {
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
         case .forget, .rewrite:
-            // Apply Retention Now's count ("Removed 2 backups. Their data
-            // stays until the next cleanup."), one short line.
+            // The record's own count ("Removed 2 backups."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
             // The verdict the run recorded — "2 errors — restic repair can
@@ -420,7 +419,7 @@ enum RunRecordPresentation {
                 lines.append("Files: \(restoreFiles(run))")
             }
         case .check, .forget, .rewrite:
-            // A check's verdict, or what Apply Retention Now removed.
+            // A check's verdict, or what a retention run removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         case .prune:
             break

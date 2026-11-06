@@ -67,7 +67,6 @@ extension AppModel {
         let alerts = StaleAlert.due(
             plans: configuration.plans,
             latestSnapshotTimes: latest,
-            thresholdDays: configuration.settings.staleAlertDays,
             running: runningPlanIDs.union(waitingTheirTurn.map(\.id)),
             now: now
         )
@@ -102,7 +101,6 @@ extension AppModel {
         switch record.outcome {
         case .succeeded: return settings.notifyOnSuccess
         case .completedWithErrors, .failed:
-            guard settings.notifyOnFailure else { return false }
             // As stored: `append(record:)` counted it before the history cap
             // trimmed the backups before it, and a run merged into a standing
             // failure counts the runs it stands for.

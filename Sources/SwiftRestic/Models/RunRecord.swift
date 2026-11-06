@@ -7,7 +7,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         case rewrite
 
         /// A forget is "Retention", the word every other surface uses for it
-        /// (the plan page's row, Apply Retention Now, "Retention skipped");
+        /// (the plan page's row, "Retention skipped");
         /// a prune is the maintenance task's own word.
         var displayName: String {
             switch self {

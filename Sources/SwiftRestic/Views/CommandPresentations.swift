@@ -1,17 +1,11 @@
 import SwiftUI
 
-struct RetentionTarget: Identifiable, Equatable {
-    let planID: UUID
-    var id: UUID { planID }
-}
-
 private struct CheckTarget: Identifiable {
     let repositoryID: UUID
     var id: UUID { repositoryID }
 }
 
-/// Every command's confirmation, once — the dialogs, Check's sheet and
-/// Apply Retention Now's sheet — wherever they are asked from: the Plan and
+/// Every command's confirmation, once, the dialogs and Check's sheet, wherever they are asked from: the Plan and
 /// Repository menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
 /// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
 /// action two ways, and none adds a dialog of its own. A modifier of its
@@ -20,7 +14,6 @@ struct CommandPresentations: ViewModifier {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Binding var pendingConfirmation: CommandConfirmation?
-    @Binding var retentionTarget: RetentionTarget?
 
     func body(content: Content) -> some View {
         // Read on every render: the delete message says whether a run will be
@@ -56,10 +49,6 @@ struct CommandPresentations: ViewModifier {
                         check(target.repositoryID, readDataPercent: readDataPercent)
                     }
                 }
-            }
-            .sheet(item: $retentionTarget) { target in
-                ApplyRetentionSheet(planID: target.planID)
-                    .environment(model)
             }
     }
 

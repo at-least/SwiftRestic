@@ -63,7 +63,6 @@ extension AppModel {
             removedPlanNames: plans.map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: names(doing: .backup),
-            applyingRetentionNames: names(doing: .applyRetention),
             removingFromEarlierBackupsNames: names(doing: .removeFromEarlierBackups),
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
@@ -80,7 +79,6 @@ extension AppModel {
         removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
-        applyingRetentionNames: [String],
         removingFromEarlierBackupsNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
@@ -101,9 +99,6 @@ extension AppModel {
             consequences += names.count == 1
                 ? " A backup of \(names[0]) is running and will be cancelled."
                 : " Backups of \(Format.list(names)) are running and will be cancelled."
-        }
-        if !applyingRetentionNames.isEmpty {
-            consequences += " Retention is being applied to \(Format.list(applyingRetentionNames.map { "“\($0)”" })) and will be cancelled."
         }
         if !removingFromEarlierBackupsNames.isEmpty {
             consequences += " Items are being removed from earlier backups of \(Format.list(removingFromEarlierBackupsNames.map { "“\($0)”" })), which will be cancelled."

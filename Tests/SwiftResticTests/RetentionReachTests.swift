@@ -38,29 +38,27 @@ struct RetentionReachTests {
         #expect(policy == before)
     }
 
-    @Test("prune and the enabled toggle survive every rewrite")
-    func togglesSurvive() {
+    @Test("choosing a window turns the rules on; Keep everything turns them off and keeps the buckets")
+    func enabledFollowsTheChoice() {
         var policy = RetentionPolicy()
-        policy.runPrune = true
-        policy.isEnabled = true
-        RetentionPolicy.Reach.year.apply(to: &policy)
-        #expect(policy.runPrune, "choosing a window must not silently turn pruning off")
-        #expect(policy.isEnabled)
+        policy.keepHourly = 3
+        RetentionPolicy.Reach.keepEverything.apply(to: &policy)
+        #expect(!policy.isEnabled)
+        #expect(policy.keepHourly == 3, "turning rules off must not lower a saved rule")
+        #expect(RetentionPolicy.Reach(policy: policy) == .keepEverything)
+        #expect(!policy.isSafeToRun)
 
-        policy.isEnabled = false
         RetentionPolicy.Reach.month.apply(to: &policy)
-        #expect(policy.isEnabled == false)
+        #expect(policy.isEnabled)
+        #expect(policy.keepDaily == 30)
+        #expect(policy.isSafeToRun)
     }
 
-    @Test("a preset chosen while disabled still lands when re-enabled")
-    func presetsDoNotDependOnEnabled() {
-        var policy = RetentionPolicy()
-        policy.isEnabled = false
-        RetentionPolicy.Reach.quarter.apply(to: &policy)
-        #expect(policy.keepDaily == 90)
-        #expect(policy.isSafeToRun == false, "a disabled policy must still read unsafe to run")
-        policy.isEnabled = true
-        #expect(policy.isSafeToRun)
+    @Test("hand-edited rules decode as they were, above any range the picker offers")
+    func customSurvivesDecoding() throws {
+        let policy = try JSONDecoder().decode(RetentionPolicy.self, from: Data(#"{"keepDaily": 1000, "keepYearly": 500, "runPrune": true}"#.utf8))
+        #expect(policy.keepDaily == 1000 && policy.keepYearly == 500)
+        #expect(RetentionPolicy.Reach(policy: policy) == .custom)
     }
 }
 

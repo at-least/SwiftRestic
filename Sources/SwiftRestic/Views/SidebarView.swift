@@ -167,9 +167,6 @@ struct SidebarView: View {
                 }
             }
         }
-        if commands.canApplyRetention {
-            Button("Apply Retention Now") { router.request(.applyRetention(plan.id)) }
-        }
         Divider()
         Button("Remove Plan", role: .destructive) { onDeletePlan(plan) }
     }

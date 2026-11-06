@@ -54,7 +54,7 @@ struct SettingsTransferTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
         model.configuration.runs = [RunRecord(planID: plan.id, planName: "Documents")]
-        model.configuration.settings.staleAlertDays = 3
+        model.configuration.settings.maxRunHistory = 33
         model.configuration.settings.notificationChannels = [channel]
         model.configuration.settings.networkShares = [NetworkShare(volumeName: "NAS", url: "smb://me@nas.local/NAS")]
         model.configuration.settings.consoleHistory = ["snapshots --json"]
@@ -75,7 +75,7 @@ struct SettingsTransferTests {
         #expect(read.name == "SwiftRestic Settings.json")
         #expect(read.configuration.repositories == [repository])
         #expect(read.configuration.plans == [plan])
-        #expect(read.configuration.settings.staleAlertDays == 3)
+        #expect(read.configuration.settings.maxRunHistory == 33)
         #expect(read.configuration.settings.notificationChannels == [channel])
         #expect(read.configuration.settings.networkShares == model.configuration.settings.networkShares)
 
@@ -130,7 +130,7 @@ struct SettingsTransferTests {
         file.plans = [changedPlan, addedPlan]
         file.runs = [RunRecord(planID: addedPlan.id, planName: "Photos")]
         file.settings.consoleHistory = ["forget"]
-        file.settings.staleAlertDays = 9
+        file.settings.maxRunHistory = 99
         // The path of the Mac that wrote the file: carried here, restic
         // goes missing and every backup stops.
         file.settings.resticPathOverride = "/Users/alice/bin/restic"
@@ -147,7 +147,7 @@ struct SettingsTransferTests {
         #expect(imported.settings.consoleHistory == ["check"])
         #expect(imported.settings.schedulePause == mac.settings.schedulePause)
         #expect(imported.settings.resticPathOverride == "/opt/restic/restic")
-        #expect(imported.settings.staleAlertDays == 9)
+        #expect(imported.settings.maxRunHistory == 99)
     }
 
     @Test("a file that is not a settings file, or holds a setting that does not read, imports nothing")
@@ -175,16 +175,16 @@ struct SettingsTransferTests {
         #expect(empty.configuration.repositories.isEmpty)
         #expect(empty.configuration.settings == AppSettings())
 
-        let damaged = try write(#"{"repositories": [], "plans": [], "settings": {"staleAlertDays": "seven"}}"#, to: directory)
+        let damaged = try write(#"{"repositories": [], "plans": [], "settings": {"maxRunHistory": "seven"}}"#, to: directory)
         do {
             _ = try SettingsFile.read(from: damaged)
             Issue.record("a setting that does not read must refuse the file")
         } catch let SettingsFile.ReadError.unreadableSettings(fields) {
-            #expect(fields == ["settings.staleAlertDays"])
+            #expect(fields == ["settings.maxRunHistory"])
             // The fields alone: the launch's note goes on "— the default (7)
             // is used", and nothing is used here.
             #expect(SettingsFile.ReadError.unreadableSettings(fields).localizedDescription
-                == "Some of its settings can’t be read: “settings.staleAlertDays”.")
+                == "Some of its settings can’t be read: “settings.maxRunHistory”.")
         }
     }
 
@@ -192,10 +192,10 @@ struct SettingsTransferTests {
     func missingSettingsReadAsDefaults() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let url = try write(#"{"repositories": [], "plans": [], "settings": {"staleAlertDays": 3}}"#, to: directory)
+        let url = try write(#"{"repositories": [], "plans": [], "settings": {"maxRunHistory": 33}}"#, to: directory)
 
         var expected = AppSettings()
-        expected.staleAlertDays = 3
+        expected.maxRunHistory = 33
         #expect(try SettingsFile.read(from: url).configuration.settings == expected)
     }
 

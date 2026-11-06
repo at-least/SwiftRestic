@@ -22,7 +22,6 @@ struct RootView: View {
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
-    @State private var retentionTarget: RetentionTarget?
     /// The Files views' levels, read once and shared by every page's Files
     /// tab: a level read for one is read for the next.
     @State private var filesTree = FilesTree()
@@ -116,8 +115,7 @@ struct RootView: View {
         // The destructive confirmations and the retention sheet, in a
         // modifier of their own: this chain sits at the type-check limit.
         .modifier(CommandPresentations(
-            pendingConfirmation: $pendingConfirmation,
-            retentionTarget: $retentionTarget
+            pendingConfirmation: $pendingConfirmation
         ))
     }
 
@@ -431,7 +429,7 @@ struct RootView: View {
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
         let sheetsUp = editingPlan != nil || editingRepository != nil
-            || pendingConfirmation != nil || retentionTarget != nil || adoptingPlan != nil
+            || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
             NSSound.beep()
@@ -484,10 +482,6 @@ struct RootView: View {
             }
         case let .editRepository(id):
             editingRepository = model.repository(id: id)
-        case let .applyRetention(id):
-            if model.planCommands(for: .plan(id)).canApplyRetention {
-                retentionTarget = RetentionTarget(planID: id)
-            }
         case let .confirm(confirmation):
             if model.confirmationCopy(for: confirmation) != nil {
                 pendingConfirmation = confirmation

@@ -155,8 +155,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     var keepWeekly: Int = 4
     var keepMonthly: Int = 12
     var keepYearly: Int = 3
-    /// Run `--prune` as part of `forget`. Slow, so off by default.
-    var runPrune: Bool = false
 
     init(
         isEnabled: Bool = true,
@@ -165,8 +163,7 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         keepDaily: Int = 7,
         keepWeekly: Int = 4,
         keepMonthly: Int = 12,
-        keepYearly: Int = 3,
-        runPrune: Bool = false
+        keepYearly: Int = 3
     ) {
         self.isEnabled = isEnabled
         self.keepLast = keepLast
@@ -175,7 +172,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         self.keepWeekly = keepWeekly
         self.keepMonthly = keepMonthly
         self.keepYearly = keepYearly
-        self.runPrune = runPrune
     }
 
     init(from decoder: any Decoder) throws {
@@ -191,7 +187,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         keepWeekly = DecodeNotes.clamped(c.value(.keepWeekly, default: 4), rule, "retention.keepWeekly")
         keepMonthly = DecodeNotes.clamped(c.value(.keepMonthly, default: 12), rule, "retention.keepMonthly")
         keepYearly = DecodeNotes.clamped(c.value(.keepYearly, default: 3), rule, "retention.keepYearly")
-        runPrune = c.value(.runPrune, default: false)
     }
 
     var forgetArguments: [String] {
@@ -228,16 +223,18 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         return "Keep " + Format.list(rules.map(\.1)) + " " + noun
     }
 
-    /// The plain-language answer to how long backups are kept —
-    /// the editor's primary control — and the bucket set each answer writes.
-    /// Matching and writing live on the model so the picker can never
-    /// disagree with the policy it describes. Not Codable: a derived view of
+    /// The plain-language answer to how long backups are kept, the editor's
+    /// only control, and the bucket set each answer writes. A derived view of
     /// the buckets, never a persisted fact.
     enum Reach: String, Sendable, CaseIterable, Identifiable {
         case standard
         case month
         case quarter
         case year
+        case keepEverything
+        /// A hand-edited policy, or one from an older build's rule steppers.
+        /// Shown, not offered: its buckets are never lowered unasked, since
+        /// lowering one removes backups.
         case custom
 
         var id: String { rawValue }
@@ -248,11 +245,16 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
             case .month: "For about a month"
             case .quarter: "For about 3 months"
             case .year: "For about a year"
+            case .keepEverything: "Keep everything"
             case .custom: "Custom"
             }
         }
 
         init(policy: RetentionPolicy) {
+            guard policy.isEnabled else {
+                self = .keepEverything
+                return
+            }
             let buckets = (
                 policy.keepLast, policy.keepHourly, policy.keepDaily,
                 policy.keepWeekly, policy.keepMonthly, policy.keepYearly
@@ -266,30 +268,28 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
             }
         }
 
-        /// Writes exactly the window the name promises: every other bucket
-        /// zeroed, and the toggles the answer does not name — prune, enabled —
-        /// survive untouched. Custom names a hand-edited policy; it has
-        /// nothing to write.
+        /// Writes exactly the window the name promises, every other bucket
+        /// zeroed. Keep everything turns the rules off and leaves the buckets.
         func apply(to policy: inout RetentionPolicy) {
-            guard self != .custom else { return }
-            let isEnabled = policy.isEnabled
-            let runPrune = policy.runPrune
-            let daily = switch self {
-            case .standard: 7
-            case .month: 30
-            case .quarter: 90
-            case .year: 365
-            case .custom: 0
+            let daily: Int
+            switch self {
+            case .custom: return
+            case .keepEverything:
+                policy.isEnabled = false
+                return
+            case .standard: daily = 7
+            case .month: daily = 30
+            case .quarter: daily = 90
+            case .year: daily = 365
             }
             policy = RetentionPolicy(
-                isEnabled: isEnabled,
+                isEnabled: true,
                 keepLast: 0,
                 keepHourly: self == .standard ? 24 : 0,
                 keepDaily: daily,
                 keepWeekly: self == .standard ? 4 : 0,
                 keepMonthly: self == .standard ? 12 : 0,
-                keepYearly: self == .standard ? 3 : 0,
-                runPrune: runPrune
+                keepYearly: self == .standard ? 3 : 0
             )
         }
     }

@@ -79,7 +79,8 @@ struct OverviewMetricsTests {
             },
             isChecking: { $0 == checking },
             activity: { _ in nil },
-            standingProblem: { _ in nil }
+            standingProblem: { _ in nil },
+            now: utcDate("2026-09-05 12:00:00")
         )
 
         // Unreadable first, then exposed, then pending, protected last; ties
@@ -98,6 +99,44 @@ struct OverviewMetricsTests {
         #expect(rows.last?.isProtected == true)
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
         #expect(rows.first { $0.planName == "Failed" }?.lastBackupAt == nil)
+    }
+
+    @Test("a scheduled plan past the quiet window is not up to date, and its line says for how long")
+    func overdueRowIsNotUpToDate() {
+        let repository = UUID()
+        var scheduled = plan("Docs", repository: repository)
+        scheduled.schedule.frequency = .daily
+        let now = utcDate("2026-09-05 12:00:00")
+        let rows = OverviewMetrics.protectionRows(
+            plans: [scheduled],
+            latestSnapshot: { _, _ in snapshot("old", at: now.addingTimeInterval(-30 * 86400)) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil },
+            now: now
+        )
+        #expect(rows.first?.isProtected == false)
+        #expect(rows.first?.stateText == "Not backed up for 30 days")
+        #expect(OverviewMetrics.needingAttention(rows).count == 1)
+    }
+
+    @Test("a manual plan makes no promise, so it is up to date however old its backup")
+    func manualPlanIsNeverOverdue() {
+        var manual = plan("Docs", repository: UUID())
+        manual.schedule.frequency = .manual
+        let rows = OverviewMetrics.protectionRows(
+            plans: [manual],
+            latestSnapshot: { _, _ in snapshot("old", at: Date.now.addingTimeInterval(-300 * 86400)) },
+            repositoryHasSnapshots: { _ in true },
+            listingOutcome: { _ in .loaded },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
+        )
+        #expect(rows.first?.isProtected == true)
+        #expect(rows.first?.stateText.hasPrefix("Last backup ") == true)
     }
 
     @Test("a protected row says when in the sidebar's words, from the same formatter")
@@ -204,7 +243,7 @@ struct OverviewMetricsTests {
         #expect(adoptedSurfaces.caption == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.row == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.page == adoptedWords)
-        #expect(adoptedSurfaces.line == "1 of 1 plan protected · Last backup \(adoptedWords)")
+        #expect(adoptedSurfaces.line == "1 of 1 plan up to date · Last backup \(adoptedWords)")
 
         // A run of the plan's own: the run's start is the moment even while
         // restic stamped the snapshot later (the before-backup hooks), so
@@ -216,7 +255,7 @@ struct OverviewMetricsTests {
         #expect(ranSurfaces.caption == "Last backup \(ranWords)")
         #expect(ranSurfaces.row == "Last backup \(ranWords)")
         #expect(ranSurfaces.page == ranWords)
-        #expect(ranSurfaces.line == "1 of 1 plan protected · Last backup \(ranWords)")
+        #expect(ranSurfaces.line == "1 of 1 plan up to date · Last backup \(ranWords)")
 
         #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshot: nil) == nil)
     }
@@ -252,7 +291,8 @@ struct OverviewMetricsTests {
             listingOutcome: { $0 == idle ? .idle : .loaded },
             isChecking: { _ in false },
             activity: { $0 == first.id ? PlanActivity(phase: .backingUp) : nil },
-            standingProblem: { _ in nil }
+            standingProblem: { _ in nil },
+            now: utcDate("2026-09-05 12:00:00")
         )
         #expect(rows.map(\.planName) == ["Waiting", "First", "Fine"])
         let running = rows.first { $0.planName == "First" }
@@ -391,7 +431,7 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: nil, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
-        #expect(plain?.text == "1 of 2 plans protected · Last backup 1 hour ago")
+        #expect(plain?.text == "1 of 2 plans up to date · Last backup 1 hour ago")
         #expect(plain?.showsResume == false)
 
         let end = utcDate("2026-09-05 14:00:00")
@@ -400,7 +440,7 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: .paused(until: end), now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
-        #expect(paused?.text == "1 of 2 plans protected · Last backup 1 hour ago · "
+        #expect(paused?.text == "1 of 2 plans up to date · Last backup 1 hour ago · "
             + ScheduleHold.paused(until: end).summary(now: utcDate("2026-09-05 11:00:00")))
         #expect(paused?.showsResume == true)
 
@@ -411,7 +451,7 @@ struct OverviewMetricsTests {
             willNotRun: { _ in nil }, hold: .onBattery, now: utcDate("2026-09-05 11:00:00"),
             relative: { _ in "1 hour ago" }
         )
-        #expect(onBattery?.text == "1 of 2 plans protected · Last backup 1 hour ago · Backups paused on battery power")
+        #expect(onBattery?.text == "1 of 2 plans up to date · Last backup 1 hour ago · Backups paused on battery power")
         #expect(onBattery?.showsResume == false)
 
         // One plan spells its own noun; no plan with a backup yet omits the
@@ -421,7 +461,7 @@ struct OverviewMetricsTests {
             listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
             now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
-        #expect(single?.text == "1 of 1 plan protected")
+        #expect(single?.text == "1 of 1 plan up to date")
         let neverRan = OverviewMetrics.protectionSummary(
             rows: [
                 protectionRow("Empty", isKnown: true, isProtected: false),
@@ -430,7 +470,7 @@ struct OverviewMetricsTests {
             listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
             now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
-        #expect(neverRan?.text == "0 of 2 plans protected")
+        #expect(neverRan?.text == "0 of 2 plans up to date")
     }
 
     @Test("the Protection card names each protected plan that will not run by itself, in the sidebar's words")
@@ -482,7 +522,7 @@ struct OverviewMetricsTests {
             partialSkip: { $0 == code.id ? skipReason : nil },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(summary?.text == "5 of 5 plans protected · Last backup 1 hour ago")
+        #expect(summary?.text == "5 of 5 plans up to date · Last backup 1 hour ago")
         #expect(summary?.attentionLines == [])
         // A protected plan backing up around an away drive is named in the
         // record's words, beside its held line if it has one.
@@ -524,7 +564,7 @@ struct OverviewMetricsTests {
             rows: [code, music, documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(summary?.text == "1 of 3 plans protected · Last backup 1 hour ago")
+        #expect(summary?.text == "1 of 3 plans up to date · Last backup 1 hour ago")
         #expect(summary?.failureLines == ["Code: Failed — 3 hours ago"])
         #expect(summary?.attentionLines == ["Music: No backups yet"])
         #expect(OverviewMetrics.protectionSummary(
@@ -542,14 +582,14 @@ struct OverviewMetricsTests {
             rows: [photos], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(running?.text == "0 of 1 plan protected · Photos — Backing up…")
+        #expect(running?.text == "0 of 1 plan up to date · Photos — Backing up…")
         #expect(running?.attentionLines == [])
         // Beside a last backup, the run comes before it.
         let both = OverviewMetrics.protectionSummary(
             rows: [photos, documents], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(both?.text == "1 of 2 plans protected · Photos — Backing up… · Last backup 1 hour ago")
+        #expect(both?.text == "1 of 2 plans up to date · Photos — Backing up… · Last backup 1 hour ago")
     }
 
     @Test("an unreadable listing is said in one sentence by the rows and the caveat alike")

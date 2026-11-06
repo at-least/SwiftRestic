@@ -1,16 +1,10 @@
 import Foundation
 
 extension AppModel {
-    func previewRetention(planID: UUID) async throws -> RetentionPreview {
-        guard let plan = plan(id: planID) else { throw ResticError.planMissing }
-        return try await previewRetention(plan: plan)
-    }
-
-    /// What `plan`'s retention would remove right now — the forget preview,
-    /// a plain await: no slot, nothing marked busy (`--no-lock` reads beside
-    /// a backup), cancelled with the caller's task. Takes a plan value
-    /// rather than an ID, so a draft that is not saved yet travels too —
-    /// the adopt sheet's dry run.
+    /// What `plan`'s retention would remove right now: a plain await with no
+    /// slot and nothing marked busy (`--no-lock` reads beside a backup),
+    /// cancelled with the caller's task. Takes a value, so an unsaved draft
+    /// travels too.
     func previewRetention(plan: BackupPlan) async throws -> RetentionPreview {
         guard let repository = repository(id: plan.repositoryID)
         else { throw ResticError.repositoryMissing }
@@ -20,18 +14,6 @@ extension AppModel {
         } catch {
             noteAuthFailure(error, repositoryID: repository.id)
             throw error
-        }
-    }
-
-    /// Runs the plan's forget now, as the post-backup retention step does —
-    /// its "Also clean up" included — in the plan's own slot, so Stop, the
-    /// sidebar's spinner, quitting and the busy repository behave as for a
-    /// backup. Guarded like `runMaintenance`: a busy repository says so
-    /// instead of queueing.
-    func applyRetention(planID: UUID) {
-        guard let plan = plan(id: planID), plan.retention.isSafeToRun else { return }
-        startQuietPlanRun(planID: planID, work: .applyRetention) { plan, repository, sink in
-            await RetentionRunEngine.perform(plan: plan, repository: repository, sink: sink)
         }
     }
 
@@ -51,7 +33,6 @@ extension AppModel {
         installPlanActivity(plan: plan, repository: repository)
         activity[planID]?.work = work
         activity[planID]?.phase = switch work {
-        case .applyRetention: .applyingRetention
         case .removeFromEarlierBackups: .removingFromEarlierBackups
         case .backup: preconditionFailure("a backup runs through runBackup, not a quiet run")
         }

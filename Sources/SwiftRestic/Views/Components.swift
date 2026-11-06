@@ -552,9 +552,7 @@ struct WarningLine: View {
     }
 }
 
-/// A retention dry-run's spinner and failure (`RetentionPreviewLoad`), the
-/// two blocks its surfaces — the adopt sheet's preview and Apply Retention
-/// Now — showed identically, each with its own "working" line. Two
+/// A retention dry-run's spinner and failure (`RetentionPreviewLoad`). Two
 /// independent `if`s: a failure stands alone, the answer being cleared.
 struct RetentionPreviewStatus: View {
     let isLoading: Bool

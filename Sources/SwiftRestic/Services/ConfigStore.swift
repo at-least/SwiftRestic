@@ -5,9 +5,6 @@ struct AppSettings: Codable, Sendable, Hashable {
     var resticPathOverride: String = ""
     var showMenuBarExtra: Bool = true
     var notifyOnSuccess: Bool = false
-    var notifyOnFailure: Bool = true
-    /// The quiet-plan alert's threshold in days (`StaleAlert`); 0 is off.
-    var staleAlertDays: Int = 7
     var maxRunHistory: Int = 300
     var pauseOnBattery: Bool = false
     /// Skip scheduled runs while the network is metered — one macOS reports
@@ -33,8 +30,6 @@ struct AppSettings: Codable, Sendable, Hashable {
         resticPathOverride = c.value(.resticPathOverride, default: resticPathOverride)
         showMenuBarExtra = c.value(.showMenuBarExtra, default: showMenuBarExtra)
         notifyOnSuccess = c.value(.notifyOnSuccess, default: notifyOnSuccess)
-        notifyOnFailure = c.value(.notifyOnFailure, default: notifyOnFailure)
-        staleAlertDays = c.value(.staleAlertDays, default: staleAlertDays)
         maxRunHistory = c.value(.maxRunHistory, default: maxRunHistory)
         pauseOnBattery = c.value(.pauseOnBattery, default: pauseOnBattery)
         pauseOnMeteredNetwork = c.value(.pauseOnMeteredNetwork, default: pauseOnMeteredNetwork)
@@ -63,13 +58,26 @@ struct AppConfiguration: Codable, Sendable {
         // file stores `StoredPlan`s, whose decode unfolds older builds'
         // `sources` into one plan per folder — read as the property's
         // `[BackupPlan]`, that split would be lost.
-        plans = c.value(.plans, default: [StoredPlan]()).flatMap(\.plans)
+        let storedPlans = c.value(.plans, default: [StoredPlan]())
+        plans = storedPlans.flatMap(\.plans)
+        turnOnCleanup(forPlansThatPruned: storedPlans)
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: runs))
         let stored = c.value(.settings, default: StoredSettings())
         settings = stored.settings
         moveAppWideRateLimits(upload: stored.uploadLimitKiBps, download: stored.downloadLimitKiBps)
+    }
+
+    /// Older builds freed space through a plan's own "Also clean up". That
+    /// switch is gone; the repository's periodic cleanup takes over, or a
+    /// repository saved with cleanup off would stop freeing what retention
+    /// removes.
+    private mutating func turnOnCleanup(forPlansThatPruned storedPlans: [StoredPlan]) {
+        for stored in storedPlans where stored.legacyPrunesAfterRetention && stored.plan.retention.isEnabled {
+            guard let index = repositories.firstIndex(where: { $0.id == stored.plan.repositoryID }) else { continue }
+            repositories[index].maintenance.pruneEnabled = true
+        }
     }
 
     /// Older builds held one pair of rate limits in the
@@ -113,10 +121,24 @@ private struct StoredPlan: Decodable {
     var plan: BackupPlan
     var sources: [String] = []
     var legacySkipsDeveloperFiles = false
+    var legacyPrunesAfterRetention = false
 
     private enum LegacyKeys: String, CodingKey {
         case sources
         case excludeDeveloperFiles
+        case retention
+    }
+
+    private struct LegacyRetention: Decodable {
+        var runPrune = false
+
+        private enum CodingKeys: String, CodingKey { case runPrune }
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            runPrune = try decoder.container(keyedBy: CodingKeys.self).value(.runPrune, default: false)
+        }
     }
 
     init(from decoder: any Decoder) throws {
@@ -124,6 +146,7 @@ private struct StoredPlan: Decodable {
         let c = try decoder.container(keyedBy: LegacyKeys.self)
         sources = BackupPlan.withoutDuplicates(c.value(.sources, default: []))
         legacySkipsDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
+        legacyPrunesAfterRetention = c.value(.retention, default: LegacyRetention()).runPrune
     }
 
     var plans: [BackupPlan] {

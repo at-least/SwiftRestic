@@ -16,9 +16,9 @@ struct StaleAlertTests {
     }
 
     private func due(
-        _ plans: [BackupPlan], days: Int = 7, running: Set<UUID> = [], snapshots: [UUID: Date] = [:]
+        _ plans: [BackupPlan], running: Set<UUID> = [], snapshots: [UUID: Date] = [:]
     ) -> [StalePlanAlert] {
-        StaleAlert.due(plans: plans, latestSnapshotTimes: snapshots, thresholdDays: days, running: running, now: now)
+        StaleAlert.due(plans: plans, latestSnapshotTimes: snapshots, running: running, now: now)
     }
 
     @Test("a daily plan past the window is named once, with the days and the moment it counts from")
@@ -44,19 +44,12 @@ struct StaleAlertTests {
     }
 
     @Test("the window is the threshold, or one schedule interval and a day when that is longer")
-    func scheduleWindow() {
-        // Weekly: due again exactly seven days after its last success, so
-        // a bare seven-day threshold would name it before every run.
-        #expect(due([plan(.weekly, lastSuccessDaysAgo: 7.5)]).isEmpty)
-        #expect(due([plan(.weekly, lastSuccessDaysAgo: 8.1)]).map(\.days) == [8])
-        #expect(due([plan(.weekly, lastSuccessDaysAgo: 4)], days: 3).isEmpty)
-        // Hourly and daily: the threshold is the longer of the two.
-        #expect(due([plan(.hourly, lastSuccessDaysAgo: 3.2)], days: 3).map(\.days) == [3])
-        #expect(StaleAlert.window(thresholdDays: 3, schedule: plan(.daily, lastSuccessDaysAgo: nil).schedule) == 3 * day)
-        #expect(StaleAlert.window(thresholdDays: 3, schedule: plan(.weekly, lastSuccessDaysAgo: nil).schedule) == 8 * day)
+    func window() {
+        #expect(StaleAlert.window(schedule: plan(.daily, lastSuccessDaysAgo: nil).schedule) == 7 * day)
+        #expect(StaleAlert.window(schedule: plan(.weekly, lastSuccessDaysAgo: nil).schedule) == 8 * day)
     }
 
-    @Test("paused, manual, incomplete and running plans are never named, and Off names none")
+    @Test("a paused plan is still named; manual, incomplete and running plans are not")
     func exemptions() {
         var off = plan(lastSuccessDaysAgo: 20)
         off.isEnabled = false
@@ -66,8 +59,14 @@ struct StaleAlertTests {
         var incomplete = plan(lastSuccessDaysAgo: 20)
         incomplete.path = ""
         let running = plan(lastSuccessDaysAgo: 20)
-        #expect(due([off, timed, manual, incomplete, running], running: [running.id]).isEmpty)
-        #expect(due([plan(lastSuccessDaysAgo: 20)], days: 0).isEmpty)
+        #expect(due([off, timed, manual, incomplete, running], running: [running.id]).map(\.planID) == [off.id, timed.id])
+    }
+
+    @Test("a config from before the switches went still loads, and a saved Off has no effect")
+    func oldSettingsAreIgnored() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"staleAlertDays": 0, "notifyOnFailure": false, "notifyOnSuccess": true}"#.utf8))
+        #expect(settings.notifyOnSuccess)
+        #expect(due([plan(lastSuccessDaysAgo: 20)]).count == 1)
     }
 
     @Test("the notification names the plan with its repository, the days, and the last backup")
@@ -78,10 +77,8 @@ struct StaleAlertTests {
         #expect(text.body == "No successful backup in 8 days — the last one was \(Format.timestamp(last)).")
     }
 
-    @Test("the setting is on at seven days unless the file says otherwise, and the alert mark survives an editor save")
+    @Test("the alert mark survives an editor save")
     func persistence() throws {
-        let settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
-        #expect(settings.staleAlertDays == 7)
         var stored = plan(lastSuccessDaysAgo: 9)
         stored.staleAlertedFor = stored.lastSuccessAt
         var draft = stored
