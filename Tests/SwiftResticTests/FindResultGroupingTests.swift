@@ -1,68 +1,9 @@
 import Foundation
 import Testing
 
-@Suite("Find results by path")
+@Suite("Search results by path")
 struct FindResultGroupingTests {
-    private func result(_ snapshot: String, _ paths: [String]) throws -> FindResult {
-        let matches = paths.map { #"{"path":"\#($0)","type":"file","size":3}"# }.joined(separator: ",")
-        return try JSONDecoder().decode(
-            FindResult.self,
-            from: Data(#"{"matches":[\#(matches)],"hits":\#(paths.count),"snapshot":"\#(snapshot)"}"#.utf8)
-        )
-    }
-
-    @Test("a path found in several backups is one row, at the newest, with how many hold it")
-    func onePerPath() throws {
-        let day = { (d: Double) in Date(timeIntervalSince1970: 1_790_000_000 + d * 86_400) }
-        let times = ["s1": day(1), "s2": day(2), "s3": day(3)]
-        let rows = FindResultGrouping.rows(
-            [
-                try result("s1", ["/d/notes.txt", "/d/old/notes.txt"]),
-                try result("s3", ["/d/notes.txt"]),
-                try result("s2", ["/d/notes.txt", "/d/cafe\u{301}/notes.txt"]),
-            ],
-            times: times,
-            chain: { _ in "Documents" }
-        )
-        #expect(rows.map(\.match.path) == ["/d/notes.txt", "/d/cafe\u{301}/notes.txt", "/d/old/notes.txt"])
-        #expect(rows.map(\.snapshotID) == ["s3", "s2", "s1"])
-        #expect(rows.map(\.count) == [3, 1, 1])
-        let spellings = FindResultGrouping.rows(
-            [try result("s1", ["/d/caf\u{E9}", "/d/cafe\u{301}"])], times: times, chain: { _ in "Documents" }
-        )
-        #expect(spellings.count == 2)
-        let unknown = FindResultGrouping.rows(
-            [try result("gone", ["/d/x"]), try result("s1", ["/d/y"])], times: times, chain: { _ in "Documents" }
-        )
-        #expect(unknown.map(\.snapshotID) == ["s1", "gone"])
-    }
-
-    @Test("a row counts the backups of its newest backup's chain — what the Files tab it opens lists — not another plan's")
-    func countsTheChainItOpens() throws {
-        let day = { (d: Double) in Date(timeIntervalSince1970: 1_790_000_000 + d * 86_400) }
-        let times = ["h1": day(1), "h2": day(2), "d1": day(3), "d2": day(4), "d3": day(5)]
-        let chains = ["h1": "Home", "h2": "Home", "d1": "Documents", "d2": "Documents", "d3": "Documents"]
-        let rows = FindResultGrouping.rows(
-            try ["d3", "d2", "d1", "h2", "h1"].map { try result($0, ["/Users/me/Documents/notes.txt"]) },
-            times: times,
-            chain: { chains[$0] }
-        )
-        #expect(rows.map(\.snapshotID) == ["d3"])
-        #expect(rows.map(\.count) == [3], "the Documents plan's three, not all five")
-    }
-
-    @Test("times all unknown, the row stays at the first holder — restic answers newest first")
-    func unknownTimesKeepTheFirstHolder() throws {
-        let rows = FindResultGrouping.rows(
-            [try result("s9", ["/d/notes.txt"]), try result("s4", ["/d/notes.txt"])],
-            times: [:],
-            chain: { _ in "Documents" }
-        )
-        #expect(rows.map(\.snapshotID) == ["s9"])
-        #expect(rows.map(\.count) == [2])
-    }
-
-    @Test("the index engine's rows are newest first by their newest version, ties keeping the search's order")
+    @Test("a search's rows are newest first by their newest version, ties keeping the search's order")
     func indexRowsOrder() {
         let old = IndexVersion(id: "old", time: Date(timeIntervalSince1970: 1_000))
         let new = IndexVersion(id: "new", time: Date(timeIntervalSince1970: 2_000))
@@ -89,7 +30,7 @@ struct FindResultGroupingTests {
         #expect(tied.rows.map(\.match.path) == ["/d/b.txt", "/d/a.txt"])
     }
 
-    @Test("the index engine's rows carry the hit and the summary's facts; a hit without its summary is dropped, not a row")
+    @Test("a search's rows carry the hit and the summary's facts; a hit without its summary is dropped, not a row")
     func indexRowsFacts() {
         let newest = IndexVersion(id: "s9", time: Date(timeIntervalSince1970: 3_000))
         let folder = SearchHit(path: "/d/Sub", isDirectory: true)
@@ -111,5 +52,47 @@ struct FindResultGroupingTests {
         #expect(built.rows.allSatisfy { $0.snapshotID == "s9" && $0.snapshotTime == newest.time })
         #expect(byPath["/d/a.txt"]?.hit == file)
         #expect(byPath["/d/Sub"]?.match.size == nil && byPath["/d/Sub"]?.match.mtime == nil)
+    }
+}
+
+@Suite("Search All Backups")
+struct AllBackupsSearchTests {
+    private func row(_ path: String, at seconds: TimeInterval) -> FindResultGrouping.IndexRow {
+        FindResultGrouping.IndexRow(
+            match: FindMatch(path: path, type: .file, size: nil, mtime: nil),
+            snapshotID: "s\(Int(seconds))",
+            snapshotTime: Date(timeIntervalSince1970: seconds),
+            count: 2,
+            hit: SearchHit(path: path, isDirectory: false)
+        )
+    }
+
+    @Test("every repository's rows merge newest first, one path in two repositories being two rows")
+    func merge() {
+        let (home, nas) = (UUID(), UUID())
+        let search = AllBackupsSearch([
+            .init(repositoryID: home, outcome: .rows([row("/a", at: 100), row("/b", at: 300)], isTruncated: false, isComplete: true)),
+            .init(repositoryID: nas, outcome: .rows([row("/a", at: 200)], isTruncated: false, isComplete: true)),
+        ])
+        #expect(search.rows.map(\.path) == ["/b", "/a", "/a"])
+        #expect(search.rows.map(\.repositoryID) == [home, nas, home])
+        #expect(Set(search.rows.map(\.id)).count == 3)
+        #expect(search.isWhole)
+        #expect(!search.isTruncated)
+    }
+
+    @Test("what could not be covered is said by repository, and never takes the others' rows with it")
+    func partial() {
+        let (reading, broken, whole) = (UUID(), UUID(), UUID())
+        let search = AllBackupsSearch([
+            .init(repositoryID: reading, outcome: .rows([], isTruncated: false, isComplete: false)),
+            .init(repositoryID: broken, outcome: .failed("database disk image is malformed")),
+            .init(repositoryID: whole, outcome: .rows([row("/a", at: 100)], isTruncated: true, isComplete: true)),
+        ])
+        #expect(search.rows.map(\.path) == ["/a"])
+        #expect(search.stillReading == [reading])
+        #expect(search.failures == [.init(repositoryID: broken, message: "database disk image is malformed")])
+        #expect(!search.isWhole, "a short list must not pass for the whole answer")
+        #expect(search.isTruncated)
     }
 }

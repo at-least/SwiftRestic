@@ -6,7 +6,6 @@ import SwiftUI
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @State private var searchText = ""
     /// The window's minute clock.
     @Environment(\.now) private var now
     let repositoryID: UUID
@@ -42,11 +41,7 @@ struct RepositoryDetailView: View {
         // The toolbar holds the search field alone; the page's verbs are the
         // menus' — the HIG's macOS toolbars: "it doesn't make sense to
         // provide a toolbar item for every menu item".
-        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search all backups"))
-        .onSubmit(of: .search) {
-            router.openFind(repositoryID: repositoryID, query: searchText, run: true)
-            searchText = ""
-        }
+        .allBackupsSearch()
     }
 
     @ViewBuilder

@@ -74,13 +74,6 @@ protocol ResticClient: Sendable {
         snapshotIDs: [String]
     ) async throws -> [FindResult]
 
-    func diff(
-        _ context: RepositoryContext,
-        olderID: String,
-        newerID: String,
-        includeMetadata: Bool
-    ) async throws -> SnapshotDiff
-
     /// Streams every `message_type: change` line of a `restic diff` — the
     /// uncapped variant of `diff`: the index needs all changed paths, so
     /// nothing is limited or retained. Throws on lines that did not decode,

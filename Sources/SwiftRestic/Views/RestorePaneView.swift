@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The restore pane: one backup record's file tree, beside a page's Backups
 /// tab's list. The app's one snapshot-first browser — the run drawer's
-/// Browse, a group's Show Backups and the Files view's Show in Backups all
-/// land here (`AppRouter.showBackup`) — so the Change column, search and
+/// Browse, a group's page and the Files view's Show in Backups all land here
+/// (`AppRouter.showBackup`) — so the Change column, Show Changes Only and
 /// drag-to-Finder never depend on which button you came through.
 ///
 /// The list beside it owns the timeline; a record is identified, not
@@ -17,8 +17,6 @@ struct RestorePaneView: View {
 
     let repositoryID: UUID
     let snapshotID: String
-    @Binding var searchText: String
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
@@ -29,17 +27,19 @@ struct RestorePaneView: View {
     /// the map in `loadLevel`, never re-derived — the header must name the
     /// comparison whose marks are on screen.
     @State private var comparison: ChangeComparison?
-    @State private var searchResult: RestorePaneSearch?
-    /// The selected rows' ids — paths in the tree, `SearchHit.id` among
-    /// search results. Several at once, as in Finder (⌘- or ⇧-click):
+    /// The backup's changes against the one before, deletions among them:
+    /// what Show Changes Only lists.
+    @State private var changeList = BackupChanges(changes: [:])
+    /// Kept across record switches: flipping through the list then shows what
+    /// each backup changed.
+    @State private var showsChangesOnly = false
+    /// The selected rows' ids — paths in the tree, `BackupChanges.Row.id` in
+    /// the list of changes. Several at once, as in Finder (⌘- or ⇧-click):
     /// Restore restores them together.
     @State private var selection: Set<String> = []
     @FocusState private var listIsFocused: Bool
     @State private var isLoadingTree = false
     @State private var loadError: String?
-    /// Why the search could not answer — the Files tab's "Search failed",
-    /// never a folder that could not be read.
-    @State private var searchError: String?
     @State private var folderMissing = false
     /// The record the tree on screen was built for. A folder listing that
     /// lands after a record switch must not install itself into the new
@@ -56,9 +56,6 @@ struct RestorePaneView: View {
         let snapshotID: String
         let path: String
     }
-    /// The query in flight, so the next keystroke cancels it: a slower older
-    /// search finishing last must not overwrite the newer one's answers.
-    @State private var searchTask: Task<Void, Never>?
     /// A routed focus folder the tree should scroll to once it is on screen —
     /// set by `loadLevel`, spent by the list. Plain record switches keep
     /// their folder open but never scroll.
@@ -105,9 +102,6 @@ struct RestorePaneView: View {
         // tree already holds their rows, and re-running the diff on every
         // chevron click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
-        .onChange(of: searchText) { _, newValue in
-            searchChanged(newValue)
-        }
         .previewSession(previewer)
         // The copy belongs to the backup on screen.
         .onChange(of: snapshotID) { previewer.end() }
@@ -119,8 +113,7 @@ struct RestorePaneView: View {
                 .environment(model)
         }
         .onDisappear {
-            // The pane's queries must not keep running after the pane is gone.
-            searchTask?.cancel()
+            // The pane's listings must not keep running after the pane is gone.
             for (_, task) in fetchTasks { task.cancel() }
         }
     }
@@ -141,6 +134,7 @@ struct RestorePaneView: View {
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
             IncompleteSnapshotStrip(snapshotID: snapshotID, repositoryID: repositoryID)
+            changesBar(record: record, comparison: shown)
             // Filling, whatever stands in for the tree: a
             // ContentUnavailableView answers its own height, and without
             // this the pane floats mid-window.
@@ -155,6 +149,30 @@ struct RestorePaneView: View {
         // view's zero-width sizing query.
         .frame(minWidth: 400)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Show Changes Only, over a backup with one before it to compare with:
+    /// its count, and the data this backup added, answer why it grew.
+    @ViewBuilder
+    private func changesBar(record: Snapshot?, comparison: ChangeComparison?) -> some View {
+        if let comparison, comparison.baseline != nil {
+            HStack(spacing: 12) {
+                Toggle("Show Changes Only", isOn: $showsChangesOnly)
+                    .toggleStyle(.checkbox)
+                if showsChangesOnly, !Self.isComparing(comparison) {
+                    Text(changeList.summary(dataAdded: record.flatMap { model.backupRun(forSnapshot: $0.id)?.dataAdded }))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(RestoreRecordHeading.columnHelp(for: comparison) ?? "")
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .onChange(of: showsChangesOnly) { selection = [] }
+            Divider()
+        }
     }
 
     /// `comparison`, when it is the open record's: between a record switch
@@ -191,22 +209,8 @@ struct RestorePaneView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
             FailureUnavailableView(title: "Could not read this folder", message: loadError)
-        } else if let searchError {
-            FailureUnavailableView(title: "Search failed", message: searchError)
-        } else if let result = searchResult {
-            if result.inThisBackup.isEmpty {
-                // Not a dead end: the index knows whether other backups
-                // hold a match, and Find Files lists them with their dates.
-                ContentUnavailableView {
-                    Label("No matches in this backup", systemImage: "magnifyingglass")
-                } description: {
-                    Text(result.note ?? "No other backup matches either.")
-                } actions: {
-                    if result.note != nil { searchAllButton }
-                }
-            } else {
-                searchResults(result.inThisBackup)
-            }
+        } else if isListingChanges(shown) {
+            changesList(shown: shown)
         } else if folderMissing {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
@@ -301,8 +305,8 @@ struct RestorePaneView: View {
             .contextMenu(forSelectionType: String.self) { ids in
                 restoreContextItem(ids) { ids.compactMap { tree.row(id: $0)?.node } }
                 if ids.count == 1, let id = ids.first, let node = tree.row(id: id)?.node {
-                    showVersionsItem(path: node.path, isDirectory: node.isDirectory)
                     if !node.isDirectory {
+                        showVersionsItem(path: node.path, isDirectory: false)
                         // The tree's node is restic's own, size included.
                         previewItem { node }
                     }
@@ -351,48 +355,100 @@ struct RestorePaneView: View {
         .accessibilityLabel(row.expanded ? "Collapse \(row.node.name)" : "Expand \(row.node.name)")
     }
 
-    private func searchResults(_ hits: [SearchHit]) -> some View {
-        List(hits, selection: $selection) { hit in
-            HStack(spacing: 6) {
-                Image(systemName: hit.isDirectory ? "folder.fill" : "doc")
-                    .foregroundStyle(hit.isDirectory ? Color.accentColor : .secondary)
-                    .frame(width: 16)
-                    .accessibilityLabel(hit.isDirectory ? "Folder" : "File")
-                Text(ResticPath.basename(of: hit.path))
-                    .lineLimit(1)
-                Spacer()
-                Text(ResticPath.parent(of: hit.path))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            .contentShape(Rectangle())
-            // A hit drags out like a tree row, through the same gate, as
-            // the node a restore of it would get (`node(for:)`): a hit
-            // carries its kind in the open backup.
-            .itemProvider { listDragProvider(for: node(for: hit)) }
-            // The hit's byte-exact id, not its path: a path's `==` is
-            // canonical equivalence, so two hits whose names differ only
-            // in Unicode normalization would share one selection.
-            .tag(hit.id)
-        }
-        .listStyle(.inset)
-        .focusOnClick($listIsFocused)
-        .contextMenu(forSelectionType: String.self) { ids in
-            restoreContextItem(ids) { hits.filter { ids.contains($0.id) }.map(node(for:)) }
-            if ids.count == 1, let id = ids.first, let hit = hits.first(where: { $0.id == id }) {
-                showVersionsItem(path: hit.path, isDirectory: hit.isDirectory)
-                if !hit.isDirectory, let record {
-                    // A hit is the index's, which carries no size, and the
-                    // preview's gate reads one: restic lists the file first.
-                    // Its restore needs only the kind, which the hit has.
-                    previewItem { [model, repositoryID] in
-                        try await model.listedNode(repositoryID: repositoryID, snapshotID: record.id, path: hit.path)
-                    }
+    private func isListingChanges(_ comparison: ChangeComparison?) -> Bool {
+        showsChangesOnly && comparison?.baseline != nil
+    }
+
+    /// What the backup changed, flat, so a change deep in a folder needs no
+    /// walking down to — deletions too, which the tree of this backup cannot
+    /// hold. Each row restores from the backup that holds it. Double-click
+    /// opens, never restores: a double-tap must not move bytes.
+    @ViewBuilder
+    private func changesList(shown: ChangeComparison?) -> some View {
+        if Self.isComparing(shown) {
+            ProgressView("Comparing…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if changeList.rows.isEmpty {
+            ContentUnavailableView("No changes", systemImage: "equal.circle")
+        } else if let record {
+            let unread = model.unreadItems(inBackup: record.id)
+            List(changeList.rows, selection: $selection) { row in
+                // Gone because this backup's own run could not read it, not
+                // because it left the disk.
+                let notRead = row.change.category == .removed ? unread.reason(for: row.path) : nil
+                HStack(spacing: 6) {
+                    Image(systemName: row.change.isDirectory ? "folder" : "doc")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                        .accessibilityLabel(row.change.isDirectory ? "Folder" : "File")
+                    Text(row.change.name)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(ResticPath.parent(of: row.path))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                    Text(notRead == nil ? row.change.category.displayName : "Not read")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .frame(width: 56, alignment: .leading)
+                        .help(notRead.map { "Not read by this backup (\($0)) — it may still be on this Mac" } ?? row.change.explanation)
                 }
+                .tag(row.id)
+            }
+            .listStyle(.inset)
+            .focusOnClick($listIsFocused)
+            .contextMenu(forSelectionType: String.self) { ids in
+                let rows = changeList.rows.filter { ids.contains($0.id) }
+                if !rows.isEmpty {
+                    Button(rows.count == 1 ? "Restore…" : "Restore \(Format.plural(rows.count, "Item"))…") {
+                        restoreChanges(rows)
+                    }
+                    .disabled(model.isRestoring)
+                }
+                if rows.count == 1, let row = rows.first, !row.change.isDirectory {
+                    showVersionsItem(path: row.path, isDirectory: false)
+                }
+            } primaryAction: { ids in
+                guard ids.count == 1, let row = changeList.rows.first(where: { ids.contains($0.id) }),
+                      !row.change.isDirectory,
+                      let holder = holder(of: row),
+                      let page = model.shelves(for: repositoryID).versionsPage(of: holder)
+                else { return }
+                router.showVersions(path: row.path, isDirectory: false, in: holder, repositoryID: repositoryID, page: page)
+            }
+            .onKeyPress(.return, phases: .down) { press in
+                guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
+                      !selectedChanges.isEmpty, !model.isRestoring
+                else { return .ignored }
+                restoreChanges(selectedChanges)
+                return .handled
             }
         }
+    }
+
+    private var selectedChanges: [BackupChanges.Row] {
+        guard !selection.isEmpty, isListingChanges(comparison) else { return [] }
+        return changeList.rows.filter { selection.contains($0.id) }
+    }
+
+    /// The backup of the two compared that holds a row's item: nil once the
+    /// older one is no longer listed.
+    private func holder(of row: BackupChanges.Row) -> Snapshot? {
+        guard let record, let baseline = comparison?.baseline,
+              model.snapshots(for: repositoryID).contains(where: { $0.id == baseline.id })
+        else { return nil }
+        return row.change.holder(newer: record, older: baseline)
+    }
+
+    private func restoreChanges(_ rows: [BackupChanges.Row]) {
+        let holders = Dictionary(rows.map { ($0.change.path, holder(of: $0)) }) { first, _ in first }
+        destinationRequest = RestoreDestinationRequest.picked(
+            DiffRestoreSelection.sources(rows.map(\.change)) { holders[$0.path] ?? nil },
+            repositoryID: repositoryID,
+            model: model
+        )
     }
 
     @ViewBuilder
@@ -424,8 +480,7 @@ struct RestorePaneView: View {
     }
 
     /// Right-click Restore on the clicked rows — the menu's own ids, not
-    /// the ambient selection — as Find Files' rows and the Compare sheet's
-    /// offer it. The request is built exactly as `restoreSelection()`
+    /// the ambient selection — as Search All Backups' rows offer it. The request is built exactly as `restoreSelection()`
     /// builds the selection's.
     @ViewBuilder
     private func restoreContextItem(_ ids: Set<String>, nodes: () -> [SnapshotNode]) -> some View {
@@ -453,30 +508,18 @@ struct RestorePaneView: View {
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
             title: "Restore…",
-            isEnabled: !selectedNodes.isEmpty && !model.isRestoring && record != nil,
+            isEnabled: hasSelection && !model.isRestoring && record != nil,
             run: { restoreSelection() }
         )
     }
 
     /// The pane's two ways out of a record, in one row: the primary Restore
-    /// for the selection on the right, and the drag named beside it. The
-    /// hint shows over a list whose rows drag — the tree, or a search's
-    /// hits; while a search lists hits and other backups hold more, the bar
-    /// says so and offers the way there — never both. The keep/replace
-    /// decision lives in the destination sheet, not as a permanent caption
-    /// under every browse.
+    /// for the selection on the right, and the drag named beside it, over the
+    /// tree whose rows drag. The keep/replace decision lives in the
+    /// destination sheet, not as a permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
-            // An empty result says it in the empty state, button included.
-            if let result = searchResult, !result.inThisBackup.isEmpty, let note = result.note {
-                Text(note)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                searchAllButton
-                    .controlSize(.small)
-                    .fixedSize()
-            } else if dragListIsShowing {
+            if dragListIsShowing {
                 Text("Drag an item to Finder to restore it there.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -486,52 +529,27 @@ struct RestorePaneView: View {
             Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(selectedNodes.isEmpty || model.isRestoring || record == nil)
+                .disabled(!hasSelection || model.isRestoring || record == nil)
                 .help("Restore the selected items from this backup")
         }
         .padding(12)
     }
 
     private var dragListIsShowing: Bool {
-        guard !isLoadingTree, loadError == nil else { return false }
-        if let searchResult { return !searchResult.inThisBackup.isEmpty }
+        guard !isLoadingTree, loadError == nil, !isListingChanges(comparison) else { return false }
         return !folderMissing && !tree.rows.isEmpty
     }
 
-    /// One title, help and guard wherever the pane offers it: Find Files
-    /// needs restic, as the Repository menu's item does.
-    private var searchAllButton: some View {
-        Button("Search All Backups") {
-            onSearchAllBackups(repositoryID, searchText.trimmingCharacters(in: .whitespaces))
-        }
-        .disabled(!model.isResticAvailable)
-        .help("Open Find Files with this search; other plans’ backups included")
+    private var hasSelection: Bool {
+        isListingChanges(comparison) ? !selectedChanges.isEmpty : !selectedNodes.isEmpty
     }
 
-    /// The nodes behind the current selection, in the list's order: tree
-    /// rows while browsing, synthesized hits while searching. Only rows on
-    /// screen count — a row whose folder is folded away is not restored
-    /// unseen.
+    /// The tree rows behind the current selection, in the list's order. Only
+    /// rows on screen count — a row whose folder is folded away is not
+    /// restored unseen.
     private var selectedNodes: [SnapshotNode] {
-        guard !selection.isEmpty else { return [] }
-        if let hits = searchResult?.inThisBackup {
-            return hits.filter { selection.contains($0.id) }.map(node(for:))
-        }
+        guard !selection.isEmpty, !isListingChanges(comparison) else { return [] }
         return tree.rows.filter { selection.contains($0.id) }.map(\.node)
-    }
-
-    /// A hit as the node its restore and its drag both get, made in one
-    /// place so the two cannot disagree. Hits are already filtered to paths
-    /// the selected backup contains and carry their kind in it — the index's
-    /// read of this backup — so the node goes straight to the restore, whose
-    /// file and folder routes differ (`RestoreSource.node`).
-    private func node(for hit: SearchHit) -> SnapshotNode {
-        let name = ResticPath.basename(of: hit.path)
-        return SnapshotNode(
-            name: name.isEmpty ? hit.path : name,
-            type: hit.isDirectory ? .dir : .file,
-            path: hit.path
-        )
     }
 
     private var selectedRow: SnapshotNode? {
@@ -575,11 +593,7 @@ struct RestorePaneView: View {
     /// " since Oct 7, 2026 at 11:00 PM" — the same for every row, so it is
     /// formatted once per render, not once per folder with changes.
     private var sinceBaseline: String {
-        let baseline: Snapshot? = switch comparison {
-        case let .comparing(baseline), let .compared(baseline, _), let .failed(baseline, _): baseline
-        case .firstBackup, nil: nil
-        }
-        return baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
+        comparison?.baseline.map { " since \(Format.timestamp($0.time))" } ?? ""
     }
 
     /// The record a drag names is the one the rows on screen were built
@@ -699,14 +713,8 @@ struct RestorePaneView: View {
 
     /// The selected record changed, or the pane was just shown: rebuild the
     /// tree, walk the preserved folder's spine back open, then open the
-    /// other roots, and load the change annotations. Search belongs to the
-    /// record it was searched in — a record switch takes both the hits and the query, so it never
-    /// shows another backup's search. A pane just shown keeps the query it
-    /// comes with — typed on a group's Overview, which turns the page to
-    /// Backups, or left when the tab was last shown — and runs it.
+    /// other roots, and load the change annotations.
     private func loadLevel() async {
-        searchResult = nil
-        if loadedSnapshotID != nil { searchText = "" }
         guard let record else {
             tree = FileTree(roots: [])
             comparison = nil
@@ -725,13 +733,8 @@ struct RestorePaneView: View {
 
         isLoadingTree = true
         loadError = nil
-        searchError = nil
         folderMissing = false
-        // The query the pane came with, against this record: after the
-        // resets above, which an index failure's answer must outlive, and
-        // once `loadedSnapshotID` names the record its answer must match.
-        // The field's own changes reach `searchChanged` as they are typed.
-        if !searchText.isEmpty { searchChanged(searchText) }
+        selection = showsChangesOnly ? [] : selection
 
         // Changes against the previous backup — one restic diff, streamed.
         // A record switch during the diff must not install the old record's
@@ -746,6 +749,7 @@ struct RestorePaneView: View {
             show: { marks in
                 changes = marks.changes
                 changesInside = marks.changesInside
+                changeList = marks.list
                 comparison = marks.comparison
             }
         )
@@ -844,76 +848,14 @@ struct RestorePaneView: View {
         }
     }
 
-    /// Search runs against the index (instant) and lists the paths the
-    /// selected record contains — the tree must stay honest about which
-    /// backup it is showing — while counting the matches only other backups
-    /// hold.
-    private func searchChanged(_ newValue: String) {
-        let query = newValue.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let record else {
-            searchTask?.cancel()
-            searchResult = nil
-            searchError = nil
-            // Clearing the search is a fresh look: a stale load error
-            // replaces the whole browser, and must not read as still failing.
-            loadError = nil
-            return
-        }
-        // The results must answer to what was typed and the record they were
-        // searched in: both are snapshotted before the awaits, and anything
-        // that lands after a keystroke or a record switch is discarded —
-        // same contract FindFilesView's search runs under.
-        let searchedRecordID = record.id
-        searchTask?.cancel()
-        searchTask = Task {
-            // An index failure is its own answer — a confident "no matches"
-            // would be the one lie a search tool cannot tell. The membership
-            // in the open backup comes from the same read, so it cannot fail
-            // apart from the search.
-            //
-            // Completeness is asked before the search, not after: a backup
-            // once read stays read, so an index complete before the query
-            // has read the open backup the hits are split against. Until
-            // then the open backup itself may be unread, and its own files
-            // would look as if only other backups held them — FindFilesView
-            // and the Files view ask the same.
-            let indexIsComplete = await model.indexIsComplete(repositoryID: repositoryID)
-            let found: (hits: [SearchHit], inSnapshot: [PathKey: Bool], isTruncated: Bool)
-            do {
-                // The hits, and which of them the open backup holds with
-                // their kind there. Every hit is held by some backup — the
-                // search returns no other path, in the same read — so the
-                // rest are the matches elsewhere.
-                found = try await model.searchIndexWithMembership(
-                    pattern: query, inSnapshot: searchedRecordID, repositoryID: repositoryID
-                )
-            } catch {
-                guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
-                searchResult = nil
-                searchError = error.localizedDescription
-                return
-            }
-            guard !Task.isCancelled, loadedSnapshotID == searchedRecordID else { return }
-            // The pane lists what the open backup holds; the rest is counted,
-            // not dropped — it is where "Search All Backups" leads.
-            searchResult = RestorePaneSearch(
-                hits: found.hits,
-                inRecord: found.inSnapshot,
-                isTruncated: found.isTruncated,
-                indexIsComplete: indexIsComplete
-            )
-            selection = []
-            // The index answered: an error from an earlier failed read or
-            // search must not sit in front of these results or behind them.
-            loadError = nil
-            searchError = nil
-        }
-    }
-
     /// The picked rows through the shared factory
     /// (`RestoreDestinationRequest.picked`): the covering rule and the
     /// sheet's wording live there, one rule for every selection restore.
     private func restoreSelection() {
+        if isListingChanges(comparison) {
+            restoreChanges(selectedChanges)
+            return
+        }
         guard let record else { return }
         destinationRequest = RestoreDestinationRequest.picked(
             selectedNodes.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },

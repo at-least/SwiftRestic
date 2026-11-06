@@ -591,43 +591,6 @@ struct IndexCoordinatorReadWrapperTests {
         return (scene, scene.coordinator, scene.repositoryID)
     }
 
-    @Test("changes answers added, removed and the removed folders, both ways round, and nil for what it has not read")
-    func changesUnderPath() async throws {
-        let (scene, coordinator, repositoryID) = try await makeScene()
-        defer { scene.remove() }
-        let planA = IndexTestData.planA
-
-        let forward = try await coordinator.changes(
-            underPath: "/data", inChain: planA, from: "s1", to: "s2", repositoryID: repositoryID
-        )
-        #expect(forward?.added == ["/data/b.txt", "/data/x.txt"])
-        #expect(forward?.removed == ["/data/a.txt", "/data/dir"])
-        #expect(forward?.removedFolders == [PathKey("/data/dir")])
-        #expect(forward?.modified.isEmpty == true)
-        #expect(forward?.uncertain.isEmpty == true)
-
-        let reverse = try await coordinator.changes(
-            underPath: "/data", inChain: planA, from: "s2", to: "s1", repositoryID: repositoryID
-        )
-        #expect(reverse?.added == ["/data/a.txt", "/data/dir"])
-        #expect(reverse?.removed == ["/data/b.txt", "/data/x.txt"])
-        #expect(reverse?.removedFolders.isEmpty == true)
-
-        // Nothing known is not "nothing changed": an unread snapshot and an
-        // unknown chain both answer nil.
-        #expect(
-            try await coordinator.changes(
-                underPath: "/data", inChain: planA, from: "nope", to: "s2", repositoryID: repositoryID
-            ) == nil
-        )
-        #expect(
-            try await coordinator.changes(
-                underPath: "/data", inChain: "swiftrestic-plan-other", from: "s1", to: "s2",
-                repositoryID: repositoryID
-            ) == nil
-        )
-    }
-
     @Test("search keeps the chain's own hits in name order, cut by the limit, with isInNewest from the chain's newest indexed")
     func searchWithinChain() async throws {
         let (scene, coordinator, repositoryID) = try await makeScene()

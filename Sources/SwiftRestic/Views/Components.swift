@@ -194,36 +194,6 @@ struct BannerView: View {
     }
 }
 
-struct StatTile: View {
-    let title: String
-    let value: String
-    var help: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(Theme.statValue)
-                .monospacedDigit()
-                .lineLimit(1)
-                // 75%, not less: these are the app's most prominent
-                // numerals, and shrinking further trades legibility for a
-                // fit a truncation ellipsis would serve better.
-                .minimumScaleFactor(0.75)
-        }
-        // Caption and value read as one utterance — as separate stops a row
-        // of tiles would cost VoiceOver twice the trips.
-        .accessibilityElement(children: .combine)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Space.cardPadding)
-        .cardSurface()
-        .modifier(TileHelp(help: help))
-    }
-}
-
 /// `.help` only when there is text to show; an empty tooltip would still hit.
 struct TileHelp: ViewModifier {
     let help: String?
@@ -252,60 +222,6 @@ struct HoverableButtonStyle: ButtonStyle {
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
             .onHover { isHovering = $0 }
-    }
-}
-
-/// A "Deleted:" line — or "Not read:", for what the backup's own run could
-/// not read — whose names are routes: each opens the item's versions at
-/// the backup before, which still holds it — the incomplete strip's
-/// grammar, inline. The names wear the accent, as a link does; the words
-/// around them stay secondary. Each tooltip is its own: one on the line
-/// would cover the names'.
-struct RemovedNamesLine: View {
-    let names: RemovedNames
-    let help: String
-    let before: Date
-    /// Opens a name's versions; nil where there is no Files tab to open
-    /// them on (a group's backups under Other backups), and the names are
-    /// words only.
-    let open: ((RemovedItem) -> Void)?
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text(names.label)
-                .help(help)
-            ForEach(Array(names.items.enumerated()), id: \.element) { index, item in
-                let standing = item.reason.map {
-                    "Not read by this backup — \($0); it may still be on this Mac. The backup of \(Format.timestamp(before)) has it"
-                } ?? "The backup of \(Format.timestamp(before)) has it"
-                if let open {
-                    Button { open(item) } label: {
-                        Text(verbatim: item.name)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .foregroundStyle(.tint)
-                    }
-                    .buttonStyle(HoverableButtonStyle())
-                    .help(standing + ". Show its versions")
-                } else {
-                    Text(verbatim: item.name)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(standing)
-                }
-                if index < names.items.count - 1 || names.more > 0 {
-                    Text(verbatim: ", ")
-                }
-            }
-            if names.more > 0 {
-                Text("and \(Format.count(names.more)) more")
-                    .help(help)
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .accessibilityElement(children: .contain)
     }
 }
 
@@ -507,8 +423,7 @@ struct OperationProgressView: View {
 /// The restore strip: while a restore runs, its progress is a fact above
 /// whatever surface is on screen, wired to the model's cancel. A restore
 /// outlives the pane that started it, so the strip's home is the window's
-/// detail column, above every pane; the panes add no copy of their own, and
-/// the Compare sheet carries one only while it covers that strip.
+/// detail column, above every pane; the panes add no copy of their own.
 struct RestoreProgressStrip: View {
     @Environment(AppModel.self) private var model
     /// Replaces an empty description. The app-level strip over the panes has
@@ -680,41 +595,6 @@ extension SnapshotNode {
         case .symlink: "Symbolic link"
         case .file: "File"
         default: "Special file"
-        }
-    }
-}
-
-/// The row a Files-view folder lists for one node: icon, name, its change
-/// mark and a file's size. (The restore pane's change-annotated row is
-/// its own shape.)
-struct SnapshotNodeRow: View {
-    let node: SnapshotNode
-    /// How it changed since the backup before — Added, Modified — in the
-    /// Restore pane's Change words; nil for unchanged.
-    var change: String? = nil
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: node.browserIconName)
-                .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
-                .frame(width: 16)
-                .accessibilityLabel(node.kindName)
-            Text(node.name)
-                .lineLimit(1)
-            Spacer()
-            if let change {
-                Text(change)
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-            // No Modified column: a folder as of a backup is chosen by the
-            // backup's moment, and a file's dates are its own pane's rows.
-            if !node.isDirectory {
-                Text(Format.bytes(node.size))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -1192,50 +1072,6 @@ struct UnreadableItemLine: View {
         if let plan {
             Button("Exclude from “\(model.label(of: plan))”") { isConfirmingExclude = true }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
-        }
-    }
-}
-
-/// A picker over a history of more than `DiffCandidateGrouping.flatMonthLimit`
-/// months, the shape `DiffCandidateGrouping.nested` answers with: the newest
-/// month's rows flat under its caption, each older month a submenu of its
-/// rows, a checkmark on the chosen one. The rows are Toggles, not a Picker
-/// per month: several Pickers sharing one selection would each warn of a
-/// tag none of their own rows carry. The Files pane's "As backed up" and
-/// the Compare sheet's "Compared with" are both this view.
-struct NestedMonthMenu<Item, Label: View>: View {
-    let nested: (flat: DiffCandidateGrouping.Month<Item>, submenus: [DiffCandidateGrouping.Month<Item>])
-    /// The row's identity, which `selected` names.
-    let id: KeyPath<Item, String>
-    /// The chosen row, resolved once by the caller: a pane whose nil means
-    /// the newest resolves it before asking, so no row scans for it.
-    let selected: String?
-    let select: (String) -> Void
-    let rowText: (Item) -> String
-    @ViewBuilder let label: () -> Label
-
-    var body: some View {
-        Menu {
-            Section(nested.flat.label) {
-                ForEach(nested.flat.items, id: id) { row($0) }
-            }
-            ForEach(nested.submenus, id: \.label) { month in
-                Menu(month.label) {
-                    ForEach(month.items, id: id) { row($0) }
-                }
-            }
-        } label: {
-            label()
-        }
-    }
-
-    private func row(_ item: Item) -> some View {
-        let itemID = item[keyPath: id]
-        return Toggle(isOn: Binding(
-            get: { selected == itemID },
-            set: { if $0 { select(itemID) } }
-        )) {
-            Text(verbatim: rowText(item))
         }
     }
 }

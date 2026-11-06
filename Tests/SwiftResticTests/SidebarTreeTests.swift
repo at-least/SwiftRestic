@@ -495,13 +495,13 @@ struct SidebarTreeTests {
         #expect(router.openFolders == [folder("/Data/Photos/2026"), folder("/Data/Photos/2026/Trip")])
         #expect(router.filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: tag)]
             == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
-        #expect(router.takeFilesVersionHint() == "b7")
+        #expect(router.filesChosenVersion[FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false)] == "b7")
         #expect(router.filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: tag)] == nil)
         // The tab is asked to look whether this Mac still has it.
         #expect(router.filesRevealRequest
             == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
         // Asked again for the item already selected, the pane opens anew:
-        // its identity moves, so it reads again and spends the hint.
+        // its identity moves, so it reads where to open again.
         let opening = router.filesPaneOpenings
         router.showVersions(
             path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,

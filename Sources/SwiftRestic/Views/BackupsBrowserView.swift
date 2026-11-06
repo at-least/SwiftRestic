@@ -18,9 +18,6 @@ struct BackupsBrowserView: View {
     let repositoryID: UUID
     /// The page's backups, newest first.
     let backups: [Snapshot]
-    /// "Search All Backups": the host opens Find Files on this repository
-    /// with the query filled in.
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     /// The list's width, dragged at its edge — the window's, kept across
     /// pages while it is open, as the Files tab's tree's is.
@@ -28,9 +25,6 @@ struct BackupsBrowserView: View {
     /// The view's own width, which bounds the drag: the pane keeps room for
     /// its tree.
     @State private var width: CGFloat = 0
-    /// Compare with Previous's sheet: what the backup changed, deletions
-    /// among them — the tree, being the backup's, shows only what it holds.
-    @State private var comparing: SnapshotDiffTarget?
 
     /// The backup the tab has open: the page's pick while the listing still
     /// holds it, else the newest — so a pick retention removed gives way to
@@ -60,11 +54,6 @@ struct BackupsBrowserView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .sheet(item: $comparing) { target in
-            SnapshotDiffView(target: target)
-                .environment(model)
-                .environment(router)
-        }
     }
 
     @ViewBuilder
@@ -82,8 +71,8 @@ struct BackupsBrowserView: View {
                     get: { openID },
                     set: { router.backupSelection[page] = $0 }
                 )) {
-                    // Past one month, a section per month (the Compare
-                    // sheet's months), so a deep history has landmarks.
+                    // Past one month, a section per month, so a deep history
+                    // has landmarks.
                     if let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time) {
                         ForEach(months, id: \.label) { month in
                             Section(month.label) {
@@ -95,19 +84,6 @@ struct BackupsBrowserView: View {
                     }
                 }
                 .listStyle(.inset)
-                // Activity's Compare with Previous, on the backup clicked —
-                // offered only where there is a previous backup of the same
-                // folders from the same Mac to compare with.
-                .contextMenu(forSelectionType: String.self) { ids in
-                    if ids.count == 1, let id = ids.first,
-                       let snapshot = backups.first(where: { $0.id == id }),
-                       SnapshotLineage.changeBaseline(for: id, in: model.snapshots(for: repositoryID)) != nil
-                    {
-                        Button("Compare with Previous") {
-                            comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
-                        }
-                    }
-                }
                 // A backup a route opened — a Files tab's Show in Backups, a
                 // run's Browse — may sit a year down the list: brought into
                 // view, a turn later because the list may gain its row in
@@ -134,20 +110,12 @@ struct BackupsBrowserView: View {
         if let open {
             RestorePaneView(
                 repositoryID: repositoryID,
-                snapshotID: open.id,
-                searchText: Binding(
-                    get: { router.backupsSearchText[page] ?? "" },
-                    set: { router.backupsSearchText[page] = $0 }
-                ),
-                onSearchAllBackups: onSearchAllBackups
+                snapshotID: open.id
             )
-                // Folder state and the record the search belongs to are one
-                // page's: another page — another plan's of the same
-                // repository too, which the root shows in the same view —
-                // must not carry paths, history or a search over, nor find
-                // its own query wiped as if it were a record switch
-                // (`RestorePaneView.loadLevel`). The pane's own @State resets
-                // with the identity.
+                // Folder state is one page's: another page — another plan's of
+                // the same repository too, which the root shows in the same
+                // view — must not carry paths or history over. The pane's own
+                // @State resets with the identity.
                 .id(page)
         } else {
             // Blank behind the list's own empty row — "Reading backups…",

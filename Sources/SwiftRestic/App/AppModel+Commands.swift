@@ -97,21 +97,10 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
-    /// The repository Find Files opens on: a "Search All Backups" hand-off's
-    /// wins; otherwise the window's selection by the Repository menu's own
-    /// rule — on Find Files itself, the repository it shows (`shown`), so
-    /// ⇧⌘F there keeps it and its results — and the first repository only
-    /// when that names none to look at (Activity, the console, nothing).
-    func findFilesRepositoryID(prefillRepositoryID: UUID?, selection: SidebarItem?, shown: UUID?) -> UUID? {
-        let onFindFiles = selection == .findFiles ? repository(id: shown)?.id : nil
-        return prefillRepositoryID ?? commandRepositoryID(for: selection) ?? onFindFiles ?? configuration.repositories.first?.id
-    }
-
-    /// The Files tab ⇧⌘F searches on this selection, by the roots its tree
+    /// The Files tab ⌘F searches on this selection, by the roots its tree
     /// hangs from: a plan's with a repository set, the one page whose Files
-    /// tab lists a tree. Nil on every other pane — a group's under Other
-    /// backups too, which has no Files tab — where it opens Find Files over
-    /// the whole repository.
+    /// tab lists a tree. Nil on every other pane, where it opens Search All
+    /// Backups.
     func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
         guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
         return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))

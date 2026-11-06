@@ -18,10 +18,18 @@ enum ChangeComparison: Equatable, Sendable {
 }
 
 extension ChangeComparison {
+    /// The backup compared with; nil for a first backup.
+    var baseline: Snapshot? {
+        switch self {
+        case let .comparing(baseline), let .compared(baseline, _), let .failed(baseline, _): baseline
+        case .firstBackup: nil
+        }
+    }
+
     /// The changes the Change column marks: the items this backup holds. A
     /// removal has no row in its tree, and counting one in a folder's tally
-    /// would promise a row the folder does not have; Compare with
-    /// Previous lists them.
+    /// would promise a row the folder does not have; Show Changes Only lists
+    /// them.
     static func heldChanges(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ResticDiffChange] {
         changes.filter { $0.value.category != .removed }
     }
@@ -65,21 +73,6 @@ extension ChangeComparison {
     }
 }
 
-/// An item a backup no longer holds that the one before it did: a
-/// "Deleted:" line's route to that copy's versions.
-struct RemovedItem: Hashable, Sendable {
-    var path: String
-    var isDirectory: Bool
-    /// Why the backup's own run could not read it (`UnreadItems.reason`):
-    /// set on a "Not read:" line's items, nil on a removal.
-    var reason: String? = nil
-
-    var name: String {
-        let last = ResticPath.basename(of: path)
-        return last.isEmpty ? path : last
-    }
-}
-
 /// What a backup's own run could not read (`AppModel.unreadItems(inBackup:)`),
 /// each item with restic's line, by its normalized path's bytes. restic
 /// leaves such an item — a folder with all it holds — out of the snapshot,
@@ -99,29 +92,6 @@ struct UnreadItems: Equatable, Sendable {
 
     func reason(for path: String) -> String? {
         item(holding: path).map { RunRecordPresentation.unreadableReason(line: $0.line, path: $0.path) }
-    }
-}
-
-/// What a "Deleted:" line names — a Files folder's change summary: the
-/// first few gone items, each a route, and how many more. Enough names to
-/// read on one line.
-struct RemovedNames: Equatable, Sendable {
-    static let shown = 3
-
-    var items: [RemovedItem]
-    var more: Int
-    var label: String
-
-    init(_ all: [RemovedItem], label: String = "Deleted: ") {
-        items = Array(all.prefix(Self.shown))
-        more = all.count - items.count
-        self.label = label
-    }
-
-    /// "Deleted: old.txt, sub, and 2 more" — the line as one string, for
-    /// VoiceOver and the tests.
-    var line: String {
-        label + (items.map(\.name) + (more > 0 ? ["and \(Format.count(more)) more"] : [])).joined(separator: ", ")
     }
 }
 

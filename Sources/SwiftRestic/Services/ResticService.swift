@@ -420,9 +420,8 @@ struct ResticService: ResticClient {
     /// the repository no longer holds is skipped with a warning on stderr;
     /// the rest still answer (restic 0.19.1).
     ///
-    /// `--no-lock`, as `listDirectory`, `diff`, `snapshots` and `stats`:
-    /// what a click in a Files tab or on Compare with Previous and a
-    /// refresh run. Locked, each would pay restic's 200 ms lock wait, fail
+    /// `--no-lock`, as `listDirectory`, `walkDiff`, `snapshots` and `stats`:
+    /// what a click in a Files tab or on a backup and a refresh run. Locked, each would pay restic's 200 ms lock wait, fail
     /// at once with exit 11 while retention's `forget` or a `prune` held
     /// the exclusive lock, and lock a starting `forget` out the same way.
     func find(
@@ -450,40 +449,10 @@ struct ResticService: ResticClient {
         }
     }
 
-    /// Compares two snapshots. `+` in the result means present only in `newer`.
-    ///
-    /// The change stream is unbounded, so it is collected through the message
-    /// callback and cut off at `SnapshotDiff.changeLimit` rather than kept whole.
-    /// Lock-free, for `find`'s reasons.
-    func diff(
-        _ context: RepositoryContext,
-        olderID: String,
-        newerID: String,
-        includeMetadata: Bool = false
-    ) async throws -> SnapshotDiff {
-        var args = ["diff", "--json", "--no-lock"]
-        if includeMetadata { args.append("--metadata") }
-        args += [olderID, newerID]
-
-        let collector = DiffCollector(limit: SnapshotDiff.changeLimit)
-        let outcome = try await run(
-            context,
-            ResticInvocation(
-                arguments: args,
-                retainMessages: false
-            ),
-            onMessage: { message in collector.consume(message) }
-        )
-        try Self.requireWhole(outcome, item: "diff")
-        var result = collector.result
-        result.olderID = olderID
-        result.newerID = newerID
-        return result
-    }
-
-    /// The uncapped diff the index applies after each backup. The stream is
-    /// unbounded, so the callback must consume incrementally. `--no-lock`
-    /// for the same reason `walkSnapshot` wears it.
+    /// The diff the index applies after each backup, and the Backups tab's
+    /// Change column and Show Changes Only read. The stream is unbounded, so
+    /// the callback must consume incrementally. `+` means present only in
+    /// `newer`. `--no-lock` for the same reason `walkSnapshot` wears it.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
@@ -991,34 +960,6 @@ struct ResticService: ResticClient {
             if case let .status(status) = message {
                 onProgress?(OperationProgress(status: status))
             }
-        }
-    }
-
-    private final class DiffCollector: @unchecked Sendable {
-        private let lock = NSLock()
-        private let limit: Int
-        private var diff = SnapshotDiff(olderID: "", newerID: "")
-
-        init(limit: Int) { self.limit = limit }
-
-        func consume(_ message: ResticMessage) {
-            lock.lock()
-            defer { lock.unlock() }
-            switch message {
-            case let .change(change):
-                if diff.changes.count < limit { diff.changes.append(change) }
-                else { diff.isTruncated = true }
-            case let .statistics(statistics):
-                diff.statistics = statistics
-            default:
-                break
-            }
-        }
-
-        var result: SnapshotDiff {
-            lock.lock()
-            defer { lock.unlock() }
-            return diff
         }
     }
 

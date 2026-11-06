@@ -364,26 +364,6 @@ struct StubRestic: Sendable {
                 esac
                 exit 0
                 ;;
-            difftruncated)
-                # A diff one line past the Compare sheet's cap
-                # (SnapshotDiff.changeLimit): the sheet must say it stopped
-                # short and still read the statistics, not render a cut-off
-                # answer as the whole. One awk process prints the changes.
-                trace "difftruncated-arm"
-                case " $* " in
-                    *" snapshots "*)
-                        echo "[]"
-                        ;;
-                    *" diff "*)
-                        awk 'BEGIN{for(i=0;i<20001;i++) printf "{\\"message_type\\":\\"change\\",\\"path\\":\\"/f%d\\",\\"modifier\\":\\"+\\"}\\n", i}'
-                        echo '{"message_type":"statistics","changed_files":20001,"added":{"files":20001,"dirs":0,"bytes":20001000},"removed":{"files":0,"dirs":0,"bytes":0}}'
-                        ;;
-                    *)
-                        echo "{}"
-                        ;;
-                esac
-                exit 0
-                ;;
             lsmalformed)
                 # A full `ls` that exits cleanly but whose third node line does
                 # not decode (a path that is not a string, as a restic newer
@@ -1271,15 +1251,6 @@ struct StubResticTests {
         #expect(!start.contains("--prune"), "start line: \(start)")
     }
 
-    @Test("the Compare sheet's diff with a line that did not decode fails, never shows the rest as the whole")
-    func compareDiffRefusesAGap() async throws {
-        let fixture = try makeFixture(mode: "diffmalformed")
-        defer { cleanUp(fixture.root) }
-        await #expect(throws: ResticError.malformedOutput(detail: "1 diff line did not decode")) {
-            _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe")
-        }
-    }
-
     @Test("the index's diff with a line that did not decode fails, never a short stream the index would close runs from")
     func walkDiffRefusesAGap() async throws {
         let fixture = try makeFixture(mode: "diffmalformed")
@@ -1287,18 +1258,6 @@ struct StubResticTests {
         await #expect(throws: ResticError.malformedOutput(detail: "1 change line did not decode")) {
             try await fixture.service.walkDiff(fixture.context, olderID: "feedface", newerID: "cafebabe") { _ in }
         }
-    }
-
-    @Test("a diff past the Compare sheet's cap keeps the cap's changes, says it stopped short, and still reads the statistics")
-    func diffTruncatesAtTheChangeLimit() async throws {
-        let fixture = try makeFixture(mode: "difftruncated")
-        defer { cleanUp(fixture.root) }
-
-        let diff = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe")
-
-        #expect(diff.changes.count == SnapshotDiff.changeLimit)
-        #expect(diff.isTruncated)
-        #expect(diff.statistics?.changedFiles == 20_001)
     }
 
     @Test("the reads a click or a refresh runs take no repository lock")
@@ -1309,7 +1268,7 @@ struct StubResticTests {
         _ = try await fixture.service.find(fixture.context, patterns: ["/src/a.txt"], ignoreCase: false, snapshotIDs: ["feedface"])
         _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
-        _ = try await fixture.service.diff(fixture.context, olderID: "feedface", newerID: "cafebabe", includeMetadata: false)
+        try await fixture.service.walkDiff(fixture.context, olderID: "feedface", newerID: "cafebabe") { _ in }
         // The refresh's size, which the default arm's "[]" does not decode as.
         _ = try? await fixture.service.stats(fixture.context, timeout: nil)
 

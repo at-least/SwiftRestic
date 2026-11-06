@@ -48,46 +48,6 @@ struct SnapshotDiffTests {
             #expect(ResticDiffChange(path: "/a", modifier: modifier).glyph == glyph, "modifier \(modifier)")
         }
     }
-
-    @Test("counts by category and remembers the order the IDs were passed in")
-    func diffCounts() throws {
-        var diff = SnapshotDiff(olderID: "old", newerID: "new")
-        for line in [
-            #"{"message_type":"change","path":"/a","modifier":"+"}"#,
-            #"{"message_type":"change","path":"/b","modifier":"+"}"#,
-            #"{"message_type":"change","path":"/c","modifier":"-"}"#,
-            #"{"message_type":"change","path":"/d","modifier":"MU"}"#,
-        ] {
-            if case let .change(change)? = ResticMessageDecoder.decode(line: line) {
-                diff.changes.append(change)
-            }
-        }
-        #expect(diff.count(of: .added) == 2)
-        #expect(diff.count(of: .removed) == 1)
-        #expect(diff.count(of: .modified) == 1)
-        #expect(diff.count(of: .metadataOnly) == 0)
-        #expect(diff.olderID == "old" && diff.newerID == "new")
-    }
-
-    @Test("path search matches case-insensitively on prepared lowercase forms")
-    func diffChangeSearch() {
-        let changes = [
-            ResticDiffChange(path: "/Users/me/Reports/Q3.PDF", modifier: "+"),
-            ResticDiffChange(path: "/Users/me/old.txt", modifier: "-"),
-            ResticDiffChange(path: "/Users/me/notes.md", modifier: "M"),
-        ]
-        let search = DiffChangeSearch(changes: changes)
-
-        #expect(search.matches(category: nil, needle: "q3.pdf").map(\.path)
-            == ["/Users/me/Reports/Q3.PDF"])
-        #expect(search.matches(category: .removed, needle: "USERS").map(\.path)
-            == ["/Users/me/old.txt"])
-        #expect(search.matches(category: .removed, needle: "q3.pdf").isEmpty)
-        #expect(search.matches(category: nil, needle: "   ").count == 3)
-        #expect(search.matches(category: nil, needle: "").count == 3)
-        #expect(search.matches(category: nil, needle: "zzz").isEmpty)
-        #expect(search.matches(category: nil, needle: "reports/q3").count == 1)
-    }
 }
 
 @Suite("Diff candidate grouping")
@@ -157,35 +117,64 @@ struct DiffCandidateGroupingTests {
         #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
     }
 
-    @Test("past three months the pickers nest: the newest month flat, each older one a submenu")
-    func nestedMonths() throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let day = { (iso: String) in ISO8601DateFormatter().date(from: iso)! }
-        let times = ["2026-04-02T09:00:00Z", "2026-03-20T09:00:00Z", "2026-02-10T09:00:00Z", "2026-01-05T09:00:00Z"].map(day)
-        let months = DiffCandidateGrouping.months(in: times, time: { $0 }, calendar: calendar)
-        let nested = try #require(DiffCandidateGrouping.nested(months))
-        #expect(nested.flat.label == "April 2026")
-        #expect(nested.flat.items == [times[0]])
-        #expect(nested.submenus.map(\.label) == ["March 2026", "February 2026", "January 2026"])
-        // Three months are captions in one list, as decided.
-        #expect(DiffCandidateGrouping.nested(Array(months.prefix(3))) == nil)
-    }
-
     @Test("empty input groups to nothing")
     func emptyInput() throws {
         #expect(DiffCandidateGrouping.months(in: []).isEmpty)
-        #expect(DiffCandidateGrouping.sharedDisplayedMinutes(in: []).isEmpty)
+    }
+}
+
+@Suite("Show Changes Only")
+struct BackupChangesTests {
+    private func changes(_ entries: [(String, String)]) -> [PathKey: ResticDiffChange] {
+        Dictionary(uniqueKeysWithValues: entries.map {
+            (PathKey(ResticPath.normalized($0.0)), ResticDiffChange(path: $0.0, modifier: $0.1))
+        })
     }
 
-    @Test("the shared-minute set names exactly the minutes two candidates display alike")
-    func sharedMinutes() throws {
-        let a = try snapshot("a", time: "2026-02-03T10:00:30Z")
-        let b = try snapshot("b", time: "2026-02-03T10:00:55Z")
-        let c = try snapshot("c", time: "2026-02-03T11:00:00Z")
+    @Test("lists every change by path, deletions and folders too, each with its normalized path")
+    func rows() {
+        let list = BackupChanges(changes: changes([
+            ("/d/z.txt", "+"), ("/d/a.txt", "-"), ("/d/sub/", "+"), ("/d/m.txt", "M"),
+        ]))
+        #expect(list.rows.map(\.path) == ["/d/a.txt", "/d/m.txt", "/d/sub", "/d/z.txt"])
+        #expect(list.rows.first?.change.category == .removed)
+        #expect(list.rows[2].change.isDirectory)
+        #expect(list.total == 4)
+        #expect(list.summary(dataAdded: nil) == "2 added, 1 deleted, 1 modified")
+    }
 
-        let shared = DiffCandidateGrouping.sharedDisplayedMinutes(in: [a, b, c])
-        #expect(shared == [DiffCandidateGrouping.displayedMinute(a.time)])
-        #expect(DiffCandidateGrouping.sharedDisplayedMinutes(in: [a]).isEmpty)
+    @Test("says the data the backup added, and nothing for a run that stored none")
+    func summaryWithData() {
+        let list = BackupChanges(changes: changes([("/a", "+")]))
+        #expect(list.summary(dataAdded: 2_000_000) == "1 added · \(Format.bytes(2_000_000)) of new data")
+        #expect(list.summary(dataAdded: 0) == "1 added")
+        #expect(BackupChanges(changes: [:]).summary(dataAdded: nil) == "No changes")
+    }
+
+    @Test("two names differing only in Unicode normalization are two rows")
+    func spellings() {
+        let list = BackupChanges(changes: changes([("/d/caf\u{e9}", "+"), ("/d/cafe\u{301}", "+")]))
+        #expect(Set(list.rows.map(\.id)).count == 2)
+    }
+
+    /// Built off the main actor when the diff lands (`RestorePaneLoad.run`); its
+    /// cost is what "why did this backup grow" waits on past the walk itself.
+    @Test("a diff past the limit keeps the counts whole, says it stopped, and builds in seconds")
+    func large() {
+        let count = 200_000
+        var entries: [PathKey: ResticDiffChange] = [:]
+        entries.reserveCapacity(count)
+        for index in 0 ..< count {
+            let path = "/data/folder\(index % 500)/file\(index)"
+            entries[PathKey(path)] = ResticDiffChange(path: path, modifier: index % 2 == 0 ? "+" : "M")
+        }
+        let started = ContinuousClock.now
+        let list = BackupChanges(changes: entries)
+        let elapsed = ContinuousClock.now - started
+        print("SHOW-CHANGES build: \(count) changes in \(elapsed)")
+        #expect(list.total == count)
+        #expect(list.rows.count == BackupChanges.rowLimit)
+        #expect(list.summary(dataAdded: nil).hasSuffix("Showing the first \(Format.count(BackupChanges.rowLimit))"))
+        #expect(elapsed < .seconds(10))
     }
 }

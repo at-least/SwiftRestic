@@ -68,25 +68,7 @@ struct ContentVersion: Sendable, Equatable, Identifiable {
     var id: String { snapshots[0].id }
 }
 
-/// What changed directly under a folder between two indexed snapshots of a
-/// chain, each child by its path, bytewise: one holds it and the other not
-/// — added or removed — or both hold a file whose content changed, which
-/// one diff between them said and every other step between them agrees
-/// with (`modified`, a kind change too), or may have — a step no diff
-/// compared, a file absent in between, or several changes that may undo
-/// one another (`uncertain`). A subfolder's own contents are its level's:
-/// the marks say nothing of them, and a change of metadata alone is never
-/// recorded.
-struct FolderChanges: Sendable, Equatable {
-    var added: [String] = []
-    var removed: [String] = []
-    var modified: [String] = []
-    var uncertain: [String] = []
-    /// The removed children that were folders, so a name can open its row.
-    var removedFolders: Set<PathKey> = []
-}
-
-/// A path's version list reduced to what Find Files shows: the newest
+/// A path's version list reduced to what Search All Backups shows: the newest
 /// indexed snapshot holding it, and how many of its chain's snapshots do —
 /// the count the Files tab its row opens lists, which is chain-scoped; a
 /// copy under another plan is that plan's to list. Output-light whatever
@@ -94,20 +76,6 @@ struct FolderChanges: Sendable, Equatable {
 struct VersionSummary: Sendable, Equatable {
     var count: Int
     var newest: IndexVersion
-}
-
-extension Array where Element == IndexVersion {
-    /// The version the Files view opens a folder at: the one the user was
-    /// reading one level up, when it holds this folder too — flipping
-    /// through time should survive walking down — else the one the user
-    /// last left this folder at, while a backup still holds it, else the
-    /// newest. The list arrives newest first from the index.
-    func preferredVersion(previousID: String?, rememberedID: String? = nil) -> IndexVersion? {
-        for id in [previousID, rememberedID].compactMap({ $0 }) {
-            if let kept = first(where: { $0.id == id }) { return kept }
-        }
-        return first
-    }
 }
 
 /// Version lists, newest first: `[IndexVersion]` for a folder,
@@ -128,18 +96,11 @@ extension Array where Element: Identifiable, Element.ID == String {
 }
 
 extension Array where Element == ContentVersion {
-    /// The version the Files view opens a file at, by the rule folders
-    /// follow (`preferredVersion(previousID:rememberedID:)`): the one
-    /// holding the backup the user was reading one level up, else the one
-    /// last left at — by its ID — else the newest.
-    func preferredVersion(previousID: String?, rememberedID: String?) -> ContentVersion? {
-        if let previousID, let kept = first(where: { $0.snapshots.contains { $0.id == previousID } }) {
-            return kept
-        }
-        if let rememberedID, let kept = first(where: { $0.id == rememberedID }) {
-            return kept
-        }
-        return first
+    /// The version holding `snapshotID` — a version's ID is its newest
+    /// backup's — else the newest.
+    func version(holding snapshotID: String?) -> ContentVersion? {
+        guard let snapshotID else { return first }
+        return first { $0.snapshots.contains { $0.id == snapshotID } } ?? first
     }
 }
 
@@ -224,7 +185,7 @@ struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConv
 /// whether it is a directory. From the index, the kind is the one in the
 /// newest indexed snapshot holding the path — a path can change kind over
 /// its history. The Restore pane replaces it with the kind in the open
-/// backup (`RestorePaneSearch`), since that is the snapshot it restores from.
+/// backup, since that is the snapshot it restores from.
 ///
 /// Identity and equality are byte-exact (`PathKey`): two hits whose names
 /// differ only in Unicode normalization are two paths, two rows and two
@@ -801,7 +762,7 @@ final class SnapshotIndex: @unchecked Sendable {
                 }
                 let edited = crossed(edits, &nextEdit)
                 let blind = crossed(blinds, &nextBlind) > 0
-                // `changes(underPath:)`'s rule: two or more edits may be a
+                // the rule: two or more edits may be a
                 // change undone across a backup forgotten since.
                 if upper.run != lower.run {
                     begins.append(.uncertain)
@@ -833,87 +794,6 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// What changed directly under `path` from `olderID` to `newerID`, two
-    /// indexed snapshots of one chain (`FolderChanges`) — a Files tab's
-    /// folder at one backup against the one before. Nil when either is not
-    /// an indexed snapshot of the chain, or the path is unknown: nothing is
-    /// known, which is not "nothing changed".
-    func changes(underPath path: String, inChain chainKey: String, from olderID: String, to newerID: String) async throws -> FolderChanges? {
-        try await pool.read { db -> FolderChanges? in
-            guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]) else {
-                return nil
-            }
-            let chainID: Int64 = chain[0]
-            guard let older = try Target.fetch(db, olderID), let newer = try Target.fetch(db, newerID),
-                  [older, newer].allSatisfy({ $0.chainID == chainID && $0.state == State.indexed })
-            else { return nil }
-            var lookup = try NodeLookup(db)
-            guard let parent = try lookup.folder(for: path) else { return nil }
-            /// Each child the snapshot at `seq` holds: the run claiming it
-            /// there, and its kind. Keyed by the name's bytes: two names that
-            /// differ only in Unicode normalization are two children.
-            func held(at seq: Int64) throws -> [PathKey: (run: Int64, isDirectory: Bool)] {
-                var result: [PathKey: (run: Int64, isDirectory: Bool)] = [:]
-                let rows = try Row.fetchAll(db.cachedStatement(sql: SQL.childrenAtSeq), arguments: [chainID, seq, seq, parent])
-                for row in rows {
-                    let name: String = row[0]
-                    let run: Int64 = row[1]
-                    let isDirectory: Bool = row[2]
-                    result[PathKey(name)] = (run, isDirectory)
-                }
-                return result
-            }
-            let before = try held(at: older.seq)
-            let after = try held(at: newer.seq)
-            // Marks sit at the upper seq of the pair they describe, in
-            // arrival order, which a back-dated backup can put the other way
-            // round from time.
-            let (low, high) = (min(older.seq, newer.seq), max(older.seq, newer.seq))
-            // How many diffs between the two said each file changed. One
-            // means the content differs: every step between them was diffed
-            // or is a blind, and only that one changed it. Two or more may
-            // be a change undone — across a backup forgotten since, or a
-            // pair of backups not side by side — so they only may have.
-            var edits: [PathKey: Int] = [:]
-            for name in try String.fetchAll(
-                db.cachedStatement(sql: SQL.childEditsBetween), arguments: [chainID, low, high, parent]
-            ) {
-                edits[PathKey(name), default: 0] += 1
-            }
-            let blind = try !Int64.fetchAll(
-                db.cachedStatement(sql: SQL.blindSeqs), arguments: [chainKey, low, high]
-            ).isEmpty
-            let prefix = path == "/" ? "" : path
-            var changes = FolderChanges()
-            for name in Set(before.keys).union(after.keys).sorted(by: { Self.bytesLess($0.path, $1.path) }) {
-                let child = prefix + "/" + name.path
-                guard let was = before[name] else {
-                    changes.added.append(child)
-                    continue
-                }
-                guard let now = after[name] else {
-                    changes.removed.append(child)
-                    if was.isDirectory { changes.removedFolders.insert(PathKey(child)) }
-                    continue
-                }
-                if was.isDirectory != now.isDirectory {
-                    changes.modified.append(child)
-                } else if now.isDirectory {
-                    // A folder's own contents are its level's to say.
-                    continue
-                } else if was.run != now.run {
-                    // Absent in between: nothing compared the two.
-                    changes.uncertain.append(child)
-                } else if edits[name] == 1, !blind {
-                    changes.modified.append(child)
-                } else if edits[name] != nil || blind {
-                    changes.uncertain.append(child)
-                }
-            }
-            return changes
-        }
-    }
-
     /// Per path: the newest indexed snapshot holding it and how many of its
     /// chain's snapshots do — that chain's `versions(ofPath:inChain:).first`
     /// and `.count`, without materialising a list that can run to
@@ -922,7 +802,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// (`summaries`), where that list puts the later arrival first. Unknown
     /// paths, and paths with no indexed version, are absent. Keyed by the
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
-    /// their own answers. Find Files reads the summaries inside its search
+    /// their own answers. Search All Backups reads the summaries inside its search
     /// (`searchWithSummaries`); this path-keyed form is what the tests hold
     /// that read to, as `versions(ofPath:inChain:)` is the Files view's read.
     func versionSummaries(ofPaths paths: [String]) async throws -> [PathKey: VersionSummary] {
@@ -997,7 +877,7 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// `searchPaths`, plus each hit's version summary — Find Files' rows —
+    /// `searchPaths`, plus each hit's version summary — Search All Backups' rows —
     /// in the same read, keyed by the node ids the search already has.
     func searchWithSummaries(matching query: String, limit: Int) async throws -> SearchWithSummaries {
         let match = Self.ftsQuery(from: query)

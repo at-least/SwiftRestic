@@ -13,8 +13,6 @@ struct OtherGroupView: View {
     /// Opens the adopt sheet for a plan-UUID group — the root owns the
     /// presenting state, as it does for every sheet a pane raises.
     let onAdopt: (_ planID: UUID) -> Void
-    /// The Backups tab's "Search All Backups": Find Files, prefilled.
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var summary: OtherGroupPageSummary? {
         model.shelves(for: repositoryID).otherGroupPage(
@@ -37,8 +35,7 @@ struct OtherGroupView: View {
                     BackupsBrowserView(
                         page: page,
                         repositoryID: repositoryID,
-                        backups: groupBackups,
-                        onSearchAllBackups: onSearchAllBackups
+                        backups: groupBackups
                     )
                 }
             } else {
@@ -50,7 +47,7 @@ struct OtherGroupView: View {
         }
         .navigationTitle(summary?.title ?? "Backups")
         .navigationSubtitle(subtitle)
-        .backupsPageSearch(page: page)
+        .allBackupsSearch()
     }
 
     /// The group's backups, newest first.

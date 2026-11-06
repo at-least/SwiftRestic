@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Compare sheet's rows as restore sources (`RestoreSelection`): each
+/// Show Changes Only's rows as restore sources (`RestoreSelection`): each
 /// from the backup of the two that holds it (`ResticDiffChange.holder`),
 /// with no node — a diff names a path and a kind, never a node, so the
 /// restore finds it in that backup (`RestoreSource.node`). A row whose

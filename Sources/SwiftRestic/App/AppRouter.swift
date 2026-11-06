@@ -93,16 +93,9 @@ final class AppRouter {
     /// there when the page is shown again.
     var filesSearchText: [FileNode: String] = [:]
 
-    /// What each page's Backups tab is searching the open backup for, by
-    /// the page, as typed in the toolbar's search field. Transient; a
-    /// record switch clears it, and so does a route to a backup
-    /// (`showBackup`), the search belonging to the backup it ran in — the
-    /// tab shown again keeps it.
-    var backupsSearchText: [SidebarItem: String] = [:]
-
     /// The page whose toolbar search field takes the keyboard focus next —
-    /// ⇧⌘F, and Find Files on arrival. The page spends it once its field
-    /// has the focus.
+    /// ⌘F, and Search All Backups on arrival. The page spends it once its
+    /// field has the focus.
     var searchFocus: SidebarItem?
 
     func searchFiles(on page: SidebarItem) {
@@ -110,49 +103,43 @@ final class AppRouter {
         searchFocus = page
     }
 
-    /// Find Files' search as typed in its toolbar field — and in a
-    /// repository page's, which hands it over on Return. Transient, kept
-    /// while the app runs: coming back to Find Files finds it.
+    /// Search All Backups' query as typed in its toolbar field — and in a
+    /// repository's page's, which hands it over on Return. Transient, kept
+    /// while the app runs: coming back to the page finds it.
     var findQuery = ""
 
-    var findRepositoryID: UUID?
+    /// The plan a search came from, for the page's way back to it.
+    struct FindOrigin: Equatable {
+        var page: SidebarItem
+        var roots: FileNode
+    }
 
-    /// A search Find Files runs as it arrives — Search All Backups's and a
-    /// repository page's Return, which asked for it — whichever engine
-    /// answers. Find Files spends it.
-    var findRunsOnArrival = false
+    private(set) var findOrigin: FindOrigin?
 
-    func openFind(repositoryID: UUID?, query: String? = nil, run: Bool = false) {
-        findRepositoryID = repositoryID
+    func openFind(query: String? = nil, from origin: FindOrigin? = nil) {
         if let query { findQuery = query }
-        findRunsOnArrival = run
+        findOrigin = origin
         searchFocus = .findFiles
         selection = .findFiles
     }
 
-    /// Find Files' repository, let go once it is removed: the picker has
-    /// no row for it, and its results would offer restores against it.
-    func revalidateFindRepository(repositories: [Repository]) {
-        if let id = findRepositoryID, !repositories.contains(where: { $0.id == id }) {
-            findRepositoryID = nil
-        }
+    /// Search All Backups' This Plan: the plan's Files tab, the query kept.
+    func returnToPlanSearch() {
+        guard let origin = findOrigin else { return }
+        filesSearchText[origin.roots] = findQuery
+        searchFiles(on: origin.page)
+        selection = origin.page
     }
 
-    /// The backup a folder's listing was read from when one of its items
-    /// was opened from it: the item's pane opens at it when the item exists
-    /// then, so walking down keeps the era. Transient; the next Files pane
-    /// to load spends it, whichever item that is.
-    @ObservationIgnored var filesVersionHint: String?
-
-    /// The backup each Files pane was left at, by its item — a folder's
-    /// backup, a file's version by its newest backup — so coming back to
-    /// the item, from Show in Backups or another page, finds it as it was
-    /// read. Transient; a pane reads it as it opens, never while shown.
+    /// The backup each file's pane opens at — the version left at, or the
+    /// one Show Versions named — so coming back to the file from another page
+    /// finds it as it was read. Transient; a pane reads it as it opens, never
+    /// while shown.
     @ObservationIgnored var filesChosenVersion: [FileNode: String] = [:]
 
     /// Bumped by Show Versions, so the Files pane opens again — at the
     /// backup it names — even for the item already selected, whose pane
-    /// would otherwise keep its backup and leave the hint for the next.
+    /// would otherwise keep its backup.
     private(set) var filesPaneOpenings = 0
 
     /// An item the Files tab was asked to show — Show Versions', a search
@@ -184,7 +171,7 @@ final class AppRouter {
         filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = nil
         filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
         filesRevealRequest = item
-        filesVersionHint = record.id
+        filesChosenVersion[item] = record.id
         filesPaneOpenings += 1
         selection = page
     }
@@ -198,11 +185,6 @@ final class AppRouter {
 
     func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
         Binding(get: { self.tab(of: page) }, set: { self.setTab($0, of: page) })
-    }
-
-    func takeFilesVersionHint() -> String? {
-        defer { filesVersionHint = nil }
-        return filesVersionHint
     }
 
     /// The main window's `openWindow` action, parked by the root view the
@@ -228,14 +210,11 @@ final class AppRouter {
     }
 
     /// A plain route clears an older focus request rather than inheriting
-    /// it, and the page's search: a query left on its Backups tab, searched
-    /// in another backup, would stand over the record and the folder the
-    /// route opens.
+    /// it.
     func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
         }
-        backupsSearchText[page] = nil
         backupSelection[page] = snapshotID
         // A group's page is its backups, with no tab to turn; the choice
         // stays as it was for the next plan's page.

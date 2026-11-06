@@ -26,9 +26,6 @@ struct FilesBrowserView: View {
     /// The plan's page, whose Backups tab the tab points to when the
     /// folder can't be read.
     let page: SidebarItem
-    /// A search with no match offers Find Files over the whole repository,
-    /// prefilled — other plans' backups included. The root presents it.
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     @FocusState private var treeIsFocused: Bool
     @FocusState private var hitsAreFocused: Bool
@@ -299,22 +296,26 @@ struct FilesBrowserView: View {
             switch answer.outcome {
             case let .failed(message):
                 // A broken index is its own answer: never a "no matches".
-                FailureUnavailableView(title: "Search failed", message: message)
+                IndexFailureView(title: "Search failed", message: message, repositoryID: roots.repositoryID)
             case let .hits(entries) where entries.isEmpty:
-                // Not a dead end: other plans' backups, and — while the index
-                // reads — the backups it has not reached, are Find Files'.
-                ContentUnavailableView {
-                    Label("No matches", systemImage: "magnifyingglass")
-                } description: {
-                    Text(answer.isComplete
-                        ? "Nothing in this plan’s backups matches. Each word you type matches the start of a word in a name."
-                        : FilesSearchAnswer.searchStillReading)
-                } actions: {
-                    Button("Search All Backups") { onSearchAllBackups(roots.repositoryID, query) }
-                        .help("Open Find Files with this search; other plans’ backups included")
+                VStack(spacing: 0) {
+                    scopeBar
+                    Divider()
+                    ContentUnavailableView {
+                        Label("No matches", systemImage: "magnifyingglass")
+                    } description: {
+                        Text(answer.isComplete
+                            ? "Nothing in this plan’s backups matches. Each word you type matches the start of a word in a name."
+                            : FilesSearchAnswer.searchStillReading)
+                    } actions: {
+                        Button("Search All Backups") { searchAllBackups() }
+                    }
+                    .frame(maxHeight: .infinity)
                 }
             case let .hits(entries):
                 VStack(spacing: 0) {
+                    scopeBar
+                    Divider()
                     List(selection: selection) {
                         ForEach(entries) { entry in
                             FilesSearchRow(entry: entry, folder: FilesSearchAnswer.folderLine(for: entry.node.path, under: rootEntries))
@@ -353,6 +354,18 @@ struct FilesBrowserView: View {
         return .handled
     }
 
+    /// This Plan | All Backups, over a search's hits.
+    private var scopeBar: some View {
+        SearchScopePicker(scope: .thisPlan, onChange: searchAllBackups)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+    }
+
+    private func searchAllBackups() {
+        router.openFind(query: query, from: AppRouter.FindOrigin(page: page, roots: roots))
+    }
+
     /// Answers the query, and again every `recheckInterval` while the index
     /// is still reading the repository — the tree's own rule — so hits from
     /// backups it reads meanwhile fill in. One read of the index, no restic,
@@ -367,10 +380,11 @@ struct FilesBrowserView: View {
             // Asked before the search: a backup once read stays read, so an
             // index complete beforehand has read every backup the hits come
             // from.
-            let complete = await model.indexIsComplete(repositoryID: roots.repositoryID)
+            var complete = false
             let outcome: FilesSearchAnswer.Outcome
             var isTruncated = false
             do {
+                complete = try await model.indexIsComplete(repositoryID: roots.repositoryID)
                 let found = try await model.searchIndex(
                     pattern: query, inChain: roots.chainKey, repositoryID: roots.repositoryID
                 )
@@ -453,7 +467,7 @@ struct FilesBrowserView: View {
     @ViewBuilder
     private var pane: some View {
         if let selected {
-            FilesPaneView(node: selected, onOpen: open)
+            FilesPaneView(node: selected)
                 // Each item's version state is its own, and Show Versions
                 // opens it anew.
                 .id(FilesPaneIdentity(node: selected, opening: router.filesPaneOpenings))
@@ -473,17 +487,6 @@ struct FilesBrowserView: View {
     /// so a file's name lines up with a folder's.
     private static func indent(_ depth: Int) -> CGFloat {
         CGFloat(depth) * (FilesTreeRow.foldWidth + 4)
-    }
-
-    /// Opens an item of the selected folder's listing in the tree, at the
-    /// backup the listing was read from: the folder opens so the item's row
-    /// is there to select, and walking down keeps the era — Show Deleted
-    /// Items too, when the tree lists it only as deleted (`reveal`).
-    private func open(_ item: FileNode, versionID: String) {
-        if let selected { router.openFolders.insert(selected) }
-        router.filesVersionHint = versionID
-        router.filesSelection[roots] = item
-        router.filesRevealRequest = item
     }
 
     /// Spoken when it folds: the fold is a button, whose changed value
@@ -529,35 +532,41 @@ extension View {
 extension View {
     /// A plan's page's search, in the window toolbar's trailing field — the
     /// HIG's place for it ("Put a search field at the trailing side of the
-    /// toolbar for many common uses"). Its scope follows the tab: on Backups, the
-    /// open backup; on Files and Overview, the page's files across every
-    /// backup — typed on Overview, the page turns to Files, where the hits
-    /// list. ⇧⌘F focuses it (`AppRouter.searchFocus`).
-    func pageSearch(page: SidebarItem, roots: FileNode?, filesPrompt: String) -> some View {
-        modifier(PageSearch(page: page, files: PageSearch.Files(roots: roots, prompt: filesPrompt)))
+    /// toolbar for many common uses"): the plan's files across every backup.
+    /// Typed on another tab, the page turns to Files, where the hits list. ⌘F
+    /// focuses it (`AppRouter.searchFocus`).
+    func pageSearch(page: SidebarItem, roots: FileNode?, prompt: String) -> some View {
+        modifier(PageSearch(page: page, roots: roots, prompt: prompt))
     }
 
-    /// A group's page's search under Other backups, the same field: the
-    /// open backup on either tab, the page having no Files tab — typed on
-    /// Overview, the page turns to Backups, where its newest backup opens
-    /// unless another was picked.
-    func backupsPageSearch(page: SidebarItem) -> some View {
-        modifier(PageSearch(page: page, files: nil))
+    /// The toolbar's field on a page with no Files tab: Return hands the query
+    /// to Search All Backups, which answers as it is typed from then on.
+    func allBackupsSearch() -> some View {
+        modifier(AllBackupsSearchField())
+    }
+}
+
+private struct AllBackupsSearchField: ViewModifier {
+    @Environment(AppRouter.self) private var router
+    @State private var text = ""
+
+    func body(content: Content) -> some View {
+        content
+            .searchable(text: $text, placement: .toolbar, prompt: Text("Search all backups"))
+            .onSubmit(of: .search) {
+                router.openFind(query: text)
+                text = ""
+            }
     }
 }
 
 private struct PageSearch: ViewModifier {
-    struct Files {
-        /// The chain the tab lists; nil for a plan with no repository,
-        /// which has nothing to search.
-        let roots: FileNode?
-        let prompt: String
-    }
-
     @Environment(AppRouter.self) private var router
     let page: SidebarItem
-    /// Nil on a page with no Files tab: a group's.
-    let files: Files?
+    /// The chain the tab lists; nil for a plan with no repository, which has
+    /// nothing to search.
+    let roots: FileNode?
+    let prompt: String
     @FocusState private var isFocused: Bool
 
     func body(content: Content) -> some View {
@@ -567,33 +576,19 @@ private struct PageSearch: ViewModifier {
             .onChange(of: router.searchFocus, initial: true) { _, asked in
                 guard asked == page else { return }
                 router.searchFocus = nil
-                // A turn later: ⇧⌘F may have switched the tab in this
-                // update, and the field takes the focus once it is there.
+                // A turn later: ⌘F may have switched the tab in this update,
+                // and the field takes the focus once it is there.
                 Task { @MainActor in isFocused = true }
             }
     }
 
-    private var onBackups: Bool { files == nil || router.tab(of: page) == .backups }
-
-    private var prompt: String { onBackups ? "Search this backup" : files?.prompt ?? "" }
-
     private var text: Binding<String> {
         Binding(
-            get: {
-                if onBackups { return router.backupsSearchText[page] ?? "" }
-                return files?.roots.flatMap { router.filesSearchText[$0] } ?? ""
-            },
+            get: { roots.flatMap { router.filesSearchText[$0] } ?? "" },
             set: { newValue in
-                if onBackups {
-                    router.backupsSearchText[page] = newValue
-                    if !newValue.isEmpty, router.tab(of: page) == .overview {
-                        router.setTab(.backups, of: page)
-                    }
-                    return
-                }
-                guard let roots = files?.roots else { return }
+                guard let roots else { return }
                 router.filesSearchText[roots] = newValue
-                if !newValue.isEmpty, router.tab(of: page) == .overview {
+                if !newValue.isEmpty, router.tab(of: page) != .files {
                     router.setTab(.files, of: page)
                 }
             }

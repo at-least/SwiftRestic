@@ -1,92 +1,49 @@
 import SwiftUI
 
-/// Find Files: searches every backup of a repository for a file, and
-/// restores what it finds — a page of the main window, as the console is,
-/// with its query in the toolbar's search field, where the HIG puts search
-/// ("Put a search field at the trailing side of the toolbar for many
-/// common uses"). Not a sheet: its restores would stack a second sheet on
-/// it ("Display only one sheet at a time").
+/// Search All Backups: every repository's index, as the query is typed in the
+/// toolbar field — the "I deleted something months ago and don't know which
+/// backup has it" case. A page, not a sheet: its restores would stack a second
+/// sheet on it.
 ///
-/// This is the "I deleted something months ago and don't know which backup has
-/// it" case, which browsing backup by backup does not solve.
-///
-/// Two engines sit behind one table. When the repository's index has finished
-/// its backfill, the search runs against the local FTS index — instant, every
-/// backup, no network — as the query is typed. Otherwise the search falls
-/// back to `restic find`, which walks the trees and takes as long as the
-/// history is deep, so it runs on Return, not per keystroke.
+/// The index is the one engine: instant, no network, works with the disk
+/// away. What it has not read yet it cannot find, so this is the route to
+/// getting a file back only while the page says, by repository, what it could
+/// not search: an index still reading, an unreachable repository, a failed
+/// index. Its rows stay beside those lines.
 struct FindFilesView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(\.now) private var now
 
     @State private var previewer = PreviewSession()
-    @State private var latestOnly = false
-    /// The table's rows, built once when a search's results land. A computed
-    /// property would rebuild the snapshot-time dictionary and re-sort on
-    /// every re-render — every keystroke in the field — though a row's
-    /// snapshot id (and therefore its time) is fixed by the search that
-    /// produced it.
-    @State private var rows: [Row] = []
-    /// Whether the repository's index has finished its backfill. nil = not
-    /// known yet for the selected repository.
-    @State private var indexComplete: Bool?
-    /// Several at a time, as in a backup's tree: Restore Selected
-    /// (Return) restores them together, each from its row's backup.
+    /// The latest answer, with the query it answers: nil before one lands.
+    @State private var answer: (query: String, search: AllBackupsSearch)?
+    /// Several at a time, as in a backup's tree: Restore Selected (Return)
+    /// restores them together, each from its row's backup.
     @State private var selection = Set<String>()
-    @State private var errorMessage: String?
-    @State private var hasSearched = false
-    /// Whether the search that last landed covered only the latest backup —
-    /// the checkbox as it stood when that search ran, not as it stands now —
-    /// so a no-match state is true to what was searched.
-    @State private var searchedLatestOnly = false
-    @State private var searchTask: Task<Void, Never>?
-    private var isSearching: Bool { searchTask != nil }
-    /// True when the index search stopped early — the index holds more
-    /// hits than the cap, or (not expected, see `FindResultGrouping.indexRows`)
-    /// a hit came without its summary. The footer says so; a truncated list must not
-    /// pass for the whole answer.
-    @State private var resultsTruncated = false
     /// The toolbar field, focused on arrival — the page exists to answer one
-    /// question — and by ⇧⌘F.
+    /// question — and by ⌘F.
     @FocusState private var searchIsFocused: Bool
-    /// Taken by a click in the results (`focusOnClick`): left in the
-    /// field, Return would search again — clearing the selection — instead
-    /// of reaching Restore Selected.
+    /// Taken by a click in the results (`focusOnClick`): left in the field,
+    /// Return would go nowhere instead of reaching Restore Selected.
     @FocusState private var resultsAreFocused: Bool
-    /// The restore waiting in the destination sheet — over the window, the
-    /// one sheet up.
     @State private var destinationRequest: RestoreDestinationRequest?
 
-    private var repositoryID: UUID? { router.findRepositoryID }
+    private var query: String {
+        router.findQuery.trimmingCharacters(in: .whitespaces)
+    }
 
-    private var pattern: String { router.findQuery }
+    private var search: AllBackupsSearch? {
+        answer.flatMap { $0.query == query ? $0.search : nil }
+    }
 
-    private struct Row: Identifiable {
-        /// Byte-exact in the path (`PathKey.hex`): two paths whose names
-        /// differ only in Unicode normalization are two rows, never one.
-        /// Stored: SwiftUI reads it on every diff of the table.
-        let id: String
-        let match: FindMatch
-        let snapshotID: String
-        let snapshotTime: Date?
-        /// How many backups hold the path: every indexed one for an index
-        /// row, every searched one for a restic row — none for a search of
-        /// the latest snapshot only, which looked at one.
-        let versionsCount: Int?
-        /// Index rows carry the search hit; a restore resolves the node from
-        /// the row's snapshot first, whatever kind the hit says
-        /// (`RestoreSource.node`).
-        let hit: SearchHit?
+    private var rows: [AllBackupsSearch.Row] { search?.rows ?? [] }
 
-        init(match: FindMatch, snapshotID: String, snapshotTime: Date?, versionsCount: Int? = nil, hit: SearchHit? = nil) {
-            id = "\(snapshotID)/\(PathKey(match.path).hex)"
-            self.match = match
-            self.snapshotID = snapshotID
-            self.snapshotTime = snapshotTime
-            self.versionsCount = versionsCount
-            self.hit = hit
-        }
+    /// A search's key: the query, and what can change its answer — a
+    /// repository added or removed, a listing the index took.
+    private struct SearchKey: Equatable {
+        let query: String
+        let repositories: [UUID]
+        let taken: [UUID: UInt64]
     }
 
     var body: some View {
@@ -94,27 +51,26 @@ struct FindFilesView: View {
         VStack(spacing: 0) {
             controls
             Divider()
+            if let search, !search.failures.isEmpty || !search.stillReading.isEmpty {
+                standing(search)
+                Divider()
+            }
             // The page's height, whatever stands in for the table: an empty
             // state alone would hug its text and float the page mid-window.
-            resultsPane(rows)
+            results
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
-            footer(rows)
+            footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .restoreCommand(restore)
-        // The repository is the page's own picker, not a subtitle as well.
-        .navigationTitle("Find Files")
-        // The prompt has to be verbatim: a literal string is a
-        // LocalizedStringKey, which SwiftUI parses as Markdown — the
-        // asterisks in a glob would be eaten as emphasis markers.
+        .navigationTitle("Search All Backups")
         .searchable(
             text: $router.findQuery,
             placement: .toolbar,
-            prompt: Text(verbatim: indexComplete == true ? "File name, such as invoice or keynote" : "File name or pattern, such as invoice or *.key")
+            prompt: Text(verbatim: "File name, such as invoice or keynote")
         )
         .searchFocused($searchIsFocused)
-        .onSubmit(of: .search) { search() }
         .previewSession(previewer)
         .sheet(item: $destinationRequest) { request in
             RestoreDestinationSheet(request: request)
@@ -125,32 +81,17 @@ struct FindFilesView: View {
             router.searchFocus = nil
             searchIsFocused = true
         }
-        .onAppear {
-            // A handed-over search runs at once; `search` picks the engine.
-            if router.findRunsOnArrival {
-                router.findRunsOnArrival = false
-                search()
-            }
-        }
-        // The index-state check re-runs when the repository changes and is
-        // cancelled when the page leaves, so a late answer cannot write
-        // into state the page no longer owns. The previous repository's
-        // answer goes first: it is not this one's.
-        .task(id: repositoryID) {
-            indexComplete = nil
-            guard let repositoryID else { return }
-            let ready = await model.indexIsComplete(repositoryID: repositoryID)
-            guard !Task.isCancelled else { return }
-            indexComplete = ready
-        }
-        // Search as it is typed, the HIG's "If possible, start search
-        // immediately when a person types" — against the index only, whose
-        // answer is instant; restic's walk waits for Return. A pause of a
-        // keystroke's length first, so a word typed is one search.
-        .task(id: TypingKey(pattern: pattern, repositoryID: repositoryID, indexIsComplete: indexComplete == true)) {
-            guard indexComplete == true else { return }
-            guard !pattern.trimmingCharacters(in: .whitespaces).isEmpty else {
-                cancelSearch()
+        // As it is typed, a keystroke's pause first so a word typed is one
+        // search; and again every `recheckInterval` while an index reads, so
+        // hits from the backups it reaches meanwhile fill in.
+        .task(id: SearchKey(
+            query: query,
+            repositories: model.configuration.repositories.map(\.id),
+            taken: model.indexTakenGeneration
+        )) {
+            guard !query.isEmpty else {
+                answer = nil
+                selection = []
                 return
             }
             do {
@@ -158,415 +99,344 @@ struct FindFilesView: View {
             } catch {
                 return
             }
-            search()
+            await searchUntilSettled()
         }
-        .onDisappear { searchTask?.cancel() }
     }
 
-    private struct TypingKey: Equatable {
-        let pattern: String
-        let repositoryID: UUID?
-        let indexIsComplete: Bool
+    private func searchUntilSettled() async {
+        let asked = query
+        while !Task.isCancelled {
+            let found = await model.searchAllBackups(pattern: asked)
+            guard !Task.isCancelled else { return }
+            answer = (asked, found)
+            selection.formIntersection(found.rows.map(\.id))
+            guard !found.stillReading.isEmpty else { return }
+            do {
+                try await Task.sleep(for: FilesTree.recheckInterval)
+            } catch {
+                return
+            }
+        }
     }
 
     private var controls: some View {
-        @Bindable var router = router
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Picker("Repository", selection: $router.findRepositoryID) {
-                    Text("Choose").tag(UUID?.none)
-                    ForEach(model.configuration.repositories) { repository in
-                        Text(model.label(of: repository)).tag(UUID?.some(repository.id))
-                    }
-                }
-                .fixedSize()
-                .onChange(of: repositoryID) { _, _ in
-                    // Results belong to the repository they were found in;
-                    // keeping them under a different picker would offer a
-                    // restore against the wrong one.
-                    cancelSearch()
-                }
-                // The listing landing after a search ran ahead of it: the
-                // Backup column's short IDs become times (`fillLateTimes`).
-                .onChange(of: repositoryID.flatMap { model.snapshotsLoadedAt(for: $0) }) { _, _ in
-                    fillLateTimes()
-                }
-                Spacer()
-                // restic's walk runs when asked — Return in the field.
-                // Meaningless against the index engine, which answers as
-                // typed and always searches every version — so not offered
-                // until the engine is known.
-                if indexComplete == false {
-                    Toggle("Latest backup only", isOn: $latestOnly)
-                        .toggleStyle(.checkbox)
-                }
-                // Occupying their space whether or not a search runs:
-                // appearing here would shift the row at the exact moment of
-                // a click.
-                Button("Stop") { cancelSearch() }
-                    .disabled(!isSearching)
-                    .opacity(isSearching ? 1 : 0)
-                    .accessibilityHidden(!isSearching)
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(isSearching ? 1 : 0)
-                    .accessibilityHidden(!isSearching)
+        HStack(spacing: 12) {
+            // Back to the plan the search came from, its query kept.
+            if let origin = router.findOrigin, model.filesSearchRoots(for: origin.page) == origin.roots {
+                SearchScopePicker(scope: .allBackups) { router.returnToPlanSearch() }
             }
-
-            // The one line says what to do; how matching works is the
-            // ⓘ's to tell.
             ExpandableCaption(
-                summary: indexComplete == true
-                    ? "Searches every backup as you type."
-                    : "Press Return to search.",
-                detail: indexComplete == true
-                    ? FilesSearchAnswer.matchRule + " The search runs on this Mac, however deep the history."
-                    : "Matching ignores case and takes shell patterns such as *.key. Searching every backup reads each one, so it takes longer the more history the repository holds. “Latest backup only” searches the repository’s newest backup — which may not be the newest of every plan."
+                summary: "Searches every backup as you type.",
+                detail: FilesSearchAnswer.matchRule + " The search runs on this Mac, however deep the history."
             )
+            Spacer(minLength: 0)
         }
         .padding(12)
+    }
+
+    /// What this answer could not cover, by repository. A broken index is its
+    /// own line with its way out, and a repository still being read says so:
+    /// a file missing from the rows may be in a backup not reached yet.
+    private func standing(_ search: AllBackupsSearch) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(search.failures, id: \.repositoryID) { failure in
+                HStack(spacing: 8) {
+                    Label("Couldn’t search “\(name(of: failure.repositoryID))”.", systemImage: "exclamationmark.triangle.fill")
+                        .help(failure.message)
+                    Spacer(minLength: 8)
+                    Button("Rebuild Search Index…") {
+                        router.request(.confirm(.rebuildIndex(failure.repositoryID)))
+                    }
+                    .controlSize(.small)
+                }
+            }
+            ForEach(search.stillReading, id: \.self) { repositoryID in
+                Label(readingLine(repositoryID), systemImage: "clock.arrow.circlepath")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func name(of repositoryID: UUID) -> String {
+        model.repository(id: repositoryID).map { model.label(of: $0) } ?? "Repository"
+    }
+
+    /// A repository out of reach is no longer being read: "still reading"
+    /// would promise an end that needs the disk back.
+    private func readingLine(_ repositoryID: UUID) -> String {
+        if case .failed = model.snapshotListingOutcome(for: repositoryID) {
+            return "“\(name(of: repositoryID))” can’t be reached, so files in backups not read yet won’t appear."
+        }
+        return "Still reading “\(name(of: repositoryID))”. Files in backups not read yet won’t appear."
     }
 
     @ViewBuilder
-    private func resultsPane(_ rows: [Row]) -> some View {
-        if let errorMessage {
-            FailureUnavailableView(title: "Search failed", message: errorMessage)
-        } else if isSearching {
-            ProgressView("Searching…").frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if rows.isEmpty {
+    private var results: some View {
+        if query.isEmpty {
             ContentUnavailableView(
-                hasSearched
-                    ? "No matches"
-                    : (repositoryID == nil
-                        ? "Search a repository"
-                        : "Find a file without knowing which backup holds it"),
-                systemImage: "magnifyingglass",
-                description: hasSearched
-                    ? Text(searchedLatestOnly
-                        ? "Nothing in the latest backup matches. Deselect “Latest backup only” to search older backups."
-                        : "Nothing in this repository’s backups matches.")
-                    : (repositoryID == nil ? Text("Find a file without knowing which backup holds it.") : nil)
+                "Find a file without knowing which backup holds it",
+                systemImage: "magnifyingglass"
             )
+        } else if let search {
+            if search.rows.isEmpty {
+                ContentUnavailableView(
+                    "No matches",
+                    systemImage: "magnifyingglass",
+                    description: Text(search.isWhole
+                        ? "Nothing in your backups matches."
+                        : "Nothing matches so far. Some backups couldn’t be searched yet.")
+                )
+            } else {
+                table(search.rows)
+            }
         } else {
-            Table(rows, selection: $selection) {
-                TableColumn("File") { row in
-                    HStack(spacing: 6) {
-                        Image(systemName: row.match.isDirectory ? "folder.fill" : "doc")
-                            .foregroundStyle(row.match.isDirectory ? Color.accentColor : .secondary)
-                            // The kind, not the symbol's "Move" / "Document".
-                            .accessibilityLabel(row.match.isDirectory ? "Folder" : "File")
-                        Text(row.match.name).lineLimit(1)
-                    }
-                }
-                .width(min: 140, ideal: 180)
+            ProgressView("Searching…").frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 
-                TableColumn("Path") { row in
-                    Text((row.match.path as NSString).deletingLastPathComponent)
+    private func table(_ rows: [AllBackupsSearch.Row]) -> some View {
+        Table(rows, selection: $selection) {
+            TableColumn("File") { row in
+                HStack(spacing: 6) {
+                    Image(systemName: row.isDirectory ? "folder.fill" : "doc")
+                        .foregroundStyle(row.isDirectory ? Color.accentColor : .secondary)
+                        // The kind, not the symbol's "Move" / "Document".
+                        .accessibilityLabel(row.isDirectory ? "Folder" : "File")
+                    Text(row.name).lineLimit(1)
+                }
+            }
+            .width(min: 140, ideal: 180)
+
+            TableColumn("Path") { row in
+                Text(ResticPath.parent(of: row.path))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+
+            if model.configuration.repositories.count > 1 {
+                TableColumn("Repository") { row in
+                    Text(name(of: row.repositoryID))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .truncationMode(.head)
                 }
-
-                TableColumn("Backup") { row in
-                    Text(row.snapshotTime.map { Format.timestamp($0) } ?? String(row.snapshotID.prefix(8)))
-                        .monospacedDigit()
-                }
-                .width(min: 130, ideal: 160)
-
-                TableColumn("Versions") { row in
-                    // How many backups hold the path, and the way to them:
-                    // Show Versions, as in the row's context menu. A search
-                    // of the latest snapshot only looked at that one.
-                    if let count = row.versionsCount, let open = showVersions(of: row) {
-                        Button(action: open) {
-                            HStack(spacing: 4) {
-                                Text("\(count)")
-                                    .monospacedDigit()
-                                RowChevron()
-                            }
-                        }
-                        .buttonStyle(HoverableButtonStyle())
-                        .help("Show every backup that holds this path, on the Files tab")
-                        .accessibilityLabel("Show \(Format.plural(count, "version"))")
-                    } else {
-                        Text(row.versionsCount.map(String.init) ?? "—")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .width(min: 60, ideal: 70)
+                .width(min: 80, ideal: 120)
             }
-            .focusOnClick($resultsAreFocused)
-            // An explicit right-click route to the restore the footer button
-            // offers. Double-click does nothing: an accidental double-tap
-            // must not start moving bytes.
-            .contextMenu(forSelectionType: Row.ID.self) { ids in
-                // The rows clicked are passed directly: a right-click on an
-                // unselected row must not depend on selection state.
-                let picked = rows.filter { ids.contains($0.id) }
-                if picked.count == 1, let row = picked.first {
-                    Button("Restore…") {
-                        restoreSelection(picked)
-                    }
-                    .disabled(model.isRestoring)
-                    if let open = showVersions(of: row) {
-                        Button("Show Versions", action: open)
-                    }
-                    if !row.match.isDirectory, let repositoryID {
-                        // An index row carries no size, which the size
-                        // gate reads: restic lists the file first.
-                        Button("Preview") {
-                            previewer.start(model, repositoryID: repositoryID, snapshotID: row.snapshotID) { [model] in
-                                row.hit == nil
-                                    ? row.match.node
-                                    : try await model.listedNode(repositoryID: repositoryID, snapshotID: row.snapshotID, path: row.match.path)
-                            }
+
+            TableColumn("Backup") { row in
+                Text(Format.timestamp(row.snapshotTime))
+                    .monospacedDigit()
+            }
+            .width(min: 130, ideal: 160)
+
+            TableColumn("Versions") { row in
+                // How many backups hold the path, and the way to them.
+                if let open = showVersions(of: row) {
+                    Button(action: open) {
+                        HStack(spacing: 4) {
+                            Text("\(row.versionsCount)")
+                                .monospacedDigit()
+                            RowChevron()
                         }
-                        .disabled(!model.isResticAvailable || previewer.isCopying)
                     }
-                } else if picked.count > 1 {
-                    Button("Restore \(Format.plural(picked.count, "Item"))…") {
-                        restoreSelection(picked)
-                    }
-                    .disabled(model.isRestoring)
+                    .buttonStyle(HoverableButtonStyle())
+                    .help("Show every backup that holds this file, on the Files tab")
+                    .accessibilityLabel("Show \(Format.plural(row.versionsCount, "version"))")
+                } else {
+                    Text("\(row.versionsCount)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
+            }
+            .width(min: 60, ideal: 70)
+        }
+        .focusOnClick($resultsAreFocused)
+        // An explicit right-click route to the restore the footer button
+        // offers. Double-click does nothing: an accidental double-tap must
+        // not start moving bytes.
+        .contextMenu(forSelectionType: AllBackupsSearch.Row.ID.self) { ids in
+            // The rows clicked are passed directly: a right-click on an
+            // unselected row must not depend on selection state.
+            let picked = rows.filter { ids.contains($0.id) }
+            if picked.count == 1, let row = picked.first {
+                Button("Restore…") { restoreSelection(picked) }
+                    .disabled(model.isRestoring)
+                if let open = showVersions(of: row) {
+                    Button("Show Versions", action: open)
+                }
+                if let open = showInBackups(row) {
+                    Button("Show in Backups", action: open)
+                }
+                if !row.isDirectory {
+                    // The index carries no size, which the preview's size
+                    // gate reads: restic lists the file first.
+                    Button("Preview") {
+                        previewer.start(model, repositoryID: row.repositoryID, snapshotID: row.snapshotID) { [model] in
+                            try await model.listedNode(repositoryID: row.repositoryID, snapshotID: row.snapshotID, path: row.path)
+                        }
+                    }
+                    .disabled(!model.isResticAvailable || previewer.isCopying)
+                }
+            } else if picked.count > 1, Self.oneRepository(picked) {
+                Button("Restore \(Format.plural(picked.count, "Item"))…") { restoreSelection(picked) }
+                    .disabled(model.isRestoring)
             }
         }
     }
 
-    private func footer(_ rows: [Row]) -> some View {
-        VStack(spacing: 10) {
-            HStack {
-                if !rows.isEmpty {
-                    VStack(alignment: .leading, spacing: 1) {
-                        // How many, not "across N snapshots": each row is
-                        // its path at the newest backup holding it, so that
-                        // count — 1 beside a row's 78 — said nothing.
-                        Text(Format.plural(rows.count, "match", "matches"))
-                            .font(.callout)
+    private var footer: some View {
+        HStack {
+            if !rows.isEmpty {
+                VStack(alignment: .leading, spacing: 1) {
+                    // How many, not "across N snapshots": each row is its
+                    // path at the newest backup holding it.
+                    Text(Format.plural(rows.count, "match", "matches"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    if search?.isTruncated == true {
+                        Text(FilesSearchAnswer.searchTruncated)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
-                        // When the listing was read: results carry snapshot
-                        // stamps from that moment, so a list that predates a
-                        // refresh in flight says so instead of passing as
-                        // current.
-                        if let loadedAt = repositoryID.flatMap({ model.snapshotsLoadedAt(for: $0) }) {
-                            Text("List of backups read \(Format.ago(loadedAt, now: now))")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .monospacedDigit()
-                        }
-                        if resultsTruncated {
-                            Text(FilesSearchAnswer.searchTruncated)
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
                     }
                 }
-                // Beside the results, never in place of them: the search
-                // did not fail, and its rows are what the user is choosing
-                // from.
-                if let failure = previewer.failure {
-                    Label(failure.title, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .help(failure.message)
-                }
-                Spacer()
-                let selected = rows.filter { selection.contains($0.id) }
-                Button("Restore Selected…") { restoreSelection(selected) }
-                    .buttonStyle(.borderedProminent)
-                    // Same grammar as the Restore pane: Return offers the
-                    // restore, always through the destination sheet, where
-                    // the keep/replace choice lives.
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selected.isEmpty || model.isRestoring)
-                    .help("Restore the selected items, each from the backup it was found in (Return)")
             }
+            // Beside the results, never in place of them: the search did not
+            // fail, and its rows are what the user is choosing from.
+            if let failure = previewer.failure {
+                Label(failure.title, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help(failure.message)
+            }
+            Spacer()
+            Button("Restore Selected…") { restoreSelection(selectedRows) }
+                .buttonStyle(.borderedProminent)
+                // Same grammar as the Restore pane: Return offers the
+                // restore, always through the destination sheet, where the
+                // keep/replace choice lives.
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canRestoreSelection)
+                .help(Self.oneRepository(selectedRows)
+                    ? "Restore the selected items, each from the backup it was found in (Return)"
+                    : "Select items from one repository at a time")
         }
         .padding(12)
     }
 
-    /// Show Versions for a row — onto the Files tab of the plan that holds
-    /// the match's history, at this match's backup — or nil when the row's
-    /// backup is no longer listed, or no plan made it (a group under Other
-    /// backups has no Files tab). The row is passed directly: a click
-    /// on an unselected row must not depend on selection state.
-    private func showVersions(of row: Row) -> (() -> Void)? {
-        guard let repositoryID,
-              let record = model.snapshots(for: repositoryID).first(where: { $0.id == row.snapshotID }),
-              let page = model.shelves(for: repositoryID).versionsPage(of: record)
+    private var selectedRows: [AllBackupsSearch.Row] {
+        rows.filter { selection.contains($0.id) }
+    }
+
+    private var canRestoreSelection: Bool {
+        !selectedRows.isEmpty && Self.oneRepository(selectedRows) && !model.isRestoring
+    }
+
+    /// One restore runs against one repository, and its password.
+    private static func oneRepository(_ rows: [AllBackupsSearch.Row]) -> Bool {
+        Set(rows.map(\.repositoryID)).count <= 1
+    }
+
+    /// Show Versions for a file's row — onto the Files tab of the plan that
+    /// holds its history — or nil for a folder, for a backup no longer listed,
+    /// or one no plan made (a group under Other backups has no Files tab).
+    private func showVersions(of row: AllBackupsSearch.Row) -> (() -> Void)? {
+        guard !row.isDirectory,
+              let record = model.snapshots(for: row.repositoryID).first(where: { $0.id == row.snapshotID }),
+              let page = model.shelves(for: row.repositoryID).versionsPage(of: record)
         else { return nil }
         return {
             router.showVersions(
-                path: row.match.path,
-                isDirectory: row.match.isDirectory,
-                in: record,
-                repositoryID: repositoryID,
-                page: page
+                path: row.path, isDirectory: false, in: record, repositoryID: row.repositoryID, page: page
             )
         }
     }
 
-    private var canSearch: Bool {
-        repositoryID != nil && !pattern.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    /// Runs the search the field holds, in place of any still running: a
-    /// query typed on asks again, and the older answer must not land last.
-    private func search() {
-        guard let repositoryID, canSearch else { return }
-        searchTask?.cancel()
-        // Snapshot what was asked for: the fields can change while the search
-        // walks the repository, and the results must answer to what was typed.
-        let searchedRepository = repositoryID
-        let searchedPattern = pattern.trimmingCharacters(in: .whitespaces)
-        let searchedLatestOnly = latestOnly
-        errorMessage = nil
-        // Each search owns the footer's truncation line: an index search that
-        // stopped early must not speak for a later restic-engine search that
-        // ran to completion.
-        resultsTruncated = false
-        selection = []
-        searchTask = Task {
-            // The engine is chosen per search, not per visit: a backfill that
-            // finished while the page sat open upgrades the next search.
-            let ready = await model.indexIsComplete(repositoryID: searchedRepository)
-            guard !Task.isCancelled else { return }
-            indexComplete = ready
-            do {
-                if ready {
-                    // The index engine: one read of the index. A thrown index
-                    // failure propagates to the page's own error message.
-                    let found = try await model.searchIndexWithSummaries(
-                        pattern: searchedPattern, repositoryID: searchedRepository
-                    )
-                    let built = FindResultGrouping.indexRows(hits: found.hits, summaries: found.summaries)
-                    guard !Task.isCancelled else { return }
-                    rows = built.rows.map {
-                        Row(
-                            match: $0.match, snapshotID: $0.snapshotID, snapshotTime: $0.snapshotTime,
-                            versionsCount: $0.count, hit: $0.hit
-                        )
-                    }
-                    resultsTruncated = built.dropped > 0 || found.isTruncated
-                } else {
-                    let found = try await model.findFiles(
-                        repositoryID: searchedRepository,
-                        pattern: searchedPattern,
-                        latestOnly: searchedLatestOnly
-                    )
-                    guard !Task.isCancelled else { return }
-                    // The listing as of this search: the row's snapshot ID
-                    // and its place in the list are fixed here. A listing
-                    // that lands later only fills in a time the search had
-                    // none for (`fillLateTimes`) — it never re-derives the
-                    // ID or re-sorts the rows under the user.
-                    let snapshots = model.snapshots(for: searchedRepository)
-                    let times = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0.time) })
-                    // Each backup's page — its plan's or its group's — whose
-                    // backups a row's Versions cell counts: the count a
-                    // plan's Files tab lists.
-                    let shelves = model.shelves(for: searchedRepository)
-                    let pages = Dictionary(uniqueKeysWithValues: snapshots.map {
-                        ($0.id, shelves.page(of: $0, repositoryID: searchedRepository))
-                    })
-                    // One row per path at its newest backup, newest first —
-                    // usually the copy the user wants back — as the index
-                    // engine's rows read.
-                    rows = FindResultGrouping.rows(found, times: times, chain: { pages[$0] }).map {
-                        Row(
-                            match: $0.match, snapshotID: $0.snapshotID, snapshotTime: $0.snapshotTime,
-                            versionsCount: searchedLatestOnly ? nil : $0.count
-                        )
-                    }
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                rows = []
-                errorMessage = error.localizedDescription
-            }
-            hasSearched = true
-            // The property, not the local the search snapped: the state the
-            // no-match state reads is what the landed search covered. The
-            // index engine searches every backup whatever the box says.
-            self.searchedLatestOnly = !ready && searchedLatestOnly
-            searchTask = nil
+    private func showInBackups(_ row: AllBackupsSearch.Row) -> (() -> Void)? {
+        guard row.isDirectory, let page = model.page(ofBackup: row.snapshotID, in: row.repositoryID) else { return nil }
+        return {
+            router.showBackup(row.snapshotID, on: page, repositoryID: row.repositoryID, focusPath: row.path)
         }
     }
 
-    /// The listing's times for the rows that have none, once it lands: a
-    /// search run before the repository's listing landed named its backups
-    /// by short ID (the restic engine reads the times at completion). Each
-    /// row keeps its place and its ID and gains only its time — a map over
-    /// the rows, never a sort — and the rows are rewritten rather than
-    /// looked up beside, because the Table's cells follow their row's
-    /// data: a lookup the parent held left the column on its short IDs
-    /// after the listing landed (seen live). The restore
-    /// request reads the same row, so the sheet names the moment the
-    /// column shows.
-    private func fillLateTimes() {
-        let missing = Set(rows.lazy.filter { $0.snapshotTime == nil }.map(\.snapshotID))
-        guard !missing.isEmpty else { return }
-        var times: [String: Date] = [:]
-        for snapshot in model.snapshots(for: repositoryID) where missing.contains(snapshot.id) {
-            times[snapshot.id] = snapshot.time
-        }
-        guard !times.isEmpty else { return }
-        rows = rows.map { row in
-            guard row.snapshotTime == nil, let time = times[row.snapshotID] else { return row }
-            return Row(match: row.match, snapshotID: row.snapshotID, snapshotTime: time, versionsCount: row.versionsCount, hit: row.hit)
-        }
-    }
-
-    /// Abandons the running search, if any. The view state is reset here rather
-    /// than in the task: the cancelled task must not touch what a newer search
-    /// or a different repository now owns.
-    private func cancelSearch() {
-        searchTask?.cancel()
-        searchTask = nil
-        rows = []
-        resultsTruncated = false
-        hasSearched = false
-        searchedLatestOnly = false
-        errorMessage = nil
-        selection = []
-    }
-
-    /// What the page restores, for File ▸ Restore: the selected rows —
-    /// the bottom bar's button's restore. Same grammar as a backup's tree:
-    /// Return offers the restore, always through the destination sheet,
-    /// where the keep/replace choice lives.
+    /// What the page restores, for File ▸ Restore: the selected rows.
     private var restore: RestoreCommand {
-        let selected = rows.filter { selection.contains($0.id) }
-        return RestoreCommand(
+        RestoreCommand(
             title: "Restore Selected…",
-            isEnabled: !selected.isEmpty && !model.isRestoring,
-            run: { restoreSelection(selected) }
+            isEnabled: canRestoreSelection,
+            run: { restoreSelection(selectedRows) }
         )
     }
 
-    /// Restores the picked rows through the destination sheet, where the
-    /// keep/replace choice lives — each from its row's backup, a folder
+    /// Through the destination sheet — each from its row's backup, a folder
     /// leaving to itself only the rows of its own backup
-    /// (`RestoreDestinationRequest.picked`). A restic-engine row carries
-    /// restic's node; an index row's kind is read again for its backup
-    /// before it restores: its kind is its search hit's, not read for the
-    /// backup its summary names (`RestoreSource.node`).
-    private func restoreSelection(_ picked: [Row]) {
-        guard let repositoryID else { return }
+    /// (`RestoreDestinationRequest.picked`). A row's kind is its search hit's,
+    /// read again for its backup before it restores (`RestoreSource.node`).
+    private func restoreSelection(_ picked: [AllBackupsSearch.Row]) {
+        guard let repositoryID = picked.first?.repositoryID else { return }
         destinationRequest = RestoreDestinationRequest.picked(
             picked.map { row in
                 RestoreSource(
-                    name: row.match.name,
-                    path: row.match.path,
-                    isDirectory: row.match.isDirectory,
+                    name: row.name,
+                    path: row.path,
+                    isDirectory: row.isDirectory,
                     snapshotID: row.snapshotID,
                     backupTime: row.snapshotTime,
-                    node: row.hit == nil ? row.match.node : nil
+                    node: nil
                 )
             },
             repositoryID: repositoryID,
             model: model
         )
+    }
+}
+
+/// Where a search looks: this plan, or everything. Finder's search scope, in
+/// the two places a search shows its results. Picking the other one hands the
+/// query over.
+struct SearchScopePicker: View {
+    enum Scope: Hashable {
+        case thisPlan
+        case allBackups
+    }
+
+    let scope: Scope
+    let onChange: () -> Void
+
+    var body: some View {
+        Picker("Search", selection: Binding(
+            get: { scope },
+            set: { if $0 != scope { onChange() } }
+        )) {
+            Text("This Plan").tag(Scope.thisPlan)
+            Text("All Backups").tag(Scope.allBackups)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+}
+
+/// A broken search index's failure, with its way out. Nothing the index
+/// answered can be trusted as "nothing matches" while this stands.
+struct IndexFailureView: View {
+    @Environment(AppRouter.self) private var router
+    let title: String
+    let message: String
+    let repositoryID: UUID
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Rebuild Search Index…") {
+                router.request(.confirm(.rebuildIndex(repositoryID)))
+            }
+        }
     }
 }

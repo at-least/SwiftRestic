@@ -2,26 +2,22 @@ import SwiftUI
 
 /// The pane for a folder or file picked in a Files tab's tree: what it is
 /// and where it lives — and when it was last backed up, once the newest
-/// backup has dropped it or this Mac no longer holds it — then the item by
-/// version — a folder as any backup holding it held it
-/// (`FolderVersionsView`), a file as each content it had
-/// (`FileVersionsView`) — or, for an item on this Mac no backup holds, that
-/// it is not backed up.
+/// backup has dropped it or this Mac no longer holds it — then a file by each
+/// content it had (`FileVersionsView`), a folder by its way back
+/// (`FolderPaneActions`), or, for an item on this Mac no backup holds, that it
+/// is not backed up. A folder at any other moment is the Backups tab's.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
     let node: FileNode
-    /// Opens an item of a folder's listing in the tree, at the backup the
-    /// listing was read from.
-    let onOpen: (FileNode, _ versionID: String) -> Void
 
     /// The backups of the chain holding the item, newest first.
     @State private var versions: [IndexVersion] = []
     /// A file's contents through those backups, newest first.
     @State private var contentVersions: [ContentVersion] = []
-    /// The backup the item is shown at — for a file, its version's newest —
-    /// nil for the newest.
+    /// The version the file is shown at, by its newest backup; nil for the
+    /// newest.
     @State private var chosenID: String?
     @State private var didOpen = false
     @State private var loadError: String?
@@ -95,7 +91,7 @@ struct FilesPaneView: View {
     @ViewBuilder
     private var content: some View {
         if let loadError {
-            FailureUnavailableView(title: "Could not read its backups", message: loadError)
+            IndexFailureView(title: "Could not read its backups", message: loadError, repositoryID: node.repositoryID)
         } else if !didOpen {
             // The first read only: a re-read while the index has not
             // reached the item yet keeps the empty state up rather than
@@ -108,7 +104,7 @@ struct FilesPaneView: View {
                 description: Text(verbatim: FilesTree.Entry.notBackedUpReason(notRead: notRead) + ".")
             )
         } else if node.isDirectory {
-            FolderVersionsView(node: node, versions: versions, chosenID: choice, onOpen: onOpen)
+            FolderPaneActions(node: node, newest: versions.first)
         } else {
             FileVersionsView(
                 node: node, versions: contentVersions, chosenID: choice,
@@ -119,20 +115,19 @@ struct FilesPaneView: View {
         }
     }
 
-    /// The backup the user picks, remembered for coming back to the item —
+    /// The version the user picks, remembered for coming back to the file —
     /// the newest as nothing, so a backup made meanwhile is what the pane
     /// opens at then. Only a pick is: where the pane opened is not.
     private var choice: Binding<String?> {
         Binding(get: { chosenID }, set: { id in
             chosenID = id
-            let newest = node.isDirectory ? versions.first?.id : contentVersions.first?.id
-            router.filesChosenVersion[node] = id == newest ? nil : id
+            router.filesChosenVersion[node] = id == contentVersions.first?.id ? nil : id
         })
     }
 
     private func load() async {
-        indexComplete = await model.indexIsComplete(repositoryID: node.repositoryID)
         do {
+            indexComplete = try await model.indexIsComplete(repositoryID: node.repositoryID)
             // A file's backups are its versions' together, so one read
             // answers both; a folder has no content versions.
             let contents = node.isDirectory ? [] : try await model.indexedContentVersions(
@@ -145,20 +140,13 @@ struct FilesPaneView: View {
             versions = loaded
             contentVersions = contents
             loadError = nil
-            // Where the pane opens, settled on the first read: the time
-            // the user was reading one level up (or Show Versions named),
-            // when this item existed then — walking down keeps the era —
-            // else the backup this item was last left at.
+            // Where the pane opens, settled on the first read: the version
+            // the file was left at, or Show Versions named. The newest as
+            // nothing: an open pane follows a newer backup.
             if !didOpen {
                 didOpen = true
-                let hint = router.takeFilesVersionHint()
-                let remembered = router.filesChosenVersion[node]
-                let opening = node.isDirectory
-                    ? loaded.preferredVersion(previousID: hint, rememberedID: remembered)?.id
-                    : contents.preferredVersion(previousID: hint, rememberedID: remembered)?.id
-                // The newest as nothing: an open pane follows a newer backup.
-                let newest = node.isDirectory ? loaded.first?.id : contents.first?.id
-                chosenID = opening == newest ? nil : opening
+                let opening = contents.version(holding: router.filesChosenVersion[node])?.id
+                chosenID = opening == contents.first?.id ? nil : opening
             }
         } catch {
             guard !Task.isCancelled else { return }
@@ -166,6 +154,76 @@ struct FilesPaneView: View {
             contentVersions = []
             loadError = error.localizedDescription
         }
+    }
+}
+
+/// A folder's way back, by the newest backup holding it — this Mac's copy gone
+/// or not: when that was, the whole folder's restore, and the backup itself
+/// open at the folder, for any other moment or a part of it.
+private struct FolderPaneActions: View {
+    @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
+    let node: FileNode
+    let newest: IndexVersion?
+
+    @State private var destinationRequest: RestoreDestinationRequest?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                if let newest {
+                    ContentUnavailableView {
+                        Label("Last backed up \(Format.timestamp(newest.time))", systemImage: "folder")
+                    } description: {
+                        Text("Select a file to see its versions, or show this folder in its backup to pick from it.")
+                    }
+                } else {
+                    // Saying why is the pane's banner's job, while the index reads.
+                    ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            HStack {
+                Button("Show in Backups") { showInBackups() }
+                    .disabled(newest == nil)
+                    .help("Open the newest backup at this folder on the Backups tab")
+                Spacer()
+                Button("Restore Folder…") { restoreFolder() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newest == nil || model.isRestoring)
+                    .help("Restore this whole folder as of the newest backup")
+            }
+            .padding(12)
+        }
+        .restoreCommand(RestoreCommand(
+            title: "Restore Folder…",
+            isEnabled: newest != nil && !model.isRestoring,
+            run: restoreFolder
+        ))
+        .sheet(item: $destinationRequest) { request in
+            RestoreDestinationSheet(request: request)
+                .environment(model)
+        }
+    }
+
+    private func showInBackups() {
+        guard let newest, let page = model.page(ofBackup: newest.id, in: node.repositoryID) else { return }
+        router.showBackup(newest.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
+    }
+
+    /// By its path, its kind in that backup read before it restores: the
+    /// backup may hold the path as a file (`RestoreSource.node`).
+    private func restoreFolder() {
+        guard let newest else { return }
+        destinationRequest = RestoreDestinationRequest.picked(
+            [RestoreSource(
+                name: node.name, path: node.path, isDirectory: true,
+                snapshotID: newest.id, backupTime: newest.time, node: nil
+            )],
+            repositoryID: node.repositoryID,
+            model: model
+        )
     }
 }
 

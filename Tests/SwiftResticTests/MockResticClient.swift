@@ -265,16 +265,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return []
     }
 
-    func diff(
-        _ context: RepositoryContext,
-        olderID: String,
-        newerID: String,
-        includeMetadata: Bool
-    ) async throws -> SnapshotDiff {
-        record("diff")
-        return SnapshotDiff(olderID: olderID, newerID: newerID)
-    }
-
     /// A complete set-difference in restic's spelling (a trailing `/` on
     /// directories), `+` for paths only in `newerID`; a path whose kind
     /// differs is one `T` line, as restic 0.19.1 writes it.

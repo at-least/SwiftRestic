@@ -138,11 +138,11 @@ enum SidebarItem: Hashable {
     /// folders are its identity, so the page survives regrouping and the
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
-    /// Find Files: a page with no row — the toolbar's search field is its
-    /// way in, and a row would be a second one — reached
-    /// from Repository ▸ Find Files (⇧⌘F) off a page with a
-    /// Files tab, a repository page's search field, and Search All
-    /// Backups. Not a sheet: its restores would stack a second sheet on it.
+    /// Search All Backups: a page with no row — the toolbar's search field
+    /// is its way in, and a row would be a second one — reached by Edit ▸ Find
+    /// (⌘F) off a page with no Files tab, a repository's page's search field,
+    /// and a plan's search's All Backups. Not a sheet: its restores would
+    /// stack a second sheet on it.
     case findFiles
     case activity
 }

@@ -22,7 +22,6 @@ struct RootDetailView: View {
     /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,10 +63,7 @@ struct RootDetailView: View {
                 switch router.selection {
                 case let .plan(id):
                     if let plan = model.plan(id: id) {
-                        PlanDetailView(
-                            planID: plan.id,
-                            onSearchAllBackups: onSearchAllBackups
-                        )
+                        PlanDetailView(planID: plan.id)
                     } else {
                         ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
                     }
@@ -85,15 +81,13 @@ struct RootDetailView: View {
                     OtherGroupView(
                         repositoryID: repositoryID,
                         groupID: .plan(planID),
-                        onAdopt: { onAdoptGroup(repositoryID, $0) },
-                        onSearchAllBackups: onSearchAllBackups
+                        onAdopt: { onAdoptGroup(repositoryID, $0) }
                     )
                 case let .lineage(repositoryID, key):
                     OtherGroupView(
                         repositoryID: repositoryID,
                         groupID: .lineage(key),
-                        onAdopt: { onAdoptGroup(repositoryID, $0) },
-                        onSearchAllBackups: onSearchAllBackups
+                        onAdopt: { onAdoptGroup(repositoryID, $0) }
                     )
                 case .findFiles:
                     FindFilesView()
@@ -106,7 +100,7 @@ struct RootDetailView: View {
                 }
             }
         }
-        // Find Files needs restic: a binary lost while it is open must move
+        // Search All Backups needs restic: a binary lost while it is open must move
         // the selection off it.
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()

@@ -1530,29 +1530,27 @@ struct ResticDiffTests {
         let second = try await service.backup(context, plan: plan)
         let newerID = try #require(second.summary?.snapshotID)
 
-        let diff = try await service.diff(context, olderID: olderID, newerID: newerID)
-        #expect(diff.olderID == olderID)
-        #expect(diff.newerID == newerID)
-        #expect(!diff.isTruncated)
+        func walk(_ older: String, _ newer: String) async throws -> [ResticDiffChange] {
+            let lock = NSLock()
+            nonisolated(unsafe) var collected: [ResticDiffChange] = []
+            try await service.walkDiff(context, olderID: older, newerID: newer) { change in
+                lock.withLock { collected.append(change) }
+            }
+            return lock.withLock { collected }
+        }
 
-        let byPath = Dictionary(uniqueKeysWithValues: diff.changes.map { ($0.path, $0) })
+        let changes = try await walk(olderID, newerID)
+        let byPath = Dictionary(uniqueKeysWithValues: changes.map { ($0.path, $0) })
         #expect(byPath[source.appendingPathComponent("a.txt").path]?.category == .modified)
         #expect(byPath[source.appendingPathComponent("c.txt").path]?.category == .added)
         #expect(byPath[sub.appendingPathComponent("b.txt").path]?.category == .removed)
-        #expect(diff.changes.count == 3)
-
-        let stats = try #require(diff.statistics)
-        #expect(stats.changedFiles == 1)
-        #expect(stats.added.files == 1)
-        #expect(stats.removed.files == 1)
+        #expect(changes.count == 3)
 
         // Swapping the order flips the sign: the API's `+` is "only in newer".
-        let reversed = try await service.diff(context, olderID: newerID, newerID: olderID)
-        #expect(reversed.changes.first { $0.path.hasSuffix("c.txt") }?.category == .removed)
+        let reversed = try await walk(newerID, olderID)
+        #expect(reversed.first { $0.path.hasSuffix("c.txt") }?.category == .removed)
 
-        let same = try await service.diff(context, olderID: newerID, newerID: newerID)
-        #expect(same.changes.isEmpty)
-        #expect(same.statistics?.changedFiles == 0)
+        #expect(try await walk(newerID, newerID).isEmpty)
     }
 }
 

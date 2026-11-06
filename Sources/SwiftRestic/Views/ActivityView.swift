@@ -8,7 +8,6 @@ struct ActivityView: View {
     /// runs rather than the sidebar out of Activity.
     @FocusState private var tableIsFocused: Bool
     @State private var isConfirmingClear = false
-    @State private var comparing: SnapshotDiffTarget?
     @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
     // recency, and the stored history's order is neither.
@@ -149,16 +148,17 @@ struct ActivityView: View {
                 .focusOnClick($tableIsFocused)
                 // Wiping the history is rare and final, so it is not chrome:
                 // a right-click on the list, behind the same confirmation.
-                // Beside it, the drawer's Compare reaches a clicked backup
-                // run directly, as backup rows elsewhere teach.
+                // Beside it, the drawer's Browse reaches a clicked backup run
+                // directly.
                 .contextMenu(forSelectionType: RunRecord.ID.self) { ids in
                     if ids.count == 1, let id = ids.first,
                        let run = runs.first(where: { $0.id == id }),
                        run.kind == .backup,
                        let repositoryID = run.repositoryID,
-                       case let .available(snapshot)? = model.snapshotLink(for: run) {
-                        Button("Compare with Previous") {
-                            comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
+                       case let .available(snapshot)? = model.snapshotLink(for: run),
+                       let page = model.page(ofBackup: snapshot.id, in: repositoryID) {
+                        Button("Browse") {
+                            router.showBackup(snapshot.id, on: page, repositoryID: repositoryID)
                         }
                         Divider()
                     }
@@ -173,7 +173,6 @@ struct ActivityView: View {
                     Divider()
                     RunDetailPanel(
                         run: selected,
-                        onCompare: { comparing = $0 },
                         onShowLog: { loggedRun = $0 }
                     )
                 }
@@ -206,11 +205,6 @@ struct ActivityView: View {
         } message: {
             Text("This permanently removes the history and its logs. The backups in your repositories aren’t affected.")
         }
-        .sheet(item: $comparing) { target in
-            SnapshotDiffView(target: target)
-                .environment(model)
-                .environment(router)
-        }
         .sheet(item: $loggedRun) { run in
             RunLogSheet(run: run)
                 .environment(model)
@@ -236,25 +230,5 @@ struct ActivityView: View {
                 selection = id
             }
         }
-        #if DEBUG
-        .onChange(of: model.snapshots, initial: true) { applyCaptureSheetOverride() }
-        #endif
     }
-
-    #if DEBUG
-    /// Debug-only: `SWIFTRESTIC_CAPTURE_SHEET=diff` opens the drawer's
-    /// Compare with Previous on the newest backup run that wrote a
-    /// snapshot, once the listing holds that snapshot — this pane is the
-    /// compare sheet's home. When the listing never does, nothing opens.
-    private func applyCaptureSheetOverride() {
-        guard ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "diff",
-              comparing == nil,
-              let run = model.configuration.runs.first(where: { $0.kind == .backup && $0.snapshotID != nil }),
-              let repositoryID = run.repositoryID,
-              case let .available(snapshot)? = model.snapshotLink(for: run)
-        else { return }
-        selection = run.id
-        comparing = SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot)
-    }
-    #endif
 }

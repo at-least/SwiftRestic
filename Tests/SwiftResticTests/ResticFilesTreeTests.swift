@@ -43,7 +43,7 @@ struct ResticFilesTreeTests {
         // The launch's listing is empty, and the index takes it whole.
         await model.bootstrap()
         await model.tasks.drain()
-        #expect(await model.indexIsComplete(repositoryID: repository.id))
+        #expect(try await model.indexIsComplete(repositoryID: repository.id))
 
         // A backup, then the folder moves on: gone.txt and Old deleted,
         // new.txt written. The listing holds the backup; the index has not
@@ -57,7 +57,7 @@ struct ResticFilesTreeTests {
         let generation = model.nextListingGeneration()
         model.snapshots[repository.id] = listing
         model.snapshotsGeneration[repository.id] = generation
-        #expect(!(await model.indexIsComplete(repositoryID: repository.id)))
+        #expect(try await !model.indexIsComplete(repositoryID: repository.id))
 
         func summary(_ level: FilesTree.Level) -> [String] {
             level.entries.map { entry in
@@ -82,7 +82,7 @@ struct ResticFilesTreeTests {
 
         model.indexReconcile(repositoryID: repository.id, listing: listing, generation: generation)
         #expect(
-            await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+            await eventually(within: 60) { (try? await model.indexIsComplete(repositoryID: repository.id)) == true },
             "the index never read the backup"
         )
         let read = try await FilesTree.level(of: folder, model: model)
@@ -162,7 +162,7 @@ struct ResticFilesTreeTests {
             let model = self.model
             await model.bootstrap()
             #expect(
-                await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+                await eventually(within: 60) { (try? await model.indexIsComplete(repositoryID: repository.id)) == true },
                 "the index never read the backups"
             )
             let chain = try #require(model.snapshots(for: repository.id).first.map(SnapshotIndex.chainKey(for:)))
@@ -282,30 +282,10 @@ struct ResticFilesTreeTests {
         await model.shutdown()
     }
 
-    /// Find Files' restic engine — what runs while the index still reads,
-    /// and what a Files tab's "Search All Backups" hands a bare word to.
-    @MainActor
-    @Test("Find Files' restic search finds a bare word inside names, and a pattern as typed")
-    func findFilesBareWord() async throws {
-        let scene = try await ReadAheadScene()
-        defer { try? FileManager.default.removeItem(at: scene.root) }
-        let model = scene.model
-
-        func names(_ pattern: String) async throws -> Set<String> {
-            let found = try await model.findFiles(repositoryID: scene.repositoryID, pattern: pattern, latestOnly: false)
-            return Set(found.flatMap(\.matches).map(\.name))
-        }
-        // restic matches a pattern against whole names: "b.tx" alone named
-        // nothing, so a word without a glob character is looked for inside.
-        #expect(try await names("b.tx") == ["b.txt"])
-        #expect(try await names("C.*") == ["c.txt"])
-        await model.shutdown()
-    }
-
     /// The index searches' cap, over the index the app builds: a full page
     /// of hits is the whole answer, one hit past the cap says it was cut —
     /// the model's probe of asking one hit past the limit, for the Files
-    /// tab, Find Files and the Restore pane. The ceiling itself is pinned
+    /// tab and Search All Backups. The ceiling itself is pinned
     /// store-side (`SnapshotIndexScaleTests.search`).
     @MainActor
     @Test("an index search's full page is not called cut short; one hit past the cap is")
@@ -357,7 +337,7 @@ struct ResticFilesTreeTests {
             // The backup's closing refresh lands through the background lane
             // and the backfill with it.
             try #require(
-                await eventually(within: 60) { await model.indexIsComplete(repositoryID: repository.id) },
+                await eventually(within: 60) { (try? await model.indexIsComplete(repositoryID: repository.id)) == true },
                 "the index never read \(plan.path)'s backup"
             )
             let found = try await model.searchIndex(
@@ -370,13 +350,7 @@ struct ResticFilesTreeTests {
             // Full's page alone, then Full's notes and Over's together.
             let summaries = try await model.searchIndexWithSummaries(pattern: "note", repositoryID: repository.id)
             #expect(summaries.hits.count == AppModel.indexSearchLimit)
-            #expect(summaries.isTruncated == (plan.id == over.id), "Find Files read as truncated \(summaries.isTruncated) after \(plan.path)")
-            let snapshotID = try #require(model.snapshots(for: repository.id, planID: plan.id).first?.id)
-            let membership = try await model.searchIndexWithMembership(
-                pattern: "note", inSnapshot: snapshotID, repositoryID: repository.id
-            )
-            #expect(membership.hits.count == AppModel.indexSearchLimit)
-            #expect(membership.isTruncated == (plan.id == over.id), "the Restore pane read as truncated \(membership.isTruncated) after \(plan.path)")
+            #expect(summaries.isTruncated == (plan.id == over.id), "Search All Backups read as truncated \(summaries.isTruncated) after \(plan.path)")
         }
         await model.shutdown()
     }

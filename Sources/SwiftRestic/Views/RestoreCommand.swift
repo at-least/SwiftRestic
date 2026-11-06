@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What Restore does on the page in view — a backup's tree on a Backups
-/// tab, a folder or a file on a Files tab, Find Files' results — published
+/// tab, a folder or a file on a Files tab, Search All Backups' results — published
 /// by the pane that holds it for File ▸ Restore: the menu bar's way to the
 /// pane's own restore, its bottom bar's prominent button. Not in the window
 /// toolbar's trailing side, the HIG's place for a page's primary action:
@@ -9,7 +9,7 @@ import SwiftUI
 struct RestoreCommand {
     /// What it restores, in the pane's words: "Restore…" for a selection,
     /// "Restore Folder…" for the whole of what is open, "Restore Selected…"
-    /// for Find Files' rows. The ellipsis: each opens the destination sheet.
+    /// for Search All Backups' rows. The ellipsis: each opens the destination sheet.
     let title: String
     let isEnabled: Bool
     let run: () -> Void

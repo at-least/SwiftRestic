@@ -1,61 +1,9 @@
 import Foundation
 
-/// `restic find`'s answer, one result per backup, as Find Files' rows: one
-/// per path — the index engine's shape, so a row reads the same whichever
-/// engine answered and a common name does not flood the list with a row
-/// per backup. Each row is the path at the newest backup that holds it,
-/// with how many of the searched backups of that backup's chain do — the
-/// count the Files tab the row opens lists.
+/// One read of an index as Search All Backups' rows.
 enum FindResultGrouping {
-    struct PathRow {
-        var match: FindMatch
-        var snapshotID: String
-        var snapshotTime: Date?
-        var count: Int
-    }
-
-    /// Newest first; paths at one backup keep restic's order, and a
-    /// backup the listing does not know sorts last. A path whose backups'
-    /// times are all unknown — a search run before the listing loaded —
-    /// stays at the first that holds it, the newest: restic 0.19.1's
-    /// `find` answers newest backup first.
-    ///
-    /// `chain` names a backup's chain — the page whose Files tab lists it;
-    /// the backups the listing does not know count as one.
-    static func rows<Chain: Hashable>(
-        _ results: [FindResult],
-        times: [String: Date],
-        chain: (String) -> Chain
-    ) -> [PathRow] {
-        var rows: [PathRow] = []
-        var index: [PathKey: Int] = [:]
-        var counts: [PathKey: [Chain: Int]] = [:]
-        for result in results {
-            let time = times[result.snapshot]
-            let resultChain = chain(result.snapshot)
-            for match in result.matches {
-                let key = PathKey(match.path)
-                counts[key, default: [:]][resultChain, default: 0] += 1
-                guard let at = index[key] else {
-                    index[key] = rows.count
-                    rows.append(PathRow(match: match, snapshotID: result.snapshot, snapshotTime: time, count: 0))
-                    continue
-                }
-                if (time ?? .distantPast) > (rows[at].snapshotTime ?? .distantPast) {
-                    rows[at].match = match
-                    rows[at].snapshotID = result.snapshot
-                    rows[at].snapshotTime = time
-                }
-            }
-        }
-        for at in rows.indices {
-            rows[at].count = counts[PathKey(rows[at].match.path)]![chain(rows[at].snapshotID)]!
-        }
-        return newestFirst(rows) { $0.snapshotTime }
-    }
-
-    /// Rows newest first by `time`, ties keeping arrival order — both
-    /// engines' row order, so equal times never shuffle between searches.
+    /// Rows newest first by `time`, ties keeping arrival order, so equal times never shuffle
+    /// between searches.
     static func newestFirst<T>(_ rows: [T], time: (T) -> Date?) -> [T] {
         rows.enumerated()
             .sorted { a, b in
@@ -69,16 +17,15 @@ enum FindResultGrouping {
     struct IndexRow {
         var match: FindMatch
         var snapshotID: String
-        var snapshotTime: Date?
+        var snapshotTime: Date
         var count: Int
         var hit: SearchHit
     }
 
-    /// The index engine's rows from one read of the index — FTS over
-    /// basenames, each hit read with its summary (the path's newest version
-    /// and version count, not its whole list), so every row names a
-    /// restorable snapshot. Newest-first by that snapshot, matching the
-    /// restic engine's row order. The dropped count comes back beside the
+    /// The rows from one read of the index — FTS over basenames, each hit
+    /// read with its summary (the path's newest version and version count,
+    /// not its whole list), so every row names a restorable snapshot.
+    /// Newest-first by that snapshot. The dropped count comes back beside the
     /// rows, for the caller to set past its cancellation check: a hit
     /// without its summary is not expected — the search keeps only paths an
     /// indexed backup holds, and the summary comes from the same read — but
@@ -101,5 +48,74 @@ enum FindResultGrouping {
             ))
         }
         return (newestFirst(rows) { $0.snapshotTime }, dropped)
+    }
+}
+
+/// One search of every repository's index: the rows of those that answered,
+/// newest first, and what could not be covered, so a short list never passes
+/// for the whole answer.
+struct AllBackupsSearch: Equatable {
+    struct Answer {
+        enum Outcome {
+            case rows([FindResultGrouping.IndexRow], isTruncated: Bool, isComplete: Bool)
+            case failed(String)
+        }
+
+        var repositoryID: UUID
+        var outcome: Outcome
+    }
+
+    struct Row: Identifiable, Equatable {
+        /// Stored: SwiftUI reads it on every diff of the table. Byte-exact in
+        /// the path (`PathKey.hex`): two paths whose names differ only in
+        /// Unicode normalization are two rows.
+        let id: String
+        let repositoryID: UUID
+        let path: String
+        let name: String
+        let isDirectory: Bool
+        let snapshotID: String
+        let snapshotTime: Date
+        /// How many backups of the path's plan hold it.
+        let versionsCount: Int
+    }
+
+    struct Failure: Equatable {
+        var repositoryID: UUID
+        var message: String
+    }
+
+    var rows: [Row] = []
+    var isTruncated = false
+    /// Repositories whose index has backups left to read.
+    var stillReading: [UUID] = []
+    var failures: [Failure] = []
+
+    var isWhole: Bool { stillReading.isEmpty && failures.isEmpty }
+
+    init(_ answers: [Answer]) {
+        var merged: [Row] = []
+        for answer in answers {
+            switch answer.outcome {
+            case let .failed(message):
+                failures.append(Failure(repositoryID: answer.repositoryID, message: message))
+            case let .rows(rows, isTruncated, isComplete):
+                if isTruncated { self.isTruncated = true }
+                if !isComplete { stillReading.append(answer.repositoryID) }
+                merged += rows.map { row in
+                    Row(
+                        id: "\(answer.repositoryID.uuidString)/\(PathKey(row.match.path).hex)",
+                        repositoryID: answer.repositoryID,
+                        path: row.match.path,
+                        name: row.match.name,
+                        isDirectory: row.match.isDirectory,
+                        snapshotID: row.snapshotID,
+                        snapshotTime: row.snapshotTime,
+                        versionsCount: row.count
+                    )
+                }
+            }
+        }
+        rows = FindResultGrouping.newestFirst(merged) { $0.snapshotTime }
     }
 }

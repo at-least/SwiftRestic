@@ -75,32 +75,19 @@ extension AppModel {
         try await indexCoordinator.contentVersions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
-    /// Nil when the index has not read both; throws when it fails, as
-    /// `indexedChildren` does.
-    func indexedChanges(
-        underPath path: String,
-        inChain chainKey: String,
-        from olderID: String,
-        to newerID: String,
-        repositoryID: UUID
-    ) async throws -> FolderChanges? {
-        try await indexCoordinator.changes(
-            underPath: path, inChain: chainKey, from: olderID, to: newerID, repositoryID: repositoryID
-        )
-    }
-
     func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {
         try await indexCoordinator.kinds(of: paths, inSnapshot: snapshotID, repositoryID: repositoryID)
     }
 
     /// Whether the index has read every listed snapshot of the repository —
-    /// the Files view's completeness signal. An index that cannot answer
-    /// reads as "not complete", never as a failure; so does one that has
-    /// not taken the listing on screen yet, whose answers still describe
-    /// the listing before — blind to what this one added or forgot.
-    func indexIsComplete(repositoryID: UUID) async -> Bool {
+    /// the Files view's and the searches' completeness signal. Not complete
+    /// when it has not taken the listing on screen yet, whose answers still
+    /// describe the listing before — blind to what this one added or forgot.
+    /// Throws when the index cannot answer: read as "still reading", a broken
+    /// index would stay a partial answer for good.
+    func indexIsComplete(repositoryID: UUID) async throws -> Bool {
         guard indexTakenGeneration[repositoryID] == snapshotsGeneration[repositoryID] else { return false }
-        return (try? await indexCoordinator.isComplete(repositoryID: repositoryID)) ?? false
+        return try await indexCoordinator.isComplete(repositoryID: repositoryID)
     }
 
     /// Throws the index away and rebuilds it from the listing the model
@@ -136,34 +123,13 @@ extension AppModel {
         (Array(hits.prefix(indexSearchLimit)), hits.count > indexSearchLimit)
     }
 
-    /// The Restore pane's search: instant basename hits over the indexed
-    /// paths, and which of them `snapshotID` holds — each with its kind in
-    /// that snapshot, true for a directory — from one read of the index.
-    /// Throws when the index itself fails: for a search tool, "the index is
-    /// broken" must never read as "nothing matches". A snapshot the index
-    /// has not read holds nothing here; the caller's completeness check
-    /// owns that. Capped by `capped`.
-    func searchIndexWithMembership(
-        pattern: String,
-        inSnapshot snapshotID: String,
-        repositoryID: UUID
-    ) async throws -> (hits: [SearchHit], inSnapshot: [PathKey: Bool], isTruncated: Bool) {
-        let found = try await indexCoordinator.searchWithMembership(
-            matching: pattern,
-            inSnapshot: snapshotID,
-            repositoryID: repositoryID,
-            limit: AppModel.indexSearchLimit + 1
-        )
-        let page = Self.capped(found.hits)
-        return (page.hits, found.inSnapshot, page.isTruncated)
-    }
-
-    /// Find Files' search: instant basename hits over the indexed paths,
-    /// each with its version count and newest version — what a row shows —
-    /// without the full lists, which can run to thousands per path, from
-    /// one read of the index. Throws when the index itself fails, as the
-    /// Restore pane's search does; the summaries are keyed by the path's
-    /// bytes (`PathKey`). Capped by `capped`.
+    /// One repository's search for Search All Backups: instant basename hits
+    /// over the indexed paths, each with its version count and newest version
+    /// — what a row shows — without the full lists, which can run to
+    /// thousands per path, from one read of the index. Throws when the index
+    /// itself fails: for a search tool, "the index is broken" must never read
+    /// as "nothing matches". The summaries are keyed by the path's bytes
+    /// (`PathKey`). Capped by `capped`.
     func searchIndexWithSummaries(
         pattern: String,
         repositoryID: UUID
@@ -175,6 +141,29 @@ extension AppModel {
         )
         let page = Self.capped(found.hits)
         return (page.hits, found.summaries, page.isTruncated)
+    }
+
+    /// Search All Backups: every repository's index, one at a time, each
+    /// answering for itself — one broken index leaves the others' rows. Asked
+    /// before the search, as every search asks: a backup once read stays read,
+    /// so an index complete beforehand has read every backup its hits come
+    /// from.
+    func searchAllBackups(pattern: String) async -> AllBackupsSearch {
+        var answers: [AllBackupsSearch.Answer] = []
+        for repository in configuration.repositories {
+            do {
+                let isComplete = try await indexIsComplete(repositoryID: repository.id)
+                let found = try await searchIndexWithSummaries(pattern: pattern, repositoryID: repository.id)
+                let built = FindResultGrouping.indexRows(hits: found.hits, summaries: found.summaries)
+                answers.append(AllBackupsSearch.Answer(
+                    repositoryID: repository.id,
+                    outcome: .rows(built.rows, isTruncated: found.isTruncated || built.dropped > 0, isComplete: isComplete)
+                ))
+            } catch {
+                answers.append(AllBackupsSearch.Answer(repositoryID: repository.id, outcome: .failed(error.localizedDescription)))
+            }
+        }
+        return AllBackupsSearch(answers)
     }
 
     /// A Files tab's search: instant basename hits over what one chain ever

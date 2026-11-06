@@ -73,10 +73,7 @@ struct RootView: View {
             pendingCaptureRestore: $pendingCaptureRestore,
             onAddPlan: startNewPlan(in:),
             onAdoptGroup: adoptGroup,
-            onRevalidateSelection: revalidateSelection,
-            onSearchAllBackups: { repositoryID, query in
-                router.openFind(repositoryID: repositoryID, query: query, run: true)
-            }
+            onRevalidateSelection: revalidateSelection
         )
         .environment(filesTree)
     }
@@ -263,25 +260,9 @@ struct RootView: View {
         case "repository": router.selection = model.configuration.repositories.first.map { .repository($0.id) }
         case "activity": router.selection = .activity
         case "find":
-            // SWIFTRESTIC_CAPTURE_FIND: a search to run on arrival in the
-            // first repository, as Search All Backups hands one over.
-            let pattern = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"]
-            router.openFind(repositoryID: model.configuration.repositories.first?.id, query: pattern, run: pattern != nil)
-        // Find Files over a non-first repository, by ⇧⌘F's own route from
-        // the repository page of the first plan whose repository is not the
-        // first. Plain `find` cannot tell the opening rule from the
-        // first-repository fallback — the landing selection IS the first
-        // repository — so a configuration without such a plan stops the run
-        // rather than photographing that fallback.
-        case "findMoved":
-            guard let repositoryID = model.configuration.plans.lazy.compactMap(\.repositoryID).first(where: {
-                $0 != model.configuration.repositories.first?.id
-            }) else {
-                preconditionFailure("findMoved needs a plan whose repository is not the first")
-            }
-            router.selection = .repository(repositoryID)
-            router.request(.showFind)
-        // ⇧⌘F on the first plan's page, through the menu's own route: the
+            // SWIFTRESTIC_CAPTURE_FIND: a search in place on arrival.
+            router.openFind(query: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"])
+        // ⌘F on the first plan's page, through the menu's own route: the
         // page turns to its Files tab, the search field focused.
         case "filesSearch":
             router.selection = model.configuration.plans.first.map { .plan($0.id) }
@@ -418,8 +399,8 @@ struct RootView: View {
     /// dropped with a beep — macOS's "not now" — since two sheets cannot
     /// present at once, and because the main menu stays live under a sheet:
     /// a Remove from SwiftRestic would leave the editor saving against a repository
-    /// that is gone. The panes' own sheets (Compare, a restore's
-    /// destination) are invisible from here, so AppKit is asked: SwiftUI
+    /// that is gone. The panes' own sheets (a restore's destination) are
+    /// invisible from here, so AppKit is asked: SwiftUI
     /// presents every sheet as the window's attached sheet. Each ask is
     /// checked again against the model — it may have waited for a window
     /// while the plan changed.
@@ -443,16 +424,11 @@ struct RootView: View {
             editingRepository = Repository()
         case .showFind:
             // A plan's page searches its own files on its Files tab, the
-            // toolbar's field focused; every other pane — a group's page
-            // too, which has no Files tab — the whole repository in Find
-            // Files, on the repository the selection names — on Find Files
-            // itself, the one it shows — else the first.
+            // toolbar's field focused; every other pane all backups.
             if let page = router.selection, model.filesSearchRoots(for: page) != nil {
                 router.searchFiles(on: page)
             } else {
-                router.openFind(repositoryID: model.findFilesRepositoryID(
-                    prefillRepositoryID: nil, selection: router.selection, shown: router.findRepositoryID
-                ))
+                router.openFind()
             }
         case .runSelectedPlan:
             runSelectedPlan()
@@ -487,6 +463,5 @@ struct RootView: View {
             isResticAvailable: model.isResticAvailable
         )
         if corrected != router.selection { router.selection = corrected }
-        router.revalidateFindRepository(repositories: model.configuration.repositories)
     }
 }

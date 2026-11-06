@@ -88,20 +88,7 @@ struct AppRouterTests {
         // Backups tab, searched in another backup, would stand over the
         // record and the folder the route asked for. Another page's stays.
         let other = SidebarItem.plan(UUID())
-        router.backupsSearchText[page] = "taxes"
-        router.backupsSearchText[other] = "photos"
         router.showBackup("s3", on: page, repositoryID: repository, focusPath: "/D/Taxes")
-        #expect(router.backupsSearchText[page] == nil)
-        #expect(router.backupsSearchText[other] == "photos")
-    }
-
-    @Test("a Files version hint is spent by the next pane that takes it, once")
-    func filesVersionHintIsSpentOnce() {
-        let router = AppRouter()
-        #expect(router.takeFilesVersionHint() == nil)
-        router.filesVersionHint = "abc"
-        #expect(router.takeFilesVersionHint() == "abc")
-        #expect(router.takeFilesVersionHint() == nil)
     }
 
     @Test("every page opens on its overview, and the view chosen on one page is every page's; a route to a group's backups leaves that choice alone")
@@ -153,21 +140,25 @@ struct AppRouterTests {
         #expect(router.searchFocus == page)
     }
 
-    @Test("Find Files opens as a page on its repository, its field focused, a handed-over search kept and run on arrival")
+    @Test("Search All Backups opens as a page, its field focused, and a query handed over is kept, with the plan it came from to go back to")
     func openFindIsAPage() {
         let router = AppRouter()
-        let repository = UUID()
         router.findQuery = "older"
-        router.openFind(repositoryID: repository)
+        router.openFind()
         #expect(router.selection == .findFiles)
-        #expect(router.findRepositoryID == repository)
         #expect(router.searchFocus == .findFiles)
         #expect(router.findQuery == "older")
-        #expect(!router.findRunsOnArrival)
+        #expect(router.findOrigin == nil)
 
-        router.openFind(repositoryID: repository, query: "invoice", run: true)
+        let plan = SidebarItem.plan(UUID())
+        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
+        router.openFind(query: "invoice", from: AppRouter.FindOrigin(page: plan, roots: roots))
         #expect(router.findQuery == "invoice")
-        #expect(router.findRunsOnArrival)
+        router.returnToPlanSearch()
+        #expect(router.selection == plan)
+        #expect(router.tab(of: plan) == .files)
+        #expect(router.searchFocus == plan)
+        #expect(router.filesSearchText[roots] == "invoice")
     }
 
     @Test("a search's hit opens the folders above it down from the deepest top holding it, and a whole-disk top ends the walk")
@@ -193,18 +184,6 @@ struct AppRouterTests {
         none.openFolders(above: node("/Data"), from: ["/Data"])
         none.openFolders(above: node("/Data2/x.txt", folder: false), from: ["/Data"])
         #expect(none.openFolders.isEmpty)
-    }
-
-    @Test("Find Files lets go of a repository that was removed, so its results and picker do not outlive it")
-    func findFilesLetsGoOfARemovedRepository() {
-        let kept = namedRepository("Kept")
-        let removed = namedRepository("Removed")
-        let router = AppRouter()
-        router.openFind(repositoryID: removed.id)
-        router.revalidateFindRepository(repositories: [kept, removed])
-        #expect(router.findRepositoryID == removed.id)
-        router.revalidateFindRepository(repositories: [kept])
-        #expect(router.findRepositoryID == nil)
     }
 
     private func revalidated(

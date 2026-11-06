@@ -74,7 +74,7 @@ struct RestorePaneLoadTests {
         await untilTreeListed(recorder)
 
         #expect(recorder.events == [
-            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .comparing(baseline: baseline))),
+            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .comparing(baseline: baseline), list: BackupChanges(changes: [:]))),
             .treeListed,
         ])
         held.finish(marks([]))
@@ -127,7 +127,7 @@ struct RestorePaneLoadTests {
         await load.value
 
         #expect(recorder.events == [
-            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .comparing(baseline: baseline))),
+            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .comparing(baseline: baseline), list: BackupChanges(changes: [:]))),
             .treeListed,
         ])
     }
@@ -175,7 +175,7 @@ struct RestorePaneLoadTests {
             show: { recorder.events.append(.shown($0)) }
         )
         #expect(recorder.events == [
-            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .firstBackup)),
+            .shown(RestorePaneLoad.Marks(changes: [:], changesInside: [:], comparison: .firstBackup, list: BackupChanges(changes: [:]))),
             .treeListed,
         ])
         #expect(recorder.compareCalls == 0)

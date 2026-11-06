@@ -263,6 +263,13 @@ struct SwiftResticApp: App {
                     NSWorkspace.shared.open(AppLinks.documentation)
                 }
             }
+            // A plan's page searches its own files, and every other page all
+            // backups; both are the toolbar field's (`AppRouter.Intent.showFind`).
+            CommandGroup(after: .textEditing) {
+                Button("Find…") { ask(.showFind) }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .disabled(!model.repositoryCommands(for: router.selection).canFind)
+            }
             RestoreCommands()
             CommandGroup(replacing: .importExport) {}
             // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
@@ -425,9 +432,6 @@ struct SwiftResticApp: App {
     private var repositoryMenu: some Commands {
         CommandMenu("Repository") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Find Files…") { ask(.showFind) }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
-                .disabled(!r.canFind)
             Button("Refresh All Backups") {
                 Task { await model.refreshAllSnapshots() }
             }

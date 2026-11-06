@@ -370,18 +370,6 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
-    nonisolated func changes(
-        underPath path: String,
-        inChain chainKey: String,
-        from olderID: String,
-        to newerID: String,
-        repositoryID: UUID
-    ) async throws -> FolderChanges? {
-        try await read(repositoryID) {
-            try await $0.changes(underPath: path, inChain: chainKey, from: olderID, to: newerID)
-        }
-    }
-
     nonisolated func searchWithMembership(
         matching query: String,
         inSnapshot snapshotID: String,

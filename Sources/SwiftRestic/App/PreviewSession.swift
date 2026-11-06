@@ -5,7 +5,7 @@ import SwiftUI
 /// One pane's Quick Look look at a file in a backup, before restoring it: the
 /// file copied out of the repository into a temporary folder
 /// (`AppModel.previewCopy`), shown, and deleted when the preview ends —
-/// whichever way it ends. The file pane, the Restore pane and Find Files each
+/// whichever way it ends. The file pane, the Restore pane and Search All Backups each
 /// hold one (`previewSession(_:)`).
 @MainActor @Observable
 final class PreviewSession {

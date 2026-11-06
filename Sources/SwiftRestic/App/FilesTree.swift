@@ -356,7 +356,7 @@ final class FilesTree {
         let isDirectory = try await Task.detached(priority: .userInitiated) { try DiskFolder.isDirectory(path) }.value
         // Asked before the holders: a backup once read stays read, so an
         // index complete beforehand has read every backup that holds it.
-        let complete = await model.indexIsComplete(repositoryID: node.repositoryID)
+        let complete = try await model.indexIsComplete(repositoryID: node.repositoryID)
         let holders = try await model.indexedHolders(ofPath: path, inChain: node.chainKey, repositoryID: node.repositoryID)
         let entry = Entry(
             node: FileNode(repositoryID: node.repositoryID, chainKey: node.chainKey, path: path, isDirectory: isDirectory),
@@ -378,7 +378,7 @@ final class FilesTree {
             disk = []
         }
         // Asked before the index's answer, as the root's is.
-        let complete = await model.indexIsComplete(repositoryID: node.repositoryID)
+        let complete = try await model.indexIsComplete(repositoryID: node.repositoryID)
         let indexed = try await model.indexedChildren(
             ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
         )
@@ -517,8 +517,8 @@ struct FilesSearchAnswer: Equatable {
     static let indexStillReading = "The index is still reading this repository — older backups may be missing."
 
     /// The index's words while it can still be missing matches — every
-    /// search answer that may be short says them: the Restore pane's note,
-    /// a Files tab's empty state and its footer.
+    /// search answer that may be short says them: a Files tab's empty state
+    /// and its footer.
     static let searchStillReading = "The index is still reading this repository — some matches may be missing."
     /// A capped search, in every search's footer: no count, since a pane
     /// may list only a subset of what the cap counted, and not "the first",

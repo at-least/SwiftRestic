@@ -238,7 +238,7 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
 /// The closing `message_type: statistics` line of `restic diff --json`.
 /// Every key is required: restic 0.19.1 writes them all, zeros included, so
 /// a missing one is a format change, decoded as `.malformed` — never a
-/// "0 files" the Compare sheet would show as fact.
+/// "0 files" read as fact.
 struct ResticDiffStatistics: Sendable, Equatable, Decodable {
     struct Counts: Sendable, Equatable, Decodable {
         var files: Int

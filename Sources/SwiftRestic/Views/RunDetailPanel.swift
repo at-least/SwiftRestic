@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Activity's drawer: what the selected run did and where to go from it —
-/// the snapshot it wrote or read (Browse, Compare with Previous), its
+/// the snapshot it wrote or read (Browse), its
 /// numbers, restic's exit code, the messages it left, and the log. Shown
 /// for every selected run, clean ones included: the plan page's Last backup
 /// value lands on exactly such a run, and an empty pane under the selection
@@ -18,7 +18,6 @@ struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let run: RunRecord
-    var onCompare: (SnapshotDiffTarget) -> Void
     var onShowLog: (RunRecord) -> Void
 
     var body: some View {
@@ -70,7 +69,7 @@ struct RunDetailPanel: View {
         switch run.kind {
         case .backup:
             if let snapshotID = run.snapshotID {
-                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
+                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID) }
             }
             if run.outcome == .skipped, let reason = run.detailText {
                 DetailRow("Reason", reason)
@@ -89,7 +88,7 @@ struct RunDetailPanel: View {
             repositoryRow
         case .restore:
             if let snapshotID = run.snapshotID {
-                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
+                DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID) }
             }
             // Records that predate destination tracking have none; their
             // rows are left out rather than guessed.
@@ -319,14 +318,12 @@ struct ConsoleRouteButton: View {
 /// The drawer's Backup row, in its own view so the listing lookup behind
 /// it reruns only when the run or the repository's listing changes — not on
 /// every write the drawer's other rows observe. Browse opens the backup
-/// on its page's Backups tab; Compare with Previous is the diff's one
-/// way in.
+/// on its page's Backups tab.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let run: RunRecord
     let snapshotID: String
-    let onCompare: (SnapshotDiffTarget) -> Void
 
     var body: some View {
         let short = String(snapshotID.prefix(8))
@@ -337,14 +334,6 @@ private struct RunSnapshotRow: View {
                 identifier(short, made: run.kind == .restore ? (run.snapshotTime ?? snapshot.time) : nil)
                 completenessMark(for: snapshot.id)
                 browseButton(snapshot.id)
-                if run.kind == .backup {
-                    Button("Compare with Previous") {
-                        if let repositoryID = run.repositoryID {
-                            onCompare(SnapshotDiffTarget(repositoryID: repositoryID, snapshot: snapshot))
-                        }
-                    }
-                    .help("See what changed since the previous backup of these folders")
-                }
             case .removed?:
                 Text("\(short) — no longer in the repository")
                     .monospaced()
@@ -357,11 +346,6 @@ private struct RunSnapshotRow: View {
                 Button("Browse") {}
                     .disabled(true)
                     .help(help)
-                if run.kind == .backup {
-                    Button("Compare with Previous") {}
-                        .disabled(true)
-                        .help(help)
-                }
             case .repositoryGone?, nil:
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
                     .help("This repository is no longer set up in SwiftRestic")

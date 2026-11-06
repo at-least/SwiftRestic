@@ -342,11 +342,11 @@ struct AppModelTests {
         let older = try #require(model.snapshots(for: id, planID: harness.plan.id).min { $0.time < $1.time })
         // Both backups indexed, so each kind comes from the index, not a listing.
         let deadline = Date.now.addingTimeInterval(60)
-        while await !model.indexIsComplete(repositoryID: id), Date.now < deadline {
+        while try await !model.indexIsComplete(repositoryID: id), Date.now < deadline {
             await model.tasks.drain()
             try await Task.sleep(for: .milliseconds(100))
         }
-        try #require(await model.indexIsComplete(repositoryID: id))
+        try #require(try await model.indexIsComplete(repositoryID: id))
         #expect(try await model.indexedNode(repositoryID: id, snapshotID: older.id, path: x.path)?.isDirectory == false)
         #expect(try await model.indexedNode(repositoryID: id, snapshotID: older.id, path: y.path)?.isDirectory == true)
 
@@ -2585,8 +2585,36 @@ struct RestoreBannerTests {
 @MainActor
 @Suite("Index completeness")
 struct IndexCompletenessTests {
+    @Test("a search of all backups names the repository whose index failed, and lists the others' rows")
+    func searchAllBackupsNamesTheFailure() async throws {
+        let (model, root) = makeModel("SwiftResticSearchAllFailure")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (home, nas) = (namedRepository("Home"), namedRepository("NAS"))
+        model.configuration.repositories = [home, nas]
+        await model.indexCoordinator.dropRepository(repositoryID: nas.id)
+
+        let found = await model.searchAllBackups(pattern: "invoice")
+        #expect(found.failures.map(\.repositoryID) == [nas.id])
+        #expect(found.rows.isEmpty)
+        #expect(!found.isWhole)
+        await model.shutdown()
+    }
+
+    @Test("an index that cannot answer throws, never passes for one still reading")
+    func anIndexThatCannotAnswerThrows() async {
+        let (model, root) = makeModel("SwiftResticIndexFailure")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = namedRepository("NAS")
+        model.configuration.repositories = [repository]
+        await model.indexCoordinator.dropRepository(repositoryID: repository.id)
+        await #expect(throws: (any Error).self) {
+            _ = try await model.indexIsComplete(repositoryID: repository.id)
+        }
+        await model.shutdown()
+    }
+
     @Test("a listing whose reconcile has not returned is not complete, however complete the index is for the one before")
-    func completenessWaitsForTheReconcile() async {
+    func completenessWaitsForTheReconcile() async throws {
         let (model, root) = makeModel("SwiftResticIndexCompleteness")
         defer { try? FileManager.default.removeItem(at: root) }
         // Configured: a reconcile of a repository no longer configured is
@@ -2599,20 +2627,20 @@ struct IndexCompletenessTests {
         model.snapshotsGeneration[repositoryID] = 1
         model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 1)
         await model.tasks.drain()
-        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+        #expect(try await model.indexIsComplete(repositoryID: repositoryID))
 
         // A newer listing on screen, its reconcile not yet run.
         model.snapshotsGeneration[repositoryID] = 2
-        #expect(await !model.indexIsComplete(repositoryID: repositoryID))
+        #expect(try await !model.indexIsComplete(repositoryID: repositoryID))
 
         model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 2)
         await model.tasks.drain()
-        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+        #expect(try await model.indexIsComplete(repositoryID: repositoryID))
         await model.shutdown()
     }
 
     @Test("Rebuild Search Index: the thrown-away store takes the listing again and is complete once more")
-    func rebuildIndexLandsTheListingAgain() async {
+    func rebuildIndexLandsTheListingAgain() async throws {
         let (model, root) = makeModel("SwiftResticRebuild")
         defer { try? FileManager.default.removeItem(at: root) }
         // Configured, as the hatch's own path checks: a reconcile of a
@@ -2626,16 +2654,16 @@ struct IndexCompletenessTests {
         model.snapshotsGeneration[repositoryID] = 5
         model.indexReconcile(repositoryID: repositoryID, listing: [], generation: 5)
         await model.tasks.drain()
-        #expect(await model.indexIsComplete(repositoryID: repositoryID))
+        #expect(try await model.indexIsComplete(repositoryID: repositoryID))
 
         // The state the hatch exists for: the store thrown away, nothing
         // applied since — no listing, so not complete.
         await model.indexCoordinator.resetRepository(repositoryID: repositoryID)
-        #expect(!(await model.indexIsComplete(repositoryID: repositoryID)))
+        #expect(try await !model.indexIsComplete(repositoryID: repositoryID))
 
         model.rebuildIndex(repositoryID: repositoryID)
         await model.tasks.drain()
-        #expect(await model.indexIsComplete(repositoryID: repositoryID), "the rebuilt index never took the listing again")
+        #expect(try await model.indexIsComplete(repositoryID: repositoryID), "the rebuilt index never took the listing again")
         #expect(model.indexTakenGeneration[repositoryID] == 5)
         await model.shutdown()
     }

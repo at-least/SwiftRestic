@@ -282,27 +282,6 @@ extension AppModel {
         return nodes
     }
 
-    /// Searches a repository's snapshots for a path pattern. restic matches a
-    /// pattern against whole names, so a pattern with no glob character is
-    /// wrapped in `*…*` — a bare word would find only an item named exactly
-    /// that. A bare word is what a Files tab's "Search All Backups" hands
-    /// over; the index's own search takes words.
-    func findFiles(
-        repositoryID: UUID,
-        pattern: String,
-        latestOnly: Bool
-    ) async throws -> [FindResult] {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
-        let (service, context) = try await resticContext(for: repository)
-        let isGlob = pattern.unicodeScalars.contains { "*?[\\".unicodeScalars.contains($0) }
-        return try await service.find(
-            context,
-            patterns: [isGlob ? pattern : "*\(pattern)*"],
-            ignoreCase: true,
-            snapshotIDs: latestOnly ? ["latest"] : []
-        )
-    }
-
     /// One file's node in `snapshotIDs` — its size and modification time
     /// there — by snapshot ID, from one `restic find` of its exact path: the
     /// Files view's version rows, which ask for each version's newest
@@ -437,22 +416,6 @@ extension AppModel {
         for reader in readers where fileHistoryReadAheads[reader] == find { fileHistoryReadAheads[reader] = nil }
     }
 
-    /// Compares two snapshots; `+` in the result means present only in `newer`.
-    func diffSnapshots(
-        repositoryID: UUID,
-        olderID: String,
-        newerID: String,
-        includeMetadata: Bool
-    ) async throws -> SnapshotDiff {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
-        let (service, context) = try await resticContext(for: repository)
-        return try await service.diff(
-            context,
-            olderID: olderID,
-            newerID: newerID,
-            includeMetadata: includeMetadata
-        )
-    }
 }
 
 /// The path is matched by bytes, as the index keys paths.

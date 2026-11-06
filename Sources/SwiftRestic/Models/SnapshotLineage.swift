@@ -8,7 +8,7 @@ import Foundation
 /// repository's Other backups it groups the records no plan tag marks (a
 /// plan's own, tagged ones group by their plan instead — see
 /// `OtherBackupsGroup`), and both the restore pane's Change column and the
-/// Compare sheet default to the previous snapshot in it. Retention is
+/// Show Changes Only compare with the previous snapshot in it. Retention is
 /// narrower: `forget` runs per plan (`--tag <plan>`), and restic
 /// groups that plan's snapshots by host+paths — so a lineage two plans share
 /// is thinned as two separate groups, and snapshots without a plan tag are

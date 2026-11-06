@@ -580,36 +580,18 @@ struct SnapshotIndexTests {
         IndexVersion(id: id, time: Date(timeIntervalSince1970: 0))
     }
 
-    @Test("preferredVersion lands on the newest and keeps the user's era when it still covers")
-    func preferredVersionPicks() {
-        let versions = [version("new"), version("mid"), version("old")]
-        #expect(versions.preferredVersion(previousID: nil)?.id == "new")
-        #expect([IndexVersion]().preferredVersion(previousID: nil) == nil)
-        #expect(versions.preferredVersion(previousID: "mid")?.id == "mid")
-        #expect(versions.preferredVersion(previousID: "ghost")?.id == "new")
-    }
-
-    @Test("a pane opens at the era one level up when it holds the item, else where the item was last left, else the newest")
-    func preferredVersionRemembers() {
-        let versions = [version("new"), version("mid"), version("old")]
-        #expect(versions.preferredVersion(previousID: nil, rememberedID: "old")?.id == "old")
-        #expect(versions.preferredVersion(previousID: "mid", rememberedID: "old")?.id == "mid")
-        // An era the item was absent from, or a forgotten backup, gives way.
-        #expect(versions.preferredVersion(previousID: "ghost", rememberedID: "old")?.id == "old")
-        #expect(versions.preferredVersion(previousID: "ghost", rememberedID: "gone")?.id == "new")
-
-        // A file's versions, by the same rule: one level up names a backup
-        // inside a version, the memory names a version.
+    @Test("a pane opens at the version holding the backup asked for, else the newest")
+    func versionHolding() {
         let contents = [
             ContentVersion(snapshots: [version("b4"), version("b3")], since: .changed),
             ContentVersion(snapshots: [version("b2")], since: .uncertain),
             ContentVersion(snapshots: [version("b1")], since: nil),
         ]
-        #expect(contents.preferredVersion(previousID: nil, rememberedID: nil)?.id == "b4")
-        #expect(contents.preferredVersion(previousID: "b3", rememberedID: "b1")?.id == "b4")
-        #expect(contents.preferredVersion(previousID: "ghost", rememberedID: "b1")?.id == "b1")
-        #expect(contents.preferredVersion(previousID: nil, rememberedID: "gone")?.id == "b4")
-        #expect([ContentVersion]().preferredVersion(previousID: nil, rememberedID: "b1") == nil)
+        #expect(contents.version(holding: nil)?.id == "b4")
+        #expect(contents.version(holding: "b3")?.id == "b4", "a backup inside a version")
+        #expect(contents.version(holding: "b1")?.id == "b1", "a version by its own ID")
+        #expect(contents.version(holding: "gone")?.id == "b4")
+        #expect([ContentVersion]().version(holding: "b1") == nil)
     }
 
     @Test("chosen falls back to the newest, after steps one down and stops at the oldest")

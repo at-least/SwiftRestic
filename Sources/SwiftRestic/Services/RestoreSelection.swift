@@ -1,7 +1,7 @@
 import Foundation
 
-/// One picked item of a restore — a row of the Restore pane, Find Files or
-/// the Compare sheet: where it is in which backup, and restic's node for it
+/// One picked item of a restore — a row of the Restore pane, Search All Backups or
+/// Show Changes Only: where it is in which backup, and restic's node for it
 /// when the row carries one.
 struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
     let name: String

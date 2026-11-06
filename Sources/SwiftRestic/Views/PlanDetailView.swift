@@ -6,8 +6,6 @@ struct PlanDetailView: View {
     /// The window's minute clock: Last backup and Next backup are as of it.
     @Environment(\.now) private var now
     let planID: UUID
-    /// The Files tab's "Search All Backups": Find Files, prefilled.
-    let onSearchAllBackups: (_ repositoryID: UUID, _ query: String) -> Void
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
@@ -32,7 +30,7 @@ struct PlanDetailView: View {
         .pageSearch(
             page: .plan(planID),
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
-            filesPrompt: "Search this plan’s backups"
+            prompt: "Search this plan’s backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
         // Plan ▸ Edit Plan and the sidebar row's Edit Plan, removing Plan ▸
@@ -229,8 +227,7 @@ struct PlanDetailView: View {
             BackupsBrowserView(
                 page: .plan(planID),
                 repositoryID: repositoryID,
-                backups: planBackups(plan),
-                onSearchAllBackups: onSearchAllBackups
+                backups: planBackups(plan)
             )
         } else {
             noRepository
@@ -254,8 +251,7 @@ struct PlanDetailView: View {
         if let repositoryID = plan.repositoryID {
             FilesBrowserView(
                 roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)),
-                page: .plan(plan.id),
-                onSearchAllBackups: onSearchAllBackups
+                page: .plan(plan.id)
             )
         } else {
             noRepository

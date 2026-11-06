@@ -12,7 +12,7 @@ protocol RestoreBatchItem {
 extension SnapshotNode: RestoreBatchItem {}
 
 /// Several items restored together — a multiple selection of the Restore
-/// pane, Find Files or the Compare sheet. The rules that turn the selection
+/// pane, Search All Backups or Show Changes Only. The rules that turn the selection
 /// into restic calls, apart from restic so they can be tested.
 ///
 /// Paths are compared by their bytes (`PathKey`), never as Swift strings:
@@ -36,7 +36,7 @@ enum RestoreBatch {
     /// it — and a repeat counts once. Only within one backup: a folder
     /// restores as its own backup holds it and brings nothing of another's.
     /// A file found in an older backup than its folder's is one the folder's
-    /// backup no longer holds (Find Files lists each path at the newest
+    /// backup no longer holds (Search All Backups lists each path at the newest
     /// backup holding it), or one a diff's newer backup removed, so it
     /// restores on its own. A selection of one backup — the Restore pane's —
     /// names that one for every item.

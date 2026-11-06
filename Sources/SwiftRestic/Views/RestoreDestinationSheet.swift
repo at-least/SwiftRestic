@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One restore waiting for its destination: what, from which backup, and
 /// what to run once the sheet has an answer. Every Restore in the app
-/// builds one — the Restore pane's, Find Files and the Files view's — so
+/// builds one — the Restore pane's, Search All Backups' and the Files view's — so
 /// the destination and the keep/replace choice are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
@@ -14,7 +14,7 @@ struct RestoreDestinationRequest: Identifiable {
     var selectionNote: String?
     let backupTime: Date?
     let snapshotShortID: String
-    /// How many backups the items come from: Find Files restores each row
+    /// How many backups the items come from: Search All Backups restores each row
     /// from the backup it was found in.
     var backupCount = 1
     /// The version's own modified time, when the request came from a row
@@ -28,7 +28,7 @@ struct RestoreDestinationRequest: Identifiable {
 
     /// The picked rows' restore — every surface's that restores a selection:
     /// the Restore pane's and the folder-versions pane's, of one backup, and
-    /// Find Files' and the Compare sheet's, of several. One rule and one
+    /// Search All Backups', of several. One rule and one
     /// wording for all (`RestoreSelection`): items inside a selected folder
     /// of the same backup are left to it, and the sheet says so, or three
     /// selected rows would read as two. Nil when the picked rows restore
@@ -64,11 +64,6 @@ struct RestoreDestinationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let request: RestoreDestinationRequest
-    /// Set when the form stands in another sheet's place — Compare's,
-    /// which shows it as its next step rather than stack a second sheet:
-    /// Cancel and Restore call it instead of dismissing.
-    var onClose: (() -> Void)?
-
     @State private var kind: RestoreDestinationKind = .desktop
     @State private var otherFolder: URL?
     @State private var policy: RestoreOverwritePolicy = .keepExisting
@@ -374,6 +369,6 @@ struct RestoreDestinationSheet: View {
     }
 
     private func close() {
-        if let onClose { onClose() } else { dismiss() }
+        dismiss()
     }
 }

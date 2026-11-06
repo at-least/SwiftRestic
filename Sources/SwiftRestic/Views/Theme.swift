@@ -25,8 +25,6 @@ enum Theme {
         static let card: CGFloat = 10
         static let chip: CGFloat = 7
     }
-
-    static let statValue: Font = .system(.title3, design: .rounded).weight(.semibold)
 }
 
 struct CardSurface: ViewModifier {
