@@ -58,10 +58,10 @@ would need a Developer ID, the hardened runtime and notarization.
 
 ## Good to know
 
-- Scheduled backups need the app running. There is no daemon: turn on
-  *Start at login* in Settings and keep the menu bar item on. The app moves
-  to `/Applications` first, since a login item registered from a build
-  folder goes stale.
+- Scheduled backups need the app running. There is no daemon: saving the
+  first scheduled plan turns on *Start at login*, once the app is in
+  `/Applications`, since a login item registered from a build folder goes
+  stale. Settings can turn it off again.
 - The app is not sandboxed. restic has to read any folder and reach the
   network, and a sandboxed app confines its children.
 - A new scheduled plan backs up within a minute of being saved. Pick

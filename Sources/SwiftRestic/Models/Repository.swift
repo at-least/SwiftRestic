@@ -87,8 +87,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var uploadLimitKiBps: Int = 0
 
     var maintenance = MaintenancePolicy()
-    /// Shell commands run around this repository's check and prune.
-    var hooks: [BackupHook] = []
 
     /// Written by hand so a configuration saved by an older build still loads;
     /// see `KeyedDecodingContainer.value(_:default:)`.
@@ -123,7 +121,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         extraEnvironment = c.value(.extraEnvironment, default: [:])
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
-        hooks = c.value(.hooks, default: [])
     }
 
     init() {}

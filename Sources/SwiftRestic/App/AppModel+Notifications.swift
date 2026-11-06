@@ -2,20 +2,16 @@ import Foundation
 import UserNotifications
 
 extension AppModel {
-    /// The outcome of a Settings › Webhooks test, reported inline where the
+    /// The outcome of a Settings › Notifications test, reported inline where the
     /// user clicked rather than as a global banner on another window.
     enum TestNotificationOutcome: Equatable, Sendable {
         case delivered
         case failed(String)
     }
 
-    /// Sends one channel a sample event so the user can confirm it is wired
-    /// up — switched on or not: the switch decides what runs send, and the
-    /// test is how the user learns it works before turning it on.
+    /// Sends one channel a sample event so the user can confirm it is wired up.
     func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
         precondition(channel.hasUsableURL, "Send Test is disabled for an unusable URL")
-        var channel = channel
-        channel.isEnabled = true
         let event = NotificationEvent(
             stage: .succeeded,
             planName: "Test",

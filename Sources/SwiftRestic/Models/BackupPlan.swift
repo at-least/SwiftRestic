@@ -358,7 +358,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         if !legacy.value(.isEnabled, default: true) {
             schedule.frequency = .manual
         }
-        hooks = c.value(.hooks, default: [])
+        hooks = c.value(.hooks, default: [StoredHook]()).compactMap(\.hook)
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)

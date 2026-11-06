@@ -1269,7 +1269,7 @@ struct LoginItemTests {
         #expect(!LoginItem.isInstallableLocation("/tmp/SwiftRestic.app"))
     }
 
-    @Test("Settings' caption says each state the daemon can answer, and the editor's confirmation is the enabled one's words")
+    @Test("Settings' caption says each state the daemon can answer, ")
     func stateDescriptions() {
         #expect(LoginItem.description(of: .enabled) == "SwiftRestic will start at login.")
         #expect(LoginItem.description(of: .notFound).hasPrefix("macOS could not find this copy"))
@@ -1278,7 +1278,6 @@ struct LoginItemTests {
         #expect(LoginItem.needsApprovalShort == "Waiting for approval.")
         #expect(LoginItem.description(of: .needsApproval)
             == "Waiting for approval in System Settings ▸ General ▸ Login Items.")
-        #expect(LoginItemAdvice.enabledConfirmation == LoginItem.description(of: .enabled))
     }
 
     @Test("an installed copy is accepted")
@@ -1296,6 +1295,26 @@ struct LoginItemTests {
         #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: true, isInstallable: false) == .awaitingApproval)
         #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: false) == .moveToApplications)
         #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: true) == .startAtLogin)
+    }
+
+    @Test("the first schedule registers the login item as it saves, and a later one never undoes the user's switch")
+    func firstScheduleRegisters() {
+        func plan(_ frequency: Schedule.Frequency) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.schedule.frequency = frequency
+            return plan
+        }
+        func registers(_ draft: BackupPlan, among plans: [BackupPlan], offer: LoginItemAdvice.Offer? = .startAtLogin) -> Bool {
+            LoginItemAdvice.registersOnSave(draft: draft, among: plans, offer: offer)
+        }
+        #expect(registers(plan(.daily), among: []))
+        #expect(registers(plan(.daily), among: [plan(.manual)]))
+        #expect(!registers(plan(.manual), among: []))
+        #expect(!registers(plan(.daily), among: [plan(.hourly)]))
+        // Already on, or something only the user can do.
+        #expect(!registers(plan(.daily), among: [], offer: nil))
+        #expect(!registers(plan(.daily), among: [], offer: .awaitingApproval))
+        #expect(!registers(plan(.daily), among: [], offer: .moveToApplications))
     }
 
     @Test("the plan editor offers start-at-login only when the save turns a schedule on")

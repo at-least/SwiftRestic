@@ -15,11 +15,6 @@ struct PlanEditorSheet: View {
     /// the repository, and what to leave out is the next question.
     @State private var tab: Tab = .files
     @FocusState private var isPathFocused: Bool
-    /// Set by the footer's Start at Login, so the line confirms the click
-    /// where the offer stood. It follows the optimistic flip, as the
-    /// Settings switch does: if the daemon answers otherwise, the mirror
-    /// moves back and the offer, or the approval caption, returns.
-    @State private var requestedLoginItem = false
     /// Adopt's asking-again dialog, armed only when the group's facts ask
     /// for it (a foreign-host snapshot, or a newest backup under 48 h).
     /// Its words are captured when it is armed: the group can leave while
@@ -54,7 +49,7 @@ struct PlanEditorSheet: View {
     /// draft the user may have edited since.
     private let adoptDefaultedToManual: Bool
 
-    enum Tab: CaseIterable { case files, schedule, retention, hooks }
+    enum Tab: CaseIterable { case files, schedule, retention }
 
     init(plan: BackupPlan, mode: Mode? = nil, initialTab: Tab = .files, onAdopted: ((UUID) -> Void)? = nil) {
         var plan = plan
@@ -101,14 +96,12 @@ struct PlanEditorSheet: View {
                 case .files: "Excluding"
                 case .schedule: "Schedule"
                 case .retention: "Retention"
-                case .hooks: "Hooks"
                 }
             }) { tab in
                 switch tab {
                 case .files: sourcesTab
                 case .schedule: scheduleTab
                 case .retention: retentionTab
-                case .hooks: HookEditor(hooks: $draft.hooks)
                 }
             }
             .padding(12)
@@ -153,6 +146,12 @@ struct PlanEditorSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if registersLoginItem {
+                        Text(LoginItemAdvice.registeringOnSave)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 20)
                 Button("Cancel") { cancel() }
@@ -164,6 +163,7 @@ struct PlanEditorSheet: View {
                         if isNew {
                             draft.path = PathListEntry.value(for: draft.path, expandsTildeInPath: true, escapesGlobs: false) ?? ""
                         }
+                        if registersLoginItem { model.requestStartsAtLogin(true) }
                         model.upsert(plan: draft)
                         saveSharePasswords()
                         dismiss()
@@ -180,9 +180,8 @@ struct PlanEditorSheet: View {
             }
             .padding(12)
         }
-        // Resizable, not fixed. Tall enough that the Hooks tab's Command
-        // field clears the fixed hook list band without scrolling. The Files
-        // tab's form scrolls, its exclude list a fixed band that scrolls on
+        // Resizable, not fixed. The Files tab's form scrolls, its exclude list
+        // a fixed band that scrolls on
         // its own, so adopt's header strip and footer warnings fit the same
         // frame.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
@@ -274,6 +273,7 @@ struct PlanEditorSheet: View {
     }
 
     private func performAdopt() {
+        if registersLoginItem { model.requestStartsAtLogin(true) }
         model.adopt(draft: draft)
         onAdopted?(draft.id)
         dismiss()
@@ -306,6 +306,18 @@ struct PlanEditorSheet: View {
                 ))
             }
         }
+    }
+
+    private var registersLoginItem: Bool {
+        LoginItemAdvice.registersOnSave(
+            draft: draft,
+            among: model.configuration.plans,
+            offer: LoginItemAdvice.offer(
+                startsAtLogin: model.startsAtLogin,
+                needsApproval: model.loginItemNeedsApproval,
+                isInstallable: model.loginItemInstallable
+            )
+        )
     }
 
     private var missingRequirement: String? {
@@ -560,12 +572,11 @@ struct PlanEditorSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-                // Only when this save turns a schedule on — the moment
-                // the user commits to it. `initial` is nil until
-                // onAppear, and an existing plan must not flash the
-                // offer on that first pass, so the draft stands in. The
-                // offer says the app must be open itself, so the plain
-                // line only stands without it.
+                // Only when this save turns a schedule on — the moment the user
+                // commits to it. `initial` is nil until onAppear, and an
+                // existing plan must not flash the line on that first pass, so
+                // the draft stands in. Starting at login itself is the footer's
+                // to say, once saving does it.
                 if let offer = LoginItemAdvice.editorOffer(
                     draft: draft,
                     initial: initial ?? draft,
@@ -573,12 +584,8 @@ struct PlanEditorSheet: View {
                     startsAtLogin: model.startsAtLogin,
                     needsApproval: model.loginItemNeedsApproval,
                     isInstallable: model.loginItemInstallable
-                ) {
-                    LoginItemOfferLine(offer: offer) { requestedLoginItem = true }
-                } else if requestedLoginItem, model.startsAtLogin {
-                    Text(LoginItemAdvice.enabledConfirmation)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                ), offer != .startAtLogin {
+                    LoginItemOfferLine(offer: offer)
                 } else {
                     Text("Runs while SwiftRestic is open, and catches up after the Mac sleeps.")
                         .font(.caption)
@@ -586,6 +593,7 @@ struct PlanEditorSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            HookSection(hooks: $draft.hooks)
         }
         .formStyle(.grouped)
     }

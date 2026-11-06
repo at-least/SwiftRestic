@@ -971,8 +971,7 @@ struct AppModelTests {
 
         let markerPath = harness.root.appendingPathComponent("hook-output.txt").path
         var hook = BackupHook()
-        hook.name = "record snapshot"
-        hook.event = .afterSuccess
+        hook.event = .afterBackup
         hook.command = #"printf '%s %s' "$SWIFTRESTIC_OUTCOME" "$SWIFTRESTIC_SNAPSHOT_ID" > "\#(markerPath)""#
 
         var plan = harness.plan
@@ -999,7 +998,6 @@ struct AppModelTests {
         let model = harness.model
 
         var hook = BackupHook()
-        hook.name = "gatekeeper"
         hook.event = .beforeBackup
         hook.command = "echo 'not today' >&2; exit 1"
         hook.failureBehaviour = .abortBackup
@@ -1014,7 +1012,7 @@ struct AppModelTests {
         let record = try #require(model.configuration.runs.first)
         #expect(record.outcome == .failed)
         #expect(record.snapshotID == nil)
-        #expect(record.hookMessages.contains { $0.contains("gatekeeper") })
+        #expect(record.hookMessages.contains { $0.contains("echo") })
         // Hook output must not be filed as a restic warning: that is what gets
         // sent to external notification channels.
         #expect(record.itemErrors.isEmpty)
@@ -1032,8 +1030,7 @@ struct AppModelTests {
         let model = harness.model
 
         var hook = BackupHook()
-        hook.name = "noisy"
-        hook.event = .afterAny
+        hook.event = .afterBackup
         hook.command = "exit 9"
 
         var plan = harness.plan
@@ -1048,74 +1045,9 @@ struct AppModelTests {
         // code has to be visible somewhere.
         #expect(record.outcome != .failed)
         #expect(record.snapshotID != nil)
-        #expect(record.hookMessages.contains { $0.contains("noisy") && $0.contains("exited 9") })
+        #expect(record.hookMessages.contains { $0.contains("exit") && $0.contains("exited 9") })
         #expect(record.itemErrors.isEmpty)
         #expect(model.plan(id: plan.id)?.lastSuccessAt != nil)
-
-        await model.shutdown()
-    }
-
-    @Test("repository hooks run around a check and are told which task it was")
-    func maintenanceHooksRun() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-
-        let markerPath = harness.root.appendingPathComponent("check-hook.txt").path
-        var hook = BackupHook()
-        hook.name = "record check"
-        hook.event = .afterMaintenanceSuccess
-        hook.command = #"printf '%s %s %s' "$SWIFTRESTIC_TASK" "$SWIFTRESTIC_OUTCOME" "$SWIFTRESTIC_EVENT" > "\#(markerPath)""#
-
-        var repository = harness.repository
-        repository.hooks = [hook]
-        await model.upsert(repository: repository, password: nil, providerSecret: nil)
-
-        model.runMaintenance(repositoryID: repository.id, task: .check, readDataPercent: 0)
-        await model.waitForMaintenance(repositoryID: repository.id)
-
-        let record = try #require(model.configuration.runs.first)
-        #expect(record.kind == .check)
-        #expect(record.outcome == .succeeded)
-        #expect(record.hookMessages.isEmpty)
-        #expect(try String(contentsOfFile: markerPath, encoding: .utf8) == "check succeeded afterMaintenanceSuccess")
-
-        await model.shutdown()
-    }
-
-    @Test("a before-maintenance hook set to cancel stops the check and still stamps the schedule")
-    func abortingHookPreventsMaintenance() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-
-        var gate = BackupHook()
-        gate.name = "gatekeeper"
-        gate.event = .beforeMaintenance
-        gate.command = "echo 'disk is busy' >&2; exit 1"
-        gate.failureBehaviour = .abortBackup
-
-        let markerPath = harness.root.appendingPathComponent("failure-hook.txt").path
-        var onFailure = BackupHook()
-        onFailure.name = "report"
-        onFailure.event = .afterMaintenanceFailure
-        onFailure.command = #"printf '%s' "$SWIFTRESTIC_ERROR" > "\#(markerPath)""#
-
-        var repository = harness.repository
-        repository.hooks = [gate, onFailure]
-        await model.upsert(repository: repository, password: nil, providerSecret: nil)
-
-        model.runMaintenance(repositoryID: repository.id, task: .check, readDataPercent: 0)
-        await model.waitForMaintenance(repositoryID: repository.id)
-
-        let record = try #require(model.configuration.runs.first)
-        #expect(record.outcome == .failed)
-        #expect(record.hookMessages.contains { $0.contains("gatekeeper") && $0.contains("disk is busy") })
-        #expect(record.itemErrors.isEmpty)
-        // The after-failure hook still fires, with the reason.
-        #expect(try String(contentsOfFile: markerPath, encoding: .utf8).contains("check didn’t run because a hook"))
-        // A hook that always refuses must not turn into a retry every minute.
-        #expect(model.repository(id: repository.id)?.maintenance.lastCheckAt != nil)
 
         await model.shutdown()
     }

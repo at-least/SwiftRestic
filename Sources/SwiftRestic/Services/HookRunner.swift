@@ -12,8 +12,6 @@ struct HookRunner: Sendable {
         var planID: String = ""
         var repositoryName: String = ""
         var repositoryID: String = ""
-        /// `check` or `prune` for a repository hook; `nil` around a backup.
-        var maintenanceTask: String?
         var snapshotID: String?
         var outcome: String = ""
         var errorMessage: String?
@@ -39,7 +37,6 @@ struct HookRunner: Sendable {
             ]
             // Absent rather than empty, so `[ -n "$SWIFTRESTIC_ERROR" ]` works.
             if let snapshotID { env["SWIFTRESTIC_SNAPSHOT_ID"] = snapshotID }
-            if let maintenanceTask { env["SWIFTRESTIC_TASK"] = maintenanceTask }
             if let errorMessage { env["SWIFTRESTIC_ERROR"] = errorMessage }
             return env
         }
@@ -85,6 +82,8 @@ struct HookRunner: Sendable {
     static let shell = URL(fileURLWithPath: "/bin/sh")
 
     let runner: ResticRunner
+    /// A script that hangs must not hold a backup's slot for good.
+    var timeout: TimeInterval = 3600
 
     /// Never throws for a non-zero exit: the caller
     /// decides what a failing hook means.
@@ -109,7 +108,7 @@ struct HookRunner: Sendable {
                     workingDirectory: NSHomeDirectory(),
                     // The exit code is the hook's answer, not an error to raise.
                     allowedExitCodes: nil,
-                    timeout: TimeInterval(max(1, hook.timeoutSeconds)),
+                    timeout: timeout,
                     retainFullOutput: false
                 )
             )

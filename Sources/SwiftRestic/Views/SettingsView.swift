@@ -32,15 +32,11 @@ struct SettingsView: View {
                 .frame(width: Self.width, height: 470)
                 .tag(0)
                 .tabItem { Label("General", systemImage: "gearshape") }
-            notificationsTab(model: model)
-                .frame(width: Self.width, height: 290)
-                .tag(1)
-                .tabItem { Label("Notifications", systemImage: "bell") }
-            NotificationChannelsTab()
+            NotificationsTab()
                 .environment(model)
                 .frame(width: Self.width, height: 460)
-                .tag(2)
-                .tabItem { Label("Webhooks", systemImage: "point.3.connected.trianglepath.dotted") }
+                .tag(1)
+                .tabItem { Label("Notifications", systemImage: "bell") }
             resticTab(model: model)
                 .frame(width: Self.width, height: 190)
                 .tag(3)
@@ -162,28 +158,6 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private func notificationsTab(model: AppModel) -> some View {
-        @Bindable var model = model
-        return Form {
-            // The pane's title names it; no section heading repeats it.
-            Section {
-                Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                Text("SwiftRestic always tells you when a backup fails, or when a scheduled plan has not backed up for \(StaleAlert.thresholdDays) days. A failure that repeats with the same cause notifies once.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                // The one fact the visible switches cannot say: the Webhooks
-                // tab's channels carry their own per-event switches, and
-                // neither layer gates the other.
-                Text("Webhooks have their own per-event switches; these don’t control them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .formStyle(.grouped)
-    }
-
     private func resticTab(model: AppModel) -> some View {
         @Bindable var model = model
         return Form {
@@ -249,206 +223,115 @@ private struct FullDiskAccessStatusLabel: View {
     }
 }
 
-
-struct NotificationChannelsTab: View {
+/// macOS notifications, and whatever else should hear: one list of addresses.
+struct NotificationsTab: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: NotificationChannel.ID?
-    @State private var testOutcome: AppModel.TestNotificationOutcome?
-    @State private var isTesting = false
-    @State private var isConfirmingRemove = false
+    @State private var testOutcomes: [NotificationChannel.ID: AppModel.TestNotificationOutcome] = [:]
+    @State private var testing: Set<NotificationChannel.ID> = []
+    @State private var removing: NotificationChannel?
 
     var body: some View {
         @Bindable var model = model
-
-        // A stack, not a VSplitView: the split sized itself from its
-        // panes' ideal sizes, so the empty state's 400 pt left bars beside
-        // it in the 560 pt window, and a channel's Form — a scroll view,
-        // ideal height next to nothing — got 16 pt under the list. The list
-        // keeps a few rows; the channel's settings get the rest. With no
-        // channel yet, the list is all there is: its frame fills the tab
-        // and says what + adds.
-        let channels = model.configuration.settings.notificationChannels
-        VStack(spacing: 0) {
-            EditableListFrame(
-                isEmpty: channels.isEmpty,
-                emptyTitle: "No webhooks",
-                emptyHint: "Click + to add a webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.",
-                addTitle: "Add webhook",
-                removeTitle: "Remove webhook",
-                canRemove: selection != nil,
-                onAdd: {
-                    var channel = NotificationChannel()
-                    channel.name = "New Webhook"
-                    model.configuration.settings.notificationChannels.append(channel)
-                    selection = channel.id
-                },
-                onRemove: { isConfirmingRemove = true }
-            ) {
-                List(selection: $selection) {
-                    ForEach($model.configuration.settings.notificationChannels) { $channel in
-                        HStack(spacing: 8) {
-                            Toggle("", isOn: $channel.isEnabled)
-                                .labelsHidden()
-                                .controlSize(.mini)
-                                .accessibilityLabel(channel.displayName)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(channel.displayName)
-                                Text(channel.kind.displayName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if !channel.isUsable, channel.isEnabled {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .foregroundStyle(Theme.warning)
-                                    .help("Enter a URL that starts with http:// or https://")
-                            }
-                        }
-                        .tag(channel.id)
-                    }
+        Form {
+            Section {
+                Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
+                Text("SwiftRestic always tells you when a backup fails, or when a scheduled plan has not backed up for \(StaleAlert.thresholdDays) days. A failure that repeats with the same cause notifies once.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach($model.configuration.settings.notificationChannels) { $channel in
+                Section {
+                    channelRows($channel)
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
-            .frame(maxHeight: channels.isEmpty ? .infinity : 130)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-
-            if !channels.isEmpty {
-                detail(model: model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Section {
+                Button("Add Webhook") { model.configuration.settings.notificationChannels.append(NotificationChannel()) }
+                Text("A webhook, a Slack or Discord channel, or a Healthchecks.io ping URL.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        // A channel is always open below the list while there is one, so
-        // its settings never stand empty: the first on arrival, a neighbour
-        // after a removal.
-        .onAppear {
-            if selection == nil { selection = channels.first?.id }
-        }
+        .formStyle(.grouped)
         .confirmationDialog(
-            "Remove “\(channels.first { $0.id == selection }?.displayName ?? "")”?",
-            isPresented: $isConfirmingRemove,
-            titleVisibility: .visible
-        ) {
+            "Remove “\(removing?.displayName ?? "")”?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible,
+            presenting: removing
+        ) { channel in
             Button("Remove") {
-                let channels = model.configuration.settings.notificationChannels
-                guard let index = channels.firstIndex(where: { $0.id == selection }) else { return }
-                selection = model.configuration.settings.notificationChannels.removeKeepingNeighbourSelected(at: index)
-                testOutcome = nil
+                model.configuration.settings.notificationChannels.removeAll { $0.id == channel.id }
+                testOutcomes[channel.id] = nil
             }
-        } message: {
+        } message: { _ in
             Text("The destination itself — the Slack channel, the Healthchecks check — is not touched.")
-        }
-        .onChange(of: selection) { _, _ in
-            // A test result belongs to the channel it was sent from; showing
-            // it under another selection would bless an untested webhook.
-            testOutcome = nil
-            isTesting = false
         }
     }
 
     @ViewBuilder
-    private func detail(model: AppModel) -> some View {
-        @Bindable var model = model
-
-        if let index = model.configuration.settings.notificationChannels
-            .firstIndex(where: { $0.id == selection })
-        {
-            let channel = model.configuration.settings.notificationChannels[index]
-            Form {
-                TextField("Name", text: $model.configuration.settings.notificationChannels[index].name)
-                Picker("Service", selection: $model.configuration.settings.notificationChannels[index].kind) {
-                    ForEach(NotificationChannel.Kind.allCases) { kind in
-                        Text(kind.displayName).tag(kind)
-                    }
-                }
-                TextField(
-                    "URL",
-                    text: $model.configuration.settings.notificationChannels[index].url,
-                    prompt: Text(channel.kind.urlPrompt)
-                )
-                // The row's warning triangle has a reason; it is repeated here
-                // where the user edits, not only on hover.
-                if !channel.isUsable, channel.isEnabled {
-                    Label("This webhook can’t send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(Theme.warning)
-                        .font(.callout)
-                }
-
-                Section("Send when") {
-                    Toggle(
-                        "Succeeds",
-                        isOn: $model.configuration.settings.notificationChannels[index].notifyOnSuccess
-                    )
-                    Toggle(
-                        "Completes with warnings",
-                        isOn: $model.configuration.settings.notificationChannels[index].notifyOnWarning
-                    )
-                    Toggle(
-                        "Fails",
-                        isOn: $model.configuration.settings.notificationChannels[index].notifyOnFailure
-                    )
-                    if channel.kind.usesStartPing {
-                        ExpandableCaption(
-                            summary: "Healthchecks is also pinged when a backup starts.",
-                            detail: "That ping is what arms the timer it measures against, so a Mac that never wakes up still raises the alarm."
-                        )
-                    }
-                }
-
-                Section {
-                    HStack {
-                    Button("Send Test") {
-                        guard let channelID = selection else { return }
-                        testOutcome = nil
-                        isTesting = true
-                        Task {
-                            let outcome = await model.sendTestNotification(channel)
-                            // A switch to another channel while in flight
-                            // must not land this result — or kill another
-                            // test's spinner — under the wrong channel.
-                            guard selection == channelID else { return }
-                            testOutcome = outcome
-                            isTesting = false
-                        }
-                    }
-                        .disabled(!channel.hasUsableURL || isTesting)
-                        if isTesting {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                    // The outcome belongs here, next to the button that caused
-                    // it — a global banner would land on a different window
-                    // than the Settings one the user is looking at.
-                    switch testOutcome {
-                    case .failed(let failure):
-                        Label {
-                            Text("Could not send the test: " + failure)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "xmark.octagon.fill")
-                        }
-                        .foregroundStyle(Theme.danger)
-                        .font(.callout)
-                    case .delivered:
-                        Label("Test sent to “\(channel.displayName)”.", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(Theme.success)
-                            .font(.callout)
-                    case nil:
-                        EmptyView()
-                    }
-                }
+    private func channelRows(_ channel: Binding<NotificationChannel>) -> some View {
+        let current = channel.wrappedValue
+        TextField("URL", text: channel.url, prompt: Text(current.kind.urlPrompt))
+            .onChange(of: current.url) { _, url in
+                testOutcomes[current.id] = nil
+                if let kind = NotificationChannel.Kind(inferringFrom: url) { channel.wrappedValue.kind = kind }
             }
-            .formStyle(.grouped)
-        } else {
-            // Only while a click in the list's empty space has cleared the
-            // selection.
-            ContentUnavailableView(
-                "No webhook selected",
-                systemImage: "point.3.connected.trianglepath.dotted",
-                description: Text("Select a webhook in the list to change it.")
+        Picker("Service", selection: channel.kind) {
+            ForEach(NotificationChannel.Kind.allCases) { kind in
+                Text(kind.displayName).tag(kind)
+            }
+        }
+        if !current.url.isEmpty, !current.hasUsableURL {
+            Label("This webhook can’t send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Theme.warning)
+                .font(.callout)
+        }
+        if current.kind.usesStartPing {
+            ExpandableCaption(
+                summary: "Healthchecks hears every backup: when it starts and how it ends.",
+                detail: "The start is what arms the timer it measures against, so a Mac that never wakes up still raises the alarm."
             )
+        } else {
+            Toggle("Also send successes", isOn: channel.notifyOnSuccess)
+        }
+        HStack {
+            Button("Send Test") { sendTest(current) }
+                .disabled(!current.hasUsableURL || testing.contains(current.id))
+            if testing.contains(current.id) {
+                ProgressView().controlSize(.small)
+            }
+            Spacer()
+            Button("Remove") { removing = current }
+        }
+        // Here, next to the button that caused it: a global banner would land
+        // on a different window than this one.
+        switch testOutcomes[current.id] {
+        case let .failed(failure):
+            Label {
+                Text("Could not send the test: " + failure)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "xmark.octagon.fill")
+            }
+            .foregroundStyle(Theme.danger)
+            .font(.callout)
+        case .delivered:
+            Label("Test sent to “\(current.displayName)”.", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(Theme.success)
+                .font(.callout)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func sendTest(_ channel: NotificationChannel) {
+        testOutcomes[channel.id] = nil
+        testing.insert(channel.id)
+        Task {
+            let outcome = await model.sendTestNotification(channel)
+            testOutcomes[channel.id] = outcome
+            testing.remove(channel.id)
         }
     }
 }

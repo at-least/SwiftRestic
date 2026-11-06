@@ -903,65 +903,6 @@ struct PathListEditor: View {
     }
 }
 
-/// A list people add rows to and take rows from, the Mac's way — the
-/// Hooks tab's and the Webhooks tab's: framed, with + and − attached beneath
-/// it, symbols and not words (the HIG's square buttons, "adding or removing
-/// rows in a table"). Empty, the frame says so and what + does, rather than
-/// standing as a blank box.
-struct EditableListFrame<Content: View>: View {
-    let isEmpty: Bool
-    let emptyTitle: String
-    /// The next step, naming the + it starts from.
-    let emptyHint: String
-    /// The buttons' names, for their tooltips and VoiceOver: "Add hook".
-    let addTitle: String
-    let removeTitle: String
-    let canRemove: Bool
-    let onAdd: () -> Void
-    let onRemove: () -> Void
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                if isEmpty {
-                    VStack(spacing: 4) {
-                        Text(emptyTitle)
-                            .font(.headline)
-                        Text(emptyHint)
-                            .font(.callout)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    content()
-                }
-            }
-            Divider()
-            HStack(spacing: 0) {
-                ListBarButton(symbol: "plus", title: addTitle, action: onAdd)
-                Divider()
-                    .frame(height: 14)
-                ListBarButton(symbol: "minus", title: removeTitle, action: onRemove)
-                    .disabled(!canRemove)
-                Spacer()
-            }
-            .padding(.horizontal, 2)
-            .frame(height: 24)
-        }
-        // The exclude list's hairline frame, so the editors' lists match.
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
-        )
-    }
-
-}
-
 struct ListBarButton: View {
     let symbol: String
     let title: String

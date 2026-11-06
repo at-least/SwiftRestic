@@ -5,7 +5,6 @@ import Testing
 struct NotificationTests {
     private func channel(_ kind: NotificationChannel.Kind, url: String) -> NotificationChannel {
         var channel = NotificationChannel()
-        channel.name = "Test"
         channel.kind = kind
         channel.url = url
         return channel
@@ -118,22 +117,54 @@ struct NotificationTests {
             for: channel(.webhook, url: "file:///etc/passwd"),
             event: event(.succeeded)
         ) == nil)
-
-        var disabled = channel(.webhook, url: "https://example.com")
-        disabled.isEnabled = false
-        #expect(NotificationPayload.request(for: disabled, event: event(.succeeded)) == nil)
     }
 
-    @Test("per-stage opt-outs are respected, and only healthchecks wants a start ping")
+    @Test("failures and warnings always go, a success only when asked, and a monitor hears everything")
     func stageFiltering() {
         var quiet = channel(.slack, url: "https://hooks.slack.com/x")
-        quiet.notifyOnSuccess = false
         #expect(!quiet.wants(.succeeded))
         #expect(quiet.wants(.failed))
+        #expect(quiet.wants(.warned))
+        quiet.notifyOnSuccess = true
+        #expect(quiet.wants(.succeeded))
+        quiet.notifyOnSuccess = false
+        let monitor = channel(.healthchecks, url: "https://hc-ping.com/x")
+        #expect(monitor.wants(.succeeded) && monitor.wants(.failed) && monitor.wants(.skipped))
         // A "backup started" chat message is noise; a Healthchecks start ping is
         // load-bearing.
         #expect(!quiet.wants(.started))
         #expect(channel(.healthchecks, url: "https://hc-ping.com/x").wants(.started))
+    }
+
+    @Test("a pasted address sets the service it names; anything else leaves the picker alone")
+    func serviceFromAddress() {
+        typealias Kind = NotificationChannel.Kind
+        #expect(Kind(inferringFrom: "https://hooks.slack.com/services/T/B/x") == .slack)
+        #expect(Kind(inferringFrom: "  https://discord.com/api/webhooks/1/x ") == .discord)
+        #expect(Kind(inferringFrom: "https://hc-ping.com/uuid") == .healthchecks)
+        #expect(Kind(inferringFrom: "https://hc.example.com/ping/uuid") == nil)
+        #expect(Kind(inferringFrom: "not a url") == nil)
+    }
+
+    @Test("a channel reads as its address's host; one with no address yet as its service")
+    func channelName() {
+        #expect(channel(.slack, url: "https://hooks.slack.com/services/x").displayName == "hooks.slack.com")
+        #expect(channel(.slack, url: "").displayName == "Slack")
+    }
+
+    @Test("an older build's channels: a switched-off one doesn't start sending, the others keep what they sent")
+    func storedChannels() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data("""
+        {"notificationChannels": [
+          {"kind": "slack", "url": "https://hooks.slack.com/a", "name": "Team", "isEnabled": true, "notifyOnSuccess": false, "notifyOnFailure": false},
+          {"kind": "webhook", "url": "https://example.com/off", "isEnabled": false},
+          {"kind": "webhook", "url": "https://example.com/old"}
+        ]}
+        """.utf8))
+        #expect(settings.notificationChannels.map(\.url) == ["https://hooks.slack.com/a", "https://example.com/old"])
+        #expect(settings.notificationChannels[0].wants(.failed))
+        #expect(!settings.notificationChannels[0].wants(.succeeded))
+        #expect(settings.notificationChannels[1].wants(.succeeded))
     }
 
     @Test("the summary line names the plan and what happened")

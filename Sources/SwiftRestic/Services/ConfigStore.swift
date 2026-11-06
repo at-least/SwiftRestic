@@ -26,7 +26,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
-        notificationChannels = c.value(.notificationChannels, default: notificationChannels)
+        notificationChannels = c.value(.notificationChannels, default: [StoredChannel]()).compactMap(\.channel)
         networkShares = c.value(.networkShares, default: networkShares)
         consoleHistory = c.value(.consoleHistory, default: consoleHistory)
     }

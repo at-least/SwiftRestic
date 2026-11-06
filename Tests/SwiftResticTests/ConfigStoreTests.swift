@@ -768,11 +768,10 @@ struct TolerantDecodingTests {
         #expect(channel.kind == .webhook)
         #expect(channel.url == "https://example.com")
 
-        let hook = try decode(
-            BackupHook.self,
-            #"{"event":"invented","failureBehaviour":"invented","command":"true"}"#
-        )
-        #expect(hook.event == .afterSuccess)
+        let hook = try #require(try decode(
+            StoredHook.self,
+            #"{"event":"afterSuccess","failureBehaviour":"invented","command":"true"}"#
+        ).hook)
         #expect(hook.failureBehaviour == .ignore)
         #expect(hook.command == "true")
 
@@ -784,7 +783,7 @@ struct TolerantDecodingTests {
         #expect(recorded.contains("frequency"))
         #expect(recorded.contains("outcome"))
         #expect(recorded.contains("failureBehaviour"))
-        #expect(notes.notes.count == 7)
+        #expect(notes.notes.count == 6)
     }
 
     @Test("out-of-range schedule values clamp to the nearest runnable time, and say so")

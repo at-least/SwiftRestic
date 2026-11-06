@@ -35,7 +35,6 @@ struct RepositoryEditorSheet: View {
     @State private var confirmNewPassword = ""
     @State private var isConfirmingPasswordChange = false
     @State private var isConfirmingDiscard = false
-    @State private var tab: Tab = .repository
     /// Asked for by the saved-password row: the password was changed on
     /// another Mac, so what the Keychain holds no longer opens it.
     @State private var isReplacingSavedPassword = false
@@ -55,7 +54,6 @@ struct RepositoryEditorSheet: View {
     /// page that offers its first plan.
     private let onCreated: (UUID) -> Void
 
-    private enum Tab: CaseIterable { case repository, hooks }
     private struct RcloneRead: Equatable {
         var kind: Repository.Kind
         var count: Int
@@ -82,11 +80,6 @@ struct RepositoryEditorSheet: View {
         isNew = repository.kind == .local && repository.localPath.isEmpty
         _draft = State(initialValue: repository)
         self.onCreated = onCreated
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"] == "repositoryHooks" {
-            _tab = State(initialValue: .hooks)
-        }
-        #endif
     }
 
     private enum Status: Equatable {
@@ -116,18 +109,7 @@ struct RepositoryEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetTabs(selection: $tab, tabs: Tab.allCases, title: { tab in
-                switch tab {
-                case .repository: "Repository"
-                case .hooks: "Hooks"
-                }
-            }) { tab in
-                switch tab {
-                case .repository: settingsForm
-                case .hooks: HookEditor(hooks: $draft.hooks, events: BackupHook.Event.maintenanceEvents)
-                }
-            }
-            .padding(12)
+            settingsForm
             // Held while restic is asked: the probe checks the fields as
             // they were when it began, and Save then stores the fields as
             // they are — an edit typed in between would be saved unchecked,
@@ -136,8 +118,8 @@ struct RepositoryEditorSheet: View {
 
             Divider()
 
-            // Save's or Change Password's answer, beside the buttons on either tab: at the end of the scrolled
-            // form it landed below the fold, or behind the Hooks tab.
+            // Save's or Change Password's answer, beside the buttons: at the end
+            // of the scrolled form it landed below the fold.
             if let status {
                 Label(status.text, systemImage: status.symbolName)
                     .foregroundStyle(status.color)

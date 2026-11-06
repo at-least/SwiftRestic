@@ -13,7 +13,7 @@ enum LoginItemAdvice {
         case moveToApplications
     }
 
-    static let enabledConfirmation = LoginItem.description(of: .enabled)
+    static let registeringOnSave = "SwiftRestic will start at login, so this schedule keeps running after a restart."
 
     /// Nil once the app starts at login. Otherwise approval comes before
     /// location: an existing registration needs only approving, wherever the
@@ -43,6 +43,13 @@ enum LoginItemAdvice {
     ) -> Offer? {
         guard isScheduled(draft), isNew || !(initial.map(isScheduled) ?? false) else { return nil }
         return offer(startsAtLogin: startsAtLogin, needsApproval: needsApproval, isInstallable: isInstallable)
+    }
+
+    /// The first schedule asks for what a schedule needs, said beside the
+    /// button that saves it. Only the first: a later plan never undoes a switch
+    /// the user turned off in Settings.
+    static func registersOnSave(draft: BackupPlan, among plans: [BackupPlan], offer: Offer?) -> Bool {
+        offer == .startAtLogin && isScheduled(draft) && !plans.contains(where: isScheduled)
     }
 
     static func caption(for offer: Offer) -> String {

@@ -338,7 +338,6 @@ struct RootView: View {
             pendingCaptureGroupPane = .moved
         case "lineage":
             pendingCaptureGroupPane = .lineage
-        case "repositoryHooks": editingRepository = model.configuration.repositories.first
         // Same sheet on its first tab: captures a specific kind's fields, e.g.
         // the rclone Remote row and its suggestion menu.
         case "repositoryEditor": editingRepository = model.configuration.repositories.first

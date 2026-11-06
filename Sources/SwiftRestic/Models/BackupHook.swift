@@ -1,52 +1,35 @@
 import Foundation
 
-/// A shell command run around a plan's backup, or around a repository's
-/// check and prune.
+/// A shell command run around a plan's backup.
 ///
 /// Hooks are given their context through environment variables rather than a
 /// template language: it is the native idiom for shell scripts, needs no parser,
 /// and quoting stays the shell's problem rather than ours.
-///
-/// The name predates repository hooks, which share this type and its
-/// stored shape.
-struct BackupHook: Identifiable, Codable, Sendable, Hashable {
-    enum Event: String, Codable, Sendable, CaseIterable, Identifiable {
+struct BackupHook: Identifiable, Encodable, Sendable, Hashable {
+    enum Event: String, Encodable, Sendable, CaseIterable, Identifiable {
         case beforeBackup
-        case afterSuccess
-        case afterWarning
-        case afterFailure
-        case afterAny
-
-        case beforeMaintenance
-        case afterMaintenanceSuccess
-        case afterMaintenanceFailure
-        case afterAnyMaintenance
+        /// Every end but a stop: the script reads `SWIFTRESTIC_OUTCOME`.
+        case afterBackup
 
         var id: String { rawValue }
-
-        static let backupEvents: [Event] = [.beforeBackup, .afterSuccess, .afterWarning, .afterFailure, .afterAny]
-        static let maintenanceEvents: [Event] = [
-            .beforeMaintenance, .afterMaintenanceSuccess, .afterMaintenanceFailure, .afterAnyMaintenance,
-        ]
 
         var displayName: String {
             switch self {
             case .beforeBackup: "Before backup"
-            case .afterSuccess: "After success"
-            case .afterWarning: "After warnings"
-            case .afterFailure: "After failure"
-            case .afterAny: "After every backup"
-            case .beforeMaintenance: "Before a check or cleanup"
-            case .afterMaintenanceSuccess: "After a successful check or cleanup"
-            case .afterMaintenanceFailure: "After a failed check or cleanup"
-            case .afterAnyMaintenance: "After every check or cleanup"
+            case .afterBackup: "After backup"
             }
         }
 
-        /// Only a hook that runs first can call the run off.
-        var canAbort: Bool { self == .beforeBackup || self == .beforeMaintenance }
-
-        var isMaintenanceEvent: Bool { Self.maintenanceEvents.contains(self) }
+        /// As a configuration holds it. Older builds split the end of a backup
+        /// by outcome, and ran other events around a repository's upkeep,
+        /// which no longer run: nil, or a check's script would run at a backup.
+        init?(stored: String) {
+            switch stored {
+            case "beforeBackup": self = .beforeBackup
+            case "afterBackup", "afterSuccess", "afterWarning", "afterFailure", "afterAny": self = .afterBackup
+            default: return nil
+            }
+        }
     }
 
     enum FailureBehaviour: String, Codable, Sendable, CaseIterable, Identifiable {
@@ -59,42 +42,58 @@ struct BackupHook: Identifiable, Codable, Sendable, Hashable {
         var displayName: String {
             switch self {
             case .ignore: "Record it and carry on"
-            case .abortBackup: "Cancel the run"
+            case .abortBackup: "Cancel the backup"
             }
         }
     }
 
     var id: UUID = UUID()
-    var name: String = ""
-    var event: Event = .afterSuccess
+    var event: Event = .afterBackup
     var command: String = ""
     var failureBehaviour: FailureBehaviour = .ignore
-    var timeoutSeconds: Int = 60
-    var isEnabled: Bool = true
 
     var isRunnable: Bool {
-        isEnabled && !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// A hook can only abort a run that has not started yet.
     var abortsRunOnFailure: Bool {
-        failureBehaviour == .abortBackup && event.canAbort
+        failureBehaviour == .abortBackup && event == .beforeBackup
     }
 
+    /// The program it runs, for the run's record and log. The program alone,
+    /// never the line: a run's log is what a user copies whole to ask for help,
+    /// and a command's arguments and leading `VAR=` hold its tokens.
     var displayName: String {
-        name.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled Hook" : name
+        let program = command.split(whereSeparator: \.isWhitespace).first { !$0.contains("=") }
+        return program.map { ($0 as NSString).lastPathComponent } ?? "Untitled Hook"
     }
 
     init() {}
+}
+
+/// A hook as a plan's configuration holds it. Nil for what must not start
+/// running: a hook switched off in an older build, and an event no backup has.
+struct StoredHook: Decodable {
+    var hook: BackupHook?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, event, command, failureBehaviour, isEnabled
+    }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = c.value(.id, default: UUID())
-        name = c.value(.name, default: "")
-        event = c.value(.event, default: .afterSuccess)
-        command = c.value(.command, default: "")
-        failureBehaviour = c.value(.failureBehaviour, default: .ignore)
-        timeoutSeconds = c.value(.timeoutSeconds, default: 60)
-        isEnabled = c.value(.isEnabled, default: true)
+        guard c.value(.isEnabled, default: true) else { return }
+        let stored: String = c.value(.event, default: "")
+        guard let event = BackupHook.Event(stored: stored) else {
+            DecodeNotes.current?.add(field: "hooks.event", "“\(stored)” isn’t a time a backup runs a script — the script was left out")
+            return
+        }
+        var hook = BackupHook()
+        hook.id = c.value(.id, default: UUID())
+        hook.event = event
+        hook.command = c.value(.command, default: "")
+        hook.failureBehaviour = c.value(.failureBehaviour, default: .ignore)
+        self.hook = hook
     }
 }

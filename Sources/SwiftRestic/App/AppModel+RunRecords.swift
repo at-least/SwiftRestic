@@ -111,7 +111,7 @@ extension AppModel {
     /// but never written into the run record, which describes the backup itself.
     func broadcast(record: RunRecord, plan: BackupPlan?) async {
         let channels = configuration.settings.notificationChannels
-        guard channels.contains(where: \.isUsable) else { return }
+        guard channels.contains(where: \.hasUsableURL) else { return }
 
         if let planID = plan?.id { setActivityPhase(.notifying, for: planID) }
 

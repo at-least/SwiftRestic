@@ -15,7 +15,7 @@ enum NotificationPayload {
 
     static func request(for channel: NotificationChannel, event: NotificationEvent) -> Request? {
         let trimmed = channel.url.trimmingCharacters(in: .whitespaces)
-        guard channel.isUsable, var url = URL(string: trimmed) else { return nil }
+        guard channel.hasUsableURL, var url = URL(string: trimmed) else { return nil }
 
         switch channel.kind {
         case .healthchecks:
@@ -108,7 +108,7 @@ enum NotificationPoster {
     ) async -> [String] {
         var failures: [String] = []
         await withTaskGroup(of: (String, String?).self) { group in
-            for channel in channels where channel.isUsable && channel.wants(event.stage) {
+            for channel in channels where channel.hasUsableURL && channel.wants(event.stage) {
                 guard let payload = NotificationPayload.request(for: channel, event: event) else {
                     continue
                 }

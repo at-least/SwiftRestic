@@ -32,25 +32,33 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         /// timer it measures the run against. For the others a "started" message
         /// is just noise.
         var usesStartPing: Bool { self == .healthchecks }
+
+        /// The service a pasted address names; nil for anything else, a
+        /// self-hosted one included, which the picker still reaches: a
+        /// self-hosted Healthchecks posted as a plain webhook would ping
+        /// "alive" on a failure.
+        init?(inferringFrom url: String) {
+            guard let parsed = URL(string: url.trimmingCharacters(in: .whitespaces)), let host = parsed.host()?.lowercased() else { return nil }
+            switch host {
+            case "hooks.slack.com": self = .slack
+            case "discord.com", "discordapp.com": self = .discord
+            case "hc-ping.com": self = .healthchecks
+            default: return nil
+            }
+        }
     }
 
     var id: UUID = UUID()
-    var name: String = ""
     var kind: Kind = .webhook
     var url: String = ""
-    var isEnabled: Bool = true
-    var notifyOnSuccess: Bool = true
-    var notifyOnWarning: Bool = true
-    var notifyOnFailure: Bool = true
+    /// Failures and warnings always go; a monitor hears everything.
+    var notifyOnSuccess: Bool = false
 
+    /// The address's host: a person pastes a link, and names nothing.
     var displayName: String {
-        name.trimmingCharacters(in: .whitespaces).isEmpty ? kind.displayName : name
+        URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? kind.displayName
     }
 
-    var isUsable: Bool { isEnabled && hasUsableURL }
-
-    /// Send Test needs only this: a webhook is tested before it is
-    /// switched on.
     var hasUsableURL: Bool {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
     }
@@ -58,12 +66,11 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     func wants(_ stage: NotificationEvent.Stage) -> Bool {
         switch stage {
         case .started: kind.usesStartPing
-        case .succeeded: notifyOnSuccess
-        case .warned: notifyOnWarning
-        case .failed: notifyOnFailure
+        case .succeeded: kind.usesStartPing || notifyOnSuccess
+        case .warned, .failed: true
         // A cancelled backup did not happen: only a dead-man's switch needs
         // to hear of it, and whoever cancelled it already knows.
-        case .cancelled, .skipped: kind.usesStartPing && notifyOnFailure
+        case .cancelled, .skipped: kind.usesStartPing
         }
     }
 
@@ -72,13 +79,23 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, default: UUID())
-        name = c.value(.name, default: "")
         kind = c.value(.kind, default: .webhook)
         url = c.value(.url, default: "")
-        isEnabled = c.value(.isEnabled, default: true)
         notifyOnSuccess = c.value(.notifyOnSuccess, default: true)
-        notifyOnWarning = c.value(.notifyOnWarning, default: true)
-        notifyOnFailure = c.value(.notifyOnFailure, default: true)
+    }
+}
+
+/// A channel as a configuration holds it. Nil for one switched off in an older
+/// build: it must not start sending.
+struct StoredChannel: Decodable {
+    var channel: NotificationChannel?
+
+    private enum LegacyKeys: String, CodingKey { case isEnabled }
+
+    init(from decoder: any Decoder) throws {
+        if try decoder.container(keyedBy: LegacyKeys.self).value(.isEnabled, default: true) {
+            channel = try NotificationChannel(from: decoder)
+        }
     }
 }
 

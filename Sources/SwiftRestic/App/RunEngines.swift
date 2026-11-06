@@ -11,27 +11,21 @@ private func note(
     for outcome in outcomes { transcript.note(outcome.logLine) }
 }
 
-/// The after-hooks loop both engines' `finish` shares. A cancel landing
-/// mid-after-hooks stops the remaining events, and a cancelled run runs
-/// none of them — firing an "after failure" script then would surprise the
-/// user who asked for the stop. A failing hook never undoes the run:
+/// A cancelled run runs no after-hook — firing a script then would surprise
+/// the user who asked for the stop. A failing hook never undoes the run:
 /// success whose hook failed reads as completed-with-errors, which arms the
 /// problem dot and notifyOnFailure, and `finishedAt` is re-stamped so the
 /// record includes the hooks.
 private func runAfterHooks(
     _ allHooks: [BackupHook],
-    events: [BackupHook.Event],
     context: HookRunner.Context,
     hooks: HookRunner,
     record: inout RunRecord,
     transcript: RunTranscript
 ) async {
     guard record.outcome != .cancelled, allHooks.contains(where: \.isRunnable) else { return }
-    for event in events {
-        let result = await hooks.runHooks(allHooks, event: event, context: context)
-        note(result.outcomes, into: &record, transcript: transcript)
-        if result.cancelled { break }
-    }
+    let result = await hooks.runHooks(allHooks, event: .afterBackup, context: context)
+    note(result.outcomes, into: &record, transcript: transcript)
     if !record.hookMessages.isEmpty, record.outcome == .succeeded {
         record.outcome = .completedWithErrors
     }
@@ -426,16 +420,8 @@ enum BackupRunEngine {
         hookContext.outcome = record.outcome.rawValue
         hookContext.errorMessage = record.failureMessage
         hookContext.durationSeconds = record.duration
-        let events: [BackupHook.Event] = switch record.outcome {
-        case .succeeded: [.afterSuccess, .afterAny]
-        case .completedWithErrors: [.afterWarning, .afterAny]
-        case .failed: [.afterFailure, .afterAny]
-        // A drive away, nothing failed: only the hooks for any end.
-        case .skipped: [.afterAny]
-        case .cancelled: []
-        }
         await runAfterHooks(
-            plan.hooks, events: events, context: hookContext,
+            plan.hooks, context: hookContext,
             hooks: hooks, record: &record, transcript: transcript
         )
 
@@ -472,7 +458,6 @@ enum MaintenanceRunEngine {
         /// the slice after (`MaintenancePolicy.nextCheckDataSlice`).
         func advanceCheckDataSlice(repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
-        func makeHookRunner() -> HookRunner
     }
 
     static func perform(
@@ -488,46 +473,15 @@ enum MaintenanceRunEngine {
             repositoryID: repository.id,
             startedAt: startedAt
         )
-        let hooks = sink.makeHookRunner()
         // The backup engine's rule: restic's words for the log, bound around
         // the service call only.
         let transcript = RunTranscript()
-        let hookContext = HookRunner.Context(
-            event: .beforeMaintenance,
-            repositoryName: sink.label(of: repository),
-            repositoryID: repository.id.uuidString,
-            maintenanceTask: task.rawValue,
-            outcome: "starting"
-        )
 
         // A failure leaves through the tail below (`break run`), which
         // stamps it; a drive or server that is away returns unstamped.
         run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
-
-            if repository.hooks.contains(where: { $0.event == .beforeMaintenance && $0.isRunnable }) {
-                let result = await hooks.runHooks(
-                    repository.hooks,
-                    event: .beforeMaintenance,
-                    context: hookContext
-                )
-                note(result.outcomes, into: &record, transcript: transcript)
-                if result.cancelled {
-                    // Same rule as the backup engine: the user's cancel is a
-                    // cancellation, never a hook verdict.
-                    throw ResticError.cancelled
-                }
-                if result.shouldAbort {
-                    record.outcome = .failed
-                    record.failureMessage =
-                        "The \(task.displayName.lowercased()) didn’t run because a hook that runs before it failed."
-                    // Stamped at the tail like any other failure: a hook that
-                    // always says no must not have the scheduler asking again
-                    // every minute.
-                    break run
-                }
-            }
 
             // The repository's network share, away and saved: mounted with
             // its saved password before restic is asked, as for a backup.
@@ -536,7 +490,7 @@ enum MaintenanceRunEngine {
             // no share saved, or one out of reach — the run waits for it,
             // as a backup does: Skipped, unstamped, so the task stays due,
             // and the scheduler leaves it alone until the drive is back
-            // (`markDriveAway`). After the hooks, which may mount it.
+            // (`markDriveAway`).
             if repository.kind == .local {
                 let failures = await reconnectAwayShares(
                     of: [repository.resolvedLocalPath],
@@ -558,8 +512,7 @@ enum MaintenanceRunEngine {
                     )
                     sink.markDriveAway(repositoryID: repository.id)
                     await finish(
-                        record: &record, repository: repository, hooks: hooks, context: hookContext,
-                        transcript: transcript, sink: sink
+                        record: &record, repository: repository, transcript: transcript, sink: sink
                     )
                     return
                 }
@@ -571,8 +524,7 @@ enum MaintenanceRunEngine {
                 record.detailText = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
                 sink.markServerAway(repositoryID: repository.id)
                 await finish(
-                    record: &record, repository: repository, hooks: hooks, context: hookContext,
-                    transcript: transcript, sink: sink
+                    record: &record, repository: repository, transcript: transcript, sink: sink
                 )
                 return
             }
@@ -644,41 +596,17 @@ enum MaintenanceRunEngine {
         // likely still unreachable.
         sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
         await finish(
-            record: &record, repository: repository, hooks: hooks, context: hookContext,
-            transcript: transcript, sink: sink
+            record: &record, repository: repository, transcript: transcript, sink: sink
         )
     }
 
-    /// A check that found errors counts as a failure here: that is the outcome
-    /// a repository hook exists to report.
     private static func finish(
         record: inout RunRecord,
         repository: Repository,
-        hooks: HookRunner,
-        context: HookRunner.Context,
         transcript: RunTranscript,
         sink: Sink
     ) async {
         record.finishedAt = .now
-        var hookContext = context
-        hookContext.outcome = record.outcome.rawValue
-        hookContext.errorMessage = record.failureMessage ?? record.detailText.flatMap {
-            record.outcome == .completedWithErrors ? $0 : nil
-        }
-        hookContext.durationSeconds = record.duration
-        let events: [BackupHook.Event] = switch record.outcome {
-        case .succeeded: [.afterMaintenanceSuccess, .afterAnyMaintenance]
-        case .completedWithErrors, .failed: [.afterMaintenanceFailure, .afterAnyMaintenance]
-        // The drive away, nothing failed: only the hooks for any end, as
-        // for a skipped backup.
-        case .skipped: [.afterAnyMaintenance]
-        case .cancelled: []
-        }
-        await runAfterHooks(
-            repository.hooks, events: events, context: hookContext,
-            hooks: hooks, record: &record, transcript: transcript
-        )
-
         let contents = transcript.contents
         if record.exitCode == nil { record.exitCode = contents.firstExitCode }
         await sink.deliver(record: record, repository: repository, transcript: contents)

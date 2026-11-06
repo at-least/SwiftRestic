@@ -1291,12 +1291,10 @@ struct AppModelStubTests {
         await server.start()
 
         var capture = NotificationChannel()
-        capture.name = "Capture"
         capture.kind = .webhook
         capture.url = "http://127.0.0.1:\(server.port)/hook"
         var leaky = BackupHook()
-        leaky.name = "leaky"
-        leaky.event = .afterAny
+        leaky.event = .afterBackup
         leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
 
         let harness = try await makeHarness(mode: "tccblocked", planHooks: [leaky], channels: [capture])
@@ -1906,7 +1904,6 @@ struct AppModelStubTests {
         defer { server.stop() }
         await server.start()
         var monitor = NotificationChannel()
-        monitor.name = "Monitor"
         monitor.kind = .healthchecks
         monitor.url = "http://127.0.0.1:\(server.port)/ping"
         #expect(monitor.wants(.cancelled))
@@ -2085,18 +2082,15 @@ struct AppModelStubTests {
         let port = server.port
 
         var leaky = BackupHook()
-        leaky.name = "leaky"
-        leaky.event = .afterAny
+        leaky.event = .afterBackup
         leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
 
         var good = NotificationChannel()
-        good.name = "Capture"
         good.kind = .webhook
         good.url = "http://127.0.0.1:\(port)/hook"
         // A second channel nothing is listening on: its failure must surface
         // without disturbing the delivered payload.
         var dead = NotificationChannel()
-        dead.name = "Dead"
         dead.kind = .webhook
         dead.url = "http://127.0.0.1:1/hook"
 

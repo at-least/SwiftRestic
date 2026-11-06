@@ -226,7 +226,6 @@ struct EditorRequirementTests {
             )
         }
         #expect(!reaches { _ in })
-        #expect(!reaches { $0.hooks = [BackupHook()] })
         #expect(reaches { $0.sftpPath = "/volume1/restik" })
         #expect(reaches { $0.sftpPort = "2222" })
         #expect(reaches { $0.kind = .local })

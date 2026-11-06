@@ -3,7 +3,7 @@ import Testing
 
 @Suite("Backup hooks")
 struct HookTests {
-    private func context(event: BackupHook.Event = .afterSuccess) -> HookRunner.Context {
+    private func context(event: BackupHook.Event = .afterBackup) -> HookRunner.Context {
         HookRunner.Context(
             event: event,
             planName: "Documents",
@@ -23,7 +23,7 @@ struct HookTests {
     @Test("the run's facts reach the script as environment variables")
     func environment() {
         let env = context().environment
-        #expect(env["SWIFTRESTIC_EVENT"] == "afterSuccess")
+        #expect(env["SWIFTRESTIC_EVENT"] == "afterBackup")
         #expect(env["SWIFTRESTIC_PLAN_NAME"] == "Documents")
         #expect(env["SWIFTRESTIC_REPO_NAME"] == "NAS")
         #expect(env["SWIFTRESTIC_SNAPSHOT_ID"] == "abc12345")
@@ -57,7 +57,6 @@ struct HookTests {
 
         let marker = directory.appendingPathComponent("marker.txt")
         var hook = BackupHook()
-        hook.name = "write marker"
         hook.command = #"printf '%s %s' "$SWIFTRESTIC_PLAN_NAME" "$SWIFTRESTIC_SNAPSHOT_ID" > "\#(marker.path)"; echo done"#
 
         let outcome = await HookRunner(runner: ResticRunner()).run(hook, context: context())
@@ -70,7 +69,6 @@ struct HookTests {
     @Test("a hook runs from the home directory, not the app's inherited cwd")
     func runsFromHomeDirectory() async throws {
         var hook = BackupHook()
-        hook.name = "report cwd"
         hook.command = "pwd"
 
         let outcome = await HookRunner(runner: ResticRunner()).run(hook, context: context())
@@ -84,7 +82,6 @@ struct HookTests {
     @Test("a non-zero exit is reported, not thrown")
     func failingCommand() async {
         var hook = BackupHook()
-        hook.name = "fails"
         hook.command = "echo 'to stderr' >&2; exit 7"
 
         let outcome = await HookRunner(runner: ResticRunner()).run(hook, context: context())
@@ -97,12 +94,10 @@ struct HookTests {
     @Test("a hook that never returns is stopped rather than hanging the backup")
     func timeout() async {
         var hook = BackupHook()
-        hook.name = "hangs"
         hook.command = "sleep 30"
-        hook.timeoutSeconds = 1
 
         let started = Date.now
-        let outcome = await HookRunner(runner: ResticRunner()).run(hook, context: context())
+        let outcome = await HookRunner(runner: ResticRunner(), timeout: 1).run(hook, context: context())
         #expect(outcome.timedOut)
         #expect(!outcome.succeeded)
         #expect(Date.now.timeIntervalSince(started) < 10)
@@ -113,64 +108,78 @@ struct HookTests {
     func onlyBeforeHooksCanAbort() {
         var hook = BackupHook()
         hook.failureBehaviour = .abortBackup
-
         hook.event = .beforeBackup
         #expect(hook.abortsRunOnFailure)
-        hook.event = .beforeMaintenance
-        #expect(hook.abortsRunOnFailure)
-
-        // By the time these run the snapshot exists or the check has finished, so
-        // "cancel" would be meaningless even if it were configured.
-        for event in [
-            BackupHook.Event.afterSuccess, .afterWarning, .afterFailure, .afterAny,
-            .afterMaintenanceSuccess, .afterMaintenanceFailure, .afterAnyMaintenance,
-        ] {
-            hook.event = event
-            #expect(!hook.abortsRunOnFailure, "\(event) must not be able to abort")
-        }
+        // By the time it runs the snapshot exists: "cancel" would be meaningless.
+        hook.event = .afterBackup
+        #expect(!hook.abortsRunOnFailure)
     }
 
-    @Test("a repository hook is told which maintenance task it surrounds")
-    func maintenanceTaskVariable() {
-        var context = context(event: .beforeMaintenance)
-        #expect(context.environment["SWIFTRESTIC_TASK"] == nil)
-        context.maintenanceTask = "prune"
-        #expect(context.environment["SWIFTRESTIC_TASK"] == "prune")
+    @Test("a hook is named by its program, never its arguments or leading variables, which hold its tokens")
+    func displayNameIsTheProgram() {
+        func name(_ command: String) -> String {
+            var hook = BackupHook()
+            hook.command = command
+            return hook.displayName
+        }
+        #expect(name("/usr/local/bin/notify.sh --token abc") == "notify.sh")
+        #expect(name("TOKEN=abc curl https://example.com") == "curl")
+        #expect(name("   ") == "Untitled Hook")
+        #expect(name("A=1 B=2") == "Untitled Hook")
+    }
+
+    @Test("an older build's hooks: every end reads as after a backup, a switched-off or repository one never starts running")
+    func storedHooks() throws {
+        func read(_ fields: String) throws -> BackupHook? {
+            try JSONDecoder().decode(StoredHook.self, from: Data("{\(fields)}".utf8)).hook
+        }
+        for old in ["afterSuccess", "afterWarning", "afterFailure", "afterAny", "afterBackup"] {
+            #expect(try read(#""event":"\#(old)","command":"true""#)?.event == .afterBackup, "\(old)")
+        }
+        #expect(try read(#""event":"beforeBackup","command":"true","failureBehaviour":"abortBackup""#)?.abortsRunOnFailure == true)
+        #expect(try read(#""event":"afterSuccess","command":"true","isEnabled":false"#) == nil)
+        #expect(try read(#""event":"beforeMaintenance","command":"true""#) == nil)
+        #expect(try read(#""event":"invented","command":"true""#) == nil)
+        #expect(try read(#""command":"true""#) == nil)
+        // Left out, and said: a stored event this build can't place.
+        let notes = DecodeNoteBox()
+        let unplaced = try DecodeNotes.$current.withValue(notes) { try read(#""event":"invented","command":"true""#) }
+        #expect(unplaced == nil)
+        #expect(notes.notes.count == 1 && notes.notes[0].contains("invented"))
+        // Written by this build, the fields it dropped are gone.
+        var hook = BackupHook()
+        hook.command = "true"
+        let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(hook)) as? [String: Any])
+        #expect(object["event"] as? String == "afterBackup")
+        #expect(object["isEnabled"] == nil && object["name"] == nil && object["timeoutSeconds"] == nil)
     }
 
     @Test("hooks run in order and stop at one that aborts")
     func runsInOrderAndStops() async {
-        func hook(_ name: String, command: String, aborts: Bool = false) -> BackupHook {
+        func hook(command: String, aborts: Bool = false) -> BackupHook {
             var hook = BackupHook()
-            hook.name = name
             hook.event = .beforeBackup
             hook.command = command
             hook.failureBehaviour = aborts ? .abortBackup : .ignore
             return hook
         }
 
-        var disabled = hook("skipped", command: "exit 1")
-        disabled.isEnabled = false
-        let blank = hook("blank", command: "   ")
-
         let hooks = [
-            hook("first", command: "exit 0"),
-            disabled,
-            blank,
-            hook("blocker", command: "exit 3", aborts: true),
-            hook("never runs", command: "exit 0"),
+            hook(command: "true"),
+            hook(command: "   "),
+            hook(command: "false", aborts: true),
+            hook(command: "pwd"),
         ]
 
         let result = await HookRunner(runner: ResticRunner())
             .runHooks(hooks, event: .beforeBackup, context: context(event: .beforeBackup))
         #expect(result.shouldAbort)
-        #expect(result.outcomes.map(\.hookName) == ["first", "blocker"])
+        #expect(result.outcomes.map(\.hookName) == ["true", "false"])
     }
 
     @Test("a hook never writes into the run's transcript, not even its command line")
     func hookStaysOutOfTheTranscript() async {
         var hook = BackupHook()
-        hook.name = "token"
         hook.command = "echo token=abc123"
 
         let transcript = RunTranscript()
@@ -202,7 +211,6 @@ struct HookTests {
             .appendingPathComponent("SwiftResticHookStarted-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: started) }
         var hook = BackupHook()
-        hook.name = "slow gate"
         hook.event = .beforeBackup
         hook.command = "touch '\(started.path)'; sleep 30"
         hook.failureBehaviour = .abortBackup
