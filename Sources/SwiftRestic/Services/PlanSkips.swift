@@ -1,7 +1,7 @@
 import Foundation
 
 /// The plan editor's *Skip* switches by the names the editor and the plan
-/// page's Excluding card both give them.
+/// page's Excluded Items section both give them.
 enum PlanSkips {
     static let always = "Caches, system files and the Trash"
     static let developerFiles = "Developer files"

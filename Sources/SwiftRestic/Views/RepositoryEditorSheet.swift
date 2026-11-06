@@ -96,7 +96,7 @@ struct RepositoryEditorSheet: View {
 
         var color: Color {
             switch self {
-            case .ok: Theme.success
+            case .ok: .secondary
             case .failure: Theme.danger
             }
         }

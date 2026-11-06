@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A plan's Files view: its folder as this Mac holds it now, the tree on the
 /// leading side — each item beside what the plan's backups hold of it
@@ -267,6 +268,7 @@ struct FilesBrowserView: View {
             List(selection: selection) {
                 ForEach(rows) { row in
                     treeRow(row, unread: unread)
+                        .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.inset)
@@ -323,6 +325,7 @@ struct FilesBrowserView: View {
                         ForEach(entries) { entry in
                             FilesSearchRow(entry: entry, folder: FilesSearchAnswer.folderLine(for: entry.node.path, under: rootEntries))
                                 .tag(entry.node)
+                                .listRowSeparator(.hidden)
                         }
                     }
                     .listStyle(.inset)
@@ -630,7 +633,7 @@ struct FilesSearchRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: entry.node.isDirectory ? "folder" : "doc")
+            FileKindIcon(type: .backedUp(name: entry.node.name, isDirectory: entry.node.isDirectory))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.node.name)
@@ -759,7 +762,8 @@ struct FilesTreeRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         } icon: {
-            Image(systemName: entry.node.isDirectory ? "folder" : "doc")
+            FileKindIcon(type: .backedUp(name: entry.node.name, isDirectory: entry.node.isDirectory))
+                .opacity(entry.standing == .onDisk ? 1 : 0.5)
         }
         .foregroundStyle(entry.standing == .onDisk ? .primary : .secondary)
         .help(entry.help(notRead: notRead))

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The pane for a folder or file picked in a Files tab's tree: what it is
 /// and where it lives — and when it was last backed up, once the newest
@@ -237,8 +238,8 @@ private struct FilesPaneLoadKey: Equatable {
     let diskGeneration: UInt64
 }
 
-/// The pane's identity block: the kind's icon, the name, the folder holding
-/// it (the whole path in its tooltip) and, for a folder no longer on
+/// The pane's identity block: the kind's icon, the name, its path and, for a
+/// folder no longer on
 /// this Mac or an item the chain's newest backup no longer holds, when it
 /// was last backed up: the one fact of its standing the rows below do not
 /// already say. How many backups and versions hold it are the rows
@@ -255,39 +256,28 @@ struct FilesPaneHeader: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: node.isDirectory ? "folder.fill" : "doc.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(node.isDirectory ? Theme.tint : .secondary)
+            FileKindIcon(type: .backedUp(name: node.name, isDirectory: node.isDirectory), size: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(node.name)
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                // Where it is, Finder's "Where": the folder holding it, cut
-                // in the middle so both ends stay readable. While this Mac
-                // holds the item, a click shows it in Finder; once it does
-                // not, the folder is words only — no affordance on a dead
-                // control.
-                let folder = (ResticPath.parent(of: node.path) as NSString).abbreviatingWithTildeInPath
+                // The item's own path, not its parent's: a plan's root would
+                // read as a bare "~". A link only while this Mac holds it.
+                let location = (node.path as NSString).abbreviatingWithTildeInPath
                 if isOnDisk == true {
-                    Button {
+                    Button(location) {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: node.path)])
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(folder)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            RowChevron()
-                        }
                     }
-                    .buttonStyle(HoverableButtonStyle())
+                    .buttonStyle(.link)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
                     .help(node.path)
-                    .accessibilityLabel("\(folder), Show in Finder")
+                    .accessibilityLabel("\(location), Show in Finder")
                 } else {
-                    Text(folder)
+                    Text(location)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

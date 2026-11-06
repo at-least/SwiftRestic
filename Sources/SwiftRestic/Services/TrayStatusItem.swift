@@ -201,7 +201,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 menu.addItem(disabledItem(text))
             case .problem(let text, let runID):
                 // The one status line that goes somewhere: the run it names,
-                // in Activity — the plan card's Show in Activity route.
+                // in Activity — the plan page's Show in Activity route.
                 let item = NSMenuItem(title: text, action: #selector(showProblem(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = runID.uuidString

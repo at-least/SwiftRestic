@@ -28,6 +28,10 @@ enum StaleAlert {
         max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 
+    static func overdueLine(since lastBackupAt: Date, now: Date) -> String {
+        "Not backed up for \(Format.plural(wholeDays(since: lastBackupAt, now: now), "day"))"
+    }
+
     /// A manual plan made no promise to keep, so it is never overdue.
     static func isOverdue(_ plan: BackupPlan, lastBackupAt: Date, now: Date) -> Bool {
         plan.schedule.frequency != .manual && now.timeIntervalSince(lastBackupAt) > window(schedule: plan.schedule)

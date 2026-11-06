@@ -373,7 +373,7 @@ extension RunRecord {
     /// The unreadable items a surface lists and how many more Activity's
     /// drawer holds past them, counted from restic's total (`itemErrorCount`),
     /// never the stored lines, which are capped: the drawer lists every
-    /// stored line, the plan page's card the first few
+    /// stored line, the plan page's problem row the first few
     /// (`PlanStatus.listedItemLimit`).
     func unreadableItemListing(limit: Int? = nil) -> (listed: ArraySlice<String>, unlisted: Int) {
         let listed = limit.map { unreadableItems.prefix($0) } ?? unreadableItems
@@ -513,7 +513,7 @@ extension RunRecord {
 
     /// A backup that went around an away drive's folders and wrote a
     /// snapshot of the rest: the rest is backed up, the drive's folders are
-    /// not, which the Protection card names and a later whole backup heals.
+    /// not, which the Status section names and a later whole backup heals.
     /// Only older builds, whose plans held several folders,
     /// recorded one — a plan of one path is backed up or skipped whole —
     /// and the history keeps them.

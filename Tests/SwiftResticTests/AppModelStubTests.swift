@@ -1825,7 +1825,6 @@ struct AppModelStubTests {
         // deletePlan's bookkeeping, installed with no run in flight, so its
         // removal below can only be deletePlan's own doing.
         let removed = harness.plan.id
-        harness.model.problemsSeenAt[removed] = .now
         harness.model.activity[removed] = PlanActivity(of: harness.plan)
         harness.model.planProgress[removed] = OperationProgress()
         harness.model.backupRunTokens[removed] = UUID()
@@ -1841,7 +1840,6 @@ struct AppModelStubTests {
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
         // The same bookkeeping as Delete Plan, so the two ways a plan goes
         // cannot drift apart.
-        #expect(harness.model.problemsSeenAt[removed] == nil)
         #expect(harness.model.activity[removed] == nil)
         #expect(harness.model.planProgress[removed] == nil)
         #expect(harness.model.backupRunTokens[removed] == nil)

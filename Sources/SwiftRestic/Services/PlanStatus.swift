@@ -9,10 +9,10 @@ struct PlanProblemSummary: Equatable, Sendable {
     let headline: String
     let message: String?
     let facts: [String]
-    /// The unreadable items the card lists, restic's own lines, at most
+    /// The unreadable items the row lists, restic's own lines, at most
     /// `PlanStatus.listedItemLimit` of them, each with the drawer's fixes.
     let items: [String]
-    /// How many unreadable items the card leaves to Activity — from
+    /// How many unreadable items the row leaves to Activity — from
     /// restic's count, never the stored lines.
     let unlistedItemCount: Int
 }
@@ -75,15 +75,15 @@ enum PlanStatus {
     private static let retentionSkippedFact = "Old backups not removed"
     static let unnamedUnreadFact = "Some source data couldn’t be read"
     /// The plan page's empty fact when the repository holds other backups —
-    /// the Overview card's count line and the Backups tab's empty state in
+    /// the Overview's count line and the Backups tab's empty state in
     /// the same words.
     static let noneFromThisPlanFact = "None from this plan yet. This location holds others"
-    /// How many unreadable items the plan page's card lists; the drawer
+    /// How many unreadable items the plan page's problem row lists; the drawer
     /// holds the rest. Five: the usual run names one or two, and a home
     /// folder macOS blocked in bulk is a diagnosis, not a list.
     static let listedItemLimit = 5
 
-    /// The plan page's problem card's when-line: how many backups in a row
+    /// The plan page's problem row's when-line: how many backups in a row
     /// ended this way for this cause (`RunRecord.problemStretch`), then the
     /// newest one's moment ("3 times in a row · 2 days ago"), else the
     /// moment alone — "in a row", as a success in between starts the count
@@ -128,7 +128,7 @@ enum PlanStatus {
     /// unreadable file), else a hook's complaint, else the banner's words
     /// for a bare exit 3.
     static func summary(of run: RunRecord) -> PlanProblemSummary {
-        // The card lists the unreadable items (each with Show in Finder and
+        // The row lists the unreadable items (each with Show in Finder and
         // Exclude, as the drawer's lines), so the message never repeats
         // the first of them: it explains the warning past the items — a
         // decoding gap, a skipped retention step — or a hook's complaint.
@@ -138,14 +138,14 @@ enum PlanStatus {
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
         } else {
-            // The words for a bare exit 3 — only while the card lists
+            // The words for a bare exit 3 — only while the row lists
             // nothing: listed items are the explanation.
             explanation ?? run.failureMessage
                 ?? (run.outcome == .completedWithErrors && listedItems.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
         }
 
         var facts = facts(for: run)
-        // The card lists the unreadable items under the facts line, so once
+        // The row lists the unreadable items under the facts line, so once
         // every one is listed there the count says nothing new. It stands
         // while items are left to Activity (unlisted > 0) or none was
         // listed, where it is the only place the count is said.
@@ -278,8 +278,8 @@ enum PlanStatus {
         return TileFace(value: Format.tileTimestamp(next, now: now), help: help)
     }
 
-    /// Why a scheduled plan will not run by itself now, for the Protection
-    /// card: "Not scheduled" when the scheduler skips it (the sidebar's and
+    /// Why a scheduled plan will not run by itself now, for the Status
+    /// section: "Not scheduled" when the scheduler skips it (the sidebar's and
     /// Next backup's word). Nil while it will, and for a manual plan, which
     /// never does: that is its chosen mode.
     static func willNotRunCaption(
@@ -333,6 +333,9 @@ enum PlanStatus {
             )
         }
         if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshot: latestSnapshot) {
+            if StaleAlert.isOverdue(plan, lastBackupAt: lastBackupAt, now: now) {
+                return PlanCaption(text: StaleAlert.overdueLine(since: lastBackupAt, now: now), outcome: .completedWithErrors)
+            }
             return PlanCaption(text: "Last backup \(relative(lastBackupAt))")
         }
         if plan.schedule.frequency != .manual,

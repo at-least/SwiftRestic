@@ -215,7 +215,7 @@ extension AppModel {
         await refreshAllSnapshots()
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler
-        // can fire a due plan mid-capture and put a progress card on screen.
+        // can fire a due plan mid-capture and put a progress row on screen.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE"] == nil {
             startScheduler()
         }

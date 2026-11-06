@@ -10,6 +10,12 @@ struct VolumeCapacityTests {
         #expect(capacity.usedFraction == 0.75)
     }
 
+    @Test("a disk under 5% free is low on space; at 5% it isn't")
+    func lowSpace() {
+        #expect(VolumeCapacity(totalBytes: 1000, freeBytes: 49).isLow)
+        #expect(!VolumeCapacity(totalBytes: 1000, freeBytes: 50).isLow)
+    }
+
     @Test("a degenerate total reads as empty, never NaN")
     func zeroTotal() {
         let capacity = VolumeCapacity(totalBytes: 0, freeBytes: 0)

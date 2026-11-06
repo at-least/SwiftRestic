@@ -230,7 +230,7 @@ extension AppModel: BackupRunEngine.Sink {
     /// A Back Up Now that was skipped, answered in the window: it ends in
     /// milliseconds, the strip's flash saying nothing, and no surface but
     /// Activity records a skip. How every other run went is the sidebar's
-    /// caption, the plan page's problem card, Activity's badge and the menu
+    /// caption, the plan page's problem row, Activity's badge and the menu
     /// bar's — where a banner over every page said it again, the whole
     /// queue's worth after Back Up All.
     /// A skip nobody asked for — a drive away at every slot of an hourly

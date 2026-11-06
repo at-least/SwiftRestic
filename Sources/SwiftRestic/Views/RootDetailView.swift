@@ -19,7 +19,7 @@ struct RootDetailView: View {
 
     let onAddPlan: (_ repositoryID: UUID?) -> Void
     /// Opens the adopt sheet for an Other backups group — its page or the
-    /// repository page's card — the root owns the presenting state, as for
+    /// location page — the root owns the presenting state, as for
     /// every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
@@ -31,8 +31,6 @@ struct RootDetailView: View {
             // menu bar line covers the window-closed case. Switching panes
             // hands the progress over to this strip.
             RestoreProgressStrip(fallbackTitle: "Restoring…")
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
             // is why.
@@ -55,8 +53,6 @@ struct RootDetailView: View {
                         openSettings()
                     }
                 )
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
             }
             BannerQueue()
             if model.isBootstrapping {
@@ -143,15 +139,13 @@ private struct BannerQueue: View {
 
     var body: some View {
         if !model.banners.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: 0) {
                 let banners = model.banners
                 ForEach(Array(banners.enumerated()), id: \.element.id) { index, banner in
                     BannerView(banner: banner)
                         .layoutPriority(Double(banners.count - index))
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
         }
     }
 }
@@ -161,70 +155,71 @@ struct WelcomeView: View {
     let onAddPlan: () -> Void
 
     var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
-
-            // The app's own mark — the same construction the tray wears — at
-            // hero scale, bare: a welcome screen's job is the mark and the
-            // button, and a macOS welcome wears no plate behind its mark.
-            Image(nsImage: MenuBarLogo.heroImage)
-                .resizable()
-                .foregroundStyle(Theme.tint)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 84, height: 84)
-                .accessibilityHidden(true)
-
-            if case let .refused(error, problem) = model.resticSearch {
-                ResticSetupView(absence: ResticAbsence(refusal: error), problem: problem)
-            } else {
-                VStack(spacing: 16) {
-                    Text("Keep a copy of your folders on another disk or in the cloud.")
-                        .multilineTextAlignment(.center)
-                    Button("Back Up a Folder…", action: onAddPlan)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+        ContentUnavailableView {
+            Label {
+                if case let .refused(error, _) = model.resticSearch {
+                    Text(ResticAbsence(refusal: error).headline)
+                } else {
+                    Text("SwiftRestic")
                 }
+            } icon: {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 96, height: 96)
+                    .accessibilityHidden(true)
             }
-
-            Spacer()
+        } description: {
+            if case let .refused(error, problem) = model.resticSearch {
+                ResticSetupDescription(absence: ResticAbsence(refusal: error), problem: problem)
+            } else {
+                Text("Keep a copy of your folders on another disk or in the cloud.")
+            }
+        } actions: {
+            if case let .refused(error, _) = model.resticSearch {
+                ResticSetupActions(absence: ResticAbsence(refusal: error))
+            } else {
+                Button("Back Up a Folder…", action: onAddPlan)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
         }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-/// What Welcome shows until restic is here: nothing else on the page can be
+/// What Welcome says until restic is here: nothing else on the page can be
 /// saved without it. It clears itself (`AppModel.findResticIfRefused`).
-private struct ResticSetupView: View {
-    @Environment(\.openSettings) private var openSettings
-    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
+private struct ResticSetupDescription: View {
     let absence: ResticAbsence
     let problem: String
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(absence.headline)
-                .font(.headline)
+        VStack(spacing: 8) {
             Text(absence.guidance ?? problem)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
             if let command = absence.installCommand {
-                HStack(spacing: 8) {
-                    Text(command)
-                        .monospaced()
-                        .textSelection(.enabled)
-                    Button("Copy Command") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(command, forType: .string)
-                    }
-                }
-            }
-            Button("Open Settings…") {
-                settingsPane = SettingsView.resticPane
-                openSettings()
+                Text(command)
+                    .monospaced()
+                    .textSelection(.enabled)
             }
         }
-        .frame(maxWidth: 420)
+    }
+}
+
+private struct ResticSetupActions: View {
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
+    let absence: ResticAbsence
+
+    var body: some View {
+        if let command = absence.installCommand {
+            Button("Copy Command") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command, forType: .string)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        Button("Open Settings…") {
+            settingsPane = SettingsView.resticPane
+            openSettings()
+        }
     }
 }

@@ -113,7 +113,6 @@ struct ResticConsoleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
         }
-        .background(.quaternary.opacity(0.25))
     }
 
     private var footer: some View {

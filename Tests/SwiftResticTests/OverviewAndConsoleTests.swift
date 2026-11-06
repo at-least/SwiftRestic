@@ -313,7 +313,6 @@ struct OverviewMetricsTests {
         #expect(rows.first?.problemOutcome == .failed)
         let attention = OverviewMetrics.needingAttention(rows)
         #expect(attention.map(\.planName) == ["Docs"])
-        #expect(OverviewMetrics.attentionOutcome(attention) == .failed)
         let summary = OverviewMetrics.protectionSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { _ in nil }, hold: nil, now: .now, relative: { _ in "4 minutes ago" }
@@ -371,10 +370,8 @@ struct OverviewMetricsTests {
         )
         #expect(rows.map(\.stateText) == ["Can’t read backups — Repository /nas is not reachable"])
         #expect(rows.first?.didFail == true)
-        // The line is the listing's, so the mark is too: the warning
-        // triangle the page's caveat wears, not the hidden failure's octagon.
+        // The line is the listing's, not the hidden failure's.
         #expect(rows.first?.problemOutcome == nil)
-        #expect(OverviewMetrics.attentionOutcome(OverviewMetrics.needingAttention(rows)) == .completedWithErrors)
     }
 
     private func protectionRow(

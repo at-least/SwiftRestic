@@ -1,35 +1,6 @@
 import AppKit
 import SwiftUI
-
-struct Card<Accessory: View, Content: View>: View {
-    var title: LocalizedStringKey
-    @ViewBuilder var accessory: () -> Accessory
-    @ViewBuilder var content: () -> Content
-
-    init(
-        _ title: LocalizedStringKey,
-        @ViewBuilder content: @escaping () -> Content,
-        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
-    ) {
-        self.title = title
-        self.content = content
-        self.accessory = accessory
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.headline)
-                Spacer()
-                accessory()
-            }
-            content()
-        }
-        .padding(Theme.Space.cardPadding)
-        .cardSurface()
-    }
-}
+import UniformTypeIdentifiers
 
 /// An editor sheet's tabs: a segmented picker over the chosen pane, where a
 /// SwiftUI `TabView` would be an `NSTabView`. That one sizes its tab control
@@ -108,8 +79,7 @@ struct BannerView: View {
         switch banner.level {
         case .error: StatusPalette.status(.failed)
         case .warning: StatusPalette.status(.completedWithErrors)
-        case .success: Theme.success
-        case .notice: .secondary
+        case .success, .notice: .secondary
         }
     }
     private var symbol: String {
@@ -136,7 +106,7 @@ struct BannerView: View {
             // says what happened, and its SF label read "Selected" to
             // VoiceOver.
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .imageScale(.large)
                 .foregroundStyle(hue)
                 .accessibilityLabel(symbolLabel ?? "")
                 .accessibilityHidden(symbolLabel == nil)
@@ -189,8 +159,10 @@ struct BannerView: View {
                 .accessibilityLabel("Dismiss")
             }
         }
-        .padding(Theme.Space.cardPadding)
-        .cardSurface()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 }
 
@@ -204,24 +176,6 @@ struct TileHelp: ViewModifier {
         } else {
             content
         }
-    }
-}
-
-/// For buttons that are tiles or rows and do not look pressable: a quiet
-/// hover tint so the pointer reveals the affordance before the click.
-struct HoverableButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                (isHovering || configuration.isPressed)
-                    ? Color.primary.opacity(0.045)
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-            )
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .onHover { isHovering = $0 }
     }
 }
 
@@ -260,9 +214,8 @@ struct NetworkSharePasswordRows: View {
     }
 }
 
-/// `LabeledContent` only aligns its two columns inside a `Form`; dropped into a
-/// plain card it renders the value hard against the label, which reads as a
-/// typo. These rows go in a `Grid` so the values line up in a column.
+/// Activity's drawer's rows. Not `LabeledContent`: outside a `Form` it renders
+/// the value hard against the label. They go in a `Grid` so values line up.
 struct DetailRow<Value: View>: View {
     let label: String
     @ViewBuilder var value: () -> Value
@@ -276,8 +229,6 @@ struct DetailRow<Value: View>: View {
         GridRow(alignment: .firstTextBaseline) {
             Text(label)
                 .foregroundStyle(.secondary)
-                // One label-column width app-wide, so stacked cards' values
-                // line up; a longer label widens the column, never truncates.
                 .frame(minWidth: 110, alignment: .trailing)
             value()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -332,7 +283,7 @@ struct ExpandableCaption: View {
                 }
                 .buttonStyle(.borderless)
                 .padding(.vertical, -4)
-                .foregroundStyle(Theme.tint)
+                .foregroundStyle(.secondary)
                 .help("More about this")
                 .accessibilityLabel("More about this")
             }
@@ -357,9 +308,6 @@ struct OperationProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                // No leading glyph: the bar below is the live status, and the
-                // card's title names the work — a decorative symbol would
-                // only re-draw the eye to a card that is already the answer.
                 Text(title).font(.headline)
                 Spacer()
                 if let onCancel {
@@ -399,9 +347,7 @@ struct OperationProgressView: View {
                     }
                     Spacer()
                     Text(Format.percent(progress.fraction))
-                        .font(.callout.weight(.semibold))
                         .monospacedDigit()
-                        .foregroundStyle(Theme.tint)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -410,13 +356,11 @@ struct OperationProgressView: View {
             if let current = progress.currentFile {
                 Text(current)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
         }
-        .padding(Theme.Space.cardPadding)
-        .cardSurface()
     }
 }
 
@@ -439,6 +383,10 @@ struct RestoreProgressStrip: View {
                 startedAt: nil,
                 onCancel: { model.cancelRestore() }
             )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
         }
     }
 
@@ -506,7 +454,7 @@ struct FailureUnavailableView: View {
 }
 
 /// Why a Snapshots value may read "—", in visible text: under the plan page's
-/// Backups card, and as the repository page's Protection card body. The tooltips carry the same
+/// Backups section, and as the repository page's Status section body. The tooltips carry the same
 /// lines, but a reason only a hovering mouse user can reach is no reason at
 /// all for a keyboard or VoiceOver user.
 struct SnapshotListingCaveat: View {
@@ -585,18 +533,47 @@ struct SnapshotCompletenessMark: View {
     }
 }
 
+/// Finder's icon for a kind of item. By type, not by path: what a backup holds
+/// need not be on this Mac. Cached per type, since a row re-renders on every
+/// scroll and `NSWorkspace` is not free.
+struct FileKindIcon: View {
+    let type: UTType
+    var size: CGFloat = 16
+
+    @MainActor private static var icons: [String: NSImage] = [:]
+
+    @MainActor private static func icon(for type: UTType) -> NSImage {
+        if let icon = icons[type.identifier] { return icon }
+        let icon = NSWorkspace.shared.icon(for: type)
+        icons[type.identifier] = icon
+        return icon
+    }
+
+    var body: some View {
+        Image(nsImage: Self.icon(for: type))
+            .resizable()
+            .frame(width: size, height: size)
+    }
+}
+
+extension UTType {
+    static func backedUp(name: String, isDirectory: Bool) -> UTType {
+        if isDirectory { return .folder }
+        return UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+    }
+}
+
 extension SnapshotNode {
-    var browserIconName: String {
+    var iconType: UTType {
         switch type {
-        case .dir: "folder.fill"
-        case .symlink: "arrow.turn.up.right"
-        case .file: "doc"
-        default: "questionmark.square.dashed"
+        case .dir: .folder
+        case .symlink: .symbolicLink
+        case .file: .backedUp(name: name, isDirectory: false)
+        default: .item
         }
     }
 
-    /// What the glyph means, for VoiceOver. SF Symbols' own labels name the
-    /// picture, not the meaning — folder.fill reads "Move", doc "Document".
+    /// The icon's meaning, for VoiceOver.
     var kindName: String {
         switch type {
         case .dir: "Folder"
@@ -726,14 +703,11 @@ struct PathListEditor: View {
             .padding(.leading, 2)
             .frame(height: 26)
         }
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                .strokeBorder(
-                    isDropTargeted ? Theme.tint : Color.primary.opacity(0.09),
-                    lineWidth: isDropTargeted ? 2 : 1
-                )
-        )
+        .overlay {
+            if isDropTargeted {
+                Rectangle().strokeBorder(Theme.tint, lineWidth: 2)
+            }
+        }
     }
 
     private func addDraft() {
@@ -881,18 +855,6 @@ enum FilePicker {
     }
 }
 
-extension View {
-    func detailPane() -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.section) {
-                self
-            }
-            .padding(Theme.Space.pane)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
 /// The one way to the grant, wherever the app asks for it. The grant
 /// cannot be requested by prompt, so the list in System Settings is where
 /// it happens.
@@ -913,7 +875,7 @@ struct FullDiskAccessButton: View {
 /// again". The two the grant does not fix carry Exclude These Items when it
 /// covers every item they count (`ItemErrorDiagnosis.excludablePaths`),
 /// asked first as a line's Exclude is. No Back Up Now on "back up again":
-/// the plan page's Backups card and the drawer's footer hold it wherever
+/// the plan page's Backups section and the drawer's footer hold it wherever
 /// the plan can back up.
 struct ItemErrorHintsView: View {
     @Environment(AppModel.self) private var model
@@ -964,7 +926,7 @@ struct ItemErrorHintsView: View {
     }
 
     /// Disabled once the plan skips every one of them, as a line's Exclude
-    /// is. Two can share a card, so VoiceOver hears each by its cause;
+    /// is. Two can share a row, so VoiceOver hears each by its cause;
     /// Voice Control still answers to the title on screen.
     private func excludeButton(hint: ItemErrorDiagnosis.Hint, paths: [String], plan: BackupPlan) -> some View {
         let pending = paths.filter { !plan.excludePatterns.contains(ResticService.globEscaped($0)) }
@@ -997,7 +959,7 @@ struct ItemErrorHintsView: View {
 }
 
 /// One unreadable item's line — in Activity's drawer and on the plan
-/// page's problem card — with the two fixes the diagnosis above it names,
+/// page's problem row — with the two fixes the diagnosis above it names,
 /// Show in Finder and Exclude from the plan, in a menu at its end and in
 /// its context menu. Only where restic named the
 /// item's path and the run stored it (`RunRecord.unreadableItemPaths`); older

@@ -167,10 +167,7 @@ struct RunDetailPanel: View {
             || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
     }
 
-    /// What the run left in words: the failure — red for a failed run,
-    /// plain for a cancelled run's note, which the header beside it already
-    /// calls by its verdict — prune's
-    /// output tail, what to do about the unreadable items, restic's item
+    /// What the run left in words: the failure, prune's output tail, what to do about the unreadable items, restic's item
     /// lines, and the hooks' own lines — which stay here, on this Mac, and
     /// never reach Copy Details. The unreadable items come under restic's
     /// count and end with how many were not stored, the way Copy Details
@@ -182,7 +179,6 @@ struct RunDetailPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let failure = run.failureMessage, failure != run.outcome.displayName {
                     Text(failure)
-                        .foregroundStyle(run.outcome == .failed ? Theme.danger : .primary)
                         .textSelection(.enabled)
                 }
                 if run.kind == .prune, let detail = run.detailText {

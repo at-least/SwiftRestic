@@ -109,8 +109,8 @@ enum MenuBarStatus {
     /// The newest problem in the run history that still stands, as one
     /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
     /// week it drops the backup failures a later successful backup of the same
-    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): the dot
-    /// and this line lead the user in, and leading with a failure forever
+    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): this line leads the
+    /// user in, and leading with a failure forever
     /// would read as permanent breakage.
     ///
     /// Yields to `hasNoRepositories`: it must not answer the `unconfigured`
@@ -145,7 +145,7 @@ enum MenuBarStatus {
                 subject = "\(newest.kind.displayName) on \(name)"
             }
         }
-        // The outcome's own words, as the sidebar, the plan card and Activity
+        // The outcome's own words, as the sidebar, the plan page and Activity
         // say it. Notification bodies keep their count-bearing prose
         // ("Completed with 2 unreadable items.") — a sentence about the run,
         // not its label.
@@ -288,7 +288,7 @@ enum MenuBarStatus {
 
     /// A plan's lines in its repository's submenu: news only, a standing
     /// problem, in the sidebar caption's words, joined to the
-    /// plan's label as the sidebar warning and the Protection card join them
+    /// plan's label as the Status section join them
     /// ("Code: Failed — 3 hours ago"). A quiet plan says nothing (success is
     /// quiet); a running plan's line already leads the menu. The menu's top
     /// problem line repeats the newest problem as a sentence on purpose: a

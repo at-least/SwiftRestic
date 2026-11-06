@@ -2,7 +2,7 @@ import Foundation
 
 /// The one action that fixes a failure whose cause the app knows, offered
 /// where the failure is read — the Activity drawer and the plan's problem
-/// card. Each title is a menu command's, under the menu's own word.
+/// row. Each title is a menu command's, under the menu's own word.
 enum RunFix: Equatable {
     /// restic exit 12: the stored password does not open the repository.
     case editRepository(UUID)
@@ -223,7 +223,7 @@ enum RunRecordPresentation {
     /// restic's count, never the stored lines), else what it did.
     static func detail(for run: RunRecord) -> String {
         // The first sentence: restic's multi-line tail stays in the drawer,
-        // the plan card and Copy Details, which show the whole message.
+        // the plan page and Copy Details, which show the whole message.
         if let failure = run.failureMessage {
             let reason = Format.firstSentence(failure)
             // A standing failure for the same folders gone, as a skip.
@@ -268,7 +268,7 @@ enum RunRecordPresentation {
     }
 
     /// The Detail column's words for a row that continues a line — the
-    /// Maintenance card's "22 hours ago · 2 errors — restic repair can
+    /// Maintenance section's "22 hours ago · 2 errors — restic repair can
     /// recover some damage" — the outcome lowercased when the detail is
     /// only the outcome.
     static func verdictClause(for run: RunRecord) -> String {

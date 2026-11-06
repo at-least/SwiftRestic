@@ -49,7 +49,7 @@ extension AppModel {
         // is not asked about — restic's "does not exist" could not tell it
         // from a moved folder — and its listing says what a skipped backup
         // says, with no banner: the repository's row, the caveat and the
-        // Protection card already state it. Its saved network share is
+        // Status section already state it. Its saved network share is
         // reconnected first, as a run does — at launch too, so the share
         // mounts when the app starts; still away, the words say why. Earlier
         // rows stay, as for any failed read. A mount re-reads it
@@ -174,7 +174,7 @@ extension AppModel {
             )
         } catch {
             // Keep whatever an earlier successful listing produced — stale
-            // rows beside an error beat a blank card that reads as "nothing
+            // rows beside an error beat a blank page that reads as "nothing
             // backed up". No banner: the sidebar's row and every page of the
             // repository say it, for as long as it lasts — a banner over
             // every page said it again.

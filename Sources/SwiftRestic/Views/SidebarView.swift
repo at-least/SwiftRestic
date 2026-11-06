@@ -129,7 +129,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
-        // The plan card's swap, worded as the Backup menu's: a running plan's
+        // The plan page's swap, worded as the Backup menu's: a running plan's
         // row offers the Stop that matters now, not a second backup.
         // A context menu leaves out what can't run (HIG: "Hide unavailable
         // menu items, don't dim them"); the Backup menu keeps its dimmed
@@ -179,7 +179,6 @@ struct SidebarView: View {
                     backupsCaption(repository, listing: model.snapshots(for: repository.id))
                 }
                 Spacer(minLength: 4)
-                attentionMark(repository)
             }
         } icon: {
             // The sidebar's own icon tint, as on Activity: it turns white
@@ -217,30 +216,6 @@ struct SidebarView: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-    }
-
-    /// The warning a repository wears while one of its plans is not
-    /// protected and should be — the rows its page's Protection line
-    /// counts, read from the same derivation. With no page over every
-    /// repository, this is where an unreadable repository shows at a
-    /// glance: the badge and the menu bar count failed runs, and a wrong
-    /// password fails none. A failed run's red octagon while a plan's last
-    /// backup failed, as that plan's row wears it, else the triangle.
-    /// The words stay with the rows; the mark only points at them.
-    @ViewBuilder
-    private func attentionMark(_ repository: Repository) -> some View {
-        let rows = OverviewMetrics.needingAttention(
-            model.protectionRows(for: model.plans(in: repository.id), now: now)
-        )
-        if !rows.isEmpty {
-            let words = rows.map { "\($0.planName): \($0.stateText)" }.joined(separator: "\n")
-            let outcome = OverviewMetrics.attentionOutcome(rows)
-            Image(systemName: outcome.symbolName!)
-                .imageScale(.small)
-                .foregroundStyle(StatusPalette.status(outcome))
-                .help(words)
-                .accessibilityLabel(words)
-        }
     }
 
     @ViewBuilder
@@ -472,18 +447,11 @@ private struct PlanSidebarRow: View {
                     .lineLimit(1)
                     .help((plan.path as NSString).abbreviatingWithTildeInPath)
                 HStack(spacing: 3) {
-                    // The glyph carries the severity — red for a failed run
-                    // (restic exit 1, no snapshot), orange for one that
-                    // completed with errors (exit 3, an incomplete snapshot)
-                    // — and the words stay in the secondary colour: orange
-                    // caption text is too low-contrast on the light sidebar.
-                    // Beside words that say it, the glyph is decoration to
-                    // VoiceOver. The words, and which state wins the line,
-                    // come from `PlanStatus.sidebarCaption`.
-                    if let outcome = caption.outcome, let symbol = outcome.symbolName {
-                        Image(systemName: symbol)
+                    // The words stay secondary: orange caption text is too
+                    // low-contrast on the light sidebar.
+                    if let outcome = caption.outcome {
+                        StatusGlyph(outcome: outcome)
                             .imageScale(.small)
-                            .foregroundStyle(StatusPalette.status(outcome))
                             .accessibilityHidden(true)
                     }
                     // The whole line when it fits, its shorter spelling when
@@ -519,24 +487,10 @@ private struct PlanSidebarRow: View {
         }
     }
 
-    /// A row wears state, never identity, and at its trailing edge,
-    /// vertically centred on the row. In rank: the in-flight spinner,
-    /// the Mail dot for a problem the user has not seen.
     @ViewBuilder
     private var marker: some View {
         if model.isRunning(planID: plan.id) {
             ProgressView().controlSize(.small)
-        } else if let label = model.unseenProblemLabel(for: plan.id) {
-            // Accent blue like Mail's unread dot, never red: the dot is an
-            // invitation ("a problem you haven't seen"), and the alarm lives
-            // in the subtitle's glyph and words. It clears when the plan's
-            // page is opened or the next run succeeds. Its label names the
-            // outcome — a completed-with-errors run is not a failure.
-            Circle()
-                .fill(Theme.tint)
-                .frame(width: 9, height: 9)
-                .help(label)
-                .accessibilityLabel(label)
         }
     }
 }
@@ -588,7 +542,7 @@ struct BackupsStatusRow: View {
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 // A plan's page says which kind of empty this is, as the
-                // Overview card's count line does; a group's page, or a
+                // Overview's count line does; a group's page, or a
                 // repository with nothing of anyone's, the plain fact.
                 Text(
                     planID != nil && !model.snapshots(for: repositoryID).isEmpty

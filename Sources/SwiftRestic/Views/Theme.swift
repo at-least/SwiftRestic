@@ -1,48 +1,27 @@
 import SwiftUI
 
-/// Colour is native: the app follows the user's system accent and Apple's
-/// semantic status colours, which adapt to appearance and Increase Contrast
-/// on their own. Only geometry (spacing, radii, type) is custom.
+/// Colour carries meaning only: accent for what can be clicked, orange and red
+/// for trouble. Normal is quiet, so there is no success colour.
 enum Theme {
     static let tint = Color.accentColor
-
-    /// Successful completion. Checked runs, healthy plans, "no problems".
-    static let success = Color.green
-
-    /// Degraded but not failed. Warnings, skipped work, completed-with-errors.
     static let warning = Color.orange
-
-    /// Failure and destructive confirmation.
     static let danger = Color.red
-
-    enum Space {
-        static let section: CGFloat = 16
-        static let cardPadding: CGFloat = 14
-        static let pane: CGFloat = 20
-    }
-
-    enum Radius {
-        static let card: CGFloat = 10
-        static let chip: CGFloat = 7
-    }
 }
 
-struct CardSurface: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
-            )
-    }
-}
+/// A run's outcome glyph, in its colour until a selected row's fill sits behind
+/// it. Not the colour there: red on the selection measured 1.34–1.83:1.
+struct StatusGlyph: View {
+    @Environment(\.backgroundProminence) private var backgroundProminence
+    let outcome: RunRecord.Outcome
 
-extension View {
-    func cardSurface() -> some View {
-        modifier(CardSurface())
+    var body: some View {
+        if let symbolName = outcome.symbolName {
+            Image(systemName: symbolName)
+                .foregroundStyle(
+                    backgroundProminence == .increased
+                        ? AnyShapeStyle(.primary)
+                        : AnyShapeStyle(StatusPalette.status(outcome))
+                )
+        }
     }
 }

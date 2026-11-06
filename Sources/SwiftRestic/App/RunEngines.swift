@@ -559,7 +559,7 @@ enum MaintenanceRunEngine {
                 // One sentence — a dash, not a period, before the command —
                 // so Format.firstSentence carries the whole verdict to the
                 // Detail column and the Maintenance
-                // card; restic's prune advice stays a second sentence.
+                // row; restic's prune advice stays a second sentence.
                 record.detailText = errors == 0
                     ? "No errors found."
                     : "\(Format.plural(errors, "error")) — restic repair can recover some damage."

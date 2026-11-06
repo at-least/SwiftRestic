@@ -51,9 +51,8 @@ struct ActivityView: View {
                         // is clear ink: `hidden()` would silence it, and so
                         // does `opacity(0)` on macOS 26, which drops the text
                         // from the accessibility tree.
-                        if let symbolName = run.outcome.symbolName {
-                            Image(systemName: symbolName)
-                                .foregroundStyle(StatusPalette.status(run.outcome))
+                        if run.outcome.symbolName != nil {
+                            StatusGlyph(outcome: run.outcome)
                                 .help(run.outcome.displayName)
                                 .accessibilityLabel(run.outcome.displayName)
                         } else {
@@ -101,22 +100,22 @@ struct ActivityView: View {
                     }
                     .width(min: 96, ideal: 112, max: 120)
 
-                    // The repository a run belongs to, looked up by ID at
-                    // render time, so a rename survives: check and prune runs
-                    // carry it nowhere else. A "—" is either a run recorded
-                    // before runs carried a repository or a repository since
-                    // removed; the data cannot tell the two apart, so the
-                    // tooltip says both and asserts neither.
-                    TableColumn("Location") { run in
-                        if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
-                            Text(name)
-                                .help(name)
-                        } else {
-                            Text("—")
-                                .help("The location isn’t known. It may have been removed")
+                    // Looked up by ID at render time, so a rename survives. A
+                    // "—" is either a run recorded before runs carried a
+                    // location or a location since removed; the data cannot
+                    // tell them apart, so the tooltip asserts neither.
+                    if model.configuration.repositories.count > 1 {
+                        TableColumn("Location") { run in
+                            if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
+                                Text(name)
+                                    .help(name)
+                            } else {
+                                Text("—")
+                                    .help("The location isn’t known. It may have been removed")
+                            }
                         }
+                        .width(min: 96, ideal: 104, max: 140)
                     }
-                    .width(min: 96, ideal: 104, max: 140)
 
                     TableColumn("Action") { run in
                         Text(run.kind.displayName)
@@ -126,7 +125,7 @@ struct ActivityView: View {
                     TableColumn("Result") { run in
                         let detail = RunRecordPresentation.detail(for: run)
                         Text(detail)
-                            .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
+                            .foregroundStyle(.secondary)
                             // One line on every row: AppKit sizes a row only
                             // when the table is created, so a second line on
                             // a row added later would be cut in half. The
@@ -191,7 +190,7 @@ struct ActivityView: View {
                     Text("Problems").tag(true)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 160)
+                .fixedSize()
             }
         }
         .confirmationDialog(

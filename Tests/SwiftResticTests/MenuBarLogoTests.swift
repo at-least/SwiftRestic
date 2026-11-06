@@ -94,10 +94,9 @@ struct MenuBarLogoTests {
         )
     }
 
-    @Test("every face renders, including the hero scale")
+    @Test("the attention face renders")
     func allFacesRender() {
         #expect(MenuBarLogo.attentionImage.size.width > 0)
-        #expect(MenuBarLogo.heroImage.size.width == 96)
     }
 
     /// Renders a face for sampling or eyeballing. Pass `platter` to compose
@@ -155,7 +154,6 @@ struct MenuBarLogoTests {
             ("attention", MenuBarLogo.attentionImage, 18),
             ("running-0", MenuBarLogo.image(phase: 0), 18),
             ("running-1", MenuBarLogo.image(phase: 1), 18),
-            ("hero", MenuBarLogo.heroImage, 96),
         ]
         for (name, image, canvas) in faces {
             let rep = try render(image, canvas: canvas, scale: 8, platter: .white)

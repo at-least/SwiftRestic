@@ -114,7 +114,6 @@ extension AppModel {
         }
         removeFromBackupQueue(id)
         configuration.plans.removeAll { $0.id == id }
-        forgetProblemSeen(planID: id)
     }
 
     func isRunning(planID: UUID) -> Bool { activity[planID] != nil }

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     private static let width: CGFloat = 560
+    /// Past this a pane scrolls: its webhooks can outgrow a small screen.
+    private static let maxHeight: CGFloat = 620
     static let paneKey = "lastSettingsPane"
     static let resticPane = 3
     /// The pane the window reopens on. UserDefaults, not
@@ -31,16 +33,22 @@ struct SettingsView: View {
         // accommodates the size of the current pane", no pane scrolling.
         TabView(selection: $lastSettingsPane) {
             generalTab(model: model)
-                .frame(width: Self.width, height: 470)
+                .frame(width: Self.width)
+                .frame(maxHeight: Self.maxHeight)
+                .fixedSize(horizontal: false, vertical: true)
                 .tag(0)
                 .tabItem { Label("General", systemImage: "gearshape") }
             NotificationsTab()
                 .environment(model)
-                .frame(width: Self.width, height: 460)
+                .frame(width: Self.width)
+                .frame(maxHeight: Self.maxHeight)
+                .fixedSize(horizontal: false, vertical: true)
                 .tag(1)
                 .tabItem { Label("Notifications", systemImage: "bell") }
             resticTab(model: model)
-                .frame(width: Self.width, height: 190)
+                .frame(width: Self.width)
+                .frame(maxHeight: Self.maxHeight)
+                .fixedSize(horizontal: false, vertical: true)
                 .tag(Self.resticPane)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
@@ -200,10 +208,8 @@ struct SettingsView: View {
     }
 }
 
-/// "Granted", "Not granted" or "Unknown", beside the glyph that says how it
-/// stands. Colour on the glyph only — coloured caption text falls short of
-/// the contrast small text needs — and the glyph hidden, since the word
-/// says it.
+/// Quiet when granted. Colour on the glyph only: coloured caption text falls
+/// short of the contrast small text needs.
 private struct FullDiskAccessStatusLabel: View {
     let status: FullDiskAccessStatus
 
@@ -211,9 +217,7 @@ private struct FullDiskAccessStatusLabel: View {
         HStack(spacing: 4) {
             switch status {
             case .granted:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Theme.success)
-                    .accessibilityHidden(true)
+                EmptyView()
             case .notGranted:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning)
@@ -322,8 +326,8 @@ struct NotificationsTab: View {
             .foregroundStyle(Theme.danger)
             .font(.callout)
         case .delivered:
-            Label("Test sent to “\(current.displayName)”.", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(Theme.success)
+            Text("Test sent to “\(current.displayName)”.")
+                .foregroundStyle(.secondary)
                 .font(.callout)
         case nil:
             EmptyView()

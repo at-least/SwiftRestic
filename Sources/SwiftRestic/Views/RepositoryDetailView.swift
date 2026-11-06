@@ -1,17 +1,11 @@
 import SwiftUI
 
-/// A repository's page, and its overview: protection in one line, with the
-/// history a repository may have arrived with, then the facts about the
-/// destination itself, Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// The window's minute clock.
     @Environment(\.now) private var now
     let repositoryID: UUID
     let onAddPlan: () -> Void
-    /// Opens the adopt sheet for a group row on this page — the root owns
-    /// the presenting state, as for every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
@@ -38,53 +32,39 @@ struct RepositoryDetailView: View {
             }
         }
         .navigationTitle(repository.map { model.label(of: $0) } ?? "Backup Location")
-        // The toolbar holds the search field alone; the page's verbs are the
-        // menus' — the HIG's macOS toolbars: "it doesn't make sense to
-        // provide a toolbar item for every menu item".
         .allBackupsSearch()
     }
 
-    @ViewBuilder
     private func content(_ repository: Repository) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ProtectionCard(repositoryID: repositoryID, onAddPlan: onAddPlan, onAdoptGroup: onAdoptGroup)
+        Form {
+            StatusSection(repositoryID: repositoryID, onAddPlan: onAddPlan, onAdoptGroup: onAdoptGroup)
 
-            // Arq's storage-location page, plus the two numbers a backup
-            // user asks of a destination: how big, and how full is its disk.
-            // The backups themselves are on each plan's or group's page,
-            // its Backups tab.
-            Card("Details") {
-                VStack(alignment: .leading, spacing: 10) {
-                    DetailGrid {
-                        DetailRow("Type", repository.kind.displayName)
-                        DetailRow("Location") {
-                            Text(repository.displayLocation)
-                                .textSelection(.enabled)
-                                .lineLimit(2)
-                                .truncationMode(.middle)
-                                .help(repository.displayLocation)
-                        }
-                        // Facts read from the repository, only once it has
-                        // been read: a row of dashes says nothing the
-                        // Protection card doesn't.
-                        if case .loaded = model.snapshotListingOutcome(for: repositoryID) {
-                            DetailRow("Size", Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
-                            DetailRow("Backups") { snapshotsValue }
-                        }
-                    }
-                    volumeStrip(repository)
+            Section("Details") {
+                LabeledContent("Type", value: repository.kind.displayName)
+                LabeledContent("Location") {
+                    Text(repository.displayLocation)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .help(repository.displayLocation)
                 }
+                // Only once read: a row of dashes says nothing the Status
+                // section doesn't.
+                if case .loaded = model.snapshotListingOutcome(for: repositoryID) {
+                    LabeledContent("Size", value: Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
+                    LabeledContent("Backups") { snapshotsValue }
+                }
+                diskRow(repository)
             }
 
-            maintenanceCard(repository)
+            maintenanceSection(repository)
         }
-        .detailPane()
-        // On the pane itself, not the strip: the strip renders nothing until
-        // a capacity exists, and a lifecycle modifier on a view that renders
-        // nothing never fires — the load would never start. Off the main
-        // actor (see `volumeCapacity`): nil first, then a cancelled-check
-        // after the await, so a slow answer from the old disk can neither
-        // render under the new one's caption nor overwrite its numbers.
+        .formStyle(.grouped)
+        // On the form, not the disk row: the row renders nothing until a
+        // capacity exists, and a lifecycle modifier on a view that renders
+        // nothing never fires. nil first, then a cancelled-check after the
+        // await, so a slow answer from the old disk can neither render under
+        // the new one's caption nor overwrite its numbers.
         .task(id: repository.id) {
             volumeCapacity = nil
             // Expanded, or `~/Backups` would probe a literal tilde directory
@@ -129,124 +109,102 @@ struct RepositoryDetailView: View {
         }
     }
 
-    /// Arq's "Used Space / Free Space" bar, for the one kind of repository
-    /// whose backing disk the app can actually see. The bar is the *volume's*
-    /// usage, not the repository's — the caption says so, because a small
-    /// repository on a full disk and a large one on an empty one must not
-    /// render as the same picture.
+    /// The volume's space, not the location's size: the only kind of location
+    /// whose backing disk the app can see.
     @ViewBuilder
-    private func volumeStrip(_ repository: Repository) -> some View {
-        if repository.kind == .local,
-           let capacity = volumeCapacity {
-            VStack(alignment: .leading, spacing: 8) {
-                Divider()
-                ProgressView(value: capacity.usedFraction)
-                    .tint(Theme.tint)
-                    .accessibilityLabel(Text("Space on this disk"))
-                Text("\(Format.bytes(capacity.freeBytes)) free of \(Format.bytes(capacity.totalBytes)) on this disk")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    private func diskRow(_ repository: Repository) -> some View {
+        if repository.kind == .local, let capacity = volumeCapacity {
+            LabeledContent("Disk") {
+                HStack(spacing: 4) {
+                    if capacity.isLow {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityLabel("Low on space")
+                    }
+                    Text("\(Format.bytes(capacity.freeBytes)) free of \(Format.bytes(capacity.totalBytes))")
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    @ViewBuilder
-    private func maintenanceCard(_ repository: Repository) -> some View {
-        Card("Maintenance") {
-            VStack(alignment: .leading, spacing: 10) {
-                if let activity = model.maintenance[repositoryID] {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            // An indeterminate spinner plus a live elapsed
-                            // time: a check can legitimately run for hours,
-                            // and "14 min" is what separates working from hung.
-                            TimelineView(.periodic(from: .now, by: 1)) { context in
-                                Text(
-                                    "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
-                                )
-                                .monospacedDigit()
-                            }
-                            Spacer()
-                            Button("Stop") {
-                                model.cancelMaintenance(repositoryID: repositoryID)
-                            }
-                            .controlSize(.small)
-                        }
-                        if let last = activity.lastOutput {
-                            Text(last)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .textSelection(.enabled)
-                                .help(last)
-                        }
-                    }
-                }
-
-                let runs = model.configuration.runs
-                let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
-                let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
-                DetailGrid {
-                    DetailRow("Last verified") {
-                        MaintenanceRunValue(
-                            text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
-                            run: check
-                        )
-                    }
-                    let hold = model.scheduleHold
-                    let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
-                    DetailRow("Next verification", Scheduler.nextMaintenanceText(
-                        .check, of: repository, among: model.configuration.repositories,
-                        hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
-                        isRunning: model.maintenance[repositoryID]?.task == .check, now: now
-                    ))
-                    if Scheduler.cleansUp(repository, plans: model.configuration.plans) {
-                        DetailRow("Last cleanup") {
-                            MaintenanceRunValue(
-                                text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
-                                run: prune
+    private func maintenanceSection(_ repository: Repository) -> some View {
+        Section("Maintenance") {
+            if let activity = model.maintenance[repositoryID] {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        // A live elapsed time: a verification can run for
+                        // hours, and "14 min" is what separates working from
+                        // hung.
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(
+                                "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
                             )
+                            .monospacedDigit()
                         }
-                        DetailRow("Next cleanup", Scheduler.nextMaintenanceText(
-                            .prune, of: repository, among: model.configuration.repositories,
-                            hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
-                            isRunning: model.maintenance[repositoryID]?.task == .prune, now: now
-                        ))
+                        Spacer()
+                        Button("Stop") {
+                            model.cancelMaintenance(repositoryID: repositoryID)
+                        }
+                        .controlSize(.small)
+                    }
+                    if let last = activity.lastOutput {
+                        Text(last)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .help(last)
                     }
                 }
+            }
 
-                // A check that found damage: the console, where `restic
-                // repair` runs with the password supplied, beside the
-                // verdict. A route, as the drawer offers it — the page keeps
-                // no maintenance controls.
-                if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
-                    ConsoleRouteButton(repositoryID: repositoryID)
-                }
-
-                if model.repositoriesMissingPassword.contains(repositoryID) {
-                    Label(
-                        "Waiting for a password. Nothing is scheduled until one is saved.",
-                        systemImage: "key.fill"
+            let runs = model.configuration.runs
+            let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
+            let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
+            let hold = model.scheduleHold
+            let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
+            LabeledContent("Last verified") {
+                MaintenanceRunValue(
+                    text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
+                    run: check
+                )
+            }
+            LabeledContent("Next verification", value: Scheduler.nextMaintenanceText(
+                .check, of: repository, among: model.configuration.repositories,
+                hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
+                isRunning: model.maintenance[repositoryID]?.task == .check, now: now
+            ))
+            if Scheduler.cleansUp(repository, plans: model.configuration.plans) {
+                LabeledContent("Last cleanup") {
+                    MaintenanceRunValue(
+                        text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
+                        run: prune
                     )
-                    .font(.callout)
-                    .foregroundStyle(Theme.warning)
-                    .fixedSize(horizontal: false, vertical: true)
                 }
+                LabeledContent("Next cleanup", value: Scheduler.nextMaintenanceText(
+                    .prune, of: repository, among: model.configuration.repositories,
+                    hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
+                    isRunning: model.maintenance[repositoryID]?.task == .prune, now: now
+                ))
+            }
 
+            // A verification that found damage: the console, where `restic
+            // repair` runs with the password supplied.
+            if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
+                ConsoleRouteButton(repositoryID: repositoryID)
+            }
+
+            if model.repositoriesMissingPassword.contains(repositoryID) {
+                WarningLine(text: "Waiting for a password. Nothing is scheduled until one is saved.")
             }
         }
     }
-
 }
 
-/// The Last check / Last cleanup value: the words alone after a run that
-/// succeeded, else the same words as a route to the run in Activity — its
-/// drawer holds Check Again or Clean Up Again, the log and Copy
-/// Details, so the page gains no maintenance control.
+/// The words alone after a run that succeeded, else a link to the run in
+/// Activity, whose drawer holds the retry and the log.
 private struct MaintenanceRunValue: View {
     @Environment(AppRouter.self) private var router
     let text: String
@@ -254,14 +212,9 @@ private struct MaintenanceRunValue: View {
 
     var body: some View {
         if let run, run.outcome != .succeeded {
-            Button { router.focusRun(run.id) } label: {
-                HStack(spacing: 6) {
-                    Text(text)
-                    RowChevron()
-                }
-            }
-            .buttonStyle(HoverableButtonStyle())
-            .help("Show in Activity")
+            Button(text) { router.focusRun(run.id) }
+                .buttonStyle(.link)
+                .help("Show in Activity")
         } else {
             Text(text)
         }

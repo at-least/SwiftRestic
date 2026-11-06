@@ -3,10 +3,10 @@ import Foundation
 /// A backup problem's stretch: how many of a plan's backups in a row ended
 /// the same way for the same cause (`isSameProblem(as:)`). A local
 /// notification speaks for the first of them only
-/// (`AppModel.wantsNotification(for:)`), and the plan page's problem card
+/// (`AppModel.wantsNotification(for:)`), and the plan page's problem row
 /// counts them ("3 times in a row"). A success ends it, as does a backup
 /// that wrote a snapshot around an away drive (`isPartialSkip`) — the two
-/// that heal the card — or another outcome or cause. A backup skipped whole
+/// that heal the row — or another outcome or cause. A backup skipped whole
 /// or stopped ran nothing, and passes over it (`passesOverProblems`).
 extension RunRecord {
     var isBackupProblem: Bool {

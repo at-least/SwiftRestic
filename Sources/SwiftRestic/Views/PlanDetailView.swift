@@ -3,7 +3,6 @@ import SwiftUI
 struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    /// The window's minute clock: Last backup and Next backup are as of it.
     @Environment(\.now) private var now
     let planID: UUID
 
@@ -32,26 +31,9 @@ struct PlanDetailView: View {
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
             prompt: "Search this plan’s backups"
         )
-        // The toolbar holds the tabs and the search field; the editor is
-        // Backup ▸ Edit Plan and the sidebar row's Edit Plan, removing Backup ▸
-        // Remove Plan and the row's menu —
-        // the HIG's macOS toolbars: "it doesn't make sense to provide a
-        // toolbar item for every menu item".
-        // Opening the page marks the plan's problem seen — honestly, since
-        // the problem row under the Backups card shows the failure for as
-        // long as it stands. Keyed on the plan, not on appearing: moving
-        // from one plan's page straight to another's keeps this view
-        // (RootDetailView gives it no per-plan identity), so onAppear never
-        // fires for the second plan. A failure arriving while the page is
-        // already open stays unseen until the page is opened again.
-        .onChange(of: planID, initial: true) { model.markProblemSeen(planID: planID) }
     }
 
-    /// The Backups card's verb: Back Up Now, Stop while a run is in
-    /// flight — worded as every command that ends a run is; the progress
-    /// strip above the cards reports the run without a Cancel of its own —
-    /// Stop (⌘.) ends it. The Backup menu's predicates, so the card and
-    /// the menu bar cannot disagree about either.
+    /// The Backup menu's predicates, so the section and the menu cannot disagree.
     @ViewBuilder
     private func backUpControl(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
@@ -70,10 +52,8 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The running-operation strip, as its own view: it reads this plan's
-    /// activity and progress here, so a restic progress tick re-renders the
-    /// strip instead of the whole pane — `content`'s cards never rerun per
-    /// tick.
+    /// Its own view, so a restic progress tick re-renders the strip instead of
+    /// the whole pane.
     private struct OperationStrip: View {
         @Environment(AppModel.self) private var model
         let planID: UUID
@@ -89,10 +69,7 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The plan's standing problem: what went wrong, when, restic's first
-    /// words about it and the counts behind them, with the way to the full
-    /// record. No dismiss button — it lasts exactly as long as the problem,
-    /// and a retry is the Backups card's Back Up Now just above it.
+    /// No dismiss button: it lasts exactly as long as the problem.
     private struct PlanProblemRow: View {
         @Environment(AppModel.self) private var model
         @Environment(\.now) private var now
@@ -104,10 +81,8 @@ struct PlanDetailView: View {
 
         var body: some View {
             HStack(alignment: .top, spacing: 10) {
-                // Activity's glyph and hue for the outcome. Beside a headline
-                // that names it: decoration to VoiceOver.
                 Image(systemName: summary.outcome.symbolName ?? "exclamationmark.triangle.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .imageScale(.large)
                     .foregroundStyle(StatusPalette.status(summary.outcome))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 8) {
@@ -173,8 +148,6 @@ struct PlanDetailView: View {
                         .help("Select this run in Activity to read every message it recorded")
                 }
             }
-            .padding(Theme.Space.cardPadding)
-            .cardSurface()
         }
     }
 
@@ -182,29 +155,31 @@ struct PlanDetailView: View {
         { router.focusRun(run.id) }
     }
 
-    @ViewBuilder
     private func content(_ plan: BackupPlan) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            OperationStrip(planID: plan.id)
-
-            backupsCard(plan)
-            // The plan's standing problem, on the plan's own page: present
-            // exactly while the sidebar names it, gone once a run succeeds.
-            if let problem = model.currentProblem(for: plan.id) {
-                PlanProblemRow(
-                    summary: PlanStatus.summary(of: problem),
-                    run: problem,
-                    // Every backup problem in the history has one: filled at
-                    // load and as each run is appended.
-                    inARow: problem.problemStretch!,
-                    onShowInActivity: showInActivity(problem)
-                )
+        Form {
+            if model.activity[plan.id] != nil {
+                Section { OperationStrip(planID: plan.id) }
             }
-            SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID))
-            scheduleCard(plan)
-            excludingCard(plan)
+            backupsSection(plan)
+            if let problem = model.currentProblem(for: plan.id) {
+                Section {
+                    PlanProblemRow(
+                        summary: PlanStatus.summary(of: problem),
+                        run: problem,
+                        // Every backup problem in the history has one: filled at
+                        // load and as each run is appended.
+                        inARow: problem.problemStretch!,
+                        onShowInActivity: showInActivity(problem)
+                    )
+                }
+            }
+            if model.snapshotListingOutcome(for: plan.repositoryID) != .loaded {
+                Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID)) }
+            }
+            scheduleSection(plan)
+            excludedItemsSection(plan)
         }
-        .detailPane()
+        .formStyle(.grouped)
     }
 
     private func subtitle(_ plan: BackupPlan) -> String {
@@ -258,30 +233,19 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The page's answer, in Arq's label/value idiom: did this plan back
-    /// up, how many backups it holds and which of them it keeps — with the
-    /// verb that makes the next one now. Its backups are this page's
-    /// Backups tab and its files its Files tab, so the card neither lists
-    /// them a second time nor offers a second way to open them.
-    private func backupsCard(_ plan: BackupPlan) -> some View {
-        // The shelf's single home, not the raw tag filter: a backup two
-        // plans' tags claim (only `restic tag` from outside can do this)
-        // counts once, under the plan its page and the sidebar count it
-        // under — its count and its Last backup answer what this page's
-        // Backups tab lists.
+    private func backupsSection(_ plan: BackupPlan) -> some View {
+        // The shelf's single home, not the raw tag filter: a backup two plans'
+        // tags claim (only `restic tag` from outside can do this) counts once,
+        // under the plan its page and the sidebar count it under.
         let snapshots = planBackups(plan)
-        return Card("Backups") {
-            DetailGrid {
-                // The card's title labels this line: a DetailRow here would
-                // read "Backups" twice, stacked. First, as the Schedule
-                // card's unlabelled line is: between two labelled rows it
-                // starts at the card's edge, left of their values.
-                snapshotsValue(plan, snapshots: snapshots)
-                DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-                DetailRow("History", plan.retention.summary)
-            }
-        } accessory: {
-            HStack(spacing: 6) {
+        return Section {
+            LabeledContent("Total") { snapshotsValue(plan, snapshots: snapshots) }
+            LabeledContent("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
+            LabeledContent("History", value: plan.retention.summary)
+        } header: {
+            HStack {
+                Text("Backups")
+                Spacer()
                 backUpControl(plan)
                 Button("Edit…") { router.request(.editPlan(plan.id, tab: .retention)) }
                     .help("Choose which old backups to remove")
@@ -290,11 +254,9 @@ struct PlanDetailView: View {
         }
     }
 
-    /// When the plan runs: its schedule, and the scheduler's own answer for
-    /// the next run, so one it skips never shows a date; the full form is the
-    /// tooltip, the short one leaving out the date when it is today or
-    /// tomorrow.
-    private func scheduleCard(_ plan: BackupPlan) -> some View {
+    /// The scheduler's own answer for the next run, so one it skips never shows
+    /// a date.
+    private func scheduleSection(_ plan: BackupPlan) -> some View {
         let next = PlanStatus.nextBackupTile(
             for: plan,
             existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
@@ -302,30 +264,25 @@ struct PlanDetailView: View {
             isBackingUp: model.activity[plan.id] != nil,
             now: now
         )
-        let schedule = plan.schedule.summary
-        return Card("Schedule") {
-            DetailGrid {
-                // The card's title labels this line, as the Backups card's
-                // does its count.
-                Text(schedule)
-                    .accessibilityLabel("Schedule: \(schedule)")
-                DetailRow("Next backup") {
-                    Text(next.value)
-                        .modifier(TileHelp(help: next.help))
-                }
+        return Section {
+            LabeledContent("Runs", value: plan.schedule.summary)
+            LabeledContent("Next backup") {
+                Text(next.value)
+                    .modifier(TileHelp(help: next.help))
             }
-        } accessory: {
-            Button("Edit…") { router.request(.editPlan(plan.id, tab: .schedule)) }
-                .controlSize(.small)
-                .help("Change when this plan runs")
+        } header: {
+            HStack {
+                Text("Schedule")
+                Spacer()
+                Button("Edit…") { router.request(.editPlan(plan.id, tab: .schedule)) }
+                    .controlSize(.small)
+                    .help("Change when this plan runs")
+            }
         }
     }
 
-    /// Arq's "View Latest Backup Record…" as the value itself: the time is a
-    /// handle to its run's record in Activity, with what that backup added —
-    /// when the plan has a run to land on. History it arrived with shows the
-    /// snapshot's own moment and figure as plain text, and "Never" has
-    /// nowhere to go.
+    /// A link to the run's record when the plan has one; history it arrived
+    /// with shows the backup's own moment as plain text.
     @ViewBuilder
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         // The one moment every surface's "Last backup" counts from
@@ -346,15 +303,8 @@ struct PlanDetailView: View {
         if let lastSuccessfulRun {
             // A clean run: Activity shows all if its Problems filter would
             // hide it.
-            Button {
-                router.focusRun(lastSuccessfulRun.id)
-            } label: {
-                HStack(spacing: 4) {
-                    Text(text)
-                    RowChevron()
-                }
-            }
-            .buttonStyle(HoverableButtonStyle())
+            Button(text) { router.focusRun(lastSuccessfulRun.id) }
+            .buttonStyle(.link)
             .help("Show this backup’s run in Activity")
             .accessibilityLabel("Last backup \(text). Show its run in Activity")
         } else {
@@ -362,24 +312,19 @@ struct PlanDetailView: View {
         }
     }
 
-    /// The count only once the listing it derives from has succeeded; before
-    /// that, or after a failure, "—" — the caveat under the card says why.
-    /// An empty plan says which kind of empty: a repository holding other
-    /// snapshots must not read as "nothing there".
+    /// "—" until the listing succeeds; the caveat says why. An empty plan says
+    /// which kind of empty: a location holding other backups must not read as
+    /// "nothing there".
     @ViewBuilder
     private func snapshotsValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         if let repositoryID = plan.repositoryID {
             HStack(spacing: 8) {
                 switch model.snapshotListingOutcome(for: repositoryID) {
                 case .loaded where !snapshots.isEmpty:
-                    // The count and how far back the plan's history reaches,
-                    // the count leading with its noun under the card's title
-                    // — the repository page's line, for this plan alone.
                     let tile = OverviewMetrics.snapshotsTile(
                         total: snapshots.count, otherBackups: 0, repositoryHasPlans: true, snapshots: snapshots, subject: "of this plan",
                         noun: true
                     )
-                    // When the count was read, in the tooltip with the rest.
                     let updated = model.snapshotsLoadedAt(for: repositoryID)
                         .map { "Updated \($0.formatted(date: .omitted, time: .shortened))" }
                     Text(tile.value)
@@ -415,37 +360,33 @@ struct PlanDetailView: View {
         }
     }
 
-    /// What the plan excludes, as the editor's Excluded Items tab says it: the
-    /// switches that are on and the user's own patterns as typed, tilde and all.
-    private func excludingCard(_ plan: BackupPlan) -> some View {
+    /// As the editor's Excluded Items tab says it: the switches that are on and
+    /// the user's own patterns as typed, tilde and all.
+    private func excludedItemsSection(_ plan: BackupPlan) -> some View {
         let skips = PlanSkips.on(in: plan)
-        return Card("Excluded Items") {
-            DetailGrid {
-                DetailRow("Exclude") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(skips, id: \.title) { skip in
-                            Text(skip.title)
-                                .modifier(TileHelp(help: skip.help))
-                        }
-                    }
-                }
-                if !plan.excludePatterns.isEmpty {
-                    DetailRow("Also exclude") {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(plan.excludePatterns, id: \.self) { pattern in
-                                Text(pattern)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help(pattern)
-                            }
-                        }
-                    }
-                }
+        return Section {
+            ForEach(skips, id: \.title) { skip in
+                Text(skip.title)
+                    .modifier(TileHelp(help: skip.help))
             }
-        } accessory: {
-            Button("Edit…") { router.request(.editPlan(plan.id, tab: .files)) }
-                .controlSize(.small)
-                .help("Change what this plan excludes")
+            ForEach(plan.excludePatterns, id: \.self) { pattern in
+                Text(pattern)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(pattern)
+            }
+            if skips.isEmpty && plan.excludePatterns.isEmpty {
+                Text("Nothing is excluded")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            HStack {
+                Text("Excluded Items")
+                Spacer()
+                Button("Edit…") { router.request(.editPlan(plan.id, tab: .files)) }
+                    .controlSize(.small)
+                    .help("Change what this plan excludes")
+            }
         }
     }
 }

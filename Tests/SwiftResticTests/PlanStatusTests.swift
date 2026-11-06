@@ -198,6 +198,27 @@ struct PlanStatusTests {
 
     private func relative(_ date: Date) -> String { "5 minutes ago" }
 
+    @Test("an overdue plan's sidebar row says so with the warning glyph, and a manual plan's never does")
+    func overdueSidebarCaption() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var plan = completeDailyPlan()
+        plan.lastSuccessAt = now.addingTimeInterval(-9 * 86_400)
+        let existing = Set([plan.repositoryID].compactMap { $0 })
+
+        let overdue = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil, existingRepositoryIDs: existing, now: now, relative: relative
+        )
+        #expect(overdue.text == "Not backed up for 9 days")
+        #expect(overdue.outcome == .completedWithErrors)
+
+        plan.schedule.frequency = .manual
+        let manual = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil, existingRepositoryIDs: existing, now: now, relative: relative
+        )
+        #expect(manual.text == "Last backup 5 minutes ago")
+        #expect(manual.outcome == nil)
+    }
+
     @Test("a plan waiting for its turn says so over its standing problem, and a run in flight over both")
     func queuedCaption() {
         let plan = completeDailyPlan()

@@ -81,7 +81,7 @@ struct CommandPresentations: ViewModifier {
         showMaintenance(of: id)
     }
 
-    /// The repository page's Maintenance card is the only place a check or
+    /// The repository page's Maintenance section is the only place a check or
     /// prune shows its progress — elapsed time, restic's last line, Cancel —
     /// and a check that passes posts no banner. Asked from anywhere else,
     /// it would run from start to finish with nothing in the window.

@@ -23,15 +23,13 @@ import Foundation
 /// diverge from the generator's weights.
 ///
 /// MainActor-isolated: the caches are AppKit bitmaps drawn once and consumed
-/// only by menu bar and welcome-screen UI. CI's Swift flags the unisolated
+/// only by the menu bar. CI's Swift flags the unisolated
 /// statics as shared mutable non-Sendable state; the annotation turns that
 /// real constraint into a compiler-enforced one.
 @MainActor
 enum MenuBarLogo {
     /// A standard status item's canvas.
     private static let canvasSize: CGFloat = 18
-    /// The welcome screen's hero mark, same construction at display size.
-    private static let heroCanvasSize: CGFloat = 96
     /// The generator's proportions are fractions of the full icon tile; the
     /// menu bar has no tile, so the glyph is drawn against a larger implied
     /// size, or the mark reads noticeably small next to neighboring status
@@ -90,9 +88,6 @@ enum MenuBarLogo {
     private static let attentionImageCache: NSImage = makeImage { rect, context in
         draw(in: rect, into: context, content: .attention)
     }
-    private static let heroImageCache: NSImage = makeImage(size: heroCanvasSize) { rect, context in
-        draw(in: rect, into: context, content: .resting)
-    }
 
     static func image() -> NSImage { restingImage }
 
@@ -100,10 +95,6 @@ enum MenuBarLogo {
     /// stack's place — a template like every face, on the same canvas, so
     /// the item neither changes width nor guesses the bar's ink.
     static var attentionImage: NSImage { attentionImageCache }
-
-    /// The welcome screen's brand mark — the app's own construction at hero
-    /// scale, not a borrowed SF Symbol.
-    static var heroImage: NSImage { heroImageCache }
 
     static func image(phase: Int) -> NSImage {
         runningImages[((phase % runningImages.count) + runningImages.count) % runningImages.count]

@@ -20,9 +20,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     let lastBackupAt: Date?
     /// The standing problem's outcome when the line is that problem's
     /// ("Failed — 3 hours ago"); nil when the listing or a run in flight
-    /// says it. A failed one wears the failed run's red octagon on the
-    /// repository's surfaces, as on the plan's own row
-    /// (`OverviewMetrics.attentionOutcome`).
+    /// says it.
     let problemOutcome: RunRecord.Outcome?
     var id: UUID { planID }
 
@@ -82,12 +80,12 @@ struct ProtectionSummary: Equatable, Sendable {
     /// The hold is the user's own Pause Backups, so the line ends with a
     /// Resume.
     var showsResume: Bool
-    /// One line per plan whose last backup failed, in the sidebar warning's
+    /// One line per plan whose last backup failed, in these
     /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
     /// octagon that the plan's own row wears. Empty when none failed.
     var failureLines: [ProtectionLine] = []
     /// One line per other plan that is not protected — no backup yet, no
-    /// repository — in the sidebar warning's words ("Photos: No backups
+    /// repository — in these words ("Photos: No backups
     /// yet"), beside the warning triangle. With the failure lines, the
     /// count names its subject; both are empty when every plan is
     /// protected.
@@ -101,7 +99,7 @@ struct ProtectionSummary: Equatable, Sendable {
     /// One line per protected plan that will not run by itself now — its
     /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
     /// — Sunday at 3:00 AM"), so "all protected" cannot hide a plan that has
-    /// stopped. A pause is a choice, not a problem: the card gives these
+    /// stopped. A pause is a choice, not a problem: the row gives these
     /// the pause glyph, not the warning's.
     var heldLines: [ProtectionLine] = []
 }
@@ -179,16 +177,6 @@ enum OverviewMetrics {
     /// bar's face wear a warning for these.
     static func needingAttention(_ rows: [ProtectionRow]) -> [ProtectionRow] {
         rows.filter { $0.severityRank <= 1 }
-    }
-
-    /// The outcome whose glyph and hue a repository's warning wears for
-    /// these rows: a failed run's red octagon while one of them is a plan
-    /// whose last backup failed — the glyph that plan's own row wears
-    /// beneath — else the warning's orange triangle, as for a run that
-    /// completed with warnings (the banners' rule: one colour, one
-    /// meaning). An unreadable listing stays orange, as its page says it.
-    static func attentionOutcome(_ rows: [ProtectionRow]) -> RunRecord.Outcome {
-        rows.contains { $0.problemOutcome == .failed } ? .failed : .completedWithErrors
     }
 
     /// The protection rows, one per plan. The lookups arrive as closures so
@@ -286,7 +274,7 @@ enum OverviewMetrics {
                 moment = stamped
                 isOverdue = StaleAlert.isOverdue(plan, lastBackupAt: stamped, now: now)
                 line = isOverdue
-                    ? "Not backed up for \(Format.plural(StaleAlert.wholeDays(since: stamped, now: now), "day"))"
+                    ? StaleAlert.overdueLine(since: stamped, now: now)
                     : "Last backup \(relative(stamped))"
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No backups yet"
@@ -319,14 +307,14 @@ enum OverviewMetrics {
         }
     }
 
-    /// An unreadable snapshot listing in one sentence — the rows behind the
-    /// sidebar's warning and the caveat under a card say it alike.
+    /// An unreadable snapshot listing in one sentence — the rows and the caveat
+    /// say it alike.
     static func listingFailureText(_ message: String) -> String {
         "Can’t read backups — \(Format.firstSentence(message))"
     }
 
-    /// The listing not read yet, in the sidebar's words — the caveat under a
-    /// card and the repository page's tooltip say it the same way.
+    /// The listing not read yet, in the sidebar's words — the caveat and the
+    /// location page's tooltip say it the same way.
     static let listingIdleText = "List of backups not loaded yet"
 
     /// The repository page's Protection line: how many of the repository's
@@ -374,9 +362,7 @@ enum OverviewMetrics {
         }
         var showsResume = false
         if case .paused = hold { showsResume = true }
-        // The sidebar warning's own join of the same rows (attentionMark), so
-        // the card and the mark beside it cannot disagree — a failed run's
-        // lines apart, under its glyph.
+        // A failed run's lines apart, under its glyph.
         var failures: [ProtectionLine] = []
         var attention: [ProtectionLine] = []
         for row in rows where row.isKnown && !row.isProtected && !row.isRunning {

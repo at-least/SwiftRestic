@@ -167,15 +167,7 @@ final class AppModel {
     /// and a notification failure can land minutes apart.
     var banners: [Banner] = []
 
-    /// Per plan, when its newest problem was last marked seen — the stamp
-    /// behind the sidebar's Mail dot. View state, not configuration: it lives
-    /// in UserDefaults (see `ProblemDotsStore`), never in config.json, because
-    /// whether a failure has been looked at is this device's reading progress,
-    /// not a setting.
-    var problemsSeenAt: [UUID: Date]
-    /// When Activity was last open with a problem it had not shown — the
-    /// stamp behind the sidebar's Activity badge. View state in UserDefaults,
-    /// as `problemsSeenAt`.
+    /// When Activity was last open with a problem it had not shown.
     var activitySeenAt: Date?
 
     /// Progress of a picker-started restore, of which there is at most one
@@ -311,8 +303,7 @@ final class AppModel {
         self.indexCoordinator = IndexCoordinator(directory: store.directory)
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
-        self.problemsSeenAt = ProblemDotsStore.load(from: defaults)
-        self.activitySeenAt = ProblemDotsStore.loadActivitySeenAt(from: defaults)
+        self.activitySeenAt = ActivitySeenStore.loadActivitySeenAt(from: defaults)
         #if DEBUG
         // Live checks run from a build folder, where only the move-to-
         // Applications advice can show. This makes the advice treat the copy

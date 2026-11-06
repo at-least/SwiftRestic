@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Search All Backups: every repository's index, as the query is typed in the
 /// toolbar field — the "I deleted something months ago and don't know which
@@ -202,9 +203,7 @@ struct FindFilesView: View {
         Table(rows, selection: $selection) {
             TableColumn("File") { row in
                 HStack(spacing: 6) {
-                    Image(systemName: row.isDirectory ? "folder.fill" : "doc")
-                        .foregroundStyle(row.isDirectory ? Color.accentColor : .secondary)
-                        // The kind, not the symbol's "Move" / "Document".
+                    FileKindIcon(type: .backedUp(name: row.name, isDirectory: row.isDirectory))
                         .accessibilityLabel(row.isDirectory ? "Folder" : "File")
                     Text(row.name).lineLimit(1)
                 }
@@ -236,14 +235,9 @@ struct FindFilesView: View {
             TableColumn("Versions") { row in
                 // How many backups hold the path, and the way to them.
                 if let open = showVersions(of: row) {
-                    Button(action: open) {
-                        HStack(spacing: 4) {
-                            Text("\(row.versionsCount)")
-                                .monospacedDigit()
-                            RowChevron()
-                        }
-                    }
-                    .buttonStyle(HoverableButtonStyle())
+                    Button("\(row.versionsCount)", action: open)
+                    .buttonStyle(.link)
+                    .monospacedDigit()
                     .help("Show every backup that holds this file, on the Files tab")
                     .accessibilityLabel("Show \(Format.plural(row.versionsCount, "version"))")
                 } else {

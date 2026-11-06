@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The restore pane: one backup record's file tree, beside a page's Backups
 /// tab's list. The app's one snapshot-first browser — the run drawer's
@@ -244,11 +245,7 @@ struct RestorePaneView: View {
                             Spacer().frame(width: 20)
                         }
                     }
-                    // SF Symbols' own labels name the picture ("Move" for
-                    // folder.fill); the kind is what the row means.
-                    Image(systemName: row.node.browserIconName)
-                        .foregroundStyle(row.node.isDirectory ? Color.accentColor : .secondary)
-                        .frame(width: 16)
+                    FileKindIcon(type: row.node.iconType)
                         .accessibilityLabel(row.node.kindName)
                     Text(row.node.name)
                         .lineLimit(1)
@@ -265,7 +262,7 @@ struct RestorePaneView: View {
                         }
                     }
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 140, alignment: .trailing)
                     // Reserved even for directories: a branch-less cell becomes
                     // an EmptyView, and EmptyView drops `.frame` — the mtime
@@ -296,6 +293,7 @@ struct RestorePaneView: View {
                 // select it.
                 .itemProvider { listDragProvider(for: row.node) }
                 .tag(row.id)
+                .listRowSeparator(.hidden)
             }
             .listStyle(.inset)
             .focusOnClick($listIsFocused)
@@ -377,9 +375,7 @@ struct RestorePaneView: View {
                 // because it left the disk.
                 let notRead = row.change.category == .removed ? unread.reason(for: row.path) : nil
                 HStack(spacing: 6) {
-                    Image(systemName: row.change.isDirectory ? "folder" : "doc")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
+                    FileKindIcon(type: .backedUp(name: row.change.name, isDirectory: row.change.isDirectory))
                         .accessibilityLabel(row.change.isDirectory ? "Folder" : "File")
                     Text(row.change.name)
                         .lineLimit(1)
@@ -575,7 +571,7 @@ struct RestorePaneView: View {
                 // "1 change since …" no longer reads as unchanged.
                 Text("\(Format.count(inside.total)) inside")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(insideHelp(inside))
                     .frame(width: 56, alignment: .leading)
@@ -968,16 +964,12 @@ private struct IncompleteSnapshotStrip: View {
                                 page: page
                             )
                         } label: {
-                            HStack(spacing: 4) {
-                                Text(words(for: line, in: run))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                RowChevron()
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            Text(words(for: line, in: run))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .font(.caption)
                         }
-                        .buttonStyle(HoverableButtonStyle())
+                        .buttonStyle(.link)
                         .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions")
                     } else {
                         Text(words(for: line, in: run))
@@ -1016,7 +1008,6 @@ private struct IncompleteSnapshotStrip: View {
             heldBefore = kinds
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.warning.opacity(0.08))
         .accessibilityElement(children: .contain)
     }
 

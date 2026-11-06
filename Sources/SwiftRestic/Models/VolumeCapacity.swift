@@ -10,6 +10,8 @@ struct VolumeCapacity: Equatable {
 
     var usedBytes: Int64 { max(0, totalBytes - freeBytes) }
 
+    var isLow: Bool { totalBytes > 0 && freeBytes * 20 < totalBytes }
+
     /// A degenerate total reads as empty rather than NaN.
     var usedFraction: Double {
         guard totalBytes > 0 else { return 0 }
