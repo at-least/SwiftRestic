@@ -47,7 +47,7 @@ struct ShareReconnect: Equatable, Sendable {
 
     var logLine: String {
         guard let failureReason else { return "Reconnected the network share \(url) at /Volumes/\(volumeName)." }
-        return "Could not reconnect the network share \(url): \(failureReason)."
+        return "Couldn’t reconnect the network share \(url): \(failureReason)."
     }
 }
 

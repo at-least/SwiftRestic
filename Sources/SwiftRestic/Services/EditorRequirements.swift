@@ -21,11 +21,11 @@ enum EditorRequirements {
             return "Choose a folder or file to back up."
         }
         if draft.repositoryID == nil {
-            return "Choose a repository to save it."
+            return "Choose a backup location to save it."
         }
         let path = comparable(draft.path)
         if isNew, plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
-            return "This repository already has a plan for this folder or file."
+            return "This location already has a plan for this folder or file."
         }
         return nil
     }
@@ -60,7 +60,7 @@ enum EditorRequirements {
     /// An edit's check finding nothing at the location: its plans' backups
     /// would fail (restic exit 10) against it, and the editor cannot change a
     /// location: another location is another repository.
-    static let noRepositoryHere = "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository."
+    static let noRepositoryHere = "No backups are at this location, so new backups would fail. If they moved, add them at their new location with Add Backup Location."
 
     /// Whether an edit's Save asks restic first: when it changes what
     /// reaches restic — the location, a credential, the environment — or
@@ -157,13 +157,13 @@ enum EditorRequirements {
         }
         if isNew {
             if password.isEmpty {
-                return "Set a repository password to save it."
+                return "Set a password to save it."
             }
             if password != confirmPassword {
                 return "The passwords don’t match."
             }
         } else if hasStoredPassword == false, password.isEmpty {
-            return "Enter the repository password to save it."
+            return "Enter the password to save it."
         }
         return nil
     }

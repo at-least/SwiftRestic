@@ -4,7 +4,7 @@ extension AppModel {
     /// Why a run was cancelled, for the run record: the user's own stop and the
     /// app quitting mid-run are different events worth telling apart.
     var cancellationMessage: String {
-        isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Cancelled"
+        isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Stopped"
     }
 
     /// `Logs/` beside `config.json` — so `SWIFTRESTIC_CONFIG_DIR` moves it
@@ -133,7 +133,7 @@ extension AppModel {
                 repositories: configuration.repositories
             )
             post(Banner(
-                title: "Could not send \(Format.plural(failures.count, "notification"))"
+                title: "Couldn’t send \(Format.plural(failures.count, "notification"))"
                     + (subject.isEmpty ? "" : " for \(subject)"),
                 message: failures.joined(separator: "\n"),
                 level: .warning

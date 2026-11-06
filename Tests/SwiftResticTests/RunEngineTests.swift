@@ -170,7 +170,7 @@ struct BackupRunEngineTests {
         repository.localPath = "/Volumes/\(volume)/restic"
 
         let outOfReach = RecordingSink()
-        let unreachable = "the server could not be reached"
+        let unreachable = "the server couldn’t be reached"
         outOfReach.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .unreachable(unreachable))]
         let client = MockResticClient().onBackup(.success(successOutcome()))
         await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: outOfReach.serving(client))
@@ -181,7 +181,7 @@ struct BackupRunEngineTests {
         #expect(skipped.outcome == .skipped)
         #expect(skipped.detailText == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: \(unreachable).")
         #expect(skipped.refusedShares == nil)
-        #expect(outOfReach.deliveredNotes.contains("Could not reconnect the network share smb://me@nas.local/\(volume): \(unreachable)."))
+        #expect(outOfReach.deliveredNotes.contains("Couldn’t reconnect the network share smb://me@nas.local/\(volume): \(unreachable)."))
 
         let refusing = RecordingSink()
         let refused = "the share did not accept the user name and password"
@@ -217,7 +217,7 @@ struct BackupRunEngineTests {
     func awaySourcesAskedOnce() async throws {
         let away = "SwiftResticAbsent-\(UUID().uuidString)"
         let sink = RecordingSink()
-        sink.reconnectAnswer = [ShareReconnect(volumeName: away, url: "smb://nas.local/\(away)", outcome: .unreachable("the server could not be reached"))]
+        sink.reconnectAnswer = [ShareReconnect(volumeName: away, url: "smb://nas.local/\(away)", outcome: .unreachable("the server couldn’t be reached"))]
         let client = MockResticClient().onBackup(.failure(ResticError.commandFailed(exitCode: 1, message: RunRecord.everySourceMissingMessage)))
         var plan = makePlan()
         plan.path = "/Volumes/\(away)/c"
@@ -227,7 +227,7 @@ struct BackupRunEngineTests {
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.outcome == .skipped)
         #expect(record.detailText
-            == "“\(away)” is not connected. Reconnecting “\(away)” failed: the server could not be reached.")
+            == "“\(away)” is not connected. Reconnecting “\(away)” failed: the server couldn’t be reached.")
 
         let here = RecordingSink()
         await BackupRunEngine.perform(
@@ -339,7 +339,7 @@ struct BackupRunEngineTests {
         // repository, its own lock live: the line says so, never the stale-
         // lock advice a failed run's exit 11 carries, which would send the
         // user to remove a lock nothing left behind.
-        #expect(record.itemErrors == ["Retention skipped: another backup or job held the repository’s lock — retention runs again after the next backup."])
+        #expect(record.itemErrors == ["Retention skipped: another backup or job was using the location. Old backups are removed after the next backup."])
         // The snapshot was written; the run itself stays marked successful.
         #expect(sink.log.contains("mark:whole"))
     }
@@ -416,8 +416,8 @@ struct BackupRunEngineTests {
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
         #expect(record.itemErrors == [
-            "Retention skipped: The repository refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
-                + "Thin it where deletions are allowed, or turn retention off.",
+            "Retention skipped: The location refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
+                + "Turn off removing old backups, or allow deletions on this storage.",
         ])
         #expect(record.retentionRefused == 1)
         #expect(sink.log.contains("mark:whole"))
@@ -425,7 +425,7 @@ struct BackupRunEngineTests {
 
     @Test("stopping a backup during its own retention step reads as cancelled, not a warning")
     func stopDuringRetentionIsACancellation() async throws {
-        // The Plan menu's and the tray's "Stop Applying Retention", Pause
+        // The Plan menu's and the tray's "Stop Removing Old Backups", Pause
         // and Stop, and a quit all reach a backup's forget as a cancelled
         // restic call — the user's stop, never a lock failure to warn about.
         let sink = RecordingSink()
@@ -439,7 +439,7 @@ struct BackupRunEngineTests {
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome), itemErrors \(record.itemErrors)")
         #expect(record.failureMessage == "cancelled in test")
         #expect(!record.itemErrors.contains { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }, "itemErrors were \(record.itemErrors)")
-        #expect(sink.deliveredNotes.contains("Retention stopped"), "notes were \(sink.deliveredNotes)")
+        #expect(sink.deliveredNotes.contains("Stopped removing old backups"), "notes were \(sink.deliveredNotes)")
         // The snapshot was written before the stop: it keeps its record and
         // its success stamp, and nothing stamps the run again as failed.
         #expect(record.snapshotID == "cafe0000")
@@ -477,13 +477,13 @@ struct BackupRunEngineTests {
         let record = try #require(sink.deliveredRecords.first)
         let summary = PlanStatus.summary(of: record)
         // The engine and the plan row key on the same spelling.
-        #expect(summary.message?.hasPrefix(RunRecord.retentionSkippedPrefix) == true, "message was \(String(describing: summary.message))")
+        #expect(summary.message?.hasPrefix(RunRecord.retentionSkippedOnScreenPrefix) == true, "message was \(String(describing: summary.message))")
         // The message already says it; the row does not repeat it as a fact.
         #expect(summary.facts.isEmpty, "facts were \(summary.facts)")
         #expect(!summary.facts.contains { $0.contains("unreadable") })
         // Standalone (Activity's Detail column builds on this), the skip is
         // named — and still nothing is called unreadable.
-        #expect(PlanStatus.facts(for: record) == ["Retention skipped"])
+        #expect(PlanStatus.facts(for: record) == ["Old backups not removed"])
     }
 
     @Test("item errors from restic read as completed-with-errors")
@@ -656,7 +656,7 @@ struct BackupRunEngineTests {
         let notes = sink.deliveredNotes
         #expect(notes.contains("Hook “true” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Hook “pwd” succeeded."), "notes were \(notes)")
-        #expect(notes.contains("Retention removed 0 backups"), "notes were \(notes)")
+        #expect(notes.contains("Removed 0 backups"), "notes were \(notes)")
     }
 
     @Test("a failed forget is noted in the log as a retention skip")
@@ -915,7 +915,7 @@ struct MaintenanceRunEngineTests {
         repository.localPath = "/Volumes/\(volume)/restic"
 
         let outOfReach = RecordingSink()
-        let unreachable = "the server could not be reached"
+        let unreachable = "the server couldn’t be reached"
         outOfReach.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .unreachable(unreachable))]
         let waiting = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(

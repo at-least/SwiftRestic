@@ -32,7 +32,7 @@ extension KeyedDecodingContainer {
             if let decoded = try decodeIfPresent(T.self, forKey: key) { return decoded }
             note(key, "is null — \(substitute())")
         } catch {
-            note(key, "could not be read (\(Self.briefFailure(error))) — \(substitute())")
+            note(key, "couldn’t be read (\(Self.briefFailure(error))) — \(substitute())")
         }
         return nil
     }

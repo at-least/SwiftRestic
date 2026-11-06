@@ -59,9 +59,9 @@ struct RemovalConsequencesTests {
             isMaintaining: true,
             isConsoleRunning: true
         )
-        #expect(sentence.contains("A restore from this repository is running and will be cancelled."))
-        #expect(sentence.contains("Backups of “Nightly” and “Untitled Plan” are running and will be cancelled."))
-        #expect(sentence.contains("Repository maintenance is running and will be cancelled."))
-        #expect(sentence.contains("A console command is running and will be cancelled."))
+        #expect(sentence.contains("A restore from this location is running and will be stopped."))
+        #expect(sentence.contains("Backups of “Nightly” and “Untitled Plan” are running and will be stopped."))
+        #expect(sentence.contains("Maintenance is running and will be stopped."))
+        #expect(sentence.contains("A console command is running and will be stopped."))
     }
 }

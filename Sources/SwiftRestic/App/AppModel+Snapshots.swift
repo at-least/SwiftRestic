@@ -110,7 +110,7 @@ extension AppModel {
                 if !statsFailureNoted.contains(repositoryID), configuration.repository(id: repositoryID) != nil {
                     statsFailureNoted.insert(repositoryID)
                     post(Banner(
-                        title: "Could not read the size of “\(label(of: repository))”",
+                        title: "Couldn’t read the size of “\(label(of: repository))”",
                         message: error.localizedDescription,
                         level: .warning
                     ))
@@ -207,8 +207,8 @@ extension AppModel {
     /// one is saved: two sentences, the sidebar showing the first alone.
     nonisolated static func missingRepositoryReason(kind: Repository.Kind) -> String {
         kind == .local
-            ? "Repository missing. Is its disk connected? If it moved, locate it."
-            : "Repository missing. If it moved, put it back, or add it where it is now as a new repository."
+            ? "Backups not found. Is the disk connected? If it moved, locate it."
+            : "Backups not found. If they moved, put them back, or add them where they are now as a new backup location."
     }
 
     func snapshotsLoadedAt(for repositoryID: UUID?) -> Date? {

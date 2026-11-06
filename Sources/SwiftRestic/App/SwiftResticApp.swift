@@ -245,7 +245,7 @@ struct SwiftResticApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!commands.canNewPlan)
 
-                Button("Add Repository…") {
+                Button("Add Backup Location…") {
                     // Through the router's pending intent: the ask survives
                     // the window being closed, and a menu command that
                     // visibly does nothing is a dead key.
@@ -283,10 +283,9 @@ struct SwiftResticApp: App {
             // toolbar button had been the one way back (the HIG's Split
             // views: "Provide multiple ways to reveal hidden panes").
             SidebarCommands()
-            appMenu
             viewMenu
-            planMenu
-            repositoryMenu
+            backupMenu
+            locationMenu
         }
 
         Settings {
@@ -315,13 +314,14 @@ struct SwiftResticApp: App {
         openWindow(id: Self.mainWindowID)
     }
 
-    /// Everything a plan page's cards and the sidebar row's menu offer,
-    /// acting on the plan selected in the sidebar and greyed out when the
-    /// selection is anything else — an enabled item over an action that does
-    /// nothing is a menu that lies. Titles stay put, so Help-menu search and
-    /// muscle memory find them; only the two state toggles change.
-    private var planMenu: some Commands {
-        CommandMenu("Plan") {
+    /// Backups: the selected plan's and, below them, every plan's. Items
+    /// acting on the selection grey out when it is anything else — an enabled
+    /// item over an action that does nothing is a menu that lies. Titles stay
+    /// put, so Help-menu search and muscle memory find them; only the state
+    /// toggles change. Direct calls for every plan's, as the tray's: no editor
+    /// holds a draft of them.
+    private var backupMenu: some Commands {
+        CommandMenu("Backup") {
             let p = model.planCommands(for: router.selection)
             Button("Back Up Now") { ask(.runSelectedPlan) }
                 .keyboardShortcut("b", modifiers: .command)
@@ -336,6 +336,19 @@ struct SwiftResticApp: App {
 
             Divider()
 
+            Button("Back Up All Plans Now") { model.backUpAllPlans() }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+                .disabled(!p.canBackUpAll)
+            if p.backupsPaused {
+                Button("Resume Backups") { model.resumeBackups() }
+            } else {
+                lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
+                    model.pauseBackups(for: length)
+                }
+            }
+
+            Divider()
+
             Button("Edit Plan…") {
                 if let id = p.planID { ask(.editPlan(id)) }
             }
@@ -347,27 +360,6 @@ struct SwiftResticApp: App {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)
-        }
-    }
-
-    /// The SwiftRestic menu's backup items, under Settings: they act on
-    /// every plan, not the sidebar's selection, so they stay out of the Plan
-    /// menu. Direct calls, as the tray's: no editor holds a draft of these
-    /// settings.
-    private var appMenu: some Commands {
-        CommandGroup(after: .appSettings) {
-            let p = model.planCommands(for: router.selection)
-            Divider()
-            Button("Back Up All Plans Now") { model.backUpAllPlans() }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
-                .disabled(!p.canBackUpAll)
-            if p.backupsPaused {
-                Button("Resume Backups") { model.resumeBackups() }
-            } else {
-                lengthsMenu("Pause Backups", isEnabled: p.canPauseBackups) { length in
-                    model.pauseBackups(for: length)
-                }
-            }
         }
     }
 
@@ -407,6 +399,12 @@ struct SwiftResticApp: App {
             ))
             .disabled(router.selection != .activity)
             Divider()
+            Button("Refresh All Backups") {
+                Task { await model.refreshAllSnapshots() }
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(!model.repositoryCommands(for: page).canRefreshAll)
+            Divider()
         }
     }
 
@@ -436,20 +434,15 @@ struct SwiftResticApp: App {
     /// maintenance buttons of its own: Check, Clean Up and the repairs are
     /// here, and the first two on the sidebar row's menu. Nothing
     /// destructive has a key.
-    private var repositoryMenu: some Commands {
-        CommandMenu("Repository") {
+    private var locationMenu: some Commands {
+        CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Refresh All Backups") {
-                Task { await model.refreshAllSnapshots() }
-            }
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(!r.canRefreshAll)
             Button("restic Console") { openWindow(id: Self.consoleWindowID) }
                 .disabled(!r.canOpenConsole)
 
             Divider()
 
-            Button("Check Now…") {
+            Button("Verify Backups…") {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
@@ -471,7 +464,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Repository…") {
+            Button("Edit Backup Location…") {
                 if let id = r.repositoryID { ask(.editRepository(id)) }
             }
             .disabled(!r.canEdit)

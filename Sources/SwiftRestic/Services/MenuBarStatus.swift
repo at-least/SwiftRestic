@@ -75,7 +75,7 @@ enum MenuBarStatus {
         now: Date = .now
     ) -> String {
         let base = switch state {
-        case .unconfigured: "SwiftRestic, no repository set"
+        case .unconfigured: "SwiftRestic, no backup location set"
         case .idle: "SwiftRestic"
         case .running: "SwiftRestic, work in progress"
         case .problem: "SwiftRestic, needs attention"
@@ -182,7 +182,7 @@ enum MenuBarStatus {
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
         guard hold == nil, resticAbsence == nil else { return nil }
-        if hasNoRepositories { return "No repository set" }
+        if hasNoRepositories { return "No backup location set" }
         guard let nextRun else { return "No backups scheduled" }
         // The plan page's Next backup tile spells the same moment in these
         // words; the scheduler clamps the date to now, so a due run reads
@@ -229,7 +229,7 @@ enum MenuBarStatus {
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
                     isEnabled: plan.isConfigurationComplete && resticAbsence == nil && lockReason == nil,
-                    // The Plan menu's own words for each reason.
+                    // The Backup menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
                         : resticAbsence?.words ?? lockReason
                 )
@@ -244,13 +244,13 @@ enum MenuBarStatus {
         }
     }
 
-    /// The Plan menu's Stop for this phase of a plan's run: a backup's own
+    /// The Backup menu's Stop for this phase of a plan's run: a backup's own
     /// retention step, whose snapshot is already written, is no backup. The
     /// tray's row passes `planName`.
     static func stopTitle(for phase: PlanActivity.Phase?, planName: String? = nil) -> String {
         let quoted = planName.map { "“\($0)”" }
         switch phase {
-        case .applyingRetention?: return quoted.map { "Stop Applying Retention to \($0)" } ?? "Stop Applying Retention"
+        case .applyingRetention?: return quoted.map { "Stop Removing Old Backups of \($0)" } ?? "Stop Removing Old Backups"
         default: return quoted.map { "Stop \($0) Backup" } ?? "Stop Backup"
         }
     }

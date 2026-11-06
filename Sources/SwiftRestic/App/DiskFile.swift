@@ -73,7 +73,7 @@ enum DiskFile: Equatable {
         case .other:
             return "On this Mac it is not a file"
         case let .unreadable(reason):
-            return "On this Mac it could not be read: \(Format.firstSentence(reason))"
+            return "On this Mac it couldn’t be read: \(Format.firstSentence(reason))"
         case let .file(size, modified):
             guard !isReading else { return nil }
             let match = versions.firstIndex { version in

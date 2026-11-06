@@ -332,8 +332,8 @@ struct PlanStatusTests {
         // message explains what the items do not (here the retention line).
         #expect(summary.items == Array(items.prefix(5)))
         #expect(summary.unlistedItemCount == 115)
-        #expect(summary.message == partial.itemErrors[50])
-        #expect(summary.facts == ["120 unreadable items", "Retention skipped"])
+        #expect(summary.message == RunRecord.retentionSkippedOnScreenPrefix + "locked")
+        #expect(summary.facts == ["120 unreadable items", "Old backups not removed"])
 
         // Two items: both listed, nothing left over, no message to repeat
         // them — and the count dropped from the facts, which the item list
@@ -353,7 +353,7 @@ struct PlanStatusTests {
         #expect(PlanStatus.standingProblemWhen(inARow: 3, ago: "2 days ago") == "3 times in a row · 2 days ago")
     }
 
-    @Test("a retention line already in history still reads as Retention skipped")
+    @Test("a retention line already in history still reads as Old backups not removed")
     func storedRetentionLineIsRecognised() {
         // The bytes records in config.json already carry, spelled out rather
         // than read from RunRecord.retentionSkippedPrefix: every other test
@@ -365,7 +365,7 @@ struct PlanStatusTests {
             "Retention skipped: repository is already locked by PID 4242 on demo-mac",
         ]
         stored.itemErrorCount = 1
-        #expect(PlanStatus.facts(for: stored) == ["1 unreadable item", "Retention skipped"])
+        #expect(PlanStatus.facts(for: stored) == ["1 unreadable item", "Old backups not removed"])
     }
 
     @Test("a warning from after-hooks alone names the hook, and a bare exit 3 still says something")
@@ -384,7 +384,7 @@ struct PlanStatusTests {
         bare.exitCode = 3
         let bareSummary = PlanStatus.summary(of: bare)
         #expect(bareSummary.message == RunRecord.unexplainedWarningMessage)
-        #expect(bareSummary.facts == ["Some source data could not be read"])
+        #expect(bareSummary.facts == ["Some source data couldn’t be read"])
     }
 
     @Test("an unnamed exit 3 beside a retention skip still says some data was not read")
@@ -396,8 +396,8 @@ struct PlanStatusTests {
         partial.exitCode = 3
         partial.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242 on demo-mac"]
         let summary = PlanStatus.summary(of: partial)
-        #expect(summary.message == partial.itemErrors[0])
-        #expect(summary.facts == ["Some source data could not be read", "Retention skipped"])
+        #expect(summary.message == RunRecord.retentionSkippedOnScreenPrefix + "repository is already locked by PID 4242 on demo-mac")
+        #expect(summary.facts == ["Some source data couldn’t be read", "Old backups not removed"])
         #expect(RunRecordPresentation.detail(for: partial) == summary.facts.joined(separator: " · "))
 
         // Only a warning that is the retention skip alone lets its message
@@ -407,7 +407,7 @@ struct PlanStatusTests {
         withHook.itemErrors = partial.itemErrors
         withHook.hookMessages = ["Hook “notify” exited 1"]
         let hookSummary = PlanStatus.summary(of: withHook)
-        #expect(hookSummary.facts == ["Retention skipped", "1 failed hook"])
+        #expect(hookSummary.facts == ["Old backups not removed", "1 failed hook"])
         #expect(RunRecordPresentation.detail(for: withHook) == hookSummary.facts.joined(separator: " · "))
     }
 
@@ -549,7 +549,7 @@ struct RepositoryLabelTests {
         rclone.rcloneRemote = "gdrive:"
         rclone.rclonePath = "restic"
         #expect(rclone.label(among: []) == "gdrive")
-        #expect(Repository().label(among: []) == "Untitled Repository")
+        #expect(Repository().label(among: []) == "Untitled Location")
     }
 
     @Test("two repositories that would read alike each read as their location")

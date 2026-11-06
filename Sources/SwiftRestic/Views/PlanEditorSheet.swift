@@ -13,7 +13,7 @@ struct PlanEditorSheet: View {
     @State private var isConfirmingDiscard = false
     /// Excluding first: the header above the tabs already holds the path and
     /// the repository, and what to leave out is the next question.
-    @State private var tab: Tab = .files
+    @State private var tab: PlanEditorTab = .files
     @FocusState private var isPathFocused: Bool
     /// Adopt's asking-again dialog, armed only when the group's facts ask
     /// for it (a foreign-host snapshot, or a newest backup under 48 h).
@@ -51,12 +51,10 @@ struct PlanEditorSheet: View {
     /// draft the user may have edited since.
     private let adoptDefaultedToManual: Bool
 
-    enum Tab: CaseIterable { case files, schedule, retention }
-
     init(
         plan: BackupPlan,
         mode: Mode? = nil,
-        initialTab: Tab = .files,
+        initialTab: PlanEditorTab = .files,
         onAdopted: ((UUID) -> Void)? = nil,
         onCreated: ((UUID) -> Void)? = nil
     ) {
@@ -99,12 +97,18 @@ struct PlanEditorSheet: View {
             if let briefing {
                 adoptHeader(briefing)
             }
+            if mode == .new {
+                Text("New Backup Plan")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding([.horizontal, .top], 20)
+            }
             identityHeader(briefing)
-            SheetTabs(selection: $tab, tabs: Tab.allCases, title: { tab in
+            SheetTabs(selection: $tab, tabs: PlanEditorTab.allCases, title: { tab in
                 switch tab {
-                case .files: "Excluding"
+                case .files: "Excluded Items"
                 case .schedule: "Schedule"
-                case .retention: "Retention"
+                case .retention: "History"
                 }
             }) { tab in
                 switch tab {
@@ -145,7 +149,7 @@ struct PlanEditorSheet: View {
                         // The group left while the sheet was open — its page
                         // is revalidating away behind the sheet. Say it here
                         // rather than letting the button grey without a why.
-                        Text("These backups are no longer in the repository — there is nothing to continue.")
+                        Text("These backups are no longer here, so there’s nothing to continue.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -314,7 +318,7 @@ struct PlanEditorSheet: View {
                 try await model.saveNetworkShare(row.share, password: typed)
             } catch {
                 model.post(Banner(
-                    title: "Could not save the password for “\(row.share.url)”",
+                    title: "Couldn’t save the password for “\(row.share.url)”",
                     message: error.localizedDescription,
                     isError: true
                 ))
@@ -396,10 +400,10 @@ struct PlanEditorSheet: View {
                 }
             }
             GridRow {
-                Text("Repository")
+                Text("Location")
                 switch mode {
                 case .new:
-                    Picker("Repository", selection: $draft.repositoryID) {
+                    Picker("Location", selection: $draft.repositoryID) {
                         Text("Choose").tag(UUID?.none)
                         ForEach(model.configuration.repositories) { repository in
                             Text(model.label(of: repository)).tag(UUID?.some(repository.id))
@@ -407,7 +411,7 @@ struct PlanEditorSheet: View {
                     }
                     .labelsHidden()
                     .fixedSize()
-                    .accessibilityLabel("Repository")
+                    .accessibilityLabel("Location")
                 case .adopt, .editing:
                     // The briefing's own words. While the group is gone —
                     // its page revalidating away — the bare name still says
@@ -487,20 +491,20 @@ struct PlanEditorSheet: View {
                     }
                 }
             } header: {
-                Text("Skip")
+                Text("Exclude")
             }
             .editorSwitches()
             Section {
                 PathListEditor(
-                    title: "Also skip",
+                    title: "Also exclude",
                     paths: $draft.excludePatterns,
                     placeholder: "Type a pattern, such as **/*.iso",  // a String variable, so not parsed as Markdown
-                    browseMessage: "Choose folders and files to leave out of backups",
+                    browseMessage: "Choose folders and files to exclude from backups",
                     browsePrompt: "Exclude",
                     escapesPickedGlobs: true
                 )
             } header: {
-                Text("Also skip")
+                Text("Also exclude")
             } footer: {
                 Text("In a pattern, * matches within a name and ** across folders.")
                     .font(.caption)
@@ -665,7 +669,7 @@ struct PlanEditorSheet: View {
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
                     Label(
-                        "With every rule off, every backup would be removed, so retention is skipped until a rule is set.",
+                        "With every rule off, every backup would be removed, so nothing is removed until a rule is set.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(Theme.warning)

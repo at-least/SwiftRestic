@@ -90,7 +90,7 @@ struct MenuBarStatusTests {
     func noRepositoriesHeadline() {
         #expect(
             MenuBarStatus.headline(activity: [:], hasNoRepositories: true, plans: [], repositories: [], nextRun: nil)
-                == "No repository set"
+                == "No backup location set"
         )
         // Running work still holds the headline back even with no repository —
         // the same rule as every other running state.
@@ -160,8 +160,8 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0)) == "0%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
-        #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Applying retention…")
-        #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Cancelling…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Removing old backups…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Stopping…")
     }
 
     @Test("two plans running at once each get a line, in configuration order")
@@ -179,7 +179,7 @@ struct MenuBarStatusTests {
             ],
             progress: [second.id: progress(fraction: 0.5)]
         )
-        #expect(lines.map(\.text) == ["First — Applying retention…", "Second — 50%"])
+        #expect(lines.map(\.text) == ["First — Removing old backups…", "Second — 50%"])
         #expect(lines.map(\.id) == [first.id.uuidString, second.id.uuidString])
     }
 
@@ -207,7 +207,7 @@ struct MenuBarStatusTests {
             repositories: [repository],
             maintenance: [repository.id: MaintenanceActivity(task: .check)]
         )
-        #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — Checking…"])
+        #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — Verifying…"])
     }
 
     @Test("upkeep and restores hold the idle headline back, like a backup does")
@@ -291,7 +291,7 @@ struct MenuBarStatusTests {
 
         // The plain mark for two states means VoiceOver carries the
         // distinction between them.
-        #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured).contains("no repository"))
+        #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured).contains("no backup location"))
         #expect(MenuBarStatus.accessibilityDescription(for: .running).contains("work in progress"))
         #expect(MenuBarStatus.accessibilityDescription(for: .problem).contains("attention"))
         #expect(MenuBarStatus.accessibilityDescription(for: .unconfigured)
@@ -614,7 +614,7 @@ struct MenuBarStatusTests {
 
         #expect(
             MenuBarStatus.problemLine(runs: [failedRun(kind: .check, name: "NAS")], hasNoRepositories: false, relative: Self.ago)
-                == "Check on NAS failed 2 hours ago"
+                == "Verification on NAS failed 2 hours ago"
         )
         #expect(
             MenuBarStatus.problemLine(runs: [failedRun(kind: .prune, name: "NAS")], hasNoRepositories: false, relative: Self.ago)
@@ -679,7 +679,7 @@ struct MenuBarStatusTests {
                 plans: [],
                 repositories: [home, offsite],
                 relative: Self.ago
-            ) == "Check on Offsite failed 2 hours ago"
+            ) == "Verification on Offsite failed 2 hours ago"
         )
     }
 

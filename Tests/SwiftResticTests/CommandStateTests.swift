@@ -55,7 +55,7 @@ struct CommandStateTests {
         #expect(!model.planCommands(for: nil).canBackUpAll)
         #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a cleanup — backups wait until it finishes.")
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
-        #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a check — backups wait until it finishes.")
+        #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a verification — backups wait until it finishes.")
         model.maintenance = [:]
 
         // Another plan's backup shares the lock; its retention step does not.
@@ -65,7 +65,7 @@ struct CommandStateTests {
         model.setActivityPhase(.applyingRetention, for: photos.id)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
+            == "“Home NAS” is removing old backups of “Photos”. Backups wait until it finishes.")
     }
 
     @Test("a removed plan's stopping run keeps its repository's backups waiting until it unwinds")
@@ -83,7 +83,7 @@ struct CommandStateTests {
         model.configuration.plans = [documents]
         #expect(model.plan(id: photos.id) == nil)
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
+            == "“Home NAS” is removing old backups of “Photos”. Backups wait until it finishes.")
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(model.busyRepositoryIDs == [repository.id])
         model.activity[photos.id] = nil
@@ -108,7 +108,7 @@ struct CommandStateTests {
         model.setActivityPhase(.applyingRetention, for: photos.id)
         #expect(model.activity[photos.id]?.phase == .cancelling)
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
+            == "“Home NAS” is removing old backups of “Photos”. Backups wait until it finishes.")
     }
 
     @Test("the lock reason names a running plan as the sidebar does, after a rename too")
@@ -123,7 +123,7 @@ struct CommandStateTests {
         model.setActivityPhase(.applyingRetention, for: photos.id)
         model.configuration.plans[1].path = "/tmp/Pictures"
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is applying retention for “Pictures” — backups wait until it finishes.")
+            == "“Home NAS” is removing old backups of “Pictures”. Backups wait until it finishes.")
     }
 
     @Test("a backup stopped in its forget keeps the repository's backups waiting; after the forget it no longer does")
@@ -134,7 +134,7 @@ struct CommandStateTests {
         let photos = makePlan("Photos", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [documents, photos]
-        let reason = "“Home NAS” is applying retention for “Photos” — backups wait until it finishes."
+        let reason = "“Home NAS” is removing old backups of “Photos”. Backups wait until it finishes."
         model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
         // The engine's own phase writes, as the backup moves on.
         model.setActivityPhase(.applyingRetention, for: photos.id)
@@ -268,7 +268,7 @@ struct CommandStateTests {
         model.activity[plan.id]?.phase = .applyingRetention
         let retention = model.planCommands(for: .plan(plan.id))
         #expect(retention.canStop)
-        #expect(retention.stopTitle == "Stop Applying Retention")
+        #expect(retention.stopTitle == "Stop Removing Old Backups")
 
         // A stop already asked for: a second one would promise nothing new.
         model.activity[plan.id]?.phase = .cancelling
@@ -296,9 +296,9 @@ struct CommandStateTests {
         // Stop ends the forget, and both
         // surfaces say so.
         model.activity[plan.id]?.phase = .applyingRetention
-        #expect(trayRow()?.title == "Stop Applying Retention to “Docs”")
+        #expect(trayRow()?.title == "Stop Removing Old Backups of “Docs”")
         #expect(trayRow()?.action == .stop)
-        #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Applying Retention")
+        #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Removing Old Backups")
     }
 
     @Test("without restic only restic's work is disabled")
@@ -458,7 +458,7 @@ struct CommandStateTests {
         model.configuration.plans = [unset]
         #expect(!model.planCommands(for: .plan(unset.id)).canBackUp)
         #expect(model.planCommands(for: .plan(unset.id)).backUpDisabledReason
-            == "This plan needs a repository and a folder or file to back up")
+            == "This plan needs a backup location and a folder or file to back up")
     }
 
     @Test("the app-wide pause items follow the tray's rules")
@@ -496,7 +496,7 @@ struct CommandStateTests {
 
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
-        #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Check “NAS”?")
+        #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Verify “NAS”?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
         #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Unlock “NAS”?")

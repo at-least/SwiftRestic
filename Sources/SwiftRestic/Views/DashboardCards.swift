@@ -22,7 +22,7 @@ struct ProtectionCard: View {
         let plans = model.plans(in: repositoryID)
         let summary = model.protectionSummary(repositoryID: repositoryID, now: now)
         let commands = model.planCommands(for: .repository(repositoryID))
-        return Card("Protection") {
+        return Card("Status") {
             VStack(alignment: .leading, spacing: 7) {
                 if let summary {
                     HStack(spacing: 8) {
@@ -34,7 +34,7 @@ struct ProtectionCard: View {
                             Button("Resume") { model.resumeBackups() }
                                 .buttonStyle(.borderless)
                                 .controlSize(.small)
-                                .help("Resume scheduled backups, checks and cleanups")
+                                .help("Resume scheduled backups, verifications and cleanups")
                         }
                     }
                     // The sidebar mark's glyphs for what needs attention — a

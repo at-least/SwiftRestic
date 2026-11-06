@@ -309,7 +309,7 @@ struct AppModelTests {
         await model.restore(selection, repositoryID: id, into: [chosen], overwrite: .keepExisting)
         #expect(!model.isRestoring)
         #expect(model.configuration.runs.allSatisfy { $0.kind != .restore })
-        let banner = try #require(model.banners.first { $0.title == "Could not restore “gone.txt”" })
+        let banner = try #require(model.banners.first { $0.title == "Couldn’t restore “gone.txt”" })
         #expect(banner.isError)
         #expect(banner.message == "“gone.txt” is no longer listed in the chosen backup — refresh and try again.")
 
@@ -452,7 +452,7 @@ struct AppModelTests {
         // strip nor the run history, and a drop that landed posts no banner.
         #expect(model.restoreActivity == nil)
         #expect(model.configuration.runs.allSatisfy { $0.kind == .backup })
-        #expect(!model.banners.contains { $0.title.hasPrefix("Could not restore") })
+        #expect(!model.banners.contains { $0.title.hasPrefix("Couldn’t restore") })
 
         await model.shutdown()
     }
@@ -1103,7 +1103,7 @@ struct AppModelTests {
 
         let record = try #require(model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
+        #expect(record.failureMessage == "Stopped")
 
         await model.shutdown()
     }
@@ -1724,7 +1724,7 @@ struct LoginItemSwitchTests {
         model.loginItemApplier = { _ in throw ResticError.commandFailed(exitCode: 1, message: "daemon refused") }
 
         await model.setStartsAtLogin(false)
-        #expect(model.banners.map(\.title) == ["Could not change the login item"])
+        #expect(model.banners.map(\.title) == ["Couldn’t change the login item"])
         #expect(model.startsAtLogin == false)
         #expect(model.loginItemState == .off)
     }
@@ -1738,7 +1738,7 @@ struct LoginItemSwitchTests {
 
         await model.setStartsAtLogin(true)
         #expect(script.applyCount == 0)
-        #expect(model.banners.map(\.title) == ["Could not start SwiftRestic at login"])
+        #expect(model.banners.map(\.title) == ["Couldn’t start SwiftRestic at login"])
         #expect(model.banners.map(\.message) == [LoginItem.notInstalledMessage])
         #expect(model.startsAtLogin == false)
         #expect(model.loginItemState == .off)
@@ -1950,7 +1950,7 @@ struct KeychainFailureHonestyTests {
         model.deleteRepository(id: repository.id)
         await model.tasks.drain()
 
-        #expect(model.banners.contains { $0.title == "The removed repository’s secrets are still in your Keychain" && $0.isError })
+        #expect(model.banners.contains { $0.title == "The removed location’s secrets are still in your Keychain" && $0.isError })
     }
 }
 
@@ -2001,7 +2001,7 @@ struct ConfigurationSaveTests {
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path) }
 
         await model.flushSave()
-        #expect(model.banners.map(\.title) == ["Could not save your configuration"])
+        #expect(model.banners.map(\.title) == ["Couldn’t save your configuration"])
         // Only bootstrap's load failure latches the unreadable state: a
         // failed save leaves the configuration editable and saving armed.
         #expect(!model.isConfigurationUnreadable)

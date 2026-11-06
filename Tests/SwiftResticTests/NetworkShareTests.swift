@@ -226,20 +226,20 @@ struct NetworkShareTests {
         #expect(ShareMounter.describe(status: EAUTH) == "the share did not accept the user name and password")
         #expect(ShareMounter.describe(status: ENOENT) == "the server has no share by that name")
         for unreachable in [ETIMEDOUT, ECONNREFUSED, EHOSTDOWN, EHOSTUNREACH] {
-            #expect(ShareMounter.describe(status: unreachable) == "the server could not be reached")
+            #expect(ShareMounter.describe(status: unreachable) == "the server couldn’t be reached")
         }
         #expect(ShareMounter.describe(status: -6600) == "macOS answered with error -6600")
         #expect(ShareMounter.describe(status: EIO) == "input/output error")
     }
 
-    @Test("the skip names each share that could not be reconnected, in the order its folders come")
+    @Test("the skip names each share that couldn’t be reconnected, in the order its folders come")
     func skipWords() {
         let sources = ["/Volumes/Photos/2026", "/Volumes/NAS/Projects", "/Volumes/Photos/2025"]
         #expect(RunRecord.skippedReason(sources: sources) == "“Photos” and “NAS” are not connected.")
         #expect(RunRecord.skippedReason(sources: sources, reconnectFailures: [
-            "NAS": "the server could not be reached", "Photos": "no password is saved for it",
+            "NAS": "the server couldn’t be reached", "Photos": "no password is saved for it",
         ]) == "“Photos” and “NAS” are not connected. Reconnecting “Photos” failed: no password is saved for it."
-            + " Reconnecting “NAS” failed: the server could not be reached.")
+            + " Reconnecting “NAS” failed: the server couldn’t be reached.")
     }
 
     @Test("saved shares round-trip in the configuration, and an older file without them reads as none")
@@ -257,7 +257,7 @@ struct NetworkShareTests {
     func logLines() {
         let reconnected = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .reconnected)
         #expect(reconnected.logLine == "Reconnected the network share smb://me@nas.local/NAS at /Volumes/NAS.")
-        let failed = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .unreachable("the server could not be reached"))
-        #expect(failed.logLine == "Could not reconnect the network share smb://me@nas.local/NAS: the server could not be reached.")
+        let failed = ShareReconnect(volumeName: "NAS", url: "smb://me@nas.local/NAS", outcome: .unreachable("the server couldn’t be reached"))
+        #expect(failed.logLine == "Couldn’t reconnect the network share smb://me@nas.local/NAS: the server couldn’t be reached.")
     }
 }

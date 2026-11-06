@@ -18,7 +18,7 @@ extension AppModel {
         else {
             post(Banner(
                 title: "Plan is incomplete",
-                message: "Choose a repository and a folder or file to back up.",
+                message: "Choose a backup location and a folder or file to back up.",
                 isError: true
             ))
             return

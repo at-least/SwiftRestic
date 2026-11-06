@@ -606,10 +606,10 @@ struct AppModelStubTests {
 
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
+        #expect(record.failureMessage == "Stopped")
         // The strip vanishing is not the whole story: a settled, non-error
         // banner says the restore stopped and nothing is still running.
-        let cancelledBanner = await bannerTitled("Restore from “Stub Repo” cancelled", in: harness.model)
+        let cancelledBanner = await bannerTitled("Restore from “Stub Repo” stopped", in: harness.model)
         #expect(
             cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
@@ -796,11 +796,11 @@ struct AppModelStubTests {
             Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
-        #expect(message.hasPrefix("Repository missing."), "message was \(message)")
-        #expect(message == "Repository missing. Is its disk connected? If it moved, locate it.")
+        #expect(message.hasPrefix("Backups not found."), "message was \(message)")
+        #expect(message == "Backups not found. Is the disk connected? If it moved, locate it.")
         #expect(AppModel.missingRepositoryReason(kind: .sftp)
-            == "Repository missing. If it moved, put it back, or add it where it is now as a new repository.")
-        #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
+            == "Backups not found. If they moved, put them back, or add them where they are now as a new backup location.")
+        #expect(!harness.model.banners.contains { $0.title.contains("Couldn’t read “Stub Repo”") })
         #expect(harness.model.repositoriesMissingPassword.isEmpty)
 
         await harness.model.shutdown()
@@ -816,7 +816,7 @@ struct AppModelStubTests {
             return
         }
         #expect(!message.isEmpty)
-        #expect(!harness.model.banners.contains { $0.title.contains("Could not read “Stub Repo”") })
+        #expect(!harness.model.banners.contains { $0.title.contains("Couldn’t read “Stub Repo”") })
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
 
         await harness.model.shutdown()
@@ -960,10 +960,10 @@ struct AppModelStubTests {
             Issue.record("expected a failed outcome for a missing repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
-        #expect(message.contains("missing"))
+        #expect(message.contains("not found"))
         // The sidebar shows the first sentence on one line, middle-truncated,
         // so it must stand alone.
-        #expect(Format.firstSentence(message) == "Repository missing")
+        #expect(Format.firstSentence(message) == "Backups not found")
         #expect(message.contains("disk"), "a local repository's likeliest cause is an unplugged disk")
         #expect(harness.model.snapshots(for: harness.repository.id).isEmpty)
         #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == nil, "nothing was read, so nothing is fresh")
@@ -1017,7 +1017,7 @@ struct AppModelStubTests {
             Issue.record("expected a failed outcome for a vanished repository, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
-        #expect(message.contains("missing"))
+        #expect(message.contains("not found"))
         #expect(harness.model.snapshots(for: harness.repository.id).count == 1, "stale rows must survive")
         #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == loadedAt)
 
@@ -1277,7 +1277,7 @@ struct AppModelStubTests {
         let run = try #require(harness.model.backupRun(forSnapshot: "feedface00000000"))
         #expect(run.exitCode == 3)
         #expect(run.snapshotCompleteness == .incomplete)
-        #expect(Format.snapshotCompleteness(run) == "Incomplete: 1 item could not be read")
+        #expect(Format.snapshotCompleteness(run) == "Incomplete: 1 item couldn’t be read")
         #expect(Array(run.unreadableItems) == ["/etc/secret-target: permission denied"])
         #expect(run.itemErrors.last?.hasPrefix("Retention skipped") == true, "lines were \(run.itemErrors)")
 
@@ -1366,7 +1366,7 @@ struct AppModelStubTests {
             repositoryID: UUID(),
             arguments: ["snapshots"]
         )
-        #expect(unknown == "No such repository.")
+        #expect(unknown == "No such backup location.")
 
         await harness.model.shutdown()
     }
@@ -1405,8 +1405,8 @@ struct AppModelStubTests {
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.unlockRepository(id: harness.repository.id)
-        let banner = await bannerTitled("Could not unlock", in: harness.model)
-        #expect(banner?.title.contains("Could not unlock") == true, "banner was: \(banner?.title ?? "none")")
+        let banner = await bannerTitled("Couldn’t unlock", in: harness.model)
+        #expect(banner?.title.contains("Couldn’t unlock") == true, "banner was: \(banner?.title ?? "none")")
         #expect(banner?.isError == true)
 
         await harness.model.shutdown()
@@ -1552,7 +1552,7 @@ struct AppModelStubTests {
         #expect(model.configuration.runs.first?.outcome == .skipped)
         // Found by its title: the launch's listing posts its own banners.
         // The repository is called by its drive now that it is on one.
-        let banner = try #require(model.banners.first { $0.title == "Check of “\(volume)” skipped" })
+        let banner = try #require(model.banners.first { $0.title == "Verification of “\(volume)” skipped" })
         #expect(banner.message == "“\(volume)” is not connected.")
         #expect(!banner.isError)
         #expect(model.repository(id: id)?.maintenance.lastCheckAt == nil)
@@ -1623,7 +1623,7 @@ struct AppModelStubTests {
         let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
         model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
         try await model.saveNetworkShare(MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)"), password: "pw")
-        let words = "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server could not be reached."
+        let words = "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server couldn’t be reached."
 
         await model.refreshSnapshots(repositoryID: id)
         #expect(await mounts.calls == 1)
@@ -1672,7 +1672,7 @@ struct AppModelStubTests {
         #expect(record.kind == .restore)
         #expect(record.outcome == .failed)
         #expect(record.failureMessage
-            == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server could not be reached.")
+            == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the server couldn’t be reached.")
         #expect(await mounts.calls == 1)
 
         await model.shutdown()
@@ -1720,7 +1720,7 @@ struct AppModelStubTests {
         #expect(harness.model.configuration.runs.count == 1)
         #expect(record.kind == .check)
         #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
+        #expect(record.failureMessage == "Stopped")
         // A cancelled check still counts as "checked": without the stamp the
         // scheduler would re-arm upkeep against this repository every minute.
         #expect(harness.model.repository(id: harness.repository.id)?.maintenance.lastCheckAt != nil)
@@ -1867,7 +1867,7 @@ struct AppModelStubTests {
         // disappearance.
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
+        #expect(record.failureMessage == "Stopped")
         // Deletion retires the progress entry with the phase strip — the pair
         // is installed and cleared together everywhere.
         #expect(harness.model.planProgress[harness.plan.id] == nil)
@@ -1922,7 +1922,7 @@ struct AppModelStubTests {
         }
         #expect(server.capturedRequestLines.contains { $0.contains("/ping/fail") },
                 "requests were \(server.capturedRequestLines)")
-        #expect(!harness.model.banners.contains { $0.title.hasPrefix("Could not send") },
+        #expect(!harness.model.banners.contains { $0.title.hasPrefix("Couldn’t send") },
                 "banners were \(harness.model.banners.map(\.message))")
 
         await harness.model.shutdown()
@@ -1947,7 +1947,7 @@ struct AppModelStubTests {
         // no longer lists.
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
+        #expect(record.failureMessage == "Stopped")
 
         await harness.model.shutdown()
     }
@@ -2009,7 +2009,7 @@ struct AppModelStubTests {
         #expect(record.outcome == .cancelled)
         // The removal may not cancel silently: the user learns their restore
         // stopped from a banner, not from a progress strip that never returns.
-        let cancelledBanner = await bannerTitled("Restore cancelled", in: harness.model)
+        let cancelledBanner = await bannerTitled("Restore stopped", in: harness.model)
         #expect(
             cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
@@ -2044,8 +2044,8 @@ struct AppModelStubTests {
 
         let consequences = harness.model.removalConsequences(for: harness.repository.id)
         #expect(consequences.contains("The backups in it are kept."))
-        #expect(consequences.contains("A restore from this repository is running"))
-        #expect(consequences.contains("cancelled"))
+        #expect(consequences.contains("A restore from this location is running"))
+        #expect(consequences.contains("will be stopped"))
 
         // Settled again: the disclosure returns to the base sentence.
         harness.model.cancelRestore()
@@ -2137,7 +2137,7 @@ struct AppModelStubTests {
 
         // The unreachable channel must be reported, not dropped on the floor.
         #expect(
-            harness.model.banners.contains { $0.title.contains("Could not send") } == true,
+            harness.model.banners.contains { $0.title.contains("Couldn’t send") } == true,
             "banners were: \(harness.model.banners.map(\.title))"
         )
 
@@ -2521,7 +2521,7 @@ struct AppModelStubTests {
         #expect(RunRecordPresentation.detail(for: record) == "1 unreadable item")
         let log = try logText(for: record, in: harness)
         #expect(log.contains("err  /src/gone does not exist, skipping"), "log was \(log)")
-        #expect(log.contains("note Retention removed 0 backups"))
+        #expect(log.contains("note Removed 0 backups"))
 
         await harness.model.shutdown()
     }
@@ -2672,7 +2672,7 @@ struct AppModelStubTests {
         #expect(FileManager.default.fileExists(atPath: log.path))
     }
 
-    @Test("a history the load could not read in full sweeps no logs")
+    @Test("a history the load couldn’t read in full sweeps no logs")
     func partlyUnreadableHistorySweepsNothing() async throws {
         let fixture = try sweepFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

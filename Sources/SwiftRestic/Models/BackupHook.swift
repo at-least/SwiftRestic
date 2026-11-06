@@ -42,7 +42,7 @@ struct BackupHook: Identifiable, Encodable, Sendable, Hashable {
         var displayName: String {
             switch self {
             case .ignore: "Record it and carry on"
-            case .abortBackup: "Cancel the backup"
+            case .abortBackup: "Stop the backup"
             }
         }
     }

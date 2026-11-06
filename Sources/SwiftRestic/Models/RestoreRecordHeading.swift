@@ -137,7 +137,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
             why = Self.comparedWith(record, baseline)
                 + ". Changes to permissions or timestamps alone are not marked"
         case let .failed(baseline, reason):
-            about = "Could not compare with \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
+            about = "Couldn’t compare with \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
             why = Self.comparedWith(record, baseline) + ". restic diff failed: \(reason)"
         }
         // The backup's ID stays in the tooltip (`why`); the line is only

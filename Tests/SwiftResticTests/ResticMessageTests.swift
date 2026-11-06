@@ -333,7 +333,7 @@ struct ResticMessageTests {
         }
         // A group with no "remove" key at all is a changed shape, not
         // restic's null for nothing removed.
-        #expect(throws: ResticError.malformedOutput(detail: "could not read the removal count from restic’s answer")) {
+        #expect(throws: ResticError.malformedOutput(detail: "couldn’t read the removal count from restic’s answer")) {
             try ResticService.countRemoved(forgetOutput: #"[{"keep":null}]"#)
         }
     }

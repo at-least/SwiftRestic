@@ -72,12 +72,12 @@ enum RepositoryCaption: Equatable, Sendable {
 /// still stands, the Next backup value, the sidebar caption, and the
 /// moment (`lastBackupAt`) every surface's "Last backup" counts from.
 enum PlanStatus {
-    private static let retentionSkippedFact = "Retention skipped"
-    static let unnamedUnreadFact = "Some source data could not be read"
+    private static let retentionSkippedFact = "Old backups not removed"
+    static let unnamedUnreadFact = "Some source data couldn’t be read"
     /// The plan page's empty fact when the repository holds other backups —
     /// the Overview card's count line and the Backups tab's empty state in
     /// the same words.
-    static let noneFromThisPlanFact = "None from this plan yet — the repository holds others"
+    static let noneFromThisPlanFact = "None from this plan yet. This location holds others"
     /// How many unreadable items the plan page's card lists; the drawer
     /// holds the rest. Five: the usual run names one or two, and a home
     /// folder macOS blocked in bulk is a diagnosis, not a list.
@@ -133,7 +133,7 @@ enum PlanStatus {
         // the first of them: it explains the warning past the items — a
         // decoding gap, a skipped retention step — or a hook's complaint.
         let (listedItems, unlisted) = run.unreadableItemListing(limit: listedItemLimit)
-        let explanation = run.trailingItemErrors.first
+        let explanation = run.trailingItemErrorsOnScreen.first
             ?? run.hookMessages.first
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
@@ -155,7 +155,7 @@ enum PlanStatus {
         // A retention-only warning already says so in its message; beside
         // any other fact the line stays, so the facts read as Activity's
         // Detail column does.
-        if let message, message == retentionLine(of: run), facts == [retentionSkippedFact] {
+        if let message, message.hasPrefix(RunRecord.retentionSkippedOnScreenPrefix), facts == [retentionSkippedFact] {
             facts = []
         }
         return PlanProblemSummary(

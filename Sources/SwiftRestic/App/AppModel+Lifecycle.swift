@@ -16,7 +16,7 @@ extension AppModel {
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
         }
-        if !maintenance.isEmpty { reasons.append("Repository maintenance is running.") }
+        if !maintenance.isEmpty { reasons.append("Maintenance is running.") }
         if isRestoring { reasons.append("A restore is running.") }
         if console.isRunning { reasons.append("A console command is running.") }
         return reasons
@@ -128,13 +128,13 @@ extension AppModel {
             if let recovered = loaded.recoveredFrom {
                 post(Banner(
                     title: "Your configuration was restored from a backup copy",
-                    message: "config.json could not be read; \(recovered) was loaded instead. Saving will replace both files.",
+                    message: "config.json couldn’t be read; \(recovered) was loaded instead. Saving will replace both files.",
                     isError: true
                 ))
             }
             if !loaded.decodeNotes.isEmpty {
                 post(Banner(
-                    title: "Some stored settings could not be read",
+                    title: "Some stored settings couldn’t be read",
                     message: loaded.decodeNotes.prefix(3).joined(separator: " · ")
                         + (loaded.decodeNotes.count > 3 ? " · …" : ""),
                     isError: true
@@ -143,7 +143,7 @@ extension AppModel {
         } catch {
             isConfigurationUnreadable = true
             post(Banner(
-                title: "Could not read your configuration",
+                title: "Couldn’t read your configuration",
                 message: error.localizedDescription
                     + " Your settings were not changed and nothing will be saved over the backup copies — fix the file and restart SwiftRestic.",
                 isError: true
@@ -382,7 +382,7 @@ extension AppModel {
         }
         if enabled, !isInInstallableLocation() {
             post(Banner(
-                title: "Could not start SwiftRestic at login",
+                title: "Couldn’t start SwiftRestic at login",
                 message: LoginItem.notInstalledMessage,
                 isError: true
             ))
@@ -403,7 +403,7 @@ extension AppModel {
         } catch {
             await syncFromDaemon()
             post(Banner(
-                title: "Could not change the login item",
+                title: "Couldn’t change the login item",
                 message: error.localizedDescription,
                 isError: true
             ))

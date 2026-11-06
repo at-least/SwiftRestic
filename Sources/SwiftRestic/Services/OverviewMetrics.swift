@@ -267,7 +267,7 @@ enum OverviewMetrics {
             return ProtectionRow(
                 plan: plan,
                 among: plans,
-                stateText: "No repository set",
+                stateText: "No backup location set",
                 isKnown: true, isProtected: false, didFail: false
             )
         }
@@ -313,7 +313,7 @@ enum OverviewMetrics {
             return ProtectionRow(
                 plan: plan,
                 among: plans,
-                stateText: checking ? "Checking…" : listingIdleText,
+                stateText: checking ? "Verifying…" : listingIdleText,
                 isKnown: false, isProtected: false, didFail: false
             )
         }

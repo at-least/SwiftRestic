@@ -32,7 +32,7 @@ struct RetentionPreview: Sendable, Equatable {
             groups = try ResticMessageDecoder.decodeArray(Group.self, from: forgetOutput)
         } catch {
             throw ResticError.malformedOutput(
-                                detail: "could not read which backups the retention rules would remove"
+                                detail: "couldn’t read which backups would be removed"
             )
         }
         self.init(
@@ -45,7 +45,7 @@ struct RetentionPreview: Sendable, Equatable {
     /// editor's rules are not applied yet: nothing has been removed.
     var outcomeLine: String {
         let total = kept.count + removed.count
-        guard total > 0 else { return "This plan has no backups in the repository yet." }
+        guard total > 0 else { return "This plan has no backups in this location yet." }
         if removed.isEmpty {
             return total == 1 ? "The backup would stay." : "All \(Format.plural(total, "backup")) would stay."
         }

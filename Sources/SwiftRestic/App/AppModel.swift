@@ -376,7 +376,7 @@ final class AppModel {
                 try await self.store.save(snapshot)
             } catch {
                 self.post(Banner(
-                    title: "Could not save your configuration",
+                    title: "Couldn’t save your configuration",
                     message: error.localizedDescription,
                     isError: true
                 ))

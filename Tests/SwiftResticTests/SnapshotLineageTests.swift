@@ -291,9 +291,9 @@ struct SnapshotLineageTests {
         // restic diff lists nothing when nothing changed: an honest zero.
         #expect(heading(.compared(baseline: baseline, changeCount: 0)).caption == "No changes since \(since)")
         // restic's first sentence in the caption; the whole reason in the tooltip.
-        let failed = heading(.failed(baseline: baseline, reason: "restic reported a fatal error — Fatal: injected. More."))
-        #expect(failed.caption == "Could not compare with \(since): restic reported a fatal error — Fatal: injected")
-        #expect(failed.detail.hasSuffix(" restic diff failed: restic reported a fatal error — Fatal: injected. More."))
+        let failed = heading(.failed(baseline: baseline, reason: "restic stopped with an error — Fatal: injected. More."))
+        #expect(failed.caption == "Couldn’t compare with \(since): restic stopped with an error — Fatal: injected")
+        #expect(failed.detail.hasSuffix(" restic diff failed: restic stopped with an error — Fatal: injected. More."))
 
         #expect(failed.isProblem)
         let calm: [ChangeComparison?] = [nil, .firstBackup, .comparing(baseline: baseline),

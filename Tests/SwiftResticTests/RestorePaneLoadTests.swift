@@ -132,7 +132,7 @@ struct RestorePaneLoadTests {
         ])
     }
 
-    @Test("a comparison that fails keeps the tree and says it could not compare, keeping what streamed")
+    @Test("a comparison that fails keeps the tree and says it couldn’t compare, keeping what streamed")
     func failedComparison() async throws {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z")
         let recorder = Recorder()

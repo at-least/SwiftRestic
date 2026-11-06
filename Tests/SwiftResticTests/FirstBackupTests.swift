@@ -37,7 +37,7 @@ struct FirstBackupTests {
         }
         #expect(reason(source: "", folder: "") == "Choose a folder to back up.")
         #expect(reason(folder: "") == "Choose where the backups go.")
-        #expect(reason(password: "") == "Set a repository password to save it.")
+        #expect(reason(password: "") == "Set a password to save it.")
         #expect(reason(confirm: "other") == "The passwords don’t match.")
         #expect(reason() == nil)
         var taken = Repository()

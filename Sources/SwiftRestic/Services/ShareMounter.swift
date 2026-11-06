@@ -45,7 +45,7 @@ struct ShareMounter: Sendable {
         case EAUTH: "the share did not accept the user name and password"
         case ENOENT: "the server has no share by that name"
         case ETIMEDOUT, ECONNREFUSED, EHOSTDOWN, EHOSTUNREACH, ENETUNREACH, ENETDOWN:
-            "the server could not be reached"
+            "the server couldn’t be reached"
         case EACCES, EPERM: "the server refused access"
         case ..<0: "macOS answered with error \(status)"
         default: String(cString: strerror(status)).lowercased()

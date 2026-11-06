@@ -107,7 +107,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .binaryNotFound(searched):
-            return "Could not find the restic executable. Looked in: \(searched.joined(separator: ", ")). "
+            return "Couldn’t find the restic executable. Looked in: \(searched.joined(separator: ", ")). "
                 + "Install it with brew install restic, or set the path in Settings."
         case let .binaryNotExecutable(path):
             return "The file at \(path) is not executable."
@@ -115,62 +115,52 @@ enum ResticError: Error, LocalizedError, Equatable {
             let base: String?
             switch code {
             case Self.wrongPasswordCode:
-                // The trust-critical failure carries its fix: restic's own
-                // diagnosis leaves Retry as the only next step, and Retry can
-                // never succeed here. restic's words stay for the discriminating
-                // detail (wrong password vs no matching key vs a damaged key
-                // file), first sentence only — stderr can run multi-line.
-                base = "The password doesn’t open this repository — check it in the repository editor."
+                // The fix, not restic's diagnosis, which leaves Retry as the
+                // only next step: Retry can never succeed here.
+                base = "The password doesn’t open this backup location. Check it in Edit Backup Location."
             case Self.repositoryMissingCode, Self.repositoryLockedCode:
-                // Exit 12's grammar: the fix leads, restic's first sentence
-                // keeps the detail. Exit 10's are the Add Repository
-                // button's own words, so the banner and the notification say
-                // what the drawer's button does. Exit 11's leave out the
-                // Unlock tooltip's "no run here holds it",
-                // checked when the button is offered: the stored message
-                // outlives that moment.
+                // Exit 10's are the Add Backup Location button's own words, so
+                // the banner and the notification say what the drawer's button
+                // does. Exit 11's leave out the Unlock tooltip's "no run here
+                // holds it", checked when the button is offered: the stored
+                // message outlives that moment.
                 base = code == Self.repositoryMissingCode
                     ? Self.noRepositoryAtLocation + "."
-                    : "The repository is locked — if no other Mac is using it, unlock it."
+                    : "The backup location is locked. If no other Mac is using it, unlock it."
             default:
                 base = nil
             }
-            if let base {
-                let restic = Format.firstSentence(message)
-                return restic.isEmpty ? base : "\(base) restic reported: \(restic)"
-            }
-            if let advice = Self.sshHostKeyAdvice(message) {
-                return "\(advice) restic reported: \(Format.firstSentence(message))"
-            }
+            if let base { return base }
+            if let advice = Self.sshHostKeyAdvice(message) { return advice }
             if let words = Self.rcloneWords(message) { return words }
             let known = ResticError.knownExitCodeDescription(code)
-            if message.isEmpty { return known ?? "restic exited with code \(code)." }
+            if message.isEmpty { return known ?? "It stopped unexpectedly. Show Log has the details." }
             // Exit 1 is restic's every fatal error, and its message starts
             // "Fatal:" already; a prefix only delayed the reason.
             if code == 1 { return message }
             return known.map { "\($0) — \(message)" } ?? message
         case .cancelled:
-            return "The operation was cancelled."
+            return "The operation was stopped."
         case .repositoryMissing:
-            return "This repository is no longer set up in SwiftRestic."
+            return "This backup location is no longer set up in SwiftRestic."
         case .planMissing:
             return "This plan is no longer set up in SwiftRestic."
         case let .itemNotListed(name):
             return "“\(name)” is no longer listed in the chosen backup — refresh and try again."
         case let .passwordMissing(name):
-            return "No password is stored for the repository “\(name)”."
+            return "No password is stored for “\(name)”."
         case let .processLaunchFailed(reason):
-            return "Could not start restic: \(reason)"
+            return "Couldn’t start restic: \(reason)"
         case let .timedOut(seconds, cause):
             return cause.isEmpty
                 ? "Timed out after \(Format.duration(seconds)) and was stopped."
                 : "Timed out after \(Format.duration(seconds)) and was stopped — restic kept retrying: \(cause)."
         case let .idleStalled(seconds):
-            return "restic reported no progress for \(Format.duration(seconds)), so it was stopped. Check the repository’s connection and try again."
+            return "Nothing moved for \(Format.duration(seconds)), so it was stopped. Check the location’s connection and try again."
         case let .malformedOutput(detail):
-            return "restic finished, but its answer could not be read (\(detail)). A restic update may have changed its output."
+            return "restic finished, but its answer couldn’t be read (\(detail)). A restic update may have changed its output."
         case let .stagedFileMoveFailed(path, reason):
-            return "The restored file could not be written at \(path): \(reason). Nothing at the destination was changed."
+            return "The restored file couldn’t be written at \(path): \(reason). Nothing at the destination was changed."
         case let .resticTooOld(path, found):
             let update = ResticBinary.isHomebrews(path) ? "Update it with brew upgrade restic" : "Update it"
             return "SwiftRestic needs restic \(ResticVersion.minimumSupported.dotted) or later. The restic at \(path) is \(found). \(update), or set the path to a newer one in Settings."
@@ -178,13 +168,13 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic."
         case let .snapshotsNotRemoved(removed, refused, reason):
             let cause = reason.isEmpty ? "" : " (\(reason))"
-            let advice = "Thin it where deletions are allowed, or turn retention off."
+            let advice = "Turn off removing old backups, or allow deletions on this storage."
             guard removed > 0 else {
-                return "The repository refused to delete \(Format.plural(refused, "backup"))\(cause) — it may be append-only or locked. \(advice)"
+                return "The location refused to delete \(Format.plural(refused, "backup"))\(cause) — it may be append-only or locked. \(advice)"
             }
             let others = removed == 1 ? "the other one was removed" : "the other \(removed) were removed"
-            return "The repository refused to delete \(refused) of the \(removed + refused) backups retention chose\(cause); \(others). "
-                + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off."
+            return "The location refused to delete \(refused) of the \(removed + refused) old backups\(cause); \(others). "
+                + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage."
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         case let .fileInTheWay(path):
@@ -192,6 +182,15 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .notRestored(paths):
             return "\(Format.list(paths)) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
         }
+    }
+
+    /// restic's own first sentence behind a failure whose `errorDescription`
+    /// says the fix instead: kept on the run for Copy Details
+    /// (`RunRecord.resticDetail`). The log has the whole of it.
+    var resticDetail: String? {
+        guard case let .commandFailed(_, message) = self else { return nil }
+        let first = Format.firstSentence(message)
+        return first.isEmpty ? nil : first
     }
 
     /// What to do when ssh refused the server's host key — the line ssh
@@ -212,17 +211,14 @@ enum ResticError: Error, LocalizedError, Equatable {
     static func rcloneWords(_ message: String) -> String? {
         if message.contains(#"exec: "rclone": executable file not found"#) { return rcloneMissing }
         // restic's line says only "error talking HTTP to rclone"; rclone's
-        // own verdict (`ResticRunResult.rcloneComplaint`) leads, as exit
-        // 12's fix does, restic's first sentence keeping the detail.
-        let restic = Format.firstSentence(message)
+        // own verdict (`ResticRunResult.rcloneComplaint`) is the news.
         if let complaint = message.split(separator: "\n").last(where: { $0.hasPrefix("rclone: ") }) {
-            let verdict = Format.withoutFinalPeriod(String(complaint))
-            return "\(verdict). restic reported: \(restic)"
+            return "\(Format.withoutFinalPeriod(String(complaint)))."
         }
         // restic waits a minute (its rclone.timeout) for rclone to answer,
         // and a remote that never answers gives rclone nothing to say yet.
         if message.contains("error talking HTTP to rclone"), message.contains("context deadline exceeded") {
-            return "rclone did not answer within a minute — its remote may be unreachable. restic reported: \(restic)"
+            return "rclone did not answer within a minute — its remote may be unreachable."
         }
         return nil
     }
@@ -233,16 +229,16 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     /// Exit 10's cause and fix, for every kind of location; a disk's also
     /// gets Locate beside it (`RunFix.locate`).
-    static let noRepositoryAtLocation = "No repository is at its location — put it back, or add it where it is now as a new repository"
+    static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
-        case 1: "restic reported a fatal error"
+        case 1: "restic stopped with an error"
         case 2: "restic stopped unexpectedly"
-        case 3: "Finished, but some data could not be read"
-        case repositoryMissingCode: "The repository does not exist"
-        case repositoryLockedCode: "The repository is already locked by another process"
-        case wrongPasswordCode: "Wrong repository password or no matching key"
+        case 3: "Finished, but some data couldn’t be read"
+        case repositoryMissingCode: "The backup location does not exist"
+        case repositoryLockedCode: "The backup location is locked by another process"
+        case wrongPasswordCode: "Wrong password"
         case 130: "restic was interrupted"
         default: nil
         }

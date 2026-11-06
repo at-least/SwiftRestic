@@ -22,7 +22,7 @@ extension AppModel {
     /// do not list what restic no longer holds until the next refresh.
     func runConsoleCommand(repositoryID: UUID, arguments: [String]) async -> String {
         guard let repository = repository(id: repositoryID) else {
-            return "No such repository."
+            return "No such backup location."
         }
         defer {
             if CommandLineTokenizer.mayChangeSnapshots(arguments) { scheduleSnapshotRefresh(repositoryID: repositoryID) }

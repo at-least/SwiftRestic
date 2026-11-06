@@ -17,7 +17,7 @@ extension AppModel {
     var lockedRepositories: [UUID: String] {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
-            let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
+            let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
         // A backup holds the exclusive lock only in its forget step. Not by
@@ -25,11 +25,11 @@ extension AppModel {
         // child, still holding the lock, dies.
         for (planID, run) in activity where run.isInRetentionStep {
             guard reasons[run.repositoryID] == nil else { continue }
-            let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
+            let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
             // The live label, as the sidebar shows it; the run's own copy
             // only once Remove Plan has taken the plan.
             let planName = plan(id: planID).map { label(of: $0) } ?? run.planName
-            reasons[run.repositoryID] = "\(name) is applying retention for “\(planName)” — backups wait until it finishes."
+            reasons[run.repositoryID] = "\(name) is removing old backups of “\(planName)”. Backups wait until it finishes."
         }
         return reasons
     }
@@ -133,7 +133,7 @@ extension AppModel {
                 // stayed, as the success banner names the one it cleaned.
                 self.post(
                     Banner(
-                        title: "Could not unlock “\(label(of: repository))”",
+                        title: "Couldn’t unlock “\(label(of: repository))”",
                         message: error.localizedDescription,
                         isError: true
                     )

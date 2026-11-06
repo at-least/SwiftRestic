@@ -940,7 +940,7 @@ struct TolerantDecodingTests {
             _ = try await ConfigStore(directory: directory).load()
             Issue.record("a corrupt configuration must not load as anything")
         } catch let error as ConfigStore.ConfigError {
-            #expect(error.localizedDescription.contains("could not be read"))
+            #expect(error.localizedDescription.contains("couldn’t be read"))
         }
     }
 

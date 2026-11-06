@@ -151,13 +151,13 @@ struct RunDetailPanel: View {
             }
         }
         if let repositoryID = run.repositoryID, let repositoryName {
-            DetailRow("Repository") {
+            DetailRow("Location") {
                 Button(repositoryName) { router.selection = .repository(repositoryID) }
                     .buttonStyle(.link)
-                    .help("Open this repository")
+                    .help("Open this location")
             }
         } else {
-            DetailRow("Repository", "No longer set up in SwiftRestic")
+            DetailRow("Location", "No longer set up in SwiftRestic")
         }
     }
 
@@ -207,7 +207,7 @@ struct RunDetailPanel: View {
                         .foregroundStyle(.secondary)
                 }
                 // The decoding gap and the retention skip explain themselves.
-                ForEach(Array(run.trailingItemErrors.enumerated()), id: \.offset) { _, message in
+                ForEach(Array(run.trailingItemErrorsOnScreen.enumerated()), id: \.offset) { _, message in
                     Text(message)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -244,7 +244,7 @@ struct RunDetailPanel: View {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.
                 if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {
-                    // The Plan menu's predicate, as the plan page's and the
+                    // The Backup menu's predicate, as the plan page's and the
                     // sidebar's buttons read it — without it the button is
                     // clickable while running or restic-less and quietly
                     // does nothing.
@@ -273,7 +273,7 @@ struct RunDetailPanel: View {
     }
 }
 
-/// A failure's one known fix, through the Repository menu's own path: the
+/// A failure's one known fix, through the Location menu's own path: the
 /// editor sheet, or the confirmed Unlock.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
@@ -290,7 +290,7 @@ struct RunFixButton: View {
             case .addRepository: router.request(.newRepository)
             case let .locate(id): locate(id)
             case let .editPlanShare(id): router.request(.editPlan(id))
-            case let .editPlanRetention(id): router.request(.editPlanRetention(id))
+            case let .editPlanRetention(id): router.request(.editPlan(id, tab: .retention))
             case let .pruneNow(id): router.request(.confirm(.prune(id)))
             }
         }
@@ -324,9 +324,9 @@ struct ConsoleRouteButton: View {
             model.pointConsole(at: repositoryID)
             openWindow(id: SwiftResticApp.consoleWindowID)
         }
-        // The Repository menu's console item's own rule.
+        // The Location menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("Type restic repair there — the repository’s password is supplied")
+        .help("Type restic repair there. The password is supplied")
     }
 }
 
@@ -350,12 +350,12 @@ private struct RunSnapshotRow: View {
                 completenessMark(for: snapshot.id)
                 browseButton(snapshot.id)
             case .removed?:
-                Text("\(short) — no longer in the repository")
+                Text("\(short) — no longer in the location")
                     .monospaced()
                     .textSelection(.enabled)
-                    .help("Removed after this run — by retention or another app")
+                    .help("Removed after this run, by this plan’s rules or another app")
             case .unavailable?:
-                let help = "This repository’s list of backups isn’t loaded right now"
+                let help = "This location’s list of backups isn’t loaded right now"
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
                 completenessMark(for: snapshotID)
                 Button("Browse") {}
@@ -363,7 +363,7 @@ private struct RunSnapshotRow: View {
                     .help(help)
             case .repositoryGone?, nil:
                 identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
-                    .help("This repository is no longer set up in SwiftRestic")
+                    .help("This backup location is no longer set up in SwiftRestic")
             }
         }
         .controlSize(.small)

@@ -13,7 +13,7 @@ struct RootView: View {
     @State private var editingPlan: BackupPlan?
     /// The tab `editingPlan` opens on: Files, except for a refused
     /// retention's fix. Back to Files when the sheet goes.
-    @State private var editingPlanTab: PlanEditorSheet.Tab = .files
+    @State private var editingPlanTab: PlanEditorTab = .files
     @State private var editingRepository: Repository?
     /// The repository editor is up for a first plan, and once it has saved
     /// one the plan editor follows, in it (`continuePlanAfterRepository`).
@@ -454,7 +454,7 @@ struct RootView: View {
         }
         switch intent {
         case .newPlan:
-            // Into the repository on screen — the one the Repository menu
+            // Into the repository on screen — the one the Location menu
             // acts on — or the editor's own default when there is none.
             startNewPlan(in: model.commandRepositoryID(for: router.selection))
         case let .newPlanIn(id):
@@ -473,12 +473,10 @@ struct RootView: View {
             runSelectedPlan()
         case let .stopPlan(id):
             if model.planCommands(for: .plan(id)).canStop { model.cancelBackup(planID: id) }
-        case let .editPlan(id):
-            editingPlan = model.plan(id: id)
-        case let .editPlanRetention(id):
+        case let .editPlan(id, tab):
             // Only with a sheet to open: its dismissal is what resets the tab.
             if let plan = model.plan(id: id) {
-                editingPlanTab = .retention
+                editingPlanTab = tab
                 editingPlan = plan
             }
         case let .editRepository(id):

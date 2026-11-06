@@ -1,6 +1,10 @@
 import Observation
 import SwiftUI
 
+/// Here, not nested in the sheet: the test bundle compiles this file without
+/// the views.
+enum PlanEditorTab: CaseIterable { case files, schedule, retention }
+
 /// Not on `AppModel`: none of this is domain state — it is the navigation
 /// surface the views and the menu bar share, and pane switches would
 /// otherwise write through the same object the domains mutate. Intents
@@ -17,15 +21,14 @@ final class AppRouter {
         case newRepository
         case showFind
         case runSelectedPlan
-        // The Plan and Repository menus' targeted asks carry their target
+        // The Backup and Location menus' targeted asks carry their target
         // rather than read the selection when consumed: the ask may wait for
         // a window, and the selection may move meanwhile. runSelectedPlan is
         // the exception — its item enables against the live selection, and
         // the consume re-checks planCommands(for: router.selection) the same
         // way.
         case stopPlan(UUID)
-        case editPlan(UUID)
-        case editPlanRetention(UUID)
+        case editPlan(UUID, tab: PlanEditorTab = .files)
         case editRepository(UUID)
         case confirm(CommandConfirmation)
     }

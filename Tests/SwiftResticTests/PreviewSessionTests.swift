@@ -107,14 +107,14 @@ struct PreviewSessionTests {
         #expect(previewFolders(in: scene.model).isEmpty)
     }
 
-    @Test("a node that fails names the failure Could not preview, with the error's own words, and copies nothing")
+    @Test("a node that fails names the failure Couldn’t preview, with the error's own words, and copies nothing")
     func failedNodeFailsThePreview() async throws {
         let scene = try await makeScene()
         defer { try? FileManager.default.removeItem(at: scene.root) }
         let session = PreviewSession()
         session.start(scene.model, repositoryID: scene.repository.id, snapshotID: scene.snapshotID, node: { throw NodeGone() })
         try #require(await eventually(within: 30) { session.failure != nil })
-        #expect(session.failure == PreviewSession.Failure(title: "Could not preview", message: "the node is gone"))
+        #expect(session.failure == PreviewSession.Failure(title: "Couldn’t preview", message: "the node is gone"))
         #expect(session.url == nil)
         #expect(previewFolders(in: scene.model).isEmpty)
     }

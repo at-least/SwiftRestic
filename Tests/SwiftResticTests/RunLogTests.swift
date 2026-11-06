@@ -36,7 +36,7 @@ struct RunLogTests {
                 .init(time: at(1), kind: .output(.stderr), text: "/src/gone does not exist, skipping"),
                 .init(time: at(1), kind: .output(.stdout), text: #"{"message_type":"summary","files_new":1}"#),
                 .init(time: at(1), kind: .exit(3), text: "3"),
-                .init(time: at(2), kind: .note, text: "Retention removed 0 backups"),
+                .init(time: at(2), kind: .note, text: "Removed 0 backups"),
             ],
             headCount: 5,
             omittedLineCount: 0,
@@ -55,7 +55,7 @@ struct RunLogTests {
         #expect(Array(lines.prefix(5)) == [
             "SwiftRestic 0.1.0 (1) · macOS 26.6.2 (Build 25G83)",
             "restic 0.19.1 compiled with go1.26.5 on darwin/arm64",
-            "Backup of “Documents” — repository “Home NAS” (Local folder or disk)",
+            "Backup of “Documents” — location “Home NAS” (Local folder or disk)",
             "Started 2026-09-26 07:58:17 +0000",
             "",
         ], "log began \(lines.prefix(5))")
@@ -63,7 +63,7 @@ struct RunLogTests {
         #expect(lines.contains("07:58:18 err  /src/gone does not exist, skipping"))
         #expect(lines.contains(#"07:58:18 out  {"message_type":"summary","files_new":1}"#))
         #expect(lines.contains("07:58:18 exit 3"))
-        #expect(lines.contains("07:58:19 note Retention removed 0 backups"))
+        #expect(lines.contains("07:58:19 note Removed 0 backups"))
         #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Completed with warnings"))
         #expect(lines.contains("Backup 61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"))
         #expect(lines.contains("Files: 1 new, 0 changed, 2 unmodified · processed \(Format.bytes(5000)) · added \(Format.bytes(5300))"))
@@ -127,7 +127,7 @@ struct RunLogTests {
             transcript: RunTranscript.Contents(),
             timeZone: TimeZone(identifier: "UTC")!
         )
-        #expect(text.contains("Restore of “Budget.numbers” — repository no longer set up in SwiftRestic"))
+        #expect(text.contains("Restore of “Budget.numbers” — location no longer set up in SwiftRestic"))
         #expect(text.contains("Restored 1 file, \(Format.bytes(14)); 0 kept as they were"))
         #expect(text.contains("Restored to /tmp/restored/Budget.numbers"))
         #expect(text.contains("No restic command ran."))

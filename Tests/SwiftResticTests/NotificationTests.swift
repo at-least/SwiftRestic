@@ -320,7 +320,7 @@ struct NotificationTests {
         retentionOnly.itemErrorCount = 0
         let body = AppModel.notificationBody(for: retentionOnly)
         #expect(!body.contains("unreadable"), "body was \(body)")
-        #expect(body == "Completed with warnings: Retention skipped.")
+        #expect(body == "Completed with warnings: Old backups not removed.")
     }
 
     @MainActor
@@ -328,9 +328,9 @@ struct NotificationTests {
     func failedNotificationBodyIsOneSentence() {
         var record = RunRecord(kind: .backup, planName: "Code")
         record.outcome = .failed
-        record.failureMessage = "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
+        record.failureMessage = "restic stopped with an error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
         #expect(AppModel.notificationBody(for: record)
-            == "Failed: restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
+            == "Failed: restic stopped with an error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
         record.failureMessage = nil
         #expect(AppModel.notificationBody(for: record) == "Failed.")
     }

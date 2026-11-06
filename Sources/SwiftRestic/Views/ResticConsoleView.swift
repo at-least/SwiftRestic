@@ -41,9 +41,9 @@ struct ResticConsoleView: View {
             // start at the same x, as the editors' grids do.
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 10) {
                 GridRow {
-                    Text("Repository")
+                    Text("Location")
                         .gridColumnAlignment(.trailing)
-                    Picker("Repository", selection: $console.repositoryID) {
+                    Picker("Location", selection: $console.repositoryID) {
                         Text("Choose").tag(UUID?.none)
                         ForEach(model.configuration.repositories) { repository in
                             Text(model.label(of: repository)).tag(UUID?.some(repository.id))
@@ -51,7 +51,7 @@ struct ResticConsoleView: View {
                     }
                     .labelsHidden()
                     .fixedSize()
-                    .accessibilityLabel("Repository")
+                    .accessibilityLabel("Location")
                 }
                 GridRow {
                     Text("restic")
@@ -97,7 +97,7 @@ struct ResticConsoleView: View {
             }
 
             ExpandableCaption(
-                summary: "The repository and its credentials are supplied for you.",
+                summary: "The location and its credentials are supplied for you.",
                 detail: "Output is restic’s own — nothing here is parsed by the app."
             )
         }

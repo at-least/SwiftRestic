@@ -61,14 +61,15 @@ extension AppModel {
         ProblemDotsStore.save(problemsSeenAt, to: viewDefaults)
     }
 
-    /// The sidebar's Activity badge: the week's problems
-    /// (`OverviewMetrics.problems`, healed ones too) that finished after
-    /// Activity was last open. Opening Activity is the Mail "read" for all of
-    /// them at once; the rows stay in the history (the user's pick, 2026-10-25).
+    /// The sidebar's Activity badge: the week's problems the menu bar still
+    /// stands for (`OverviewMetrics.isHealed`) that finished after Activity
+    /// was last open. Opening Activity is the Mail "read" for all of them at
+    /// once; the rows stay in the history (the user's pick, 2026-10-25).
     func activityBadgeCount(now: Date) -> Int {
         let seenAt = activitySeenAt ?? .distantPast
-        return OverviewMetrics.problems(in: configuration.runs, since: OverviewMetrics.problemWindowStart(from: now))
-            .filter { $0.finishedAt > seenAt }
+        let runs = configuration.runs
+        return OverviewMetrics.problems(in: runs, since: OverviewMetrics.problemWindowStart(from: now))
+            .filter { $0.finishedAt > seenAt && !OverviewMetrics.isHealed($0, in: runs) }
             .count
     }
 

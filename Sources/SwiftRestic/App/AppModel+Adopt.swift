@@ -123,7 +123,7 @@ extension AppModel {
             confirmation: ConfirmationCopy(
                 title: "Continue “\(name)” on this Mac?",
                 message: "Nothing is written to “\(label(of: repository))”."
-                    + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
+                    + " If another Mac still runs this plan, both Macs share one history and the same rules for removing old backups"
                     + " — continue only backups no other Mac is still making."
             )
         )
@@ -148,7 +148,7 @@ extension AppModel {
         post(Banner(
             title: "Continuing “\(label(of: draft))”",
             message: count == 0
-                ? "Its backups are no longer in the repository."
+                ? "Its backups are no longer in this location."
                 : count == 1
                     ? "Its 1 existing backup is now its history."
                     : "Its \(Format.plural(count, "existing backup")) are now its history.",

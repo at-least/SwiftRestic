@@ -36,7 +36,7 @@ struct RunLogSheet: View {
                     LogTextView(text: text, finder: finder)
                 } else if let failure {
                     ContentUnavailableView(
-                        "The log could not be read",
+                        "The log couldn’t be read",
                         systemImage: "exclamationmark.triangle",
                         description: Text(failure)
                     )

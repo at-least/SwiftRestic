@@ -153,7 +153,7 @@ final class ConsoleModel {
         runTask = Task { [weak self] in
             let result = await command(repositoryID, arguments)
             // No cancellation guard here: the runner answers a stop with
-            // "The operation was cancelled.", and nothing else writes this
+            // "The operation was stopped.", and nothing else writes this
             // state while the command runs — the message must reach the pane.
             self?.output = result
             self?.isRunning = false

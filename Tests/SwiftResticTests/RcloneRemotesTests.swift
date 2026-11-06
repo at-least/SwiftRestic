@@ -52,7 +52,7 @@ struct RcloneRemotesTests {
         try writeExecutableScript(body, label: "Rclone", named: "rclone")
     }
 
-    @Test("rclone's remotes, none yet, or why it could not list them")
+    @Test("rclone's remotes, none yet, or why it couldn’t list them")
     func setup() async throws {
         let lister = RcloneRemoteLister(runner: ResticRunner())
         let listed = try stubRclone(#"printf 'gd:  drive \nnas: sftp  Home box\n'"#)
@@ -64,12 +64,12 @@ struct RcloneRemotesTests {
         // rclone 1.75.2's words for a config it cannot parse.
         let broken = try stubRclone(#"echo '2026/10/25 18:07:23 CRITICAL: Failed to load config file "/x/rclone.conf": could not parse line: [bad' >&2; exit 1"#)
         #expect(await lister.list(binary: broken)
-            == .unreadable(#"rclone could not list its remotes: Failed to load config file "/x/rclone.conf": could not parse line: [bad"#))
+            == .unreadable(#"rclone couldn’t list its remotes: Failed to load config file "/x/rclone.conf": could not parse line: [bad"#))
         // An encrypted config, as rclone 1.75.2 answers it with no stdin.
         let encrypted = try stubRclone(#"printf 'Enter configuration password:\npassword:' >&2; echo '2026/10/25 18:07:29 CRITICAL: Failed to read line: EOF' >&2; exit 1"#)
         #expect(await lister.list(binary: encrypted) == .unreadable(RcloneSetup.passwordProtected))
         // A failure with nothing on stderr must not end the sentence on a colon.
         let silent = try stubRclone("exit 1")
-        #expect(await lister.list(binary: silent) == .unreadable("rclone could not list its remotes."))
+        #expect(await lister.list(binary: silent) == .unreadable("rclone couldn’t list its remotes."))
     }
 }

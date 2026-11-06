@@ -363,7 +363,7 @@ struct OperationProgressView: View {
                 Text(title).font(.headline)
                 Spacer()
                 if let onCancel {
-                    Button("Cancel", action: onCancel)
+                    Button("Stop", action: onCancel)
                         .controlSize(.small)
                 }
             }
@@ -618,7 +618,7 @@ struct PathListEditor: View {
     let title: String
     @Binding var paths: [String]
     var placeholder = "Add a pattern"
-    var browseMessage = "Choose folders and files to leave out of backups"
+    var browseMessage = "Choose folders and files to exclude from backups"
     var browsePrompt = "Add"
     /// Excludes: an item chosen in the panel or dropped from Finder is
     /// entered as its own path, matching itself alone (`PathListEntry`).
@@ -957,8 +957,8 @@ struct ItemErrorHintsView: View {
                 }
             } message: {
                 Text(excluding.count == 1
-                    ? "The plan’s next backups skip it — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again."
-                    : "The plan’s next backups skip them — backups already made keep them. The plan editor lists them under Also skip, where − takes each out again.")
+                    ? "The plan’s next backups exclude it — backups already made keep it. The plan editor lists it under Also exclude, where − takes it out again."
+                    : "The plan’s next backups exclude them — backups already made keep them. The plan editor lists them under Also exclude, where − takes each out again.")
             }
         }
     }
@@ -976,7 +976,7 @@ struct ItemErrorHintsView: View {
         }
         .controlSize(.small)
         .disabled(pending.isEmpty)
-        .modifier(TileHelp(help: pending.isEmpty ? "“\(model.label(of: plan))” already skips these items" : nil))
+        .modifier(TileHelp(help: pending.isEmpty ? "“\(model.label(of: plan))” already excludes these items" : nil))
         .accessibilityLabel(label)
         .accessibilityInputLabels([title, label])
     }
@@ -1064,7 +1064,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(paths: [path], fromPlan: plan.id) }
             }
         } message: {
-            Text("The plan’s next backups skip \(path ?? "") — backups already made keep it. The plan editor lists it under Also skip, where − takes it out again.")
+            Text("The plan’s next backups exclude \(path ?? "") — backups already made keep it. The plan editor lists it under Also exclude, where − takes it out again.")
         }
         .task(id: path) {
             await existence.check(path)

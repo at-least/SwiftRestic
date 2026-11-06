@@ -141,9 +141,7 @@ struct NotificationEvent: Sendable, Equatable {
         let subject = planName.isEmpty
             ? repositoryName
             : RunRecordPresentation.planWithRepository(planName, repositoryName: repositoryName)
-        // The app's word for the run, as every screen says it; the payload's
-        // `operation` keeps the word filters match on (`payloadOperation`).
-        let operation = kind.displayName
+        let operation = kind.channelSummaryName
         switch stage {
         case .started:
             return "\(operation) started: \(subject)"

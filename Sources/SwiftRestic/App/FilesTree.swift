@@ -468,7 +468,7 @@ extension FilesTree.Entry {
     func spokenStanding(notRead: String?) -> String? {
         switch standing {
         case .onDisk: nil
-        case .notBackedUp: notRead.map { "not backed up, the newest backup could not read it, \($0)" } ?? "not backed up"
+        case .notBackedUp: notRead.map { "not backed up, the newest backup couldn’t read it, \($0)" } ?? "not backed up"
         case let .deleted(lastBackedUp): "not on this Mac, last backed up \(Format.timestamp(lastBackedUp.time))"
         }
     }
@@ -491,7 +491,7 @@ extension FilesTree.Entry {
     /// add the sentence's period; the tooltip, like every tooltip, ends
     /// without one.
     static func notBackedUpReason(notRead: String?) -> String {
-        notRead.map { "The newest backup could not read it (\($0))" } ?? "No backup of this plan holds it"
+        notRead.map { "The newest backup couldn’t read it (\($0))" } ?? "No backup of this plan holds it"
     }
 
     static func deleted(lastBackedUp: Date) -> String {
@@ -534,12 +534,12 @@ struct FilesSearchAnswer: Equatable {
 
     /// The index's words while it has backups still to read — the Files
     /// pane's browsing banner says them.
-    static let indexStillReading = "The index is still reading this repository — older backups may be missing."
+    static let indexStillReading = "Still reading backups. Older ones may be missing."
 
     /// The index's words while it can still be missing matches — every
     /// search answer that may be short says them: a Files tab's empty state
     /// and its footer.
-    static let searchStillReading = "The index is still reading this repository — some matches may be missing."
+    static let searchStillReading = "Still reading backups. Some matches may be missing."
     /// A capped search, in every search's footer: no count, since a pane
     /// may list only a subset of what the cap counted, and not "the first",
     /// since each list re-sorts what the index cut in its own order.

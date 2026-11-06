@@ -53,8 +53,8 @@ enum Format {
         var cuts = ["\n", "。"].compactMap { trimmed.range(of: $0)?.lowerBound }
         // ". " ends a sentence only when something sentence-shaped follows:
         // a capital starting the next one, or restic — a name that is always
-        // spelled lowercase, and opens the wrong-password message's second
-        // sentence. Anything else — "U.S. region" — is an abbreviation the
+        // spelled lowercase, and opens the second sentence of messages stored
+        // by older builds. Anything else — "U.S. region" — is an abbreviation the
         // cut would have truncated mid-thought.
         var searchEnd = trimmed.startIndex
         while let range = trimmed.range(of: ". ", range: searchEnd..<trimmed.endIndex) {
@@ -280,8 +280,8 @@ enum Format {
         case .incomplete?:
             let unreadable = run?.itemErrorCount ?? 0
             return unreadable > 0
-                ? "Incomplete: \(plural(unreadable, "item")) could not be read"
-                : "Incomplete: some of the source data could not be read"
+                ? "Incomplete: \(plural(unreadable, "item")) couldn’t be read"
+                : "Incomplete: some of the source data couldn’t be read"
         case .complete?:
             return "Complete"
         case .unknown?, nil:

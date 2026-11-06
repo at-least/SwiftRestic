@@ -317,7 +317,7 @@ actor ResticRunner {
                 box.terminate()
             }
         } catch is CancellationError {
-            transcript?.note("Stopped: cancelled")
+            transcript?.note("Stopped")
             throw ResticError.cancelled
         }
         let exitCode = result.exitCode

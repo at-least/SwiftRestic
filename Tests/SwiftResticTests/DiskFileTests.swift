@@ -68,6 +68,6 @@ struct DiskFileTests {
         #expect(DiskFile.link.line(versions: [], isReading: false) == "On this Mac it is a link")
         #expect(DiskFile.other.line(versions: [], isReading: false) == "On this Mac it is not a file")
         #expect(DiskFile.unreadable("Permission denied. More text.").line(versions: [], isReading: false)
-            == "On this Mac it could not be read: \(Format.firstSentence("Permission denied. More text."))")
+            == "On this Mac it couldn’t be read: \(Format.firstSentence("Permission denied. More text."))")
     }
 }

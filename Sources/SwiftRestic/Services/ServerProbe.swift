@@ -137,7 +137,7 @@ struct ServerProbe: Sendable {
             default: String(cString: strerror(code.rawValue)).lowercased()
             }
         case .dns:
-            "its name could not be found"
+            "its name couldn’t be found"
         default:
             "\(error)"
         }

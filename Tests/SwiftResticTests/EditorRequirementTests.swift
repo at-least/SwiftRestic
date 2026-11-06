@@ -13,7 +13,7 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder or file to back up.")
 
         plan.path = "/Users/demo/Documents"
-        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a repository to save it.")
+        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a backup location to save it.")
 
         plan.repositoryID = UUID()
         #expect(EditorRequirements.plan(plan, isNew: true, among: []) == nil, "a complete plan has nothing to name")
@@ -31,7 +31,7 @@ struct EditorRequirementTests {
 
         var draft = BackupPlan()
         draft.repositoryID = home
-        let taken = "This repository already has a plan for this folder or file."
+        let taken = "This location already has a plan for this folder or file."
         for spelling in ["/Users/demo/Documents", "/Users/demo/Documents/", " /Users/demo/Documents"] {
             draft.path = spelling
             #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == taken, "spelled \(spelling)")
@@ -112,7 +112,7 @@ struct EditorRequirementTests {
             == "Choose a folder to save it.")
         draft.localPath = "/Volumes/Backup/restic"
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
-            == "Set a repository password to save it.")
+            == "Set a password to save it.")
 
         // Each backend names its own required pair rather than the local one,
         // and every one is pinned so a field rename cannot desync its copy.
@@ -246,7 +246,7 @@ struct EditorRequirementTests {
         draft.localPath = "/Volumes/Backup/restic"
 
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, hasStoredPassword: nil, among: [])
-            == "Set a repository password to save it.")
+            == "Set a password to save it.")
         #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "no", isNew: true, hasStoredPassword: nil, among: [])
             == "The passwords don’t match.")
         #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "secret", isNew: true, hasStoredPassword: nil, among: [])
@@ -264,7 +264,7 @@ struct EditorRequirementTests {
 
         // Known absent: the blank field is the gap the listing already names.
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
-            == "Enter the repository password to save it.")
+            == "Enter the password to save it.")
         #expect(EditorRequirements.repository(draft, password: "secret", confirmPassword: "", isNew: false, hasStoredPassword: false, among: [])
             == nil)
         // Stored, or not yet known (the Keychain still answering, or its

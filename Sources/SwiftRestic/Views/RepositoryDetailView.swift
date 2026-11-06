@@ -34,10 +34,10 @@ struct RepositoryDetailView: View {
             if let repository {
                 content(repository)
             } else {
-                ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
+                ContentUnavailableView("Backup location not found", systemImage: "questionmark.folder")
             }
         }
-        .navigationTitle(repository.map { model.label(of: $0) } ?? "Repository")
+        .navigationTitle(repository.map { model.label(of: $0) } ?? "Backup Location")
         // The toolbar holds the search field alone; the page's verbs are the
         // menus' — the HIG's macOS toolbars: "it doesn't make sense to
         // provide a toolbar item for every menu item".
@@ -170,7 +170,7 @@ struct RepositoryDetailView: View {
                                 .monospacedDigit()
                             }
                             Spacer()
-                            Button("Cancel") {
+                            Button("Stop") {
                                 model.cancelMaintenance(repositoryID: repositoryID)
                             }
                             .controlSize(.small)
@@ -191,7 +191,7 @@ struct RepositoryDetailView: View {
                 let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
                 let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
                 DetailGrid {
-                    DetailRow("Last check") {
+                    DetailRow("Last verified") {
                         MaintenanceRunValue(
                             text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
                             run: check
@@ -199,7 +199,7 @@ struct RepositoryDetailView: View {
                     }
                     let hold = model.scheduleHold
                     let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
-                    DetailRow("Next check", Scheduler.nextMaintenanceText(
+                    DetailRow("Next verification", Scheduler.nextMaintenanceText(
                         .check, of: repository, among: model.configuration.repositories,
                         hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
                         isRunning: model.maintenance[repositoryID]?.task == .check, now: now
@@ -229,7 +229,7 @@ struct RepositoryDetailView: View {
 
                 if model.repositoriesMissingPassword.contains(repositoryID) {
                     Label(
-                        "Waiting for a repository password — nothing is scheduled until one is saved.",
+                        "Waiting for a password. Nothing is scheduled until one is saved.",
                         systemImage: "key.fill"
                     )
                     .font(.callout)
@@ -261,7 +261,7 @@ private struct MaintenanceRunValue: View {
                 }
             }
             .buttonStyle(HoverableButtonStyle())
-            .help("Show this run in Activity")
+            .help("Show in Activity")
         } else {
             Text(text)
         }

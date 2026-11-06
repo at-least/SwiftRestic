@@ -6,13 +6,23 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         /// Remove from Earlier Backups: `restic rewrite --forget`.
         case rewrite
 
-        /// A forget is "Retention", the word every other surface uses for it
-        /// (the plan page's row, "Retention skipped");
-        /// a prune is the maintenance task's own word.
         var displayName: String {
             switch self {
-            case .forget: "Retention"
+            case .forget: "Old Backups"
             case .prune: MaintenanceTask.prune.displayName
+            case .check: MaintenanceTask.check.displayName
+            case .rewrite: "Removal"
+            default: rawValue.capitalized
+            }
+        }
+
+        /// The first word of a webhook's or chat channel's `summary`, which
+        /// people and filters have read as these words; a rename on screen
+        /// never changes what a channel receives.
+        var channelSummaryName: String {
+            switch self {
+            case .forget: "Retention"
+            case .prune: "Cleanup"
             case .rewrite: "Removal"
             default: rawValue.capitalized
             }
@@ -47,7 +57,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             case .succeeded: "Succeeded"
             case .completedWithErrors: "Completed with warnings"
             case .failed: "Failed"
-            case .cancelled: "Cancelled"
+            case .cancelled: "Stopped"
             case .skipped: "Skipped"
             }
         }
@@ -126,6 +136,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// to a webhook or chat channel.
     var hookMessages: [String] = []
     var failureMessage: String?
+    /// restic's first sentence, for Copy Details: `failureMessage` says what
+    /// to do instead (`ResticError.resticDetail`).
+    var resticDetail: String?
     /// A plain-text result: the tail of what `prune` printed (it has no JSON
     /// output in restic 0.19.1, so this is the only record of what it did; the drawer shows
     /// it among the run's messages), a check's verdict, or what Apply
@@ -271,7 +284,11 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         itemErrorTally = c.optional(.itemErrorTally)
         fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)
         hookMessages = c.value(.hookMessages, default: [])
-        failureMessage = c.optional(.failureMessage)
+        // Records from before a stop read "Stopped" carry the old word, which
+        // would no longer match the outcome and show as a second message.
+        let storedFailure: String? = c.optional(.failureMessage)
+        failureMessage = storedFailure == "Cancelled" ? RunRecord.Outcome.cancelled.displayName : storedFailure
+        resticDetail = c.optional(.resticDetail)
         detailText = c.optional(.detailText)
         resticVersion = c.optional(.resticVersion)
         hasLog = c.value(.hasLog, default: false)
@@ -315,6 +332,7 @@ extension RunRecord {
     /// spelling must stay in sync — and records already in history carry
     /// these exact bytes.
     static let retentionSkippedPrefix = "Retention skipped: "
+    static let retentionSkippedOnScreenPrefix = "Old backups not removed: "
 
     /// A network repository's server out of reach (`ServerProbe`): "“Home
     /// Server” cannot be reached (connection refused)." — a skipped run's
@@ -327,7 +345,7 @@ extension RunRecord {
     /// explains it — restic exited 3 and named nothing. The in-app banner and
     /// the plan page's status row both fall back to it, so the two agree
     /// word for word.
-    static let unexplainedWarningMessage = "Finished, but restic reported problems."
+    static let unexplainedWarningMessage = "Finished, but some items may not be backed up."
 
     /// Whether the snapshot a backup wrote holds everything it was asked to.
     /// restic keeps no such fact in the snapshot itself (`snapshots --json`
@@ -377,6 +395,15 @@ extension RunRecord {
     /// then the retention line (`itemErrors`' order).
     var trailingItemErrors: ArraySlice<String> {
         itemErrors.dropFirst(unreadableItems.count)
+    }
+
+    /// `trailingItemErrors` as the app says them. A channel still receives
+    /// the stored line (`retentionSkippedPrefix`).
+    var trailingItemErrorsOnScreen: [String] {
+        trailingItemErrors.map { line in
+            guard line.hasPrefix(Self.retentionSkippedPrefix) else { return line }
+            return Self.retentionSkippedOnScreenPrefix + line.dropFirst(Self.retentionSkippedPrefix.count)
+        }
     }
 
     /// The backup run that wrote each snapshot, keyed by full snapshot ID —
@@ -452,7 +479,7 @@ extension RunRecord {
         guard resticMessage.contains("write \(root)/") else { return nil }
         let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac’s disk"
         return "\(disk) is full — the backup needed more room than it has free. "
-            + "What it uploaded before it stopped stays in the repository until a cleanup frees it."
+            + "What it uploaded before it stopped stays in the location until a cleanup frees it."
     }
 
     /// Why a backup failed when the plan's folder is not on this Mac and no
@@ -546,6 +573,7 @@ extension RunRecord {
         let cancelled = ResticError.isCancellation(error)
         outcome = cancelled ? .cancelled : .failed
         failureMessage = cancelled ? cancellationMessage : error.localizedDescription
+        resticDetail = (error as? ResticError)?.resticDetail
     }
 }
 

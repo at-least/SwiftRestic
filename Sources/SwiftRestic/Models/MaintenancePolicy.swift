@@ -83,14 +83,14 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
     var displayName: String {
         switch self {
         case .prune: "Cleanup"
-        case .check: "Check"
+        case .check: "Verification"
         }
     }
 
     var inFlightTitle: String {
         switch self {
         case .prune: "Cleaning up…"
-        case .check: "Checking…"
+        case .check: "Verifying…"
         }
     }
 }

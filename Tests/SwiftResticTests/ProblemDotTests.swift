@@ -204,10 +204,16 @@ struct ProblemDotTests {
         let model = makeModel()
         // Stamps are "now": the first problem predates the mark, the second
         // lands after it, as real runs do.
+        // A failure its plan's next backup healed is not the badge's, as it
+        // is not the menu bar's.
         model.configuration.runs = [
             record(.succeeded, finishedAt: .now.addingTimeInterval(-1_800)),
             record(.failed, finishedAt: .now.addingTimeInterval(-3_600)),
         ]
+        #expect(model.activityBadgeCount(now: .now) == 0)
+        #expect(MenuBarStatus.problemLine(runs: model.configuration.runs, hasNoRepositories: false) == nil)
+
+        model.configuration.runs = [record(.failed, finishedAt: .now.addingTimeInterval(-3_600))]
         #expect(model.activityBadgeCount(now: .now) == 1)
 
         model.markActivitySeen()

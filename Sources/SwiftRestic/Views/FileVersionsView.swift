@@ -159,7 +159,7 @@ struct FileVersionsView: View {
         VStack(spacing: 10) {
             HStack {
                 if let detailsError {
-                    Label("Sizes and dates could not be read", systemImage: "exclamationmark.triangle")
+                    Label("Sizes and dates couldn’t be read", systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .help(detailsError)
@@ -187,7 +187,7 @@ struct FileVersionsView: View {
                 if previewer.isCopying {
                     ProgressView()
                         .controlSize(.small)
-                        .help("Copying the chosen version out of the repository for the preview")
+                        .help("Copying the chosen version for the preview")
                 }
                 let blocked = chosen.flatMap { previewBlock(for: $0) }
                 Button("Preview") { preview() }
@@ -206,7 +206,6 @@ struct FileVersionsView: View {
     /// the bottom bar's button's restore. Return is the list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
-            title: "Restore…",
             isEnabled: chosen != nil && !model.isRestoring,
             run: restoreChosen
         )
@@ -263,9 +262,9 @@ struct FileVersionsView: View {
     /// Why a version cannot be previewed, or nil: the repository and restic
     /// first, as the drag's gate, then its size (`VersionPreview`).
     private func previewBlock(for version: ContentVersion) -> String? {
-        guard model.repository(id: node.repositoryID) != nil else { return "The repository no longer exists" }
+        guard model.repository(id: node.repositoryID) != nil else { return "The backup location no longer exists" }
         if let absence = model.resticAbsence {
-            return absence == .missing ? "Preview needs restic, which could not be found" : "Preview needs restic: \(absence.words)"
+            return absence == .missing ? "Preview needs restic, which couldn’t be found" : "Preview needs restic: \(absence.words)"
         }
         return VersionPreview.unavailableReason(size: detail(of: version)?.size, isReading: isReadingDetails)
     }

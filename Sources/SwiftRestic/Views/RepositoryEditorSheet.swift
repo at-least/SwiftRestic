@@ -104,6 +104,12 @@ struct RepositoryEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if isNew {
+                Text("Add Backup Location")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding([.horizontal, .top], 20)
+            }
             settingsForm
             // Held while restic is asked: the probe checks the fields as
             // they were when it began, and Save then stores the fields as
@@ -148,7 +154,7 @@ struct RepositoryEditorSheet: View {
                     Button("Save Anyway") { Task { await save(verifying: false) } }
                         .disabled(isWorking)
                 }
-                Button(isNew ? "Add Repository" : "Save") { Task { await save() } }
+                Button(isNew ? "Add Backup Location" : "Save") { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSubmit || isWorking)
@@ -258,7 +264,7 @@ struct RepositoryEditorSheet: View {
                 }
             }
 
-            Section("Location") { locationFields }
+            Section("Where") { locationFields }
 
             Section("Encryption") {
                 // The Keychain's password stays out of sight until it needs
@@ -271,7 +277,7 @@ struct RepositoryEditorSheet: View {
                 } else {
                     // A grouped form draws its fields without a border, so an
                     // empty one needs its prompt to be seen at all.
-                    SecureField("Repository password", text: $password, prompt: Text(passwordPrompt))
+                    SecureField("Password", text: $password, prompt: Text(passwordPrompt))
                 }
                 if isNew {
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
@@ -464,7 +470,7 @@ struct RepositoryEditorSheet: View {
             HStack {
                 TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
                 Button("Choose…") {
-                    if let url = FilePicker.chooseDirectory(message: "Choose the repository folder") {
+                    if let url = FilePicker.chooseDirectory(message: "Choose the folder for your backups") {
                         draft.localPath = url.path
                     }
                 }
@@ -596,7 +602,7 @@ struct RepositoryEditorSheet: View {
             // Prefill failed — say so. Blank fields would read as "no
             // password stored" and a save would silently keep whatever the
             // Keychain actually holds, hiding the failure either way.
-            status = .failure("Could not read the password from your Keychain: \(error.localizedDescription)")
+            status = .failure("Couldn’t read the password from your Keychain: \(error.localizedDescription)")
             secretsReadFailed = true
         }
     }
@@ -656,7 +662,7 @@ struct RepositoryEditorSheet: View {
             )
 
             if try await service.repositoryExists(context, timeout: EditorRequirements.probeTimeout) {
-                status = .ok("Connected to the existing repository.")
+                status = .ok("Connected to the existing backups.")
                 return true
             }
             guard initializeIfMissing else {
@@ -664,10 +670,10 @@ struct RepositoryEditorSheet: View {
                 return false
             }
             _ = try await service.initializeRepository(context)
-            status = .ok("Created a new repository.")
+            status = .ok("Created a new backup location.")
             return true
         } catch ResticError.timedOut {
-            status = .failure("No answer from the repository in \(Int(EditorRequirements.probeTimeout)) seconds — check that it is reachable.")
+            status = .failure("No answer from the location in \(Int(EditorRequirements.probeTimeout)) seconds. Check that it is reachable.")
             return false
         } catch {
             status = .failure(error.localizedDescription)
@@ -732,8 +738,8 @@ struct RepositoryEditorSheet: View {
                 try await model.saveNetworkShare(share, password: sharePassword)
             } catch {
                 model.post(Banner(
-                    title: "Could not save the password for “\(share.url)”",
-                    message: "The repository “\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
+                    title: "Couldn’t save the password for “\(share.url)”",
+                    message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
                     isError: true
                 ))
             }

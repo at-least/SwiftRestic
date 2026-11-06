@@ -34,13 +34,13 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No activity yet",
                     systemImage: "list.bullet.rectangle",
-                    description: Text("Backups, retention, checks, cleanups and restores show here when they finish.")
+                    description: Text("Backups, verifications, cleanups and restores show here when they finish.")
                 )
             } else if runs.isEmpty {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
-                    description: Text("Nothing in the history failed or completed with warnings.")
+                    description: Text("Nothing in Activity failed or completed with warnings.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {
@@ -88,7 +88,7 @@ struct ActivityView: View {
                     // those rows' stored name is the repository's, so a sort
                     // on this header would order their "—" cells by a value
                     // on screen nowhere.
-                    TableColumn("Subject") { run in
+                    TableColumn("Name") { run in
                         Group {
                             switch run.kind {
                             case .backup, .forget, .rewrite, .restore:
@@ -107,23 +107,23 @@ struct ActivityView: View {
                     // before runs carried a repository or a repository since
                     // removed; the data cannot tell the two apart, so the
                     // tooltip says both and asserts neither.
-                    TableColumn("Repository") { run in
+                    TableColumn("Location") { run in
                         if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
                             Text(name)
                                 .help(name)
                         } else {
                             Text("—")
-                                .help("The repository isn’t known. It may have been removed")
+                                .help("The location isn’t known. It may have been removed")
                         }
                     }
                     .width(min: 96, ideal: 104, max: 140)
 
-                    TableColumn("Kind") { run in
+                    TableColumn("Action") { run in
                         Text(run.kind.displayName)
                     }
-                    .width(min: 64, ideal: 72, max: 72)
+                    .width(min: 72, ideal: 88, max: 104)
 
-                    TableColumn("Detail") { run in
+                    TableColumn("Result") { run in
                         let detail = RunRecordPresentation.detail(for: run)
                         Text(detail)
                             .foregroundStyle(run.outcome == .failed ? Theme.danger : .secondary)
@@ -162,7 +162,7 @@ struct ActivityView: View {
                         }
                         Divider()
                     }
-                    Button("Clear History", role: .destructive) {
+                    Button("Clear Activity…", role: .destructive) {
                         isConfirmingClear = true
                     }
                 }
@@ -195,15 +195,15 @@ struct ActivityView: View {
             }
         }
         .confirmationDialog(
-            "Clear the history in Activity?",
+            "Clear Activity?",
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
-            Button("Clear History") {
+            Button("Clear Activity", role: .destructive) {
                 model.clearRunHistory()
             }
         } message: {
-            Text("This permanently removes the history and its logs. The backups in your repositories aren’t affected.")
+            Text("This permanently removes the list and its logs. Your backups aren’t affected.")
         }
         .sheet(item: $loggedRun) { run in
             RunLogSheet(run: run)

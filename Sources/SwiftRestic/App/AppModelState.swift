@@ -17,10 +17,10 @@ struct PlanActivity: Sendable, Equatable {
             switch self {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
-            case .applyingRetention: "Applying retention…"
+            case .applyingRetention: "Removing old backups…"
             case .runningHooks: "Running hooks…"
             case .notifying: "Sending notifications…"
-            case .cancelling: "Cancelling…"
+            case .cancelling: "Stopping…"
             }
         }
     }

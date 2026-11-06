@@ -20,7 +20,7 @@ struct DragRestoreProviderTests {
         let orphan = model.dragRestoreProvider(repositoryID: UUID(), snapshotID: "s1", node: node)
         #expect(orphan.registeredTypeIdentifiers.isEmpty)
         let gone = try #require(model.banners.first)
-        #expect(gone.title == "Could not restore “a.txt”")
+        #expect(gone.title == "Couldn’t restore “a.txt”")
         #expect(gone.message.contains("no longer exists"))
         #expect(gone.isError)
 
@@ -31,7 +31,7 @@ struct DragRestoreProviderTests {
         let unresolved = model.dragRestoreProvider(repositoryID: repository.id, snapshotID: "s1", node: node)
         #expect(unresolved.registeredTypeIdentifiers.isEmpty)
         #expect(model.banners.contains {
-            $0.title == "Could not restore “a.txt”"
+            $0.title == "Couldn’t restore “a.txt”"
                 && $0.message == ResticError.binaryNotFound(searched: ResticBinary.searchPaths).localizedDescription
         })
     }

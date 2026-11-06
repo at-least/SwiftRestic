@@ -56,7 +56,7 @@ struct SettingsView: View {
                         try await model.removeNetworkShare(share)
                     } catch {
                         model.post(Banner(
-                            title: "Could not remove the password for “\(share.url)”",
+                            title: "Couldn’t remove the password for “\(share.url)”",
                             message: error.localizedDescription,
                             isError: true
                         ))
@@ -64,7 +64,7 @@ struct SettingsView: View {
                 }
             }
         } message: { share in
-            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the repository’s or plan’s editor.")
+            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the location’s or plan’s editor.")
         }
         .task {
             await model.refreshFullDiskAccess()
@@ -313,7 +313,7 @@ struct NotificationsTab: View {
         switch testOutcomes[current.id] {
         case let .failed(failure):
             Label {
-                Text("Could not send the test: " + failure)
+                Text("Couldn’t send the test: " + failure)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {

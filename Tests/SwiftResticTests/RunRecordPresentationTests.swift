@@ -138,7 +138,7 @@ struct RunRecordPresentationTests {
                 for: RunRecord(kind: .check, planName: "Home Disk", repositoryID: home.id),
                 plans: [],
                 repositories: [home]
-            ) == "Check log — Home Disk"
+            ) == "Verification log — Home Disk"
         )
         #expect(
             RunRecordPresentation.logSheetTitle(
@@ -213,8 +213,8 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
-        #expect(RunFix.editRepository(repository).title == "Edit Repository…")
-        #expect(RunFix.addRepository.title == "Add Repository…")
+        #expect(RunFix.editRepository(repository).title == "Edit Backup Location…")
+        #expect(RunFix.addRepository.title == "Add Backup Location…")
         #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
         // The failure message beside the button already says the cause.
         #expect(RunFix.editRepository(repository).help == nil)
@@ -244,7 +244,7 @@ struct RunRecordPresentationTests {
         refused.planID = nil
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
-        #expect(RunFix.editRepositoryShare(repository).title == "Edit Repository…")
+        #expect(RunFix.editRepositoryShare(repository).title == "Edit Backup Location…")
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
@@ -278,7 +278,7 @@ struct RunRecordPresentationTests {
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")
     func repositoryFull() {
-        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the repository until a cleanup frees it."
+        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the location until a cleanup frees it."
         var onDrive = Repository()
         onDrive.kind = .local
         onDrive.localPath = "/Volumes/TinyDisk/repo"
@@ -331,7 +331,7 @@ struct RunRecordPresentationTests {
         // A check that found damage: its verdict, not a crash, is the news.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
-        #expect(MaintenanceRetry.check(repository).title == "Check Again…")
+        #expect(MaintenanceRetry.check(repository).title == "Verify Again…")
         #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
@@ -377,15 +377,15 @@ struct RunRecordPresentationTests {
 
         #expect(detail(backup {
             $0.outcome = .failed
-            $0.failureMessage = "The repository does not exist — Fatal: …"
-        }) == "The repository does not exist — Fatal: …")
+            $0.failureMessage = "The backup location does not exist — Fatal: …"
+        }) == "The backup location does not exist — Fatal: …")
 
         // restic's multi-line tail stays in the drawer; the scan line keeps
         // the first sentence.
         #expect(detail(backup {
             $0.outcome = .failed
-            $0.failureMessage = "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
-        }) == "restic reported a fatal error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
+            $0.failureMessage = "restic stopped with an error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory\nIs there a repository at the following location?"
+        }) == "restic stopped with an error — Fatal: unable to open config file: stat /Volumes/T/config: no such file or directory")
 
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
@@ -399,12 +399,12 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.itemErrors = ["/a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
             $0.itemErrorCount = 1
-        }) == "1 unreadable item · Retention skipped")
+        }) == "1 unreadable item · Old backups not removed")
 
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
             $0.itemErrors = [RunRecord.retentionSkippedPrefix + "locked"]
-        }) == "Retention skipped")
+        }) == "Old backups not removed")
 
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
@@ -422,7 +422,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.exitCode = 3
             $0.filesNew = 1
-        }) == "Some source data could not be read")
+        }) == "Some source data couldn’t be read")
 
         // …and it stays said when other facts come along: a skipped retention
         // step or a failing hook must not stand in for the unread data.
@@ -430,12 +430,12 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.exitCode = 3
             $0.itemErrors = [RunRecord.retentionSkippedPrefix + "locked"]
-        }) == "Some source data could not be read · Retention skipped")
+        }) == "Some source data couldn’t be read · Old backups not removed")
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
             $0.exitCode = 3
             $0.hookMessages = ["Hook “notify” exited 1"]
-        }) == "Some source data could not be read · 1 failed hook")
+        }) == "Some source data couldn’t be read · 1 failed hook")
 
         // A reporting gap alone: nothing was unreadable, and the line itself
         // is the explanation.
@@ -590,7 +590,7 @@ struct RunRecordPresentationTests {
         )
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Backup of “Documents” — Completed with warnings")
-        #expect(lines.contains("Repository: Home NAS"))
+        #expect(lines.contains("Location: Home NAS"))
         #expect(lines.contains("Backup: \(snapshotID)"))
         #expect(lines.contains("restic exit: 3"))
         #expect(lines.contains("Unreadable items (1):"))
@@ -614,7 +614,7 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
         )
         let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Retention of “Documents” — Succeeded")
+        #expect(lines.first == "Old Backups of “Documents” — Succeeded")
         #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
@@ -635,7 +635,7 @@ struct RunRecordPresentationTests {
         )
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Restore of “Budget.numbers” — Succeeded")
-        #expect(lines.contains("Repository: No longer set up in SwiftRestic"))
+        #expect(lines.contains("Location: No longer set up in SwiftRestic"))
         #expect(lines.contains("Backup: abf728998814d029"))
         #expect(lines.contains("Item: /src/Documents/Budget.numbers"))
         #expect(lines.contains("Restored to: /tmp/restored/Budget.numbers"))
@@ -658,5 +658,43 @@ struct RunRecordPresentationTests {
         let lines = text.components(separatedBy: "\n")
         #expect(lines.contains("Item: Entire backup"), "details were \(lines)")
         #expect(lines.contains("Restored to: /tmp/restored"))
+    }
+
+    @Test("restic's own sentence stays out of the message and in Copy Details")
+    func resticDetailReachesCopyDetailsOnly() throws {
+        var run = RunRecord(kind: .backup, planName: "Documents")
+        run.setOutcome(
+            from: ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password or no key found"),
+            cancellationMessage: "Stopped"
+        )
+        #expect(run.failureMessage?.contains("Fatal") == false)
+        #expect(run.resticDetail == "Fatal: wrong password or no key found")
+        let lines = RunRecordPresentation.detailsText(
+            for: run, repositoryName: "Home NAS",
+            versionsNow: RunLogVersions(app: "1", macOS: "26", restic: "0.19.1")
+        ).components(separatedBy: "\n")
+        #expect(lines.contains("restic: Fatal: wrong password or no key found"))
+
+        let decoded = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(run))
+        #expect(decoded.resticDetail == run.resticDetail)
+    }
+
+    @Test("a stop stored in the old word still reads as the outcome, not as a second message")
+    func oldCancelledMessageIsTheOutcome() throws {
+        let stored = #"{"kind":"backup","outcome":"cancelled","failureMessage":"Cancelled"}"#
+        let run = try JSONDecoder().decode(RunRecord.self, from: Data(stored.utf8))
+        #expect(run.outcome.displayName == "Stopped")
+        #expect(run.failureMessage == run.outcome.displayName)
+    }
+
+    @Test("a channel keeps the words it has always received; the app says the new ones")
+    func channelWordsDoNotFollowTheScreen() {
+        #expect(RunRecord.Kind.forget.displayName == "Old Backups")
+        #expect(RunRecord.Kind.forget.channelSummaryName == "Retention")
+        #expect(RunRecord.Kind.forget.payloadOperation == "Retention")
+        #expect(RunRecord.Kind.check.displayName == "Verification")
+        #expect(RunRecord.Kind.check.channelSummaryName == "Check")
+        #expect(RunRecord.Kind.check.payloadOperation == "Check")
+        #expect(RunRecord.Kind.prune.channelSummaryName == "Cleanup")
     }
 }

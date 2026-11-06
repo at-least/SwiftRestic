@@ -162,7 +162,7 @@ struct FindFilesView: View {
     }
 
     private func name(of repositoryID: UUID) -> String {
-        model.repository(id: repositoryID).map { model.label(of: $0) } ?? "Repository"
+        model.repository(id: repositoryID).map { model.label(of: $0) } ?? "Location"
     }
 
     /// A repository out of reach is no longer being read: "still reading"
@@ -219,7 +219,7 @@ struct FindFilesView: View {
             }
 
             if model.configuration.repositories.count > 1 {
-                TableColumn("Repository") { row in
+                TableColumn("Location") { row in
                     Text(name(of: row.repositoryID))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -282,7 +282,7 @@ struct FindFilesView: View {
                     .disabled(!model.isResticAvailable || previewer.isCopying)
                 }
             } else if picked.count > 1, Self.oneRepository(picked) {
-                Button("Restore \(Format.plural(picked.count, "Item"))…") { restoreSelection(picked) }
+                Button("Restore…") { restoreSelection(picked) }
                     .disabled(model.isRestoring)
             }
         }
@@ -313,7 +313,7 @@ struct FindFilesView: View {
                     .help(failure.message)
             }
             Spacer()
-            Button("Restore Selected…") { restoreSelection(selectedRows) }
+            Button("Restore…") { restoreSelection(selectedRows) }
                 .buttonStyle(.borderedProminent)
                 // Same grammar as the Restore pane: Return offers the
                 // restore, always through the destination sheet, where the
@@ -322,7 +322,7 @@ struct FindFilesView: View {
                 .disabled(!canRestoreSelection)
                 .help(Self.oneRepository(selectedRows)
                     ? "Restore the selected items, each from the backup it was found in (Return)"
-                    : "Select items from one repository at a time")
+                    : "Select items from one location at a time")
         }
         .padding(12)
     }
@@ -365,7 +365,6 @@ struct FindFilesView: View {
     /// What the page restores, for File ▸ Restore: the selected rows.
     private var restore: RestoreCommand {
         RestoreCommand(
-            title: "Restore Selected…",
             isEnabled: canRestoreSelection,
             run: { restoreSelection(selectedRows) }
         )

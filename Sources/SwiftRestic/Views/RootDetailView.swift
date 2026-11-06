@@ -81,7 +81,7 @@ struct RootDetailView: View {
                             onAdoptGroup: onAdoptGroup
                         )
                     } else {
-                        ContentUnavailableView("Repository not found", systemImage: "questionmark.folder")
+                        ContentUnavailableView("Backup location not found", systemImage: "questionmark.folder")
                     }
                 case let .orphanPlan(repositoryID, planID):
                     OtherGroupView(

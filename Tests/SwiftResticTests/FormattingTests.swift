@@ -16,7 +16,7 @@ struct FormattingTests {
         #expect(Format.timestamp(nil) == "—")
     }
 
-    @Test("duration rejects anything a clock could not have measured")
+    @Test("duration rejects anything a clock couldn’t have measured")
     func durationGuards() {
         #expect(Format.duration(-1) == "—")
         #expect(Format.duration(.infinity) == "—")
@@ -50,7 +50,7 @@ struct FormattingTests {
         #expect(Format.plural(2, "match", "matches") == "2 matches")
     }
 
-    @Test("a snapshot's completeness reads as a count of what could not be read, or not at all")
+    @Test("a snapshot's completeness reads as a count of what couldn’t be read, or not at all")
     func snapshotCompletenessLabels() {
         func backup(exitCode: Int32?, unreadable: Int) -> RunRecord {
             var record = RunRecord(kind: .backup)
@@ -59,11 +59,11 @@ struct FormattingTests {
             record.itemErrorCount = unreadable
             return record
         }
-        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 3)) == "Incomplete: 3 items could not be read")
-        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 1)) == "Incomplete: 1 item could not be read")
+        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 3)) == "Incomplete: 3 items couldn’t be read")
+        #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 1)) == "Incomplete: 1 item couldn’t be read")
         #expect(
             Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 0))
-                == "Incomplete: some of the source data could not be read"
+                == "Incomplete: some of the source data couldn’t be read"
         )
         #expect(Format.snapshotCompleteness(backup(exitCode: 0, unreadable: 0)) == "Complete")
         // No exit code and no errors: nothing is known, so nothing is said.
@@ -280,7 +280,7 @@ struct FormattingTests {
         )
         #expect(
             Format.firstSentence(wrongPassword.localizedDescription)
-                == "The password doesn’t open this repository — check it in the repository editor",
+                == "The password doesn’t open this backup location",
             "a sentence that starts with restic is still a sentence"
         )
         #expect(Format.firstSentence("first\nsecond") == "first", "a newline is a boundary")

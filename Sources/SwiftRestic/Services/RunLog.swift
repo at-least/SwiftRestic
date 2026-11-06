@@ -44,8 +44,8 @@ enum RunLog {
         let clock = formatter("HH:mm:ss", timeZone: timeZone)
         let stamp = formatter("yyyy-MM-dd HH:mm:ss Z", timeZone: timeZone)
         let repository = repositoryName.map { name in
-            "repository “\(name)”" + (repositoryKind.map { " (\($0))" } ?? "")
-        } ?? "repository no longer set up in SwiftRestic"
+            "location “\(name)”" + (repositoryKind.map { " (\($0))" } ?? "")
+        } ?? "location no longer set up in SwiftRestic"
 
         var lines = [
             "\(versions.app) · \(versions.macOS)",

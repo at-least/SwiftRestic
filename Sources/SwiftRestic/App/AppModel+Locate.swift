@@ -13,13 +13,13 @@ enum LocateRefusal: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .neverRead(name):
-            "SwiftRestic hasn’t read “\(name)” on this Mac, so it can’t tell whether this is the same repository. Add it where it is now as a new repository."
+            "SwiftRestic hasn’t read “\(name)” on this Mac, so it can’t tell whether this is the same backup location. Add it where it is now as a new one."
         case let .differentRepository(name):
-            "This folder holds a different repository, so “\(name)” stays where it was."
+            "This folder holds different backups, so “\(name)” stays where it was."
         case .noRepository:
-            "No repository is in this folder."
+            "No backups are in this folder."
         case let .wrongPassword(name):
-            "The password saved for “\(name)” doesn’t open the repository in this folder."
+            "The password saved for “\(name)” doesn’t open the backups in this folder."
         case let .alreadySetUp(other):
             "“\(other)” is already at this location."
         case .busy:

@@ -164,13 +164,13 @@ extension AppModel {
                 // than describing where it is (the HIG's Writing).
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
                     post(Banner(
-                        title: "Could not send a notification",
+                        title: "Couldn’t send a notification",
                         message: "Notifications are turned off for SwiftRestic.",
                         level: .warning,
                         link: Banner.Link(title: "Open Notification Settings", url: Self.notificationSettingsURL)
                     ))
                 } else {
-                    post(Banner(title: "Could not send a notification", message: error.localizedDescription, level: .warning))
+                    post(Banner(title: "Couldn’t send a notification", message: error.localizedDescription, level: .warning))
                 }
             }
         }
@@ -215,7 +215,7 @@ extension AppModel {
         case .failed:
             return record.failureMessage.map { "Failed: \(Format.firstSentence($0))" } ?? "Failed."
         case .cancelled:
-            return "Cancelled."
+            return "Stopped."
         case .skipped:
             return record.detailText ?? "Skipped."
         }

@@ -319,15 +319,15 @@ enum BackupRunEngine {
                     let removed = try await RunTranscript.$current.withValue(transcript) {
                         try await service.forget(context, plan: plan)
                     }
-                    transcript.note("Retention removed \(Format.plural(removed, "backup"))")
+                    transcript.note("Removed \(Format.plural(removed, "backup"))")
                 } catch where ResticError.isCancellation(error) {
-                    // The user's stop, "Stop Applying Retention" in the Plan
+                    // The user's stop, "Stop Removing Old Backups" in the Plan
                     // menu or the tray, or a quit: recorded
                     // as every stop is, never as the lock failure below. The
                     // snapshot stands and is already stamped, so nothing
                     // stamps the run again.
                     record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
-                    transcript.note("Retention stopped")
+                    transcript.note("Stopped removing old backups")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
                     // takes a shared one, so a second plan backing up to the
@@ -339,7 +339,7 @@ enum BackupRunEngine {
                     // backup's, live, and the next backup's retention runs
                     // again by itself.
                     let reason = if case ResticError.commandFailed(exitCode: 11, _) = error {
-                        "another backup or job held the repository’s lock — retention runs again after the next backup."
+                        "another backup or job was using the location. Old backups are removed after the next backup."
                     } else {
                         error.localizedDescription
                     }

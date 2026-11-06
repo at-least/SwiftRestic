@@ -9,7 +9,7 @@ SwiftRestic is a native macOS backup app in the spirit of Arq, with
 [restic](https://restic.net) doing the work underneath. It backs up folders
 on a schedule to local disks, SFTP, S3-compatible storage, Backblaze B2,
 rclone remotes and restic REST servers; browses and restores any backup; keeps a searchable index of every
-file in every backup; runs retention, prune and check for each repository;
+file in every backup; removes old backups, frees their space and verifies each backup location;
 and reports through macOS notifications, webhooks, Slack, Discord and
 Healthchecks.io.
 
@@ -48,10 +48,10 @@ would need a Developer ID, the hardened runtime and notarization.
 
 - Settings: `~/Library/Application Support/com.newlix.SwiftRestic/config.json`,
   with the two previous generations beside it.
-- Repository passwords and backend secrets: the login Keychain.
-- The search index: one SQLite file per repository, `index/` beside
+- Backup location passwords and storage secrets: the login Keychain.
+- The search index: one SQLite file per backup location, `index/` beside
   `config.json`. It holds the path of every file in every backup, unencrypted,
-  and is rebuilt from the repository on request.
+  and is rebuilt from the location on request.
 - Each run's log: `Logs/` beside `config.json`, deleted with its run record.
   It holds the restic command lines and restic's messages, never a password
   or a hook's output.

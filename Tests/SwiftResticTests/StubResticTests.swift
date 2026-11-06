@@ -873,7 +873,7 @@ struct StubResticTests {
         let warned = try makeFixture(mode: "warn")
         defer { cleanUp(warned.root) }
         let warnedAnswer = try await warned.service.runRaw(warned.context, arguments: ["backup"])
-        #expect(warnedAnswer.hasSuffix("\n\n[exit 3: Finished, but some data could not be read]"))
+        #expect(warnedAnswer.hasSuffix("\n\n[exit 3: Finished, but some data couldn’t be read]"))
 
         // Both streams, stdout's summary first: the join the console shows.
         let both = try makeFixture(mode: "tccblocked")
@@ -914,7 +914,7 @@ struct StubResticTests {
         #expect(outcome.exitCode == 0)
         #expect(outcome.summary == nil)
         #expect(outcome.completedWithErrors)
-        #expect(outcome.decodingWarning?.hasPrefix("restic reported no summary") == true)
+        #expect(outcome.decodingWarning?.hasPrefix("The backup gave no summary") == true)
         #expect(outcome.itemErrors.isEmpty)
     }
 
@@ -1198,19 +1198,19 @@ struct StubResticTests {
             _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: 5)
         } throws: { error in
             guard case let ResticError.malformedOutput(detail) = error else { return false }
-            return detail.hasPrefix("the snapshot list could not be read")
+            return detail.hasPrefix("the snapshot list couldn’t be read")
         }
         await #expect {
             _ = try await fixture.service.stats(fixture.context, timeout: 5)
         } throws: { error in
             guard case let ResticError.malformedOutput(detail) = error else { return false }
-            return detail.hasPrefix("the size answer could not be read")
+            return detail.hasPrefix("the size answer couldn’t be read")
         }
         await #expect {
             _ = try await fixture.service.find(fixture.context, patterns: ["/src"])
         } throws: { error in
             guard case let ResticError.malformedOutput(detail) = error else { return false }
-            return detail.hasPrefix("the find results could not be read")
+            return detail.hasPrefix("the find results couldn’t be read")
         }
     }
 

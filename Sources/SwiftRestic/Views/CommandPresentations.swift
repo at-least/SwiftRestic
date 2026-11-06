@@ -6,7 +6,7 @@ private struct CheckTarget: Identifiable {
 }
 
 /// Every command's confirmation, once, the dialogs and Check's sheet, wherever they are asked from: the Plan and
-/// Repository menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
+/// Location menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
 /// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
 /// action two ways, and none adds a dialog of its own. A modifier of its
 /// own because RootView's chain sits at the compiler's type-check limit.
@@ -115,12 +115,12 @@ private struct CheckSheet: View {
                 Text("All of the data").tag(100)
             }
             .fixedSize()
-            .help("Reading data back finds damage the structure check misses, and takes longer")
+            .help("Reading data back finds damage the quick verification misses, and takes longer")
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Check") {
+                Button("Verify") {
                     run(readDataPercent)
                     dismiss()
                 }

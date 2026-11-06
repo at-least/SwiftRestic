@@ -91,7 +91,7 @@ struct FilesPaneView: View {
     @ViewBuilder
     private var content: some View {
         if let loadError {
-            IndexFailureView(title: "Could not read its backups", message: loadError, repositoryID: node.repositoryID)
+            IndexFailureView(title: "Couldn’t read its backups", message: loadError, repositoryID: node.repositoryID)
         } else if !didOpen {
             // The first read only: a re-read while the index has not
             // reached the item yet keeps the empty state up rather than
@@ -189,7 +189,7 @@ private struct FolderPaneActions: View {
                     .disabled(newest == nil)
                     .help("Open the newest backup at this folder on the Backups tab")
                 Spacer()
-                Button("Restore Folder…") { restoreFolder() }
+                Button("Restore…") { restoreFolder() }
                     .buttonStyle(.borderedProminent)
                     .disabled(newest == nil || model.isRestoring)
                     .help("Restore this whole folder as of the newest backup")
@@ -197,7 +197,6 @@ private struct FolderPaneActions: View {
             .padding(12)
         }
         .restoreCommand(RestoreCommand(
-            title: "Restore Folder…",
             isEnabled: newest != nil && !model.isRestoring,
             run: restoreFolder
         ))

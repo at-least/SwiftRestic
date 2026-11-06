@@ -17,18 +17,18 @@ struct ResticErrorTests {
 
     @Test("a known code prefixes restic's message; an unknown code gets the raw text")
     func commandFailedDescriptions() {
-        // The wrong-password failure carries its fix, plus restic's words for
-        // the discriminating detail — Retry can never succeed here.
+        // Retry can never succeed here, so the failure carries its fix, and
+        // restic's own words go to Copy Details.
         let wrongPassword = ResticError.commandFailed(
             exitCode: 12,
             message: "Fatal: wrong password"
         ).errorDescription ?? ""
-        #expect(wrongPassword.contains("doesn’t open this repository"))
-        #expect(wrongPassword.contains("check it in the repository editor"))
-        #expect(wrongPassword.contains("Fatal: wrong password"))
+        #expect(wrongPassword == "The password doesn’t open this backup location. Check it in Edit Backup Location.")
+        #expect(ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password").resticDetail == "Fatal: wrong password")
+        #expect(ResticError.commandFailed(exitCode: 12, message: "").resticDetail == nil)
         #expect(
             ResticError.commandFailed(exitCode: 12, message: "")
-                .errorDescription?.contains("check it in the repository editor") == true
+                .errorDescription?.contains("Check it in Edit Backup Location") == true
         )
 
         // A missing repository and a lock carry their fix the same way: the
@@ -36,19 +36,19 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(
             exitCode: 10,
             message: "Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory"
-        ).errorDescription == "No repository is at its location — put it back, or add it where it is now as a new repository. restic reported: Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory")
+        ).errorDescription == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
         #expect(ResticError.commandFailed(exitCode: 10, message: "").errorDescription
-            == "No repository is at its location — put it back, or add it where it is now as a new repository.")
+            == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
         #expect(ResticError.commandFailed(
             exitCode: 11,
             message: "Fatal: repository is locked"
-        ).errorDescription == "The repository is locked — if no other Mac is using it, unlock it. restic reported: Fatal: repository is locked")
+        ).errorDescription == "The backup location is locked. If no other Mac is using it, unlock it.")
 
         let known = ResticError.commandFailed(
             exitCode: 3,
             message: "warning: at least one source file could not be read"
         ).errorDescription ?? ""
-        #expect(known.contains("some data could not be read"))
+        #expect(known.contains("some data couldn’t be read"))
         #expect(known.contains("warning: at least one source file could not be read"))
 
         let bare = ResticError.commandFailed(
@@ -63,7 +63,7 @@ struct ResticErrorTests {
         )
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "")
-                .errorDescription == "restic exited with code 99."
+                .errorDescription == "It stopped unexpectedly. Show Log has the details."
         )
     }
 
@@ -107,14 +107,14 @@ struct ResticErrorTests {
         let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
         #expect(unknownText.hasPrefix("SSH does not know this server’s key yet"))
         #expect(unknownText.contains("Connect to it once in Terminal with ssh"))
-        #expect(unknownText.hasSuffix("restic reported: \(fatal)"))
+        #expect(!unknownText.contains(fatal))
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
         #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
     }
 
-    @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic could not get from it")
+    @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic couldn’t get from it")
     func rcloneWords() {
         // restic 0.19.1 with rclone 1.75.2: rclone's own
         // verdict reaches stderr as "rclone: <date> <time> CRITICAL: …", and
@@ -140,22 +140,21 @@ struct ResticErrorTests {
             == fatal + "\nrclone: sftp: can't stat: permission denied")
         #expect(result(["2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed."]).failureMessage == fatal)
 
-        // rclone's verdict leads — the first sentence, which captions show
-        // — and restic's keeps the detail.
+        // rclone's verdict, the first sentence, which captions show.
         #expect(ResticError.commandFailed(exitCode: 1, message: refused.failureMessage).errorDescription
             == "rclone: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: "
-            + "ssh: unexpected message type 51 (expected 60). restic reported: \(fatal)")
+            + "ssh: unexpected message type 51 (expected 60).")
         let typo = result(["2026/10/16 02:55:12 CRITICAL: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\")"])
         let typoText = ResticError.commandFailed(exitCode: 1, message: typo.failureMessage).errorDescription ?? ""
-        #expect(Format.firstSentence(typoText)
-            == "rclone: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\")")
+        #expect(typoText
+            == "rclone: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\").")
 
         // A remote that never answered: restic gave up waiting on rclone
         // after a minute, before rclone said anything.
         let waited = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: "
             + "Get \"http://localhost/file-6043080322775398060\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
         #expect(ResticError.commandFailed(exitCode: 1, message: waited).errorDescription
-            == "rclone did not answer within a minute — its remote may be unreachable. restic reported: \(waited)")
+            == "rclone did not answer within a minute — its remote may be unreachable.")
 
         let missing = "Fatal: unable to open repository at rclone:sftp:backups/restic: exec: \"rclone\": executable file not found in $PATH"
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
@@ -186,11 +185,11 @@ struct ResticErrorTests {
     @Test("a forget the repository refused says so, and how many went")
     func refusedSnapshotsWords() {
         #expect(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden").errorDescription
-            == "The repository refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
-            + "Thin it where deletions are allowed, or turn retention off.")
+            == "The location refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
+            + "Turn off removing old backups, or allow deletions on this storage.")
         #expect(ResticError.snapshotsNotRemoved(removed: 2, refused: 1, reason: "operation not permitted").errorDescription
-            == "The repository refused to delete 1 of the 3 backups retention chose (operation not permitted); the other 2 were removed. "
-            + "It may be append-only or locked — thin it where deletions are allowed, or turn retention off.")
+            == "The location refused to delete 1 of the 3 old backups (operation not permitted); the other 2 were removed. "
+            + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage.")
     }
 
     @Test("the other failure shapes name what the user can do about them")

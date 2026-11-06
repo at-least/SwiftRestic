@@ -93,7 +93,7 @@ struct RestorePaneView: View {
                 ContentUnavailableView {
                     Label("Backup not found", systemImage: "questionmark.folder")
                 } description: {
-                    Text("This backup is no longer in the repository. Select another one in the list.")
+                    Text("This backup no longer exists. Select another one in the list.")
                 }
             }
         }
@@ -208,7 +208,7 @@ struct RestorePaneView: View {
             ProgressView("Reading…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
-            FailureUnavailableView(title: "Could not read this folder", message: loadError)
+            FailureUnavailableView(title: "Couldn’t read this folder", message: loadError)
         } else if isListingChanges(shown) {
             changesList(shown: shown)
         } else if folderMissing {
@@ -402,7 +402,7 @@ struct RestorePaneView: View {
             .contextMenu(forSelectionType: String.self) { ids in
                 let rows = changeList.rows.filter { ids.contains($0.id) }
                 if !rows.isEmpty {
-                    Button(rows.count == 1 ? "Restore…" : "Restore \(Format.plural(rows.count, "Item"))…") {
+                    Button("Restore…") {
                         restoreChanges(rows)
                     }
                     .disabled(model.isRestoring)
@@ -487,7 +487,7 @@ struct RestorePaneView: View {
         if let record, !ids.isEmpty {
             let clicked = nodes()
             if !clicked.isEmpty {
-                Button(clicked.count == 1 ? "Restore…" : "Restore \(Format.plural(clicked.count, "Item"))…") {
+                Button("Restore…") {
                     destinationRequest = RestoreDestinationRequest.picked(
                         clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
                         repositoryID: repositoryID,
@@ -507,7 +507,6 @@ struct RestorePaneView: View {
     /// restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
-            title: "Restore…",
             isEnabled: hasSelection && !model.isRestoring && record != nil,
             run: { restoreSelection() }
         )
@@ -946,8 +945,8 @@ private struct IncompleteSnapshotStrip: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(unreadable > 0
-                    ? "This backup is incomplete: \(Format.plural(unreadable, "item")) could not be read when it was made."
-                    : "This backup is incomplete: some of the source data could not be read when it was made.")
+                    ? "This backup is incomplete: \(Format.plural(unreadable, "item")) couldn’t be read when it was made."
+                    : "This backup is incomplete: some of the source data couldn’t be read when it was made.")
                     .font(.callout.weight(.medium))
                     // Not height-pinned, for BannerView's reason: the pane
                     // does not scroll, and a pinned text answers the split

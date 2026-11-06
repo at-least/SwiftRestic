@@ -237,7 +237,7 @@ actor ConfigStore {
         var errorDescription: String? {
             switch self {
             case let .unreadable(detail):
-                return "config.json could not be read, and none of its backup copies could either (\(detail))."
+                return "config.json couldn’t be read, and none of its backup copies could either (\(detail))."
             }
         }
     }

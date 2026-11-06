@@ -55,12 +55,9 @@ struct SidebarView: View {
             // repository's news and must not scroll away under a long tree.
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
-                    // The window's unread badge: the week's problems since
-                    // Activity was last open (`activityBadgeCount`) — a
-                    // backup failure its plan's next backup healed included,
-                    // which the tray dot and the menu's problem line drop
-                    // (`OverviewMetrics.isHealed`). It also yields to the
-                    // unconfigured state like the tray's problem face does —
+                    // The window's unread badge (`activityBadgeCount`). It
+                    // yields to the unconfigured state like the tray's problem
+                    // face does —
                     // a removed repository's old failures must not summon
                     // setup-bound attention — and stays silent when clean.
                     .badge(
@@ -111,7 +108,7 @@ struct SidebarView: View {
                 let commands = model.repositoryCommands(for: router.selection)
                 Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
                     .disabled(!commands.canNewPlan)
-                Button("Add Repository…") { onNewRepository() }
+                Button("Add Backup Location…") { onNewRepository() }
                     .disabled(!commands.canAddRepository)
             } label: {
                 Label("Add", systemImage: "plus")
@@ -120,7 +117,7 @@ struct SidebarView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Add a backup plan or a repository")
+            .help("Add a backup plan or a backup location")
 
             Spacer()
         }
@@ -132,10 +129,10 @@ struct SidebarView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
-        // The plan card's swap, worded as the Plan menu's: a running plan's
+        // The plan card's swap, worded as the Backup menu's: a running plan's
         // row offers the Stop that matters now, not a second backup.
         // A context menu leaves out what can't run (HIG: "Hide unavailable
-        // menu items, don't dim them"); the Plan menu keeps its dimmed
+        // menu items, don't dim them"); the Backup menu keeps its dimmed
         // items, a regular menu's place to say why.
         if model.isRunning(planID: plan.id) {
             if commands.canStop {
@@ -154,14 +151,14 @@ struct SidebarView: View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
         Button("New Backup Plan…") { onNewPlan(repository.id) }
         Divider()
-        Button("Edit Repository…") { onEditRepository(repository) }
+        Button("Edit Backup Location…") { onEditRepository(repository) }
         Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
-        // The two of the Repository menu's a row most often wants; the
+        // The two of the Location menu's a row most often wants; the
         // shared confirmations ask first. Left out, not dimmed, while they
         // can't run, as the plan row's commands.
         if commands.canMaintain {
             Divider()
-            Button("Check Now…") { router.request(.confirm(.check(repository.id))) }
+            Button("Verify Backups…") { router.request(.confirm(.check(repository.id))) }
             Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
         }
         Divider()

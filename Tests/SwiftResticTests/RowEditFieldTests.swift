@@ -20,7 +20,7 @@ struct RowEditFieldTests {
                 Text("short")
                 RowEditField(
                     text: text,
-                    accessibilityLabel: "Also skip",
+                    accessibilityLabel: "Also exclude",
                     onChange: onChange,
                     onSubmit: {},
                     onCancel: {},

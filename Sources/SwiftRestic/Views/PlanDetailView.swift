@@ -33,7 +33,7 @@ struct PlanDetailView: View {
             prompt: "Search this plan’s backups"
         )
         // The toolbar holds the tabs and the search field; the editor is
-        // Plan ▸ Edit Plan and the sidebar row's Edit Plan, removing Plan ▸
+        // Backup ▸ Edit Plan and the sidebar row's Edit Plan, removing Backup ▸
         // Remove Plan and the row's menu —
         // the HIG's macOS toolbars: "it doesn't make sense to provide a
         // toolbar item for every menu item".
@@ -50,7 +50,7 @@ struct PlanDetailView: View {
     /// The Backups card's verb: Back Up Now, Stop while a run is in
     /// flight — worded as every command that ends a run is; the progress
     /// strip above the cards reports the run without a Cancel of its own —
-    /// Stop (⌘.) ends it. The Plan menu's predicates, so the card and
+    /// Stop (⌘.) ends it. The Backup menu's predicates, so the card and
     /// the menu bar cannot disagree about either.
     @ViewBuilder
     private func backUpControl(_ plan: BackupPlan) -> some View {
@@ -60,7 +60,7 @@ struct PlanDetailView: View {
                 model.cancelBackup(planID: plan.id)
             }
             .disabled(!commands.canStop)
-            .help("Activity records it as cancelled (⌘.)")
+            .help("Activity records it as stopped (⌘.)")
         } else {
             Button("Back Up Now") {
                 model.runBackup(planID: plan.id)
@@ -236,9 +236,9 @@ struct PlanDetailView: View {
 
     private var noRepository: some View {
         ContentUnavailableView {
-            Label("No repository set", systemImage: "questionmark.folder")
+            Label("No backup location set", systemImage: "questionmark.folder")
         } description: {
-            Text("Its repository is no longer in SwiftRestic.")
+            Text("Its backup location is no longer in SwiftRestic.")
         } actions: {
             // Not Edit Plan…: the editor shows a saved plan's repository
             // without a picker and refuses to save one without a repository.
@@ -278,11 +278,15 @@ struct PlanDetailView: View {
                 // starts at the card's edge, left of their values.
                 snapshotsValue(plan, snapshots: snapshots)
                 DetailRow("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-                DetailRow("Retention", plan.retention.summary)
+                DetailRow("History", plan.retention.summary)
             }
         } accessory: {
-            backUpControl(plan)
-                .controlSize(.small)
+            HStack(spacing: 6) {
+                backUpControl(plan)
+                Button("Edit…") { router.request(.editPlan(plan.id, tab: .retention)) }
+                    .help("Choose which old backups to remove")
+            }
+            .controlSize(.small)
         }
     }
 
@@ -310,6 +314,10 @@ struct PlanDetailView: View {
                         .modifier(TileHelp(help: next.help))
                 }
             }
+        } accessory: {
+            Button("Edit…") { router.request(.editPlan(plan.id, tab: .schedule)) }
+                .controlSize(.small)
+                .help("Change when this plan runs")
         }
     }
 
@@ -402,24 +410,18 @@ struct PlanDetailView: View {
                 }
             }
         } else {
-            Text("No repository set")
+            Text("No backup location set")
                 .foregroundStyle(.secondary)
         }
     }
 
-    /// What the plan leaves out, as the editor's Excluding tab says it: the
-    /// *Skip* switches that are on and the user's own patterns as typed,
-    /// tilde and all. The folder itself is the page's subtitle. When is the
-    /// Schedule card's, what it keeps the Backups card's, where the
-    /// sidebar's (the plan sits under its repository); the rest of how it
-    /// runs, its hooks among it, is the editor's, which Plan ▸ Edit Plan and
-    /// the row's Edit Plan open — and the card's own Edit Plan, on the
-    /// Excluding tab, where these rows are changed.
+    /// What the plan excludes, as the editor's Excluded Items tab says it: the
+    /// switches that are on and the user's own patterns as typed, tilde and all.
     private func excludingCard(_ plan: BackupPlan) -> some View {
         let skips = PlanSkips.on(in: plan)
-        return Card("Excluding") {
+        return Card("Excluded Items") {
             DetailGrid {
-                DetailRow("Skip") {
+                DetailRow("Exclude") {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(skips, id: \.title) { skip in
                             Text(skip.title)
@@ -428,7 +430,7 @@ struct PlanDetailView: View {
                     }
                 }
                 if !plan.excludePatterns.isEmpty {
-                    DetailRow("Also skip") {
+                    DetailRow("Also exclude") {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(plan.excludePatterns, id: \.self) { pattern in
                                 Text(pattern)
@@ -441,9 +443,9 @@ struct PlanDetailView: View {
                 }
             }
         } accessory: {
-            Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
+            Button("Edit…") { router.request(.editPlan(plan.id, tab: .files)) }
                 .controlSize(.small)
-                .help("Change what this plan leaves out")
+                .help("Change what this plan excludes")
         }
     }
 }

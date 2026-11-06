@@ -14,33 +14,32 @@ struct ConceptsView: View {
     private let tasks: [Topic] = [
         Topic(
             title: "Back up a folder",
-            text: "Choose File ▸ New Backup Plan, pick the folder and a repository, and click Create Plan. Its first backup starts right away; after that it runs on its schedule while SwiftRestic is open."
+            text: "Choose File ▸ New Backup Plan, pick the folder and a backup location, and click Create Plan. Its first backup starts right away; after that it runs on its schedule while SwiftRestic is open."
         ),
         Topic(
             title: "Get a file back",
-            text: "Select the file on the plan’s Files tab and click Restore to put it back. Edit ▸ Find finds a file by name in every backup. To bring back everything from one moment, open the backup on the Backups tab, select its top folders, and click Restore."
+            text: "Choose File ▸ Restore a File and type its name. Or select it on the plan’s Files tab and click Restore. To bring back everything from one moment, open the backup on the Backups tab, select its top folders, and click Restore."
         ),
         Topic(
             title: "When a backup fails",
-            text: "Activity lists every backup, retention, check, cleanup and restore. Select one to see what happened, with Show Log and Copy Details below it — and a button for the fix, when there is one. A backup that couldn’t read some files still saves the rest and is marked Completed with warnings."
+            text: "Activity lists every backup, verification, cleanup and restore. Select one to see what happened, with Show Log and Copy Details below it, and a button for the fix when there is one. A backup that couldn’t read some files still saves the rest and is marked Completed with warnings."
         ),
         Topic(
-            title: "Keep the history tidy",
-            text: "Retention, on the plan editor’s Retention tab, removes old backups after each one. The space they held is freed by a cleanup: Repository ▸ Clean Up Now, or the repository’s periodic cleanup. Repository ▸ Check Now verifies that nothing is damaged."
+            title: "Keep old backups tidy",
+            text: "The History tab in a plan’s editor chooses which old backups to remove after each backup. A cleanup frees the space they held: Location ▸ Clean Up Now, or the automatic one. Verify Backups, in the Location menu, makes sure nothing is damaged. SwiftRestic does this on its own every week."
         ),
         Topic(
             title: "Backups from elsewhere",
-            text: "Backups no plan here made — another Mac’s, or a removed plan’s — appear under Other backups in the sidebar. Those a SwiftRestic plan made can continue on this Mac with Continue Backups, keeping their history."
+            text: "Backups no plan here made, from another Mac or a removed plan, appear under Other backups in the sidebar. Those a SwiftRestic plan made can continue on this Mac with Continue Backups, keeping their history."
         ),
     ]
 
     private let terms: [Topic] = [
-        Topic(title: "Repository", text: "Where backups are kept: a drive, another computer, or cloud storage. Everything in it is encrypted with its password."),
-        Topic(title: "Plan", text: "One folder, the repository it backs up to, and when."),
+        Topic(title: "Backup Location", text: "Where backups are kept: a drive, another computer, or cloud storage. Everything in it is encrypted with its password. restic calls it a repository."),
+        Topic(title: "Backup Plan", text: "One folder, the backup location it backs up to, and when."),
         Topic(title: "Backup", text: "The folder as it was at one moment. restic calls it a snapshot."),
-        Topic(title: "Retention", text: "Which backups to keep — the latest ones, and one per hour, day, week, month or year."),
-        Topic(title: "Cleanup", text: "Frees the space of removed backups. Slow; backups to the repository wait for it."),
-        Topic(title: "Check", text: "Verifies the repository. Reading data back finds more damage, and takes longer."),
+        Topic(title: "Cleanup", text: "Frees the space of removed backups. Slow; backups to the location wait for it."),
+        Topic(title: "Verify", text: "Makes sure a location’s backups are sound. Reading data back finds more damage, and takes longer."),
     ]
 
     var body: some View {

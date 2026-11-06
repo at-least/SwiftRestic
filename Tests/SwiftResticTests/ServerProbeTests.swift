@@ -60,7 +60,7 @@ struct ServerProbeTests {
         #expect(ServerProbe.verdict(for: .failed(.posix(.EHOSTUNREACH))) == .unreachable("no route to the server"))
         #expect(ServerProbe.verdict(for: .waiting(.posix(.ENETUNREACH))) == .unreachable("no route to the server"))
         #expect(ServerProbe.verdict(for: .waiting(.posix(.ENETDOWN))) == .unreachable("this Mac has no network connection"))
-        #expect(ServerProbe.verdict(for: .waiting(.dns(-65554))) == .unreachable("its name could not be found"))
+        #expect(ServerProbe.verdict(for: .waiting(.dns(-65554))) == .unreachable("its name couldn’t be found"))
         #expect(ServerProbe.timeoutWords(seconds: 10) == "it did not answer within 10 seconds")
     }
 
@@ -77,6 +77,6 @@ struct ServerProbeTests {
 
         // .invalid never resolves (RFC 2606): NXDOMAIN, at once.
         #expect(await ServerProbe.connect(to: Target(host: "swiftrestic-absent.invalid", port: 443), timeout: 5)
-            == .unreachable("its name could not be found"))
+            == .unreachable("its name couldn’t be found"))
     }
 }

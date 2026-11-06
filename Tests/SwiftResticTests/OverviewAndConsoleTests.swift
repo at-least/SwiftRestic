@@ -67,10 +67,10 @@ struct OverviewMetricsTests {
         // pinned by prefix below, not by literal.
         #expect(Array(rows.map(\.stateText).prefix(5)) == [
             "Can’t read backups — Repository /nas is not reachable",
-            "No repository set",
+            "No backup location set",
             "No backups yet",
-            "None from this plan yet — the repository holds others",
-            "Checking…",
+            "None from this plan yet. This location holds others",
+            "Verifying…",
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isProtected == true)

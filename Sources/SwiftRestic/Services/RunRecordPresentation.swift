@@ -29,15 +29,15 @@ enum RunFix: Equatable {
     /// (`RunRecord.repositoryFull`): a prune frees what the failed run
     /// uploaded.
     case pruneNow(UUID)
-    /// The repository refused to delete what the plan's retention chose
+    /// The location refused to delete what the plan's retention chose
     /// (`RunRecord.retentionRefused`): the plan editor's Retention tab
     /// turns it off.
     case editPlanRetention(UUID)
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryShare: "Edit Repository…"
-        case .addRepository: "Add Repository…"
+        case .editRepository, .editRepositoryShare: "Edit Backup Location…"
+        case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
         case .removeStaleLocks: "Unlock"
         case .newPlan: "New Backup Plan…"
@@ -52,8 +52,8 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .addRepository, .locate, .newPlan, .pruneNow, .editPlanRetention: nil
         case .removeStaleLocks: "A lock no run here holds is in the way"
-        case .editRepositoryShare: "The share’s saved password is in the repository editor"
-        case .editPlanShare: "The share’s saved password is on the plan editor’s Excluding tab"
+        case .editRepositoryShare: "The share’s saved password is in Edit Backup Location"
+        case .editPlanShare: "The share’s saved password is on the plan editor’s Excluded Items tab"
         }
     }
 }
@@ -65,7 +65,7 @@ struct UnreadableItemWords: Equatable {
 }
 
 /// A check or prune that did not end clean, run again from the drawer where
-/// its verdict is read — the Repository menu's command, through the same
+/// its verdict is read — the Location menu's command, through the same
 /// confirmation.
 enum MaintenanceRetry: Equatable {
     case check(UUID)
@@ -73,7 +73,7 @@ enum MaintenanceRetry: Equatable {
 
     var title: String {
         switch self {
-        case .check: "Check Again…"
+        case .check: "Verify Again…"
         case .prune: "Clean Up Again"
         }
     }
@@ -243,7 +243,7 @@ enum RunRecordPresentation {
         switch run.kind {
         case .backup:
             // A reporting gap, alone: the line explains itself.
-            if run.outcome == .completedWithErrors, let line = run.trailingItemErrors.first {
+            if run.outcome == .completedWithErrors, let line = run.trailingItemErrorsOnScreen.first {
                 return line
             }
             return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
@@ -365,11 +365,12 @@ enum RunRecordPresentation {
         var lines = [
             "\(subject(of: run)) — \(run.outcome.displayName)",
             "Started: \(Format.timestamp(run.startedAt)) (\(Format.duration(run.duration)))",
-            "Repository: \(repositoryName ?? "No longer set up in SwiftRestic")",
+            "Location: \(repositoryName ?? "No longer set up in SwiftRestic")",
         ]
         if let failure = run.failureMessage, failure != run.outcome.displayName {
             lines.append("Error: \(failure)")
         }
+        if let detail = run.resticDetail { lines.append("restic: \(detail)") }
         if let snapshotID = run.snapshotID {
             let made = run.kind == .restore ? run.snapshotTime.map { " (\(Format.timestamp($0)))" } ?? "" : ""
             lines.append("Backup: \(snapshotID)\(made)")
@@ -420,7 +421,7 @@ enum RunRecordPresentation {
             if unlisted > 0 { lines.append("  … and \(Format.count(unlisted)) more") }
         }
         // The decoding gap and the retention skip explain themselves.
-        lines += run.trailingItemErrors
+        lines += run.trailingItemErrorsOnScreen
         if !run.hookMessages.isEmpty {
             lines.append("Hooks: \(Format.count(run.hookMessages.count)) failed")
         }

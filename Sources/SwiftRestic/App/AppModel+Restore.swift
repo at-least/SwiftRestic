@@ -85,7 +85,7 @@ extension AppModel {
             }
         } catch {
             let subject = selection.sources.count == 1 ? "“\(selection.sources[0].name)”" : "the selected items"
-            post(Banner(title: "Could not restore \(subject)", message: error.localizedDescription, isError: true))
+            post(Banner(title: "Couldn’t restore \(subject)", message: error.localizedDescription, isError: true))
             return
         }
         guard items.count > 1 else {
@@ -232,7 +232,7 @@ extension AppModel {
             // success check would say it did.
             post(Banner(
                 title: "A restore is already running",
-                message: "Wait for it to finish, or cancel it.",
+                message: "Wait for it to finish, or stop it.",
                 isError: false,
                 symbolName: "clock"
             ))
@@ -331,7 +331,7 @@ extension AppModel {
                 // run's own glyph as Activity shows its record — not the
                 // success check: the restore did not finish.
                 if !isShuttingDown {
-                    let title = repositoryName.map { "Restore from “\($0)” cancelled" } ?? "Restore cancelled"
+                    let title = repositoryName.map { "Restore from “\($0)” stopped" } ?? "Restore stopped"
                     post(Banner(
                         title: title,
                         // Empty with no partial: the title already says
@@ -384,7 +384,7 @@ extension AppModel {
         // saying *why* right here, at drag start, beats a drop that Finder
         // refuses with no explanation of its own.
         guard let repository = repository(id: repositoryID) else {
-            postDragImpossibleBanner(node.name, "The repository no longer exists — select a backup from a current repository in the sidebar.")
+            postDragImpossibleBanner(node.name, "This backup location no longer exists. Select a backup from one in the sidebar.")
             return provider
         }
         let service: any ResticClient
@@ -432,7 +432,7 @@ extension AppModel {
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
                         let message = error.localizedDescription
-                        self.post(Banner(title: "Could not restore “\(itemName)”", message: message, isError: true))
+                        self.post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, isError: true))
                     }
                 }
             }
@@ -442,7 +442,7 @@ extension AppModel {
     }
 
     private func postDragImpossibleBanner(_ itemName: String, _ message: String) {
-        post(Banner(title: "Could not restore “\(itemName)”", message: message, isError: true))
+        post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, isError: true))
     }
 
     /// `nonisolated`, and handed everything it needs as values, because the

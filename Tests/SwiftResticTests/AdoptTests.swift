@@ -291,7 +291,7 @@ struct AdoptTests {
         #expect(briefing.confirmation.title == "Continue “Movies” on this Mac?")
         #expect(briefing.confirmation.message
             == "Nothing is written to “Home Disk”."
-                + " If another Mac still runs this plan, both Macs share one history and the same retention settings"
+                + " If another Mac still runs this plan, both Macs share one history and the same rules for removing old backups"
                 + " — continue only backups no other Mac is still making.")
     }
 
@@ -472,7 +472,7 @@ struct AdoptTests {
 
         model.adopt(draft: draft)
 
-        #expect(model.banners.first?.message == "Its backups are no longer in the repository.")
+        #expect(model.banners.first?.message == "Its backups are no longer in this location.")
     }
 
     @Test("deleting a plan says where its snapshots land, and that they can come back")
@@ -486,7 +486,7 @@ struct AdoptTests {
 
         // Nothing backed up: today's sentence.
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            == "This Mac stops backing up “Untitled Plan”. Backups already written to the repository are not deleted.")
+            == "This Mac stops backing up “Untitled Plan”. Backups already written to the location are not deleted.")
 
         // Two backups under it: the repository they stay in is named, with
         // the way back.
@@ -565,6 +565,6 @@ struct AdoptionPreviewLineTests {
             == "The backup would stay.")
         // Nothing to judge: the honest empty, not a claim of survival.
         #expect(RetentionPreview(kept: [], removed: []).outcomeLine
-            == "This plan has no backups in the repository yet.")
+            == "This plan has no backups in this location yet.")
     }
 }

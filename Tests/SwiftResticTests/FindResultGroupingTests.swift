@@ -81,7 +81,7 @@ struct AllBackupsSearchTests {
         #expect(!search.isTruncated)
     }
 
-    @Test("what could not be covered is said by repository, and never takes the others' rows with it")
+    @Test("what couldn’t be covered is said by repository, and never takes the others' rows with it")
     func partial() {
         let (reading, broken, whole) = (UUID(), UUID(), UUID())
         let search = AllBackupsSearch([

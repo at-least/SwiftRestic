@@ -66,7 +66,7 @@ struct HookRunner: Sendable {
 
         private func verdict(withDetail: Bool) -> String {
             let base = "Hook “\(hookName)”"
-            if cancelled { return "\(base) was cancelled before it finished." }
+            if cancelled { return "\(base) was stopped before it finished." }
             if timedOut { return "\(base) timed out and was stopped." }
             if exitCode == 0 { return "\(base) succeeded." }
             if !withDetail { return "\(base) exited \(exitCode)." }

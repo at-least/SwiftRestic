@@ -96,12 +96,12 @@ extension AppModel {
         return state
     }
 
-    /// The repository the Repository menu acts on: the selected one, the
+    /// The repository the Location menu acts on: the selected one, the
     /// selected plan's, or the one a selected Other-backups group sits
     /// under (which is where
     /// that menu acts even for a moved plan's group: the plan's own
     /// repository is the other one). Nil for a target that no longer exists
-    /// and for every other pane. A group is no plan, so the Plan menu stays
+    /// and for every other pane. A group is no plan, so the Backup menu stays
     /// grey over its selection.
     func commandRepositoryID(for selection: SidebarItem?) -> UUID? {
         let id: UUID? = switch selection {
@@ -142,7 +142,7 @@ extension AppModel {
                 landing = "Its \(Format.plural(left, "backup")) \(left == 1 ? "stays" : "stay")"
                     + " in “\(label(of: repository))”, and you can continue \(left == 1 ? "it" : "them") later."
             } else {
-                landing = "Backups already written to the repository are not deleted."
+                landing = "Backups already written to the location are not deleted."
             }
             let message = activity[id] != nil
                 ? "The running backup will be stopped. \(landing)"
@@ -160,11 +160,11 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             // Reading data costs time in proportion to the size, so the
             // sheet names the size the user holds.
-            var message = "Backups to it wait until the check finishes."
+            var message = "Backups to it wait until verification finishes."
             if let size = repositoryStats[id]?.totalSize {
                 message += " It holds \(Format.bytes(size))."
             }
-            return ConfirmationCopy(title: "Check “\(label(of: repository))”?", message: message)
+            return ConfirmationCopy(title: "Verify “\(label(of: repository))”?", message: message)
         case let .prune(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
@@ -175,13 +175,13 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Unlock “\(label(of: repository))”?",
-                message: "Do this only when no other Mac or app is using it — unlocking a repository in use can damage it."
+                message: "Do this only when no other Mac or app is using it. Unlocking a location in use can damage it."
             )
         case let .rebuildIndex(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Rebuild the search index for “\(label(of: repository))”?",
-                message: "The index is read again from the repository. Searches are slower until it finishes."
+                message: "The index is read again from the location. Searches are slower until it finishes."
             )
         }
     }

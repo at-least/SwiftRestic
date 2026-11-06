@@ -247,7 +247,7 @@ struct FilesTreeTests {
         #expect(reveal("/Data/notes.md") == .wait)
         // A level that failed or can't be read answers nothing: the tab, or
         // the folder's row, says why.
-        states[data] = .failed("The index could not be read.")
+        states[data] = .failed("The index couldn’t be read.")
         #expect(reveal("/Data/notes.md") == .nothing)
         states[data] = .unavailable(.blockedByMacOS(name: "Data"), diskGeneration: 2)
         #expect(reveal("/Data/notes.md") == .nothing)
@@ -258,7 +258,7 @@ struct FilesTreeTests {
         #expect(reveal("/Data/notes.md", turn: 3) == .wait)
     }
 
-    @Test("a disk that may have changed reads every level again, keeping it on screen meanwhile; a folder that could not be listed waits for that")
+    @Test("a disk that may have changed reads every level again, keeping it on screen meanwhile; a folder that couldn’t be listed waits for that")
     func diskTurnRereads() async {
         let model = AppModel(
             store: ConfigStore(
@@ -474,9 +474,9 @@ struct FilesTreeTests {
         let unsaved = entry(node("/Docs/new.txt", folder: false), .notBackedUp)
         #expect(unsaved.tag == "Not backed up")
         #expect(unsaved.help(notRead: nil) == "Not backed up. No backup of this plan holds it")
-        #expect(unsaved.help(notRead: "permission denied") == "Not backed up. The newest backup could not read it (permission denied)")
+        #expect(unsaved.help(notRead: "permission denied") == "Not backed up. The newest backup couldn’t read it (permission denied)")
         #expect(unsaved.spokenStanding(notRead: nil) == "not backed up")
-        #expect(unsaved.spokenStanding(notRead: "permission denied") == "not backed up, the newest backup could not read it, permission denied")
+        #expect(unsaved.spokenStanding(notRead: "permission denied") == "not backed up, the newest backup couldn’t read it, permission denied")
         #expect(FilesTree.Entry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
 
         let gone = entry(node("/Docs/old.txt", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: when)))

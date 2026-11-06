@@ -564,7 +564,7 @@ struct ResticService: ResticClient {
         let decodingWarning: String? = if result.malformedCount > 0 {
             "SwiftRestic couldn’t read \(result.malformedCount) of restic’s messages, so this backup’s numbers may be incomplete. A restic update may have changed them."
         } else if result.summary == nil {
-            "restic reported no summary — a restic update may have changed its output; the run’s numbers are unknown."
+            "The backup gave no summary, so its numbers are unknown. A restic update may have changed its output."
         } else {
             nil
         }
@@ -709,7 +709,7 @@ struct ResticService: ResticClient {
     static func countRemoved(forgetOutput: String) throws -> Int {
         let trimmed = forgetOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return 0 }
-        let unreadable = ResticError.malformedOutput(detail: "could not read the removal count from restic’s answer")
+        let unreadable = ResticError.malformedOutput(detail: "couldn’t read the removal count from restic’s answer")
         guard let data = trimmed.data(using: .utf8),
               let groups = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { throw unreadable }
@@ -921,7 +921,7 @@ struct ResticService: ResticClient {
         do {
             return try decode()
         } catch {
-            throw ResticError.malformedOutput(detail: "\(what) could not be read: \(ResticMessageDecoder.briefFailure(error))")
+            throw ResticError.malformedOutput(detail: "\(what) couldn’t be read: \(ResticMessageDecoder.briefFailure(error))")
         }
     }
 

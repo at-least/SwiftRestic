@@ -81,7 +81,7 @@ struct RetentionPreviewTests {
         }
     }
 
-    @Test("a forget that could not remove some backups counts the ones that went, and an output it cannot read claims no count")
+    @Test("a forget that couldn’t remove some backups counts the ones that went, and an output it cannot read claims no count")
     func partialRemovalCountsOrStaysRestics() throws {
         let stderr = """
         Remove(<snapshot/860f8ac74b>) failed: unexpected HTTP response (403): 403 Forbidden

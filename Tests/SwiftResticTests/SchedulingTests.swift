@@ -777,7 +777,7 @@ struct MaintenanceSchedulingTests {
         #expect(last([withVerdict]) == "\(ago) · 2 errors — restic repair can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
         #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with warnings")
-        #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · cancelled")
+        #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · stopped")
         // The newest of the repository's own checks, never a prune's or
         // another repository's.
         var prune = check(.failed, at: "2026-09-09 13:00:00")
@@ -1272,7 +1272,7 @@ struct LoginItemTests {
     @Test("Settings' caption says each state the daemon can answer, ")
     func stateDescriptions() {
         #expect(LoginItem.description(of: .enabled) == "SwiftRestic will start at login.")
-        #expect(LoginItem.description(of: .notFound).hasPrefix("macOS could not find this copy"))
+        #expect(LoginItem.description(of: .notFound).hasPrefix("macOS couldn’t find this copy"))
         // The pane's short form sits above its own Open Login Items button;
         // the banner's full form has no button and spells the pane out.
         #expect(LoginItem.needsApprovalShort == "Waiting for approval.")

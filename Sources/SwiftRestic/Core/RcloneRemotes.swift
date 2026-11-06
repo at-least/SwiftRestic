@@ -53,7 +53,7 @@ struct RcloneRemoteLister: Sendable {
                 )
             )
         } catch {
-            return .unreadable("rclone could not list its remotes: \(error.localizedDescription)")
+            return .unreadable("rclone couldn’t list its remotes: \(error.localizedDescription)")
         }
         guard result.exitCode == 0 else {
             // An encrypted config asks for its password on the terminal, and
@@ -63,10 +63,10 @@ struct RcloneRemoteLister: Sendable {
                 return .unreadable(RcloneSetup.passwordProtected)
             }
             guard let lastLine = result.stderr.split(whereSeparator: \.isNewline).last else {
-                return .unreadable("rclone could not list its remotes.")
+                return .unreadable("rclone couldn’t list its remotes.")
             }
             let words = ResticRunResult.rcloneErrorWords(lastLine) ?? lastLine
-            return .unreadable("rclone could not list its remotes: \(words)")
+            return .unreadable("rclone couldn’t list its remotes: \(words)")
         }
         return .remotes(Self.parse(result.stdout))
     }

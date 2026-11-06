@@ -70,7 +70,7 @@ final class PreviewSession {
                 // A cancelled copy is the pane's own doing, not a failure.
                 if !Task.isCancelled {
                     closeShown()
-                    failure = Failure(title: "Could not preview", message: error.localizedDescription)
+                    failure = Failure(title: "Couldn’t preview", message: error.localizedDescription)
                 }
             }
             if !Task.isCancelled { task = nil }
@@ -107,7 +107,7 @@ final class PreviewSession {
         do {
             try AppModel.removePreviewCopy(url)
         } catch {
-            failure = Failure(title: "Could not delete the preview’s copy", message: error.localizedDescription)
+            failure = Failure(title: "Couldn’t delete the preview’s copy", message: error.localizedDescription)
         }
     }
 }

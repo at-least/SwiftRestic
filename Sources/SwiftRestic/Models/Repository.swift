@@ -238,7 +238,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// ignored.
     func label(among repositories: [Repository]) -> String {
         let short = shortLabel
-        guard !short.isEmpty else { return "Untitled Repository" }
+        guard !short.isEmpty else { return "Untitled Location" }
         let twin = repositories.contains { $0.id != id && $0.shortLabel == short }
         return twin ? displayLocation : short
     }

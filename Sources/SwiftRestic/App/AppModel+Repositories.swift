@@ -14,7 +14,7 @@ extension AppModel {
             // Name the repository: a Keychain failure for one repository
             // must not read as a problem with another's.
             post(Banner(
-                title: "Could not save the password for “\(label(of: repository))”",
+                title: "Couldn’t save the password for “\(label(of: repository))”",
                 message: error.localizedDescription,
                 isError: true
             ))
@@ -73,19 +73,19 @@ extension AppModel {
         }
         consequences += "The backups in it are kept."
         if isRestoring {
-            consequences += " A restore from this repository is running and will be cancelled."
+            consequences += " A restore from this location is running and will be stopped."
         }
         if !runningBackupNames.isEmpty {
             let names = runningBackupNames.map { "“\($0)”" }
             consequences += names.count == 1
-                ? " A backup of \(names[0]) is running and will be cancelled."
-                : " Backups of \(Format.list(names)) are running and will be cancelled."
+                ? " A backup of \(names[0]) is running and will be stopped."
+                : " Backups of \(Format.list(names)) are running and will be stopped."
         }
         if isMaintaining {
-            consequences += " Repository maintenance is running and will be cancelled."
+            consequences += " Maintenance is running and will be stopped."
         }
         if isConsoleRunning {
-            consequences += " A console command is running and will be cancelled."
+            consequences += " A console command is running and will be stopped."
         }
         return consequences
     }
@@ -136,7 +136,7 @@ extension AppModel {
                 try await secrets.remove(id)
             } catch {
                 self?.post(Banner(
-                    title: "The removed repository’s secrets are still in your Keychain",
+                    title: "The removed location’s secrets are still in your Keychain",
                     message: error.localizedDescription
                         + " In Keychain Access they are named “\(KeychainStore.service)”, with accounts that start \(id.uuidString).",
                     isError: true
@@ -270,7 +270,7 @@ struct PasswordNotStored: LocalizedError {
     let reason: String
 
     var errorDescription: String? {
-        "“\(repositoryName)” now opens only with the new password, but the Keychain could not store it: \(reason) "
-            + "Type the new password in Repository password and save once the Keychain works — until then its backups fail."
+        "“\(repositoryName)” now opens only with the new password, but the Keychain couldn’t store it: \(reason) "
+            + "Type the new password in Password and save once the Keychain works. Until then its backups fail."
     }
 }
