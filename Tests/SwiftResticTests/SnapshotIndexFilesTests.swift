@@ -393,49 +393,4 @@ struct SnapshotIndexFilesTests {
         ])
     }
 
-    @Test("foldersBesideManifests finds every named folder beside its manifest in the chain's newest backup alone")
-    func foldersBesideManifests() async throws {
-        let checked = try CheckedIndex()
-        let index = checked.index
-        let listing = [try snap("s1", 10), try snap("s2", 20), try snap("b1", 30, plan: planB)]
-        let s2: IndexContent = [
-            "/data": true,
-            "/data/app": true, "/data/app/build": true, "/data/app/build.gradle": false,
-            // No manifest beside it.
-            "/data/lib": true, "/data/lib/build": true,
-            // A second manifest of the same folder name.
-            "/data/py": true, "/data/py/build": true, "/data/py/setup.py": false,
-            // Inside a found folder: found too (the plan's offer decides).
-            "/data/py/build/sub": true, "/data/py/build/sub/build": true, "/data/py/build/sub/build.gradle": false,
-            // A file named like the folder, and a folder named like the manifest.
-            "/data/x": true, "/data/x/build": false, "/data/x/build.gradle": false,
-            "/data/y": true, "/data/y/build": true, "/data/y/build.gradle": true,
-            // A name FTS splits into two tokens.
-            "/data/web": true, "/data/web/bower_components": true, "/data/web/bower.json": false,
-            // A name holding the folder's token, not the folder's name.
-            "/data/z": true, "/data/z/build-old": true, "/data/z/build.gradle": false,
-        ]
-        var s1 = s2
-        s1["/data/gone"] = true
-        s1["/data/gone/build"] = true
-        s1["/data/gone/build.gradle"] = false
-        let contents: [String: IndexContent] = [
-            "s1": s1,
-            "s2": s2,
-            "b1": ["/data": true, "/data/b": true, "/data/b/build": true, "/data/b/build.gradle": false],
-        ]
-        try checked.reconcile(listing)
-        try checked.runToDone(contents)
-
-        let manifests = ["build": ["build.gradle", "setup.py"], "bower_components": ["bower.json"]]
-        let found = try await index.foldersBesideManifests(manifests, inChain: planA)
-        #expect(found.map { "\($0.path) \($0.manifest)" } == [
-            "/data/app/build build.gradle",
-            "/data/py/build setup.py",
-            "/data/py/build/sub/build build.gradle",
-            "/data/web/bower_components bower.json",
-        ])
-        #expect(try await index.foldersBesideManifests(manifests, inChain: planB).map(\.path) == ["/data/b/build"])
-        #expect(try await index.foldersBesideManifests(manifests, inChain: "swiftrestic-plan-unknown").isEmpty)
-    }
 }

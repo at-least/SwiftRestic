@@ -143,11 +143,6 @@ extension Array where Element == ContentVersion {
     }
 }
 
-struct FolderBesideManifest: Sendable, Equatable {
-    var path: String
-    var manifest: String
-}
-
 /// One path handed to the index with its kind known — the one form both
 /// routes cross into the store in: the path as the index keys it (no
 /// trailing `/`), and the kind, from an `ls` node's `type` or from the
@@ -1100,45 +1095,6 @@ final class SnapshotIndex: @unchecked Sendable {
                     isInNewest: seq == newestSeq
                 )
             }
-        }
-    }
-
-    /// The folders the chain's newest indexed snapshot holds whose name is
-    /// a key of `manifests` and beside which that snapshot holds a file
-    /// named by one of the key's manifests — `build` beside `build.gradle`.
-    /// Folders inside other found ones included. Each folder once, with the
-    /// first of its manifests present, ordered by path bytewise. An unknown
-    /// chain, or one with nothing indexed, answers `[]`.
-    func foldersBesideManifests(_ manifests: [String: [String]], inChain chainKey: String) async throws -> [FolderBesideManifest] {
-        try await pool.read { db in
-            guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]),
-                  let newestSeq = try Int64.fetchOne(db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey])
-            else { return [] }
-            let chainID: Int64 = chain[0]
-            let nodesNamed = try db.cachedStatement(sql: SQL.nodesNamed)
-            let nodeAtSeq = try db.cachedStatement(sql: SQL.nodeAtSeq)
-            let lookup = try db.cachedStatement(sql: SQL.nodeLookup)
-            func kindInNewest(_ node: Int64) throws -> Bool? {
-                try Bool.fetchOne(nodeAtSeq, arguments: [node, chainID, newestSeq, newestSeq])
-            }
-            var found: [FolderBesideManifest] = []
-            var paths: [Int64: String] = [:]
-            for (folder, names) in manifests {
-                // The name as one FTS phrase, its quotes doubled.
-                let match = "\"" + folder.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-                for row in try Row.fetchAll(nodesNamed, arguments: [match, folder]) {
-                    let node: Int64 = row[0]
-                    let parent: Int64 = row[1]
-                    guard try kindInNewest(node) == true else { continue }
-                    let manifest = try names.first { name in
-                        guard let sibling = try Int64.fetchOne(lookup, arguments: [parent, name]) else { return false }
-                        return try kindInNewest(sibling) == false
-                    }
-                    guard let manifest else { continue }
-                    found.append(FolderBesideManifest(path: try Self.path(db, of: node, memo: &paths), manifest: manifest))
-                }
-            }
-            return found.sorted { Self.bytesLess($0.path, $1.path) }
         }
     }
 

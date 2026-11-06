@@ -245,13 +245,12 @@ enum MenuBarStatus {
     }
 
     /// The Plan menu's Stop for this phase of a plan's run: a backup's own
-    /// retention step, whose snapshot is already written, and Remove from
-    /// Earlier Backups' rewrite are no backup. The tray's row passes `planName`.
+    /// retention step, whose snapshot is already written, is no backup. The
+    /// tray's row passes `planName`.
     static func stopTitle(for phase: PlanActivity.Phase?, planName: String? = nil) -> String {
         let quoted = planName.map { "“\($0)”" }
         switch phase {
         case .applyingRetention?: return quoted.map { "Stop Applying Retention to \($0)" } ?? "Stop Applying Retention"
-        case .removingFromEarlierBackups?: return quoted.map { "Stop Removing from Earlier Backups of \($0)" } ?? "Stop Removing from Earlier Backups"
         default: return quoted.map { "Stop \($0) Backup" } ?? "Stop Backup"
         }
     }

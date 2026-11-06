@@ -68,53 +68,25 @@ struct CommandStateTests {
             == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
     }
 
-    @Test("a stopped Remove from Earlier Backups keeps the repository's backups waiting until it unwinds")
-    func stoppedQuietRunKeepsTheLock() async {
-        let cases: [(PlanActivity.Work, String)] = [
-            (.removeFromEarlierBackups, "“Home NAS” is removing items from earlier backups of “Photos” — backups wait until it finishes."),
-        ]
-        for (work, reason) in cases {
-            let model = makeModel()
-            let repository = makeRepository("Home NAS")
-            let documents = makePlan("Documents", on: repository)
-            let photos = makePlan("Photos", on: repository)
-            model.configuration.repositories = [repository]
-            model.configuration.plans = [documents, photos]
-            model.startQuietPlanRun(planID: photos.id, work: work) { _, _, _ in
-                try? await Task.sleep(for: .seconds(60))
-            }
-            // Stop: the restic child holds the exclusive lock until it is
-            // gone, and nothing awaits before the reads below.
-            model.cancelBackup(planID: photos.id)
-            #expect(model.activity[photos.id]?.phase == .cancelling)
-            #expect(model.backupLockReason(for: documents) == reason, "\(work)")
-            #expect(!model.planCommands(for: .plan(documents.id)).canBackUp, "\(work)")
-            await model.tasks.drain()
-            #expect(model.backupLockReason(for: documents) == nil, "\(work)")
-        }
-    }
-
     @Test("a removed plan's stopping run keeps its repository's backups waiting until it unwinds")
-    func removedPlansRunKeepsTheLock() async {
+    func removedPlansRunKeepsTheLock() {
         let model = makeModel()
         let repository = makeRepository("Home NAS")
         let documents = makePlan("Documents", on: repository)
         let photos = makePlan("Photos", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [documents, photos]
-        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
-            try? await Task.sleep(for: .seconds(60))
-        }
-        // Remove Plan cancels the run; its restic child still holds the
-        // lock while it dies, and nothing awaits before the reads below.
-        model.deletePlan(id: photos.id)
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+        model.setActivityPhase(.applyingRetention, for: photos.id)
+        // Remove Plan takes the plan at once; the forget's restic child still
+        // holds the lock while it dies.
+        model.configuration.plans = [documents]
         #expect(model.plan(id: photos.id) == nil)
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is removing items from earlier backups of “Photos” — backups wait until it finishes.")
+            == "“Home NAS” is applying retention for “Photos” — backups wait until it finishes.")
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
         #expect(model.busyRepositoryIDs == [repository.id])
-        await model.tasks.drain()
-        #expect(model.activity[photos.id] == nil)
+        model.activity[photos.id] = nil
         #expect(model.backupLockReason(for: documents) == nil)
         #expect(model.busyRepositoryIDs.isEmpty)
     }
@@ -140,21 +112,18 @@ struct CommandStateTests {
     }
 
     @Test("the lock reason names a running plan as the sidebar does, after a rename too")
-    func lockReasonFollowsARename() async {
+    func lockReasonFollowsARename() {
         let model = makeModel()
         let repository = makeRepository("Home NAS")
         let documents = makePlan("Documents", on: repository)
         let photos = makePlan("Photos", on: repository)
         model.configuration.repositories = [repository]
         model.configuration.plans = [documents, photos]
-        model.startQuietPlanRun(planID: photos.id, work: .removeFromEarlierBackups) { _, _, _ in
-            try? await Task.sleep(for: .seconds(60))
-        }
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+        model.setActivityPhase(.applyingRetention, for: photos.id)
         model.configuration.plans[1].path = "/tmp/Pictures"
         #expect(model.backupLockReason(for: documents)
-            == "“Home NAS” is removing items from earlier backups of “Pictures” — backups wait until it finishes.")
-        model.cancelBackup(planID: photos.id)
-        await model.tasks.drain()
+            == "“Home NAS” is applying retention for “Pictures” — backups wait until it finishes.")
     }
 
     @Test("a backup stopped in its forget keeps the repository's backups waiting; after the forget it no longer does")
@@ -207,35 +176,6 @@ struct CommandStateTests {
         #expect(model.activity.isEmpty)
     }
 
-    @Test("Remove from Earlier Backups is gated in order: an incomplete plan, then a missing restic, then a busy repository")
-    func removeFromEarlierBackupsGating() {
-        let model = makeModel()
-        let repository = makeRepository("Home NAS")
-        let documents = makePlan("Documents", on: repository)
-        var orphan = BackupPlan()
-        orphan.repositoryID = UUID()
-        orphan.path = "/tmp/Orphan"
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [documents, orphan]
-
-        #expect(model.removeFromEarlierBackupsBlocker(planID: makePlan("Draft", on: nil).id)
-            == BackupPlan.incompleteConfigurationReason)
-        #expect(model.removeFromEarlierBackupsBlocker(planID: orphan.id)
-            == BackupPlan.incompleteConfigurationReason)
-        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
-
-        model.resticSearch = .searching
-        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
-        model.maintenance[repository.id] = MaintenanceActivity(task: .check)
-        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == "restic is missing.")
-
-        model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
-        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id)
-            == "The repository is in use by a backup or maintenance job — try again when it finishes.")
-        model.maintenance = [:]
-        #expect(model.removeFromEarlierBackupsBlocker(planID: documents.id) == nil)
-    }
-
     @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
     func backUpAllQueuesBehindAPlansRun() {
         let model = makeModel()
@@ -283,21 +223,6 @@ struct CommandStateTests {
         #expect(model.plan(id: plan.id)?.excludePatterns
             == [".DS_Store", "/Users/u/Taxes/a\\[1].pdf", "/Users/u/b\\?.txt", "/Users/u/c"])
         #expect(model.plan(id: plan.id)?.path == plan.path)
-    }
-
-    @Test("Keep stops a rebuildable folder's offer once, and Suggest Again brings it back")
-    func keepAndSuggestAgain() {
-        let model = makeModel()
-        let repository = makeRepository()
-        let plan = makePlan(on: repository)
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [plan]
-
-        model.keepRebuildableFolders(paths: ["/Users/u/app/build", "/Users/u/go/vendor"], inPlan: plan.id)
-        model.keepRebuildableFolders(paths: ["/Users/u/app/build"], inPlan: plan.id)
-        #expect(model.plan(id: plan.id)?.keptRebuildableFolders == ["/Users/u/app/build", "/Users/u/go/vendor"])
-        model.suggestAgain(rebuildableFolder: "/Users/u/app/build", inPlan: plan.id)
-        #expect(model.plan(id: plan.id)?.keptRebuildableFolders == ["/Users/u/go/vendor"])
     }
 
     @Test("the Plan menu acts on the selected plan, and on nothing else")
@@ -374,11 +299,6 @@ struct CommandStateTests {
         #expect(trayRow()?.title == "Stop Applying Retention to “Docs”")
         #expect(trayRow()?.action == .stop)
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Applying Retention")
-
-        // Remove from Earlier Backups: no backup runs, and Stop ends a rewrite.
-        model.activity[plan.id]?.phase = .removingFromEarlierBackups
-        #expect(trayRow()?.title == "Stop Removing from Earlier Backups of “Docs”")
-        #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Removing from Earlier Backups")
     }
 
     @Test("without restic only restic's work is disabled")
@@ -625,10 +545,6 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
-        model.activity[plan.id]?.work = .removeFromEarlierBackups
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Removing items from earlier backups will be stopped.") == true)
-        #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
         model.activity[plan.id] = nil
 
         // The check dialog says which size of slow the user is holding.
@@ -648,27 +564,4 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .prune(UUID())) == nil)
     }
 
-    @Test("a stopped Remove from Earlier Backups is still named as a removal until it unwinds")
-    func stoppedRemovalKeepsItsName() async {
-        let model = makeModel()
-        let repository = makeRepository("NAS")
-        let plan = makePlan("Docs", on: repository)
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [plan]
-        // Started as the sheet starts it; the wait stands where restic runs.
-        model.startQuietPlanRun(planID: plan.id, work: .removeFromEarlierBackups) { _, _, _ in
-            try? await Task.sleep(for: .seconds(60))
-        }
-        // Stop. The cancelled restic child can take seconds to go, and the
-        // dialogs read the run meanwhile: nothing awaits before they do.
-        model.cancelBackup(planID: plan.id)
-        #expect(model.activity[plan.id]?.phase == .cancelling)
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
-            .hasPrefix("Removing items from earlier backups will be stopped.") == true)
-        #expect(model.quitInterruptions == ["Items are being removed from earlier backups."])
-        #expect(model.removalConsequences(for: repository.id)
-            .contains("Items are being removed from earlier backups of “Docs”, which will be cancelled.") == true)
-        await model.tasks.drain()
-        #expect(model.activity[plan.id] == nil)
-    }
 }

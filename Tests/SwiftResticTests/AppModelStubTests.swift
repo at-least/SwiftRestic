@@ -1934,34 +1934,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("remove from earlier backups rewrites the plan's backups without the items, in the plan's slot, and records it alone")
-    func removeFromEarlierBackupsRuns() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let planID = harness.plan.id
-        let item = ExcludedPath(pattern: harness.plan.path + "/app/build", path: harness.plan.path + "/app/build")
-
-        harness.model.removeFromEarlierBackups(planID: planID, items: [item])
-        #expect(harness.model.activity[planID]?.phase == .removingFromEarlierBackups)
-        #expect(harness.model.removalConsequences(for: harness.repository.id)
-            .contains("Items are being removed from earlier backups of “Stub Plan”, which will be cancelled."))
-        // The rewrite holds restic's exclusive lock: a backup waits for it.
-        #expect(harness.model.lockedRepositories[harness.repository.id]?.contains("removing items from earlier backups") == true)
-        await harness.model.waitForRun(planID: planID)
-
-        let record = try #require(harness.model.configuration.runs.first)
-        #expect(record.kind == .rewrite)
-        #expect(record.outcome == .succeeded)
-        #expect(record.planID == planID)
-        #expect(record.detailText == "Removed 1 item from 1 backup. The space is freed at the next cleanup.")
-        #expect(harness.model.plan(id: planID)?.lastRunAt == nil)
-        let rewrite = try #require(try invocations(harness).first { $0.contains(" rewrite ") })
-        for argument in ["rewrite", "--forget", "--tag \(ResticService.planTag(planID))", "--exclude \(item.pattern)"] {
-            #expect(rewrite.contains(" \(argument)"), "\(argument) missing from \(rewrite)")
-        }
-        await harness.model.shutdown()
-    }
-
     @Test("deleting a repository cancels the backup running against it")
     func deletingRepositoryCancelsRunningBackup() async throws {
         let harness = try await makeHarness(mode: "hang-backup")
@@ -1982,37 +1954,6 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
         #expect(record.failureMessage == "Cancelled")
-
-        await harness.model.shutdown()
-    }
-
-    @Test("Import Settings stops the backup in flight and records it cancelled")
-    func importSettingsCancelsRunningBackup() async throws {
-        let harness = try await makeHarness(mode: "hang-backup")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        harness.model.runBackup(planID: harness.plan.id)
-        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
-
-        // The file holds the running plan and its repository, so Delete
-        // Plan's bookkeeping and `deletePlansWithoutRepository` both pass it
-        // over: `tasks.cancelSlots()` is the only canceller an import has.
-        var file = AppConfiguration()
-        file.repositories = [harness.repository]
-        file.plans = [harness.plan]
-        harness.model.importSettings(SettingsFile(name: "SwiftRestic Settings.json", configuration: file))
-        #expect(harness.model.activity[harness.plan.id]?.phase == .cancelling)
-        await harness.model.waitForRun(planID: harness.plan.id)
-
-        let record = try #require(harness.model.configuration.runs.first)
-        #expect(record.outcome == .cancelled)
-        #expect(record.failureMessage == "Cancelled")
-        #expect(harness.model.configuration.repositories == [harness.repository])
-        #expect(harness.model.configuration.plans.count == 1)
-        #expect(harness.model.configuration.plans.first?.id == harness.plan.id)
-        // The cancelled unwind stamps the plan's slot with the run's start,
-        // so the file's unstamped plan does not read as never run.
-        #expect(harness.model.configuration.plans.first?.lastRunAt == record.startedAt)
 
         await harness.model.shutdown()
     }

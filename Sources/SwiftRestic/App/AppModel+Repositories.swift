@@ -32,20 +32,6 @@ extension AppModel {
             configuration.repositories.append(repository)
         }
 
-        // The context always applies the stored location and password last, so
-        // these entries would silently do nothing. Say so rather than let the
-        // user believe a variable is doing work.
-        let overridden = RepositoryContext.overriddenExtraEnvironmentKeys(in: repository.extraEnvironment)
-        if !overridden.isEmpty {
-            let one = overridden.count == 1
-            post(Banner(
-                title: one ? "Ignored environment variable" : "Ignored environment variables",
-                message: one
-                    ? "SwiftRestic manages \(overridden[0]) itself, so its entry in the extra environment for “\(label(of: repository))” has no effect. Remove it from SwiftRestic’s configuration file."
-                    : "SwiftRestic manages \(Format.list(overridden)) itself, so their entries in the extra environment for “\(label(of: repository))” have no effect. Remove them from SwiftRestic’s configuration file.",
-                level: .warning
-            ))
-        }
     }
 
     /// What removing this repository does to work in flight — the removal
@@ -56,14 +42,10 @@ extension AppModel {
     /// trail what removal actually does.
     func removalConsequences(for repositoryID: UUID) -> String {
         let plans = plans(in: repositoryID)
-        func names(doing work: PlanActivity.Work) -> [String] {
-            plans.filter { activity[$0.id]?.work == work }.map { label(of: $0) }
-        }
         return Self.removalConsequences(
             removedPlanNames: plans.map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
-            runningBackupNames: names(doing: .backup),
-            removingFromEarlierBackupsNames: names(doing: .removeFromEarlierBackups),
+            runningBackupNames: plans.filter { activity[$0.id] != nil }.map { label(of: $0) },
             isMaintaining: maintenance[repositoryID] != nil,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )
@@ -79,7 +61,6 @@ extension AppModel {
         removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
-        removingFromEarlierBackupsNames: [String],
         isMaintaining: Bool,
         isConsoleRunning: Bool
     ) -> String {
@@ -99,9 +80,6 @@ extension AppModel {
             consequences += names.count == 1
                 ? " A backup of \(names[0]) is running and will be cancelled."
                 : " Backups of \(Format.list(names)) are running and will be cancelled."
-        }
-        if !removingFromEarlierBackupsNames.isEmpty {
-            consequences += " Items are being removed from earlier backups of \(Format.list(removingFromEarlierBackupsNames.map { "“\($0)”" })), which will be cancelled."
         }
         if isMaintaining {
             consequences += " Repository maintenance is running and will be cancelled."

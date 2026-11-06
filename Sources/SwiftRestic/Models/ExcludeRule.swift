@@ -1,10 +1,7 @@
 import Foundation
 
-/// The kind of thing a rule the app offers leaves out. The defaults'
-/// categories are what the plan editor's two defaults switches cover
-/// (`finderFiles`, `systemFiles`); the developer rules' (`developerGroups`)
-/// are what its developer switch is ticked by, one checkbox each, so their
-/// raw values are what a configuration stores.
+/// The kind of thing a rule the app passes leaves out. Older configurations
+/// stored the developer categories' raw values.
 enum ExcludeCategory: String, CaseIterable, Codable, Sendable {
     case finder
     case appState
@@ -33,47 +30,16 @@ enum ExcludeCategory: String, CaseIterable, Codable, Sendable {
     case simulators
     case machines
 
-    var title: String {
-        switch self {
-        case .finder: "Finder & Trash"
-        case .appState: "Apps’ caches & state"
-        case .indexes: "Search indexes"
-        case .drives: "Drives’ own bookkeeping"
-        case .startupDisk: "Startup disk"
-        case .python: "Python"
-        case .javascript: "JavaScript & TypeScript"
-        case .apple: "Swift & Xcode"
-        case .rust: "Rust"
-        case .go: "Go"
-        case .jvm: "Java & Kotlin"
-        case .dart: "Dart & Flutter"
-        case .ruby: "Ruby"
-        case .php: "PHP"
-        case .dotnet: ".NET"
-        case .elixir: "Elixir & Erlang"
-        case .haskell: "Haskell"
-        case .scala: "Scala"
-        case .julia: "Julia"
-        case .r: "R"
-        case .cpp: "C & C++"
-        case .zig: "Zig"
-        case .ocaml: "OCaml"
-        case .otherTools: "Other tools"
-        case .simulators: "Simulators"
-        case .machines: "Containers & virtual machines"
-        }
-    }
-
-    /// The developer switch's groups, in the categories' order.
-    static let developerGroups: [ExcludeCategory] = Array(allCases.drop { $0 != .python })
-
-    static let finderFiles: Set<ExcludeCategory> = [.finder]
-    static let systemFiles: Set<ExcludeCategory> = [.appState, .indexes, .drives, .startupDisk]
+    /// What the *Developer files* switch covers.
+    static let rebuildableGroups: [ExcludeCategory] = [
+        .python, .javascript, .apple, .rust, .go, .jvm, .dart, .ruby, .php, .dotnet,
+        .elixir, .haskell, .scala, .julia, .r, .cpp, .zig, .ocaml, .otherTools,
+    ]
+    /// What the *Simulators, containers and virtual machines* switch covers.
+    static let machineGroups: [ExcludeCategory] = [.simulators, .machines]
 }
 
-/// One rule the app offers: a new plan's default, the developer switch's,
-/// or a developer group's marker — with what it leaves out and why that is safe,
-/// the label every surface shows beside it.
+/// One rule the app passes, with what it leaves out and why that is safe.
 struct ExcludeRule: Hashable, Sendable {
     /// What restic is passed: an `--exclude` pattern, or for a marker the
     /// file name `--exclude-if-present` takes.
@@ -83,29 +49,19 @@ struct ExcludeRule: Hashable, Sendable {
     let what: String
     /// Who puts it back, or why nothing has to.
     let why: String
-    var isMarker = false
 
-    init(_ pattern: String, _ category: ExcludeCategory, _ what: String, _ why: String, isMarker: Bool = false) {
+    init(_ pattern: String, _ category: ExcludeCategory, _ what: String, _ why: String) {
         self.pattern = pattern
         self.category = category
         self.what = what
         self.why = why
-        self.isMarker = isMarker
     }
-
-    var line: String { isMarker ? "Folders holding \(pattern)" : pattern }
-
-    var label: String { "\(what) · \(why)" }
 
     /// Noise the Finder, package managers and caches regenerate on their
     /// own. Nothing here may be the only copy of anything — a restored Git
     /// working copy without its object store is "not a git repository".
-    /// A plan gets them all, whatever its path; one naming the path or a
-    /// folder above it is not passed (`ResticService.pattern(_:covers:)`).
-    /// The first five are the list
-    /// older builds offered, unchanged and first, but for
-    /// `**/node_modules`, which went to the developer switch's JavaScript
-    /// rules: plans saved with it keep it as their own row.
+    /// Every plan passes them all, whatever its path; one naming the path or
+    /// a folder above it is not passed (`ResticService.pattern(_:covers:)`).
     static let defaults: [ExcludeRule] = [
         ExcludeRule(".DS_Store", .finder, "Finder’s window settings", "Finder writes them again"),
         ExcludeRule("~/Library/Caches", .appState, "Apps’ caches", "apps fill them again"),
@@ -153,12 +109,10 @@ struct ExcludeRule: Hashable, Sendable {
     ]
 
     /// What developer tools rebuild, one group per language or tool
-    /// (`ExcludeCategory.developerGroups`): a group ticked under a plan's
-    /// developer switch adds its rules
-    /// (`BackupPlan.developerExcludes(groups:)`) to the plan's list,
-    /// and its marker, if it has one (`developerMarkers`), is passed while
-    /// it is ticked. Each pattern belongs to one group. The defaults' bar
-    /// holds — nothing here may be the only copy of anything — and where a
+    /// (`ExcludeCategory`). Each pattern belongs to one group. For the
+    /// rebuildable groups the defaults' bar holds — nothing there may be the
+    /// only copy of anything; the machine groups do not meet it, so their
+    /// switch is off for new plans. Where a
     /// tool folder also holds the user's own words, the disposable
     /// subfolder is named, never the folder: `~/.gradle`'s
     /// gradle.properties, `~/.lima`'s lima.yaml, `~/.android`'s keys,
@@ -355,13 +309,13 @@ struct ExcludeRule: Hashable, Sendable {
     /// obj stays, a folder holding the file the build writes into it does
     /// not. Cargo writes its marker into the target folder (not into
     /// ~/.cargo); NuGet's restore writes project.assets.json into a
-    /// project's obj folder. Each applies to every path while its group is
-    /// ticked. The Cargo marker takes the user's files with it only where
+    /// project's obj folder. Each applies to every path while the developer
+    /// switch is on. The Cargo marker takes the user's files with it only where
     /// `CARGO_TARGET_DIR` or `build.target-dir` points the build into a
     /// folder that holds them: restic then keeps the marker alone, exit 0
     /// (0.19.1, probed).
     static let developerMarkers: [ExcludeRule] = [
-        ExcludeRule(".rustc_info.json", .rust, "Cargo build output, the marker kept", "cargo build makes it again", isMarker: true),
-        ExcludeRule("project.assets.json", .dotnet, ".NET intermediate build output, the marker kept", "dotnet build makes it again", isMarker: true),
+        ExcludeRule(".rustc_info.json", .rust, "Cargo build output, the marker kept", "cargo build makes it again"),
+        ExcludeRule("project.assets.json", .dotnet, ".NET intermediate build output, the marker kept", "dotnet build makes it again"),
     ]
 }

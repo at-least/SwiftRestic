@@ -554,10 +554,3 @@ extension RunRecord {
         kind == .backup && self.planID == planID
     }
 }
-
-extension RunRecord {
-    static func rewriteSummary(items: Int, backups: Int) -> String {
-        guard backups > 0 else { return "No backup held \(items == 1 ? "it" : "them")." }
-        return "Removed \(Format.plural(items, "item")) from \(Format.plural(backups, "backup")). The space is freed at the next cleanup."
-    }
-}

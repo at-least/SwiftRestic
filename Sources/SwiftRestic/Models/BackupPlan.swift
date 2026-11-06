@@ -289,24 +289,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     }
 }
 
-/// One of a plan's own patterns that names one path
-/// (`ResticService.excludedPaths(of:)`).
-struct ExcludedPath: Hashable, Sendable {
-    /// As a backup passes it.
-    let pattern: String
-    /// As a backup records it.
-    let path: String
-}
-
-/// One of a plan's skipped paths that its backups still hold, with the
-/// backups holding it (`AppModel.itemsInEarlierBackups(planID:)`).
-struct EarlierBackupItem: Hashable, Sendable, Identifiable {
-    let excluded: ExcludedPath
-    let backups: [IndexVersion]
-
-    var id: String { excluded.path }
-}
-
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var repositoryID: UUID?
@@ -324,17 +306,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var resolvedPath: String { ResticService.expandTilde(path) }
 
     /// The patterns the user added, as typed or picked: the editor's
-    /// *Also skip* list. The switches' rules are not among them — a run
-    /// passes those beside them (`excludesToPass`).
+    /// *Also skip* list. What the switches and the fixed rules leave out is
+    /// not among them — a run passes those beside them (`excludesToPass`).
     var excludePatterns: [String] = []
-    /// *Skip › Finder files and the Trash*: the defaults of
-    /// `ExcludeCategory.finderFiles`. On for new plans.
-    var skipsFinderFiles: Bool = true
-    /// *Skip › App caches and system files*: the defaults of
-    /// `ExcludeCategory.systemFiles`. On for new plans.
-    var skipsSystemFiles: Bool = true
-    var excludeCaches: Bool = true
-    var oneFileSystem: Bool = false
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
@@ -351,37 +325,24 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// UNVERIFIED (never tried on a real iCloud Drive file): what restic
     /// does with an online-only file without the flag.
     var excludeCloudFiles: Bool = true
-    /// Leave out the items Time Machine's options list
-    /// (`TimeMachineExclusions`), read at each backup. On for new plans; a
-    /// plan saved before the option reads it off, so its backups do not
-    /// change under it.
-    var skipsTimeMachineExclusions: Bool = true
-    /// The developer switch's groups that are ticked
-    /// (`ExcludeCategory.developerGroups`), in their order: a run passes
-    /// each ticked group's rules (`developerExcludes(groups:)`) and, for a
-    /// group with a marker, `--exclude-if-present`. Every group for new
-    /// plans (the user's call); a plan saved without the key has none, so
-    /// its backups do not change under a switch it never asked for. Older
-    /// builds stored one switch, `excludeDeveloperFiles`: on, it becomes
-    /// every group once at load (`AppConfiguration`).
-    var developerGroups: [ExcludeCategory] = ExcludeCategory.developerGroups
-    /// The folders the plan page offered to skip (`RebuildableFolder`) that
-    /// the user chose to keep backing up, as the backup recorded them: never
-    /// offered again.
-    var keptRebuildableFolders: [String] = []
-
-    var excludeDeveloperFiles: Bool { !developerGroups.isEmpty }
+    /// What developer tools download or build again
+    /// (`ExcludeCategory.rebuildableGroups`). On for new plans.
+    var skipsDeveloperFiles: Bool = true
+    /// Simulators, containers and virtual machines
+    /// (`ExcludeCategory.machineGroups`): their disks are recreated empty, so
+    /// what is inside may be the only copy. Off for new plans (user decision).
+    var skipsMachines: Bool = false
 
     enum CodingKeys: String, CodingKey {
-        case id, repositoryID, path, excludePatterns, excludeCaches, oneFileSystem, tags, schedule, retention
+        case id, repositoryID, path, excludePatterns, tags, schedule, retention
         case hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
-        case developerGroups = "skipDeveloperGroups"
-        case skipsFinderFiles, skipsSystemFiles, skipsTimeMachineExclusions
-        case keptRebuildableFolders
+        case skipsDeveloperFiles, skipsMachines
     }
 
-    /// Read, never written: a plan an older build switched off stays stopped.
-    private enum LegacyKeys: String, CodingKey { case isEnabled }
+    /// Read, never written. `isEnabled`: a plan an older build switched off
+    /// stays stopped. `skipDeveloperGroups`: older builds ticked each language
+    /// on its own; any group turns on the switch that now holds it.
+    private enum LegacyKeys: String, CodingKey { case isEnabled, skipDeveloperGroups }
 
     init() {}
 
@@ -390,12 +351,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         repositoryID = c.optional(.repositoryID)
         path = c.value(.path, default: "")
-        excludeCaches = c.value(.excludeCaches, default: true)
-        oneFileSystem = c.value(.oneFileSystem, default: false)
         tags = c.value(.tags, default: [])
         schedule = c.value(.schedule, default: Schedule())
         retention = c.value(.retention, default: RetentionPolicy())
-        if try !decoder.container(keyedBy: LegacyKeys.self).value(.isEnabled, default: true) {
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        if !legacy.value(.isEnabled, default: true) {
             schedule.frequency = .manual
         }
         hooks = c.value(.hooks, default: [])
@@ -403,75 +363,41 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
-        skipsTimeMachineExclusions = c.value(.skipsTimeMachineExclusions, default: false)
-        // A group a later build added or renamed is dropped, not the list.
-        let groups = Set(c.value(.developerGroups, default: [String]()).compactMap(ExcludeCategory.init(rawValue:)))
-        developerGroups = ExcludeCategory.developerGroups.filter(groups.contains)
-        keptRebuildableFolders = c.value(.keptRebuildableFolders, default: [])
-        // The string-list editor dedupes its own writes, so a duplicate
-        // here means a hand-edited config — and duplicates would give the
-        // list's rows colliding identities. First occurrence wins, order
-        // preserved.
-        let stored = Self.withoutDuplicates(c.value(.excludePatterns, default: BackupPlan.defaultExcludes))
-        if c.contains(.skipsFinderFiles) || c.contains(.skipsSystemFiles) {
-            skipsFinderFiles = c.value(.skipsFinderFiles, default: true)
-            skipsSystemFiles = c.value(.skipsSystemFiles, default: true)
-            excludePatterns = stored
-        } else {
-            // Saved before these switches, when their rules were rows of
-            // the list: one is on when any of its rules is there, and the
-            // rules the switches now pass leave the list — the ticked
-            // developer groups' too. A rule of an unticked group stays, the
-            // user's own row.
-            readDefaultSwitches(fromRecorded: stored)
-            excludePatterns = withoutSwitchRules(stored)
-        }
+        // A plan saved without either key asked for neither, so its backups
+        // do not change under a switch it never turned on.
+        let groups = legacy.value(.skipDeveloperGroups, default: [String]())
+        skipsDeveloperFiles = c.value(.skipsDeveloperFiles, default: !groups.isEmpty)
+        skipsMachines = c.value(.skipsMachines, default: groups.contains {
+            ExcludeCategory(rawValue: $0).map(ExcludeCategory.machineGroups.contains) ?? false
+        })
+        // A duplicate here means a hand-edited config, and duplicates would
+        // give the list's rows colliding identities. First occurrence wins.
+        // Older builds kept the rules the app now passes itself among these.
+        excludePatterns = withoutSwitchRules(Self.withoutDuplicates(c.value(.excludePatterns, default: [])))
     }
 
     static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
 
-    private static func patterns(of rules: [ExcludeRule], in categories: some Collection<ExcludeCategory>) -> [String] {
-        rules.filter { categories.contains($0.category) }.map(\.pattern)
+    private static func patterns(of rules: [ExcludeRule], in groups: [ExcludeCategory]) -> [String] {
+        rules.filter { groups.contains($0.category) }.map(\.pattern)
     }
 
-    static func defaultExcludes(in categories: Set<ExcludeCategory>) -> [String] {
-        patterns(of: ExcludeRule.defaults, in: categories)
+    static let developerExcludes = patterns(of: ExcludeRule.developer, in: ExcludeCategory.rebuildableGroups)
+    static let machineExcludes = patterns(of: ExcludeRule.developer, in: ExcludeCategory.machineGroups)
+
+    /// `--exclude-if-present` file names: restic leaves out the contents of a
+    /// folder holding one and keeps the marker itself.
+    var developerMarkers: [String] {
+        skipsDeveloperFiles ? ExcludeRule.developerMarkers.map(\.pattern) : []
     }
 
-    static let developerExcludes = developerExcludes(groups: ExcludeCategory.developerGroups)
-
-    static func developerMarkers(for groups: [ExcludeCategory]) -> [String] {
-        patterns(of: ExcludeRule.developerMarkers, in: groups)
-    }
-
-    static func developerExcludes(groups: [ExcludeCategory]) -> [String] {
-        patterns(of: ExcludeRule.developer, in: groups)
-    }
-
-    mutating func setSkips(_ group: ExcludeCategory, _ isOn: Bool) {
-        setSkips([group], isOn)
-    }
-
-    mutating func setSkipsDeveloperFiles(_ isOn: Bool) {
-        setSkips(ExcludeCategory.developerGroups, isOn)
-    }
-
-    private mutating func setSkips(_ groups: [ExcludeCategory], _ isOn: Bool) {
-        let changed = Set(groups)
-        let kept = Set(developerGroups).subtracting(changed)
-        developerGroups = ExcludeCategory.developerGroups.filter { kept.contains($0) || (isOn && changed.contains($0)) }
-    }
-
-    /// The rules the switches pass: the defaults of the ones on, then the
-    /// ticked developer groups' rules — whatever the path, since a rule
-    /// naming nothing under it matches nothing. A plan stores the switches,
-    /// not their rules, so a rule a later build adds reaches every plan
-    /// with its switch on.
+    /// The rules the app passes itself, whatever the path, since a rule naming
+    /// nothing under it matches nothing. A plan stores the switches, not their
+    /// rules, so a rule a later build adds reaches every plan with its switch on.
     var switchExcludes: [String] {
-        var categories = Set<ExcludeCategory>()
-        if skipsFinderFiles { categories.formUnion(ExcludeCategory.finderFiles) }
-        if skipsSystemFiles { categories.formUnion(ExcludeCategory.systemFiles) }
-        return Self.defaultExcludes(in: categories) + Self.developerExcludes(groups: developerGroups)
+        Self.defaultExcludes
+            + (skipsDeveloperFiles ? Self.developerExcludes : [])
+            + (skipsMachines ? Self.machineExcludes : [])
     }
 
     var excludesToPass: [String] {
@@ -483,25 +409,17 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return patterns.filter { !passed.contains($0) }
     }
 
-    /// The switches as a list of patterns that held their rules sets them —
-    /// a configuration saved before the switches, or a backup restic
-    /// recorded: a defaults switch is on when any of its rules is there, a
-    /// developer group ticked when most of its rules are — not all, since a
-    /// later build may add a rule an older list never held; a few of them
-    /// are rows the user typed, which leave the group unticked.
+    /// The switches a backup's recorded excludes imply. A group counts when
+    /// most of its rules are there: a later build may add a rule an older list
+    /// never held, and a few of them are rows the user typed.
     mutating func readSwitches(fromRecorded patterns: [String]) {
-        readDefaultSwitches(fromRecorded: patterns)
         let present = Set(patterns)
-        developerGroups = ExcludeCategory.developerGroups.filter { group in
-            let rules = Self.developerExcludes(groups: [group])
+        func holds(_ group: ExcludeCategory) -> Bool {
+            let rules = Self.patterns(of: ExcludeRule.developer, in: [group])
             return rules.filter(present.contains).count * 2 > rules.count
         }
-    }
-
-    private mutating func readDefaultSwitches(fromRecorded patterns: [String]) {
-        let present = Set(patterns)
-        skipsFinderFiles = Self.defaultExcludes(in: ExcludeCategory.finderFiles).contains(where: present.contains)
-        skipsSystemFiles = Self.defaultExcludes(in: ExcludeCategory.systemFiles).contains(where: present.contains)
+        skipsDeveloperFiles = ExcludeCategory.rebuildableGroups.contains(where: holds)
+        skipsMachines = ExcludeCategory.machineGroups.contains(where: holds)
     }
 
     static func withoutDuplicates(_ values: [String]) -> [String] {
@@ -547,7 +465,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// The stored plan wins over the editor's draft for the model-written
     /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
-    /// quiet-plan alert's mark and the folders the plan page was told to keep.
+    /// quiet-plan alert's mark.
     /// A new model-written field joins this list, or the next save reverts it
     /// to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
@@ -555,7 +473,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
         merged.staleAlertedFor = staleAlertedFor
-        merged.keptRebuildableFolders = keptRebuildableFolders
         return merged
     }
 }

@@ -10,8 +10,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var backupScript: Result<BackupOutcome, Error> =
         .success(BackupOutcome(summary: nil, itemErrors: [], exitCode: 0))
     private var forgetScript: Result<Int, Error> = .success(0)
-    private var rewriteScript: Result<Int, Error> = .success(0)
-    private var rewritePatterns: [[String]] = []
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
     private var pruneScript: Result<String, Error> = .success("")
     private var pruneRawLines: [String] = []
@@ -43,13 +41,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func onForget(_ result: Result<Int, Error>) -> Self {
         locked { forgetScript = result }
-        return self
-    }
-
-    var rewrites: [[String]] { locked { rewritePatterns } }
-
-    func onRewrite(_ result: Result<Int, Error>) -> Self {
-        locked { rewriteScript = result }
         return self
     }
 
@@ -350,13 +341,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         record("forget")
         transcribe("forget")
         return try locked { forgetScript }.get()
-    }
-
-    func rewrite(_ context: RepositoryContext, plan: BackupPlan, excluding patterns: [String]) async throws -> Int {
-        record("rewrite")
-        transcribe("rewrite")
-        locked { rewritePatterns.append(patterns) }
-        return try locked { rewriteScript }.get()
     }
 
     /// Not transcribed: the preview is a read the sheet asks for, not a run.

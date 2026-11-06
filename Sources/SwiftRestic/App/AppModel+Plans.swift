@@ -73,20 +73,6 @@ extension AppModel {
         }
     }
 
-    func keepRebuildableFolders(paths: [String], inPlan planID: UUID) {
-        updatePlan(planID) { plan in
-            for path in paths where !plan.keptRebuildableFolders.contains(path) {
-                plan.keptRebuildableFolders.append(path)
-            }
-        }
-    }
-
-    func suggestAgain(rebuildableFolder path: String, inPlan planID: UUID) {
-        updatePlan(planID) { plan in
-            plan.keptRebuildableFolders.removeAll { PathKey($0) == PathKey(path) }
-        }
-    }
-
     /// Changes one plan's fields in place, in one write: each write to
     /// `configuration` runs its didSet. Nothing when the plan is gone.
     func updatePlan(_ id: UUID, _ change: (inout BackupPlan) -> Void) {

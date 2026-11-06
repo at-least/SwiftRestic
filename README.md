@@ -49,9 +49,7 @@ would need a Developer ID, the hardened runtime and notarization.
 
 - Settings: `~/Library/Application Support/com.newlix.SwiftRestic/config.json`,
   with the two previous generations beside it.
-- Repository passwords and backend secrets: the login Keychain. An exported
-  settings file holds no password, but it holds webhook addresses, hook
-  commands and a repository's extra environment variables as typed.
+- Repository passwords and backend secrets: the login Keychain.
 - The search index: one SQLite file per repository, `index/` beside
   `config.json`. It holds the path of every file in every backup, unencrypted,
   and is rebuilt from the repository on request.

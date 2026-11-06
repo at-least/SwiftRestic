@@ -482,18 +482,6 @@ enum SnapshotIndexSchema {
             SELECT n.id, n.name FROM node_fts f JOIN node n ON n.id = f.rowid
             WHERE node_fts MATCH ? ORDER BY n.name
             """
-        /// The nodes with exactly one name, found through the FTS cursor: the
-        /// MATCH narrows to names holding the name's tokens, the equality
-        /// keeps the name itself, bytewise.
-        let nodesNamed = """
-            SELECT n.id, n.parent FROM node_fts f JOIN node n ON n.id = f.rowid
-            WHERE node_fts MATCH ? AND n.name = ?
-            """
-        /// One node's kind at one seq of a chain, when a run claims it there:
-        /// a node's runs in a chain never overlap, so one row at most.
-        let nodeAtSeq = """
-            SELECT is_dir FROM run WHERE node_id = ? AND chain_id = ? AND first_seq <= ? AND last_seq >= ?
-            """
         /// One search candidate's newest indexed snapshot within one chain —
         /// its kind, seq and hash there, the bare columns of the `max()` row
         /// as in `childrenInChain` — or no row when no indexed snapshot of

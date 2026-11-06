@@ -404,10 +404,7 @@ struct PlanEditorSheet: View {
     }
 
     private var sourcesTab: some View {
-        // Read once per render: the section and the Time Machine switch's
-        // button both ask it.
-        let showsFullDiskAccessSection = showsFullDiskAccessSection
-        return Form {
+        Form {
             // A folder on a network share: its password, so a backup can
             // reconnect it. Not while adopting — the sheet is about history.
             if mode != .adopt, let row = model.shareRow(for: draft.resolvedPath, mounted: mountedShare) {
@@ -452,51 +449,26 @@ struct PlanEditorSheet: View {
                     FullDiskAccessButton()
                 }
             }
-            // What the app knows to leave out, as switches under one verb;
-            // the list below holds only what the user added.
+            // What the app leaves out; the list below holds only what the
+            // user added.
             Section {
-                Toggle(isOn: $draft.skipsFinderFiles) {
-                    Text(PlanSkips.finderFiles)
-                }
-                .help(PlanSkips.rulesHelp(ExcludeCategory.finderFiles))
-                Toggle(isOn: $draft.skipsSystemFiles) {
-                    Text(PlanSkips.systemFiles)
-                    Text("Caches, logs, search indexes and other files macOS and apps make again.")
-                }
-                .help(PlanSkips.rulesHelp(ExcludeCategory.systemFiles))
-                Toggle(PlanSkips.caches, isOn: $draft.excludeCaches)
-                    .help(PlanSkips.cachesHelp)
-                // No row anywhere can name what a simulator or a container
-                // disk held, so the trade is said here, once.
-                Toggle(isOn: Binding(
-                    get: { draft.excludeDeveloperFiles },
-                    set: { draft.setSkipsDeveloperFiles($0) }
-                )) {
+                Text(PlanSkips.always)
+                    .foregroundStyle(.secondary)
+                    .help(PlanSkips.alwaysHelp)
+                Toggle(isOn: $draft.skipsDeveloperFiles) {
                     Text(PlanSkips.developerFiles)
-                    Text(developerFilesCaption)
+                    Text(PlanSkips.developerFilesCaption)
                 }
-                if draft.excludeDeveloperFiles {
-                    developerGroupBoxes
+                Toggle(isOn: $draft.skipsMachines) {
+                    Text(PlanSkips.machines)
+                    Text(PlanSkips.machinesCaption)
                 }
-                // No row anywhere can show a file that was left out, so the
-                // trade is said here, once.
-                Toggle(isOn: $draft.excludeCloudFiles) {
-                    Text(PlanSkips.cloudFiles)
-                    Text(PlanSkips.cloudFilesCaption)
+                DisclosureGroup("Advanced") {
+                    Toggle(isOn: $draft.excludeCloudFiles) {
+                        Text(PlanSkips.cloudFiles)
+                        Text(PlanSkips.cloudFilesCaption)
+                    }
                 }
-                Toggle(isOn: $draft.skipsTimeMachineExclusions) {
-                    Text(PlanSkips.timeMachineExclusions)
-                    Text(timeMachineListNeedsFullDiskAccess
-                        ? PlanSkips.timeMachineExclusionsCaption + " " + PlanSkips.timeMachineExclusionsFullDiskAccessHint
-                        : PlanSkips.timeMachineExclusionsCaption)
-                }
-                // The caption's next step, beside it — unless the section
-                // above already offers the same button.
-                if timeMachineListNeedsFullDiskAccess, !showsFullDiskAccessSection {
-                    FullDiskAccessButton()
-                }
-                // restic's --one-file-system, said as what it skips.
-                Toggle(PlanSkips.otherDisks, isOn: $draft.oneFileSystem)
             } header: {
                 Text("Skip")
             }
@@ -517,78 +489,12 @@ struct PlanEditorSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            keptFoldersSection
         }
         .formStyle(.grouped)
     }
 
-    /// The folders the plan page's Rebuildable Folders were told to keep,
-    /// each with Suggest Again. Read from the stored plan and changed on it
-    /// at once, not in the draft: the field is model-written
-    /// (`BackupPlan.merging(draft:)` keeps the stored list), so Cancel does
-    /// not undo it. Absent while the list is empty.
-    @ViewBuilder
-    private var keptFoldersSection: some View {
-        let kept = model.plan(id: draft.id)?.keptRebuildableFolders ?? []
-        if !kept.isEmpty {
-            Section {
-                ForEach(kept, id: \.self) { path in
-                    HStack {
-                        Text((path as NSString).abbreviatingWithTildeInPath)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(path)
-                        Spacer(minLength: 8)
-                        Button("Suggest Again") { model.suggestAgain(rebuildableFolder: path, inPlan: draft.id) }
-                            .controlSize(.small)
-                    }
-                }
-            } header: {
-                Text("Kept folders")
-            } footer: {
-                Text("Rebuildable folders you chose to keep backing up. SwiftRestic doesn’t suggest skipping them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var developerGroupBoxes: some View {
-        // .topLeading, not .firstTextBaseline: the baseline lines a row's other
-        // cells up with a wrapped label's last line, a line below its checkbox.
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .topLeading), count: 3), alignment: .leading, spacing: 6) {
-            ForEach(ExcludeCategory.developerGroups, id: \.self) { group in
-                Toggle(group.title, isOn: Binding(
-                    get: { draft.developerGroups.contains(group) },
-                    set: { draft.setSkips(group, $0) }
-                ))
-                .toggleStyle(.checkbox)
-                .controlSize(.regular)
-                .help(developerGroupHelp(group))
-            }
-        }
-        .padding(.leading, 4)
-    }
-
-    private func developerGroupHelp(_ group: ExcludeCategory) -> String {
-        (BackupPlan.developerExcludes(groups: [group])
-            + ExcludeRule.developerMarkers.filter { $0.category == group }.map(\.line))
-            .joined(separator: "\n")
-    }
-
-    /// What the developer switch covers, and its one trade: the rules'
-    /// names are the tools' own, what they download again — the contents
-    /// of the simulators and the machines are the part nobody rebuilds.
-    private var developerFilesCaption: String {
-        "Leaves out what developer tools download or build again. Simulators and Containers leave out their devices and disks — whatever is inside those isn’t backed up."
-    }
-
     private var showsFullDiskAccessSection: Bool {
         model.fullDiskAccess != .granted && ProtectedLocations.needsFullDiskAccess(draft.path, home: NSHomeDirectory())
-    }
-
-    private var timeMachineListNeedsFullDiskAccess: Bool {
-        draft.skipsTimeMachineExclusions && model.fullDiskAccess == .notGranted
     }
 
     private var scheduleTab: some View {
@@ -632,7 +538,7 @@ struct PlanEditorSheet: View {
                 stored: model.plan(id: draft.id),
                 existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
                 hold: model.scheduleHold(repositoryID: draft.repositoryID, now: now),
-                isBackingUp: model.activity[draft.id]?.work == .backup,
+                isBackingUp: model.activity[draft.id] != nil,
                 now: now
             ) {
                 LabeledContent("Next backup") {

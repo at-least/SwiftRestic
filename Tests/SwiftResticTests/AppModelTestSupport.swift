@@ -15,10 +15,6 @@ func waitUntilRestoreFinishes(in model: AppModel, within seconds: TimeInterval =
     }
 }
 
-func writeTimeMachinePreferences(_ contents: Any, to file: URL) throws {
-    try PropertyListSerialization.data(fromPropertyList: contents, format: .binary, options: 0).write(to: file)
-}
-
 extension AppModel {
     var holdsOffSleep: Bool { sleepActivity != nil }
 
@@ -32,12 +28,11 @@ extension AppModel {
 }
 
 extension BackupPlan {
-    /// So a fixture's tree is backed up as planted.
+    /// So a fixture's tree is backed up as planted, but for the rules every
+    /// plan passes.
     mutating func skipNothing() {
         excludePatterns = []
-        skipsFinderFiles = false
-        skipsSystemFiles = false
-        developerGroups = []
-        skipsTimeMachineExclusions = false
+        skipsDeveloperFiles = false
+        skipsMachines = false
     }
 }

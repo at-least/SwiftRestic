@@ -31,7 +31,6 @@ struct ResticFilesTreeTests {
         plan.repositoryID = repository.id
         plan.path = data.path
         plan.skipNothing()
-        plan.skipsFinderFiles = true
         plan.schedule.frequency = .manual
 
         var configuration = AppConfiguration()
@@ -336,7 +335,6 @@ struct ResticFilesTreeTests {
             plan.repositoryID = repository.id
             plan.path = folder.path
             plan.skipNothing()
-            plan.skipsFinderFiles = true
             plan.schedule.frequency = .manual
             return plan
         }

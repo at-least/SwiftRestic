@@ -64,8 +64,7 @@ extension AppModel {
     /// The sidebar's Activity badge: the week's problems
     /// (`OverviewMetrics.problems`, healed ones too) that finished after
     /// Activity was last open. Opening Activity is the Mail "read" for all of
-    /// them at once; the rows stay in the history and on the Recent problems
-    /// card (the user's pick, 2026-10-25).
+    /// them at once; the rows stay in the history (the user's pick, 2026-10-25).
     func activityBadgeCount(now: Date) -> Int {
         let seenAt = activitySeenAt ?? .distantPast
         return OverviewMetrics.problems(in: configuration.runs, since: OverviewMetrics.problemWindowStart(from: now))

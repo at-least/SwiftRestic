@@ -166,36 +166,6 @@ struct RunRecordPresentationTests {
         )
     }
 
-    @Test("a Recent problems row names the run as it is called now and says why in the Detail column's words")
-    func problemRowWording() {
-        var plan = BackupPlan()
-        plan.path = "/Users/someone/Documents"
-        var renamed = backup {
-            $0.planID = plan.id
-            $0.planName = "Old name"
-            $0.outcome = .failed
-            $0.failureMessage = "restic reported a fatal error — Fatal: wrong password\nmore"
-        }
-        #expect(RunRecordPresentation.problemRowTitle(for: renamed, plans: [plan]) == "Documents")
-        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Failed · restic reported a fatal error — Fatal: wrong password")
-        // A plan that is gone keeps the name it ran under.
-        #expect(RunRecordPresentation.problemRowTitle(for: renamed, plans: []) == "Old name")
-
-        // A check or prune is named by its kind: the page already names the
-        // repository its planName stores.
-        var check = RunRecord(kind: .check, planName: "Home NAS")
-        check.outcome = .failed
-        #expect(RunRecordPresentation.problemRowTitle(for: check, plans: [plan]) == "Check")
-        // Nothing more to say than the outcome: said once.
-        #expect(RunRecordPresentation.problemRowCaption(for: check) == "Failed")
-
-        renamed.failureMessage = nil
-        renamed.outcome = .completedWithErrors
-        renamed.itemErrors = ["/a: permission denied", "/b: permission denied"]
-        renamed.itemErrorCount = 2
-        #expect(RunRecordPresentation.problemRowCaption(for: renamed) == "Completed with warnings · 2 unreadable items")
-    }
-
     @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Unlock while nobody here holds the lock")
     func failureFixes() {
         let repository = UUID()
@@ -390,8 +360,6 @@ struct RunRecordPresentationTests {
         let damaged = check(.completedWithErrors, "2 errors — restic repair can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — restic repair can recover some damage")
         #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — restic repair can recover some damage")
-        #expect(RunRecordPresentation.problemRowCaption(for: damaged)
-            == "Completed with warnings · 2 errors — restic repair can recover some damage")
         // A verdict stored before 2026-10-09 put a period before the
         // command, which the sentence cut leaves alone: shown whole, its
         // own final period dropped like every entry's.
@@ -400,7 +368,6 @@ struct RunRecordPresentationTests {
         // No verdict at all: the outcome, as every kind without words.
         #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Completed with warnings")
         #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "completed with warnings")
-        #expect(RunRecordPresentation.problemRowCaption(for: check(.completedWithErrors, nil)) == "Completed with warnings")
         #expect(RunRecordPresentation.detail(for: check(.succeeded, "No errors found.")) == "No errors found")
     }
 

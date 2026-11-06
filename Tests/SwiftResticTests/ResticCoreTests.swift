@@ -499,18 +499,6 @@ struct PasswordPrecedenceTests {
         )
     }
 
-    @Test("conflicting extra entries are named so the editor can warn about them")
-    func conflictsAreReported() {
-        let overridden = RepositoryContext.overriddenExtraEnvironmentKeys(in: [
-            "RESTIC_PASSWORD": "x",
-            "RESTIC_PASSWORD_COMMAND": "y",
-            "RESTIC_HOST": "elsewhere",
-            "AWS_ACCESS_KEY_ID": "z",
-        ])
-        #expect(overridden == ["RESTIC_HOST", "RESTIC_PASSWORD", "RESTIC_PASSWORD_COMMAND"])
-
-        #expect(RepositoryContext.overriddenExtraEnvironmentKeys(in: ["AWS_ACCESS_KEY_ID": "y"]).isEmpty)
-    }
 }
 
 @Suite("Rate limits")

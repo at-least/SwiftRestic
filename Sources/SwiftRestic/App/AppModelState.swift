@@ -9,7 +9,6 @@ struct PlanActivity: Sendable, Equatable {
         case starting
         case backingUp
         case applyingRetention
-        case removingFromEarlierBackups
         case runningHooks
         case notifying
         case cancelling
@@ -19,22 +18,11 @@ struct PlanActivity: Sendable, Equatable {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
             case .applyingRetention: "Applying retention…"
-            case .removingFromEarlierBackups: "Removing from earlier backups…"
             case .runningHooks: "Running hooks…"
             case .notifying: "Sending notifications…"
             case .cancelling: "Cancelling…"
             }
         }
-    }
-
-    /// What the run in the plan's slot is. Not read from `phase`: Stop
-    /// turns that to `.cancelling` while the run unwinds, for seconds, and
-    /// the work it names still runs then.
-    enum Work: Sendable, Equatable {
-        case backup
-        /// No backup: however it ends, a quit's cancel included, it stamps no
-        /// slot as run.
-        case removeFromEarlierBackups
     }
 
     /// Kept on the run, not read from the plan: Remove Plan takes the plan
@@ -43,7 +31,6 @@ struct PlanActivity: Sendable, Equatable {
     let planName: String
     var phase: Phase = .starting
     var startedAt: Date = .now
-    var work: Work = .backup
     /// A backup's forget, which takes the exclusive lock. Set by every
     /// engine phase write and ended by `endRetentionStep`, not by Stop's
     /// `.cancelling`: the child still holds the lock while it dies.

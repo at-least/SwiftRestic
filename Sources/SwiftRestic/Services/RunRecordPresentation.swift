@@ -194,26 +194,6 @@ enum RunRecordPresentation {
         run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
     }
 
-    /// A repository page's Recent problems row title: the plan as it is
-    /// called now — the repository is the page's own — or, for a check or
-    /// prune, its kind, since the stored planName of those is the
-    /// repository the page already names.
-    static func problemRowTitle(for run: RunRecord, plans: [BackupPlan]) -> String {
-        switch run.kind {
-        case .backup, .forget, .rewrite, .restore:
-            let name = currentPlanName(of: run, plans: plans)
-            return name.isEmpty ? run.kind.displayName : name
-        case .check, .prune:
-            return run.kind.displayName
-        }
-    }
-
-    static func problemRowCaption(for run: RunRecord) -> String {
-        let outcome = run.outcome.displayName
-        let why = detail(for: run)
-        return why == outcome ? outcome : "\(outcome) · \(why)"
-    }
-
     /// The run log sheet's header: "Backup log — Documents (Home Disk)",
     /// "Check log — Home Disk". A derivation rather than view text so the
     /// header's words are pinned with the naming rule they follow.

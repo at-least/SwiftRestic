@@ -104,10 +104,9 @@ struct ProtectionSummary: Equatable, Sendable {
 ///
 /// Pure and separate from the view so it can be tested.
 enum OverviewMetrics {
-    /// The window a "recent problem" counts over: the Recent problems card,
-    /// the sidebar's Activity badge and the menu bar's problem line all read
-    /// the same week, so a problem cannot age out of one surface before
-    /// another. A week, not "until the next success": a backup fixes no
+    /// The window a "recent problem" counts over: the sidebar's Activity
+    /// badge and the menu bar's problem line read the same week, so a problem
+    /// cannot age out of one before the other. A week, not "until the next success": a backup fixes no
     /// failed check, prune, retention run or restore.
     static func problemWindowStart(from now: Date) -> Date {
         now.addingTimeInterval(-7 * 86_400)
@@ -115,59 +114,13 @@ enum OverviewMetrics {
 
     /// Failures and completed-with-errors runs that finished inside the
     /// window — the one definition of "recent problem". The sidebar's badge
-    /// counts its unseen part and the Recent problems card lists it, healed
-    /// or not; the menu bar's problem line leads with its newest entry `isHealed`
+    /// counts its unseen part, healed or not; the menu bar's problem line leads with its newest entry `isHealed`
     /// has not cleared. Recency counts from when a run finished: a backup
     /// that ran all night and failed at dawn is this morning's news, not
     /// eight days old.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
             $0.finishedAt >= since && $0.outcome.isProblem
-        }
-    }
-
-    /// One Recent problems row: the newest run of a plan's (or a
-    /// repository's upkeep's) problems that ended the same way, and how many
-    /// the window holds.
-    struct ProblemGroup: Equatable, Identifiable {
-        var newest: RunRecord
-        var count: Int
-        var id: UUID { newest.id }
-    }
-
-    /// The card's reading of `problems`, newest first: a cause that stands —
-    /// one unreadable file warns every run — is one row with its count, not
-    /// a row per run pushing every other problem off the card. Grouped by
-    /// plan, kind and outcome, never by a guessed cause; Activity keeps each
-    /// run. Display only: the stored history is untouched.
-    static func problemGroups(_ problems: [RunRecord]) -> [ProblemGroup] {
-        var groups: [ProblemKey: ProblemGroup] = [:]
-        for run in problems {
-            let key = ProblemKey(run)
-            if var group = groups[key] {
-                group.count += 1
-                if run.finishedAt > group.newest.finishedAt { group.newest = run }
-                groups[key] = group
-            } else {
-                groups[key] = ProblemGroup(newest: run, count: 1)
-            }
-        }
-        return groups.values.sorted { $0.newest.finishedAt > $1.newest.finishedAt }
-    }
-
-    /// What one Recent problems row collects: a plan's (or a repository's
-    /// upkeep's) runs of one kind that ended the same way.
-    private struct ProblemKey: Hashable {
-        var planID: UUID?
-        var repositoryID: UUID?
-        var kind: RunRecord.Kind
-        var outcome: RunRecord.Outcome
-
-        init(_ run: RunRecord) {
-            planID = run.planID
-            repositoryID = run.repositoryID
-            kind = run.kind
-            outcome = run.outcome
         }
     }
 
@@ -211,13 +164,6 @@ enum OverviewMetrics {
             standing.insert(problem.id)
         }
         return standing
-    }
-
-    /// One repository's share of that set, every kind of run: a check or
-    /// prune has no plan, so the repository's page is the only place near it
-    /// its failure can be read.
-    static func problems(in runs: [RunRecord], since: Date, repositoryID: UUID) -> [RunRecord] {
-        problems(in: runs, since: since).filter { $0.repositoryID == repositoryID }
     }
 
     /// The rows whose plan is not protected and should be: an unreadable

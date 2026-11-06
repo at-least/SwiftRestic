@@ -64,17 +64,6 @@ extension AppModel {
         try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
-    func rebuildableFolders(planID: UUID) async throws -> [RebuildableFolder] {
-        guard let plan = plan(id: planID), let repositoryID = plan.repositoryID else { return [] }
-        let found = try await indexCoordinator.foldersBesideManifests(
-            RebuildableFolderRule.manifestsByFolder, inChain: ResticService.planTag(planID), repositoryID: repositoryID
-        )
-        // The plan as it stands once the read returns: a Keep or an Exclude
-        // made while it ran is already answered.
-        guard let current = self.plan(id: planID) else { return [] }
-        return RebuildableFolder.offered(found, to: current)
-    }
-
     /// Throws when the index fails: the Files view says so beside the
     /// fallback it lists instead, rather than reading a broken index as an
     /// empty folder.

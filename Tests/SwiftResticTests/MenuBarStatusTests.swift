@@ -565,7 +565,7 @@ struct MenuBarStatusTests {
         #expect(face(runs) == .problem)
     }
 
-    @Test("the Activity badge and Recent problems still count a healed failure for the week")
+    @Test("the Activity badge still counts a healed failure for the week")
     func historyCountsHealedProblems() {
         let planID = UUID()
         let runs = [run(.failed, minutesAgo: 60, planID: planID), run(.succeeded, minutesAgo: 10, planID: planID)]

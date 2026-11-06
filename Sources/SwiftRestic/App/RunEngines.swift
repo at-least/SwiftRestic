@@ -598,7 +598,7 @@ enum MaintenanceRunEngine {
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
                 // One sentence — a dash, not a period, before the command —
                 // so Format.firstSentence carries the whole verdict to the
-                // Detail column, the Recent problems row and the Maintenance
+                // Detail column and the Maintenance
                 // card; restic's prune advice stays a second sentence.
                 record.detailText = errors == 0
                     ? "No errors found."
@@ -679,113 +679,5 @@ enum MaintenanceRunEngine {
         // mid-call and leave the listing stale. (A cancel landing inside the
         // refresh itself is answered quietly by the sink.)
         sink.scheduleSnapshotRefresh(repositoryID: repository.id)
-    }
-}
-
-/// The maintenance engine's checks before restic, for a plan's run outside
-/// a backup: the drive's share reconnected first, and a drive or server
-/// still away fails the run in those words, before restic — its "does not
-/// exist" or its quarter-hour of retries would say less.
-@MainActor
-private func failIfRepositoryAway(
-    _ repository: Repository,
-    record: inout RunRecord,
-    transcript: RunTranscript,
-    sink: some RunEngineSink
-) async {
-    if repository.kind == .local {
-        let failures = await reconnectAwayShares(
-            of: [repository.resolvedLocalPath],
-            transcript: transcript,
-            sink: sink
-        )
-        if await sink.isDriveAway(repository) {
-            record.outcome = .failed
-            let refused = failures.filter(\.isRefusal).map(\.volumeName)
-            if !refused.isEmpty { record.refusedShares = refused }
-            record.failureMessage = RunRecord.skippedReason(
-                sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
-            )
-        }
-    } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
-        record.outcome = .failed
-        record.failureMessage = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
-    }
-}
-
-/// The model surface of a plan's run that is no backup, Remove from Earlier
-/// Backups': the backup engine's sink, minus
-/// everything a backup has and these runs do not. Delivery has its own
-/// name: AppModel's `deliver(record:plan:transcript:)` notifies and
-/// broadcasts, which these runs must not.
-@MainActor
-protocol QuietPlanRunSink: RunEngineSink {
-    var cancellationMessage: String { get }
-    /// What every surface calls the plan (`AppModel.label(of:)`).
-    func label(of plan: BackupPlan) -> String
-    /// Stores the run, and announces it nowhere: the plan page and
-    /// Activity say how it went.
-    func deliverQuietly(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
-}
-
-/// One quiet run's lifecycle: the record, the reachability checks, `work`
-/// with restic's words bound to the run's log — its answer is the record's
-/// detail — then delivery and the closing refresh, whatever happened: a run
-/// stopped or failed partway may already have changed the plan's backups,
-/// and the refresh must not inherit a cancel. `failed` adds what one kind
-/// of run reads from its own errors.
-@MainActor
-private func performQuietPlanRun(
-    _ kind: RunRecord.Kind,
-    plan: BackupPlan,
-    repository: Repository,
-    sink: some QuietPlanRunSink,
-    work: (any ResticClient, RepositoryContext) async throws -> String,
-    failed: (Error, inout RunRecord) -> Void = { _, _ in }
-) async {
-    var record = RunRecord(
-        kind: kind,
-        planID: plan.id,
-        planName: sink.label(of: plan),
-        repositoryID: repository.id,
-        startedAt: .now
-    )
-    let transcript = RunTranscript()
-    do {
-        let service = try sink.service()
-        let context = try await sink.context(for: repository)
-        await failIfRepositoryAway(repository, record: &record, transcript: transcript, sink: sink)
-        if record.outcome != .failed {
-            let detail = try await RunTranscript.$current.withValue(transcript) {
-                try await work(service, context)
-            }
-            record.outcome = .succeeded
-            record.detailText = detail
-        }
-    } catch {
-        record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
-        failed(error, &record)
-        sink.noteAuthFailure(error, repositoryID: repository.id)
-    }
-    record.finishedAt = .now
-    let contents = transcript.contents
-    if record.exitCode == nil { record.exitCode = contents.firstExitCode }
-    await sink.deliverQuietly(record: record, plan: plan, transcript: contents)
-    sink.scheduleSnapshotRefresh(repositoryID: repository.id)
-}
-
-/// Remove from Earlier Backups' run: `restic rewrite --forget` of the plan's
-/// backups without the paths it now skips by name. Like Apply Retention
-/// Now's, it runs in the plan's own slot and announces nothing past its
-/// Activity record.
-@MainActor
-enum RewriteRunEngine {
-    typealias Sink = QuietPlanRunSink
-
-    static func perform(plan: BackupPlan, repository: Repository, removing items: [ExcludedPath], sink: Sink) async {
-        await performQuietPlanRun(.rewrite, plan: plan, repository: repository, sink: sink) { service, context in
-            let rewritten = try await service.rewrite(context, plan: plan, excluding: items.map(\.pattern))
-            return RunRecord.rewriteSummary(items: items.count, backups: rewritten)
-        }
     }
 }

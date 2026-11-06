@@ -110,10 +110,6 @@ protocol ResticClient: Sendable {
     /// remove, read without a lock.
     func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview
 
-    /// `rewrite --forget` of the plan's backups without what `patterns`
-    /// match; returns how many backups restic rewrote.
-    func rewrite(_ context: RepositoryContext, plan: BackupPlan, excluding patterns: [String]) async throws -> Int
-
     /// `overwrite` has no default, here or below: every caller states what
     /// happens to a file already at the destination.
     @discardableResult

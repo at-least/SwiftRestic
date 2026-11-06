@@ -833,12 +833,8 @@ struct AppModelTests {
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
 
         model.configuration.plans[index].excludePatterns = ["*.iso"]
-        model.configuration.plans[index].skipsFinderFiles = true
-        model.configuration.plans[index].skipsSystemFiles = false
-        model.configuration.plans[index].setSkipsDeveloperFiles(true)
-        // An unticked group passes neither its rules nor its marker.
-        model.configuration.plans[index].setSkips(.rust, false)
-        model.configuration.plans[index].setSkips(.ruby, false)
+        model.configuration.plans[index].skipsDeveloperFiles = true
+        model.configuration.plans[index].skipsMachines = false
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let with = try #require(model.configuration.runs.first)
@@ -848,10 +844,11 @@ struct AppModelTests {
         #expect(on.contains("--exclude .DS_Store"))
         // A home rule, tilde expanded, whatever the plan's folder.
         #expect(on.contains("--exclude \(NSHomeDirectory())/.Trash"))
-        #expect(on.contains("/Library/Logs") == false)
+        #expect(on.contains("--exclude \(NSHomeDirectory())/Library/Logs"))
         #expect(on.contains("--exclude-if-present project.assets.json"))
-        #expect(on.contains("--exclude-if-present .rustc_info.json") == false)
-        #expect(on.contains("--exclude **/vendor/bundle") == false)
+        #expect(on.contains("--exclude-if-present .rustc_info.json"))
+        #expect(on.contains("--exclude-caches"))
+        #expect(on.contains("--exclude \(NSHomeDirectory())/.android/avd") == false)
         #expect(on.contains("--exclude **/.venv"))
         #expect(on.contains("--exclude **/__pycache__"))
         #expect(on.contains("--exclude **/node_modules"))
@@ -859,8 +856,8 @@ struct AppModelTests {
         // user's code.
         #expect(on.contains("pyvenv.cfg") == false)
 
-        model.configuration.plans[index].skipsFinderFiles = false
-        model.configuration.plans[index].setSkipsDeveloperFiles(false)
+        model.configuration.plans[index].skipsDeveloperFiles = false
+        model.configuration.plans[index].skipsMachines = true
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let without = try #require(model.configuration.runs.first)
@@ -871,9 +868,10 @@ struct AppModelTests {
         // recorded excludes — the switch-on run's, minutes old, among
         // them.
         #expect(off.contains("--exclude *.iso"))
-        #expect(off.contains("--exclude .DS_Store") == false)
+        #expect(off.contains("--exclude .DS_Store"))
         #expect(off.contains("--exclude-if-present") == false)
         #expect(off.contains("--exclude **/__pycache__") == false)
+        #expect(off.contains("--exclude \(NSHomeDirectory())/.android/avd"))
 
         await model.shutdown()
     }

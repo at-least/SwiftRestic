@@ -261,17 +261,9 @@ struct SwiftResticApp: App {
                 Button("restic Documentation") {
                     NSWorkspace.shared.open(AppLinks.documentation)
                 }
-                Button("restic Change Log") {
-                    NSWorkspace.shared.open(AppLinks.changelog)
-                }
             }
             RestoreCommands()
-            CommandGroup(replacing: .importExport) {
-                Button("Export Settings…") { ask(.exportSettings) }
-                    .disabled(!model.canTransferSettings)
-                Button("Import Settings…") { ask(.importSettings) }
-                    .disabled(!model.canTransferSettings)
-            }
+            CommandGroup(replacing: .importExport) {}
             // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
             // toolbar button had been the one way back (the HIG's Split
             // views: "Provide multiple ways to reveal hidden panes").

@@ -239,45 +239,6 @@ struct ResticIntegrationTests {
         #expect(try await fixture.service.snapshots(fixture.context).count == 2)
     }
 
-    @Test("rewrite removes a skipped path from the plan's backups alone, keeping their times and tags")
-    func rewriteRemovesASkippedPath() async throws {
-        let fixture = try makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = try await fixture.service.initializeRepository(fixture.context)
-        for index in 0 ..< 2 {
-            try "change \(index)".write(to: fixture.sourceDirectory.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-            _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
-        }
-        var otherPlan = fixture.plan
-        otherPlan.id = UUID()
-        _ = try await fixture.service.backup(fixture.context, plan: otherPlan)
-        let before = try await fixture.service.snapshots(fixture.context, planID: fixture.plan.id)
-
-        var plan = fixture.plan
-        plan.excludePatterns = [ResticService.globEscaped(fixture.sourceDirectory.appendingPathComponent("sub").path)]
-        let items = ResticService.excludedPaths(of: plan)
-        #expect(items.map(\.path) == [fixture.sourceDirectory.appendingPathComponent("sub").path])
-        #expect(try await fixture.service.rewrite(fixture.context, plan: plan, excluding: items.map(\.pattern)) == 2)
-
-        let after = try await fixture.service.snapshots(fixture.context, planID: plan.id)
-        #expect(Set(after.map(\.id)).isDisjoint(with: before.map(\.id)))
-        #expect(after.map(\.time).sorted() == before.map(\.time).sorted())
-        let newest = try #require(after.max { $0.time < $1.time })
-        func listing(of snapshotID: String) async throws -> Set<String> {
-            let listed = NodeCollector()
-            try await fixture.service.walkSnapshot(fixture.context, snapshotID: snapshotID) { listed.append($0) }
-            return Set(listed.content.keys)
-        }
-        let paths = try await listing(of: newest.id)
-        #expect(paths.contains(fixture.sourceDirectory.appendingPathComponent("a.txt").path))
-        #expect(!paths.contains { $0.hasPrefix(fixture.sourceDirectory.appendingPathComponent("sub").path) })
-        let other = try await fixture.service.snapshots(fixture.context, planID: otherPlan.id)
-        #expect(other.count == 1)
-        let otherPaths = try await listing(of: other[0].id)
-        #expect(otherPaths.contains(fixture.sourceDirectory.appendingPathComponent("sub/b.txt").path))
-        #expect(try await fixture.service.rewrite(fixture.context, plan: plan, excluding: items.map(\.pattern)) == 0)
-    }
-
     @Test("a forget the repository refuses reads as refused, never as removed")
     func refusedForgetIsNotARemoval() async throws {
         let fixture = try makeFixture()
@@ -1191,46 +1152,6 @@ struct ResticIntegrationTests {
         #expect(try String(contentsOf: restored, encoding: .utf8) == "same-size-A", "Replace trusted size and time over content")
     }
 
-    @Test("the items Time Machine's options list are left out of a backup by their own names, $ and [ included, and only while the plan asks")
-    func timeMachineExclusionsAreLeftOut() async throws {
-        var fixture = try makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = try await fixture.service.initializeRepository(fixture.context)
-        let source = fixture.sourceDirectory
-        // "$HOME" would be expanded in an --exclude-file line, "[1]" read
-        // as a glob class without its escape.
-        let special = source.appendingPathComponent("cache$HOME[1]")
-        // An ordinary name too, so the escapes cannot be what excludes it.
-        let plain = source.appendingPathComponent("listed")
-        for folder in [special, plain] {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try "listed".write(to: folder.appendingPathComponent("g"), atomically: true, encoding: .utf8)
-        }
-        let preferences = fixture.root.appendingPathComponent("com.apple.TimeMachine.plist")
-        try writeTimeMachinePreferences(["SkipPaths": [special.path, plain.path]], to: preferences)
-        fixture.service.timeMachinePreferences = preferences
-
-        func backedUp(skipping: Bool) async throws -> Set<String> {
-            var plan = fixture.plan
-            plan.skipsTimeMachineExclusions = skipping
-            let outcome = try await fixture.service.backup(fixture.context, plan: plan)
-            let snapshotID = try #require(outcome.summary?.snapshotID)
-            let destination = fixture.root.appendingPathComponent("restore-\(skipping)")
-            _ = try await fixture.service.restoreWholeSnapshot(
-                fixture.context, snapshotID: snapshotID, destinationDirectory: destination, overwrite: .replaceExisting
-            )
-            return Set(try FileManager.default.contentsOfDirectory(atPath: destination.appendingPathComponent(source.path).path))
-        }
-
-        let skipped = try await backedUp(skipping: true)
-        #expect(!skipped.contains("cache$HOME[1]"), "\(skipped)")
-        #expect(!skipped.contains("listed"), "\(skipped)")
-        #expect(skipped.contains("a.txt"), "the rest of the folder must still be backed up: \(skipped)")
-
-        let kept = try await backedUp(skipping: false)
-        #expect(kept.isSuperset(of: ["cache$HOME[1]", "listed", "a.txt"]), "\(kept)")
-    }
-
     @Test("the default excludes keep a Git repository restorable, object store included")
     func defaultExcludesKeepGitHistory() async throws {
         var fixture = try makeFixture()
@@ -1249,13 +1170,10 @@ struct ResticIntegrationTests {
         // because no exclude reached restic.
         let finderFile = fixture.sourceDirectory.appendingPathComponent("project/.DS_Store")
         try "finder".write(to: finderFile, atomically: true, encoding: .utf8)
-        // Both defaults switches on, as a new plan has them, over the source
-        // spelled with its symlinks resolved: the scratch tree then lies
+        // The source spelled with its symlinks resolved: the scratch tree lies
         // under /private/var/folders, itself one of the startup disk's
         // defaults, and the run must not pass a rule that names the source
         // or a folder above it, or this backup would hold nothing.
-        fixture.plan.skipsFinderFiles = true
-        fixture.plan.skipsSystemFiles = true
         let resolved = fixture.sourceDirectory.path.replacingOccurrences(of: "/var/", with: "/private/var/", options: .anchored)
         fixture.plan.path = resolved
         #expect(ResticService.pattern("/private/var/folders", covers: resolved))
@@ -1355,7 +1273,7 @@ struct ResticIntegrationTests {
         #expect(paths.contains(document.path), "the user folder on the volume must stay")
     }
 
-    @Test("the developer groups' rules and markers skip what the tools rebuild, over a stand-in home")
+    @Test("the developer rules and markers skip what the tools rebuild, over a stand-in home")
     func developerExcludesSkipRebuildables() async throws {
         var fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -1368,7 +1286,8 @@ struct ResticIntegrationTests {
         fixture.service.home = home.path
         // Every group's rules and markers alone: no other rule may be what
         // skips a folder here.
-        fixture.plan.developerGroups = ExcludeCategory.developerGroups
+        fixture.plan.skipsDeveloperFiles = true
+        fixture.plan.skipsMachines = true
 
         // The developers' own layouts: a virtualenv by its name, a Cargo
         // target by its marker, the package stores and toolchains beside

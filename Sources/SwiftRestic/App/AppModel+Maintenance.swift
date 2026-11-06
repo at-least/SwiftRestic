@@ -20,19 +20,16 @@ extension AppModel {
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
-        // A quiet run holds the lock for its whole life, a backup only in
-        // its forget step. Not by phase: Stop turns the phase to
-        // `.cancelling` while the restic child, still holding the lock,
-        // dies.
-        for (planID, run) in activity where run.work != .backup || run.isInRetentionStep {
+        // A backup holds the exclusive lock only in its forget step. Not by
+        // phase: Stop turns the phase to `.cancelling` while the restic
+        // child, still holding the lock, dies.
+        for (planID, run) in activity where run.isInRetentionStep {
             guard reasons[run.repositoryID] == nil else { continue }
             let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The repository"
             // The live label, as the sidebar shows it; the run's own copy
             // only once Remove Plan has taken the plan.
             let planName = plan(id: planID).map { label(of: $0) } ?? run.planName
-            reasons[run.repositoryID] = run.work == .removeFromEarlierBackups
-                ? "\(name) is removing items from earlier backups of “\(planName)” — backups wait until it finishes."
-                : "\(name) is applying retention for “\(planName)” — backups wait until it finishes."
+            reasons[run.repositoryID] = "\(name) is applying retention for “\(planName)” — backups wait until it finishes."
         }
         return reasons
     }
@@ -179,8 +176,8 @@ extension AppModel: MaintenanceRunEngine.Sink {
     }
 
     /// A failure — a check that found errors is one where hooks are
-    /// concerned — posts no banner: the repository page's Last check or Last cleanup, its
-    /// Recent problems and Activity's badge say it.
+    /// concerned — posts no banner: the repository page's Last check or Last cleanup and
+    /// Activity's badge say it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)

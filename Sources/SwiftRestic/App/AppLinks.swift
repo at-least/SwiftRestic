@@ -4,5 +4,4 @@ import Foundation
 /// menu item.
 enum AppLinks {
     static let documentation = URL(string: "https://restic.readthedocs.io")!
-    static let changelog = URL(string: "https://restic.readthedocs.io/en/stable/changelog.html")!
 }

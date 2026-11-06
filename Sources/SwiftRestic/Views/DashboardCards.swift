@@ -1,11 +1,5 @@
 import SwiftUI
 
-// The repository page's cards — protection in one line, the adoptable
-// history a repository may have arrived with, and the week's problems
-// against it — over the repository the page shows, in the order the
-// questions are asked. No charts or tiles: sizes live in the Details card,
-// history in Activity.
-
 /// The repository page's Protection card: one line — how many of the
 /// repository's plans are protected, a run in flight, when its newest
 /// backup landed, and, while one is on, the app-wide hold's words with a
@@ -167,106 +161,5 @@ struct OtherBackupsCard: View {
                 .accessibilityLabel("Continue backups of \(label.title)")
             RowChevron()
         }
-    }
-}
-
-/// The week's failed and completed-with-errors runs — the same window the
-/// sidebar's Activity badge and the menu bar count — one row per plan and
-/// outcome with its count (`OverviewMetrics.problemGroups`), and what five
-/// rows leave out in a last row. A row opens Activity on its newest run: a
-/// failure the user cannot reach is a failure they cannot fix.
-struct RecentProblemsCard: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
-    @Environment(\.now) private var now
-
-    let repositoryID: UUID
-
-    var body: some View {
-        // The same window the sidebar's badge counts, read once.
-        let problems = OverviewMetrics.problems(
-            in: model.configuration.runs,
-            since: OverviewMetrics.problemWindowStart(from: now),
-            repositoryID: repositoryID
-        )
-        // A clean week is the absence of trouble: no card at all, rather
-        // than one saying so.
-        if !problems.isEmpty {
-            Card("Recent problems") {
-                VStack(alignment: .leading, spacing: 7) {
-                    // A cause that stands repeats every run: one row each, with
-                    // its count, so it cannot push the rest off the card.
-                    let groups = OverviewMetrics.problemGroups(problems)
-                    let shown = groups.prefix(5)
-                    // What the badge counts and the rows do not show.
-                    let hidden = groups.dropFirst(5).reduce(0) { $0 + $1.count }
-
-                    Group {
-                        ForEach(Array(shown)) { group in
-                            let run = group.newest
-                            let title = RunRecordPresentation.problemRowTitle(for: run, plans: model.configuration.plans)
-                            let when = PlanStatus.problemWhen(count: group.count, ago: Format.ago(run.finishedAt, now: now))
-                            let caption = RunRecordPresentation.problemRowCaption(for: run)
-                            Button { showInActivity(run) } label: {
-                                HStack(spacing: 6) {
-                                    // This card lists only problems, so the
-                                    // outcome is said in words right under the
-                                    // name — a glyph would only repeat it — with
-                                    // why, as Activity's Detail column says it.
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(title)
-                                            .lineLimit(1)
-                                        Text(caption)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                            .help(caption)
-                                    }
-                                    Spacer()
-                                    // The newest of them is the one the row
-                                    // opens.
-                                    Text(when)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    RowChevron()
-                                }
-                            }
-                            .buttonStyle(HoverableButtonStyle())
-                            .accessibilityLabel("\(title): \(caption). \(when). Show in Activity")
-                        }
-                        if hidden > 0 {
-                            Button {
-                                router.activityShowsProblemsOnly = true
-                                router.selection = .activity
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text("… and \(hidden) more in Activity")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    RowChevron()
-                                }
-                            }
-                            .buttonStyle(HoverableButtonStyle())
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private func showInActivity(_ run: RunRecord) {
-        router.focusRun(run.id)
-    }
-}
-
-struct RowChevron: View {
-    var body: some View {
-        Image(systemName: "chevron.forward")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
     }
 }

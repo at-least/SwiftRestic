@@ -320,7 +320,7 @@ struct AppRouterTests {
 struct AppLinksTests {
     @Test("every documentation link parses as https")
     func linksAreValid() {
-        for url in [AppLinks.documentation, AppLinks.changelog] {
+        for url in [AppLinks.documentation] {
             #expect(url.scheme == "https")
             #expect(url.host()?.hasSuffix("readthedocs.io") == true)
         }

@@ -87,7 +87,6 @@ struct RunDetailPanel: View {
                 DetailRow("Size", "Processed \(Format.bytes(run.bytesProcessed)) · added \(Format.bytes(run.dataAdded))")
             }
             repositoryRow
-            exitRow
         case .restore:
             if let snapshotID = run.snapshotID {
                 DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID, onCompare: onCompare) }
@@ -120,7 +119,6 @@ struct RunDetailPanel: View {
                 DetailRow("Files", RunRecordPresentation.restoreFiles(run))
             }
             repositoryRow
-            exitRow
         default:
             repositoryRow
             // A check's verdict, or what a retention run removed:
@@ -138,7 +136,6 @@ struct RunDetailPanel: View {
                     }
                 }
             }
-            exitRow
         }
     }
 
@@ -162,13 +159,6 @@ struct RunDetailPanel: View {
             }
         } else {
             DetailRow("Repository", "No longer set up in SwiftRestic")
-        }
-    }
-
-    @ViewBuilder
-    private var exitRow: some View {
-        if let code = run.exitCode, let text = RunRecordPresentation.exitCodeText(code) {
-            DetailRow("restic exit") { Text(text).textSelection(.enabled) }
         }
     }
 

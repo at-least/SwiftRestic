@@ -12,14 +12,9 @@ extension AppModel {
     /// phrasing stay testable at the model level.
     var quitInterruptions: [String] {
         var reasons: [String] = []
-        // Remove from Earlier Backups runs in a plan's
-        // slot too, and are not backups.
-        let backups = activity.values.filter { $0.work == .backup }.count
+        let backups = activity.count
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
-        }
-        if activity.values.contains(where: { $0.work == .removeFromEarlierBackups }) {
-            reasons.append("Items are being removed from earlier backups.")
         }
         if !maintenance.isEmpty { reasons.append("Repository maintenance is running.") }
         if isRestoring { reasons.append("A restore is running.") }
@@ -46,7 +41,7 @@ extension AppModel {
         guard !startsAtLogin else { return nil }
         let hold = scheduleHold(now: now)
         let plansAfterQuit = configuration.plans.map { plan in
-            guard let run = activity[plan.id], run.work == .backup else { return plan }
+            guard let run = activity[plan.id] else { return plan }
             var plan = plan
             plan.lastRunAt = max(plan.lastRunAt ?? .distantPast, run.startedAt)
             return plan

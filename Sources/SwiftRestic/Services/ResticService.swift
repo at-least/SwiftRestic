@@ -26,15 +26,6 @@ struct RepositoryContext: Sendable {
         return env
     }
 
-    /// Entries in `extraEnvironment` that this context overwrites anyway, so an
-    /// editor screen can tell the user their setting has no effect. Reads the
-    /// extra environment alone — the answer never depends on the secrets.
-    static func overriddenExtraEnvironmentKeys(in extraEnvironment: [String: String]) -> [String] {
-        extraEnvironment.keys
-            .filter { ResticRunner.protectedEnvironmentKeys.contains($0) }
-            .sorted()
-    }
-
     var globalArguments: [String] {
         var args: [String] = []
         if repository.uploadLimitKiBps > 0 {
@@ -106,9 +97,6 @@ struct ResticService: ResticClient {
     /// The real one, except where the tests re-root the anchored rules
     /// over a scratch tree.
     var home = NSHomeDirectory()
-    /// Time Machine's preferences, whose listed items a plan that skips
-    /// Time Machine's exclusions leaves out; a scratch file in the tests.
-    var timeMachinePreferences = TimeMachineExclusions.preferencesFile
 
     /// Tag stamped on every snapshot a plan creates, so retention and snapshot
     /// listings can be scoped to that plan without touching anyone else's data.
@@ -545,77 +533,12 @@ struct ResticService: ResticClient {
         )
     }
 
-    /// `pattern` read back as the one path it matches, the inverse of
-    /// `globEscaped`: nil when it holds an unescaped `*`, `?` or `[` — a
-    /// pattern that can match more than one path — or ends in a lone `\`.
-    static func globUnescaped(_ pattern: String) -> String? {
-        var path = String.UnicodeScalarView()
-        var escaping = false
-        for scalar in pattern.unicodeScalars {
-            if escaping {
-                path.append(scalar)
-                escaping = false
-            } else if scalar == "\\" {
-                escaping = true
-            } else if "*?[".unicodeScalars.contains(scalar) {
-                return nil
-            } else {
-                path.append(scalar)
-            }
-        }
-        return escaping ? nil : String(path)
-    }
-
     /// `stored` as a backup passes them: blanks dropped, tilde expanded,
     /// each once, less any naming the source itself or a folder above it.
     private static func passedExcludes(_ stored: [String], source: String, home: String) -> [String] {
         let nonBlank = stored.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         return BackupPlan.withoutDuplicates(nonBlank.map { expandTilde($0, home: home) })
             .filter { !pattern($0, covers: source) }
-    }
-
-    /// The plan's own patterns that each name one absolute path, as a backup
-    /// passes them (tilde expanded, less any naming the source or a folder
-    /// above it), with that path: what Remove from Earlier Backups looks for
-    /// in the plan's backups and passes to `rewrite`, so it removes exactly
-    /// what the next backups skip of those.
-    static func excludedPaths(of plan: BackupPlan, home: String = NSHomeDirectory()) -> [ExcludedPath] {
-        var seen = Set<PathKey>()
-        return passedExcludes(plan.excludePatterns, source: expandTilde(plan.path, home: home), home: home).compactMap { passed in
-            guard let unescaped = globUnescaped(passed), unescaped.hasPrefix("/") else { return nil }
-            let path = ResticPath.normalized(unescaped)
-            guard seen.insert(PathKey(path)).inserted else { return nil }
-            return ExcludedPath(pattern: passed, path: path)
-        }
-    }
-
-    /// Removes the paths `patterns` match from every backup the plan made:
-    /// `restic rewrite --forget`, which writes each backup that holds one
-    /// again without it, under a new ID with the old one's time and tags, and
-    /// removes the old one. The data stays in the repository until a prune.
-    /// Returns how many backups restic rewrote.
-    func rewrite(_ context: RepositoryContext, plan: BackupPlan, excluding patterns: [String]) async throws -> Int {
-        var args = ["rewrite", "--forget", "--tag", Self.planTag(plan.id)]
-        for pattern in patterns {
-            args += ["--exclude", pattern]
-        }
-        // As arguments, not an --exclude-file: restic expands $VAR in a
-        // file's lines, as `backup` found.
-        let result = try await run(context, ResticInvocation(arguments: args, retainFullOutput: true))
-        return try Self.countRewritten(rewriteOutput: result.stdout)
-    }
-
-    /// `rewrite` has no JSON output (restic 0.19.1, probed: `--json` prints
-    /// the same text); its last line is "modified N snapshots" — plural for
-    /// one too — or "no snapshots were modified".
-    static func countRewritten(rewriteOutput output: String) throws -> Int {
-        let last = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
-        if last == "no snapshots were modified" { return 0 }
-        let words = last.split(separator: " ")
-        guard words.count == 3, words[0] == "modified", words[2] == "snapshots", let count = Int(words[1]) else {
-            throw ResticError.malformedOutput(detail: "restic rewrite’s summary could not be read: \(last.prefix(200))")
-        }
-        return count
     }
 
     /// Whether the anchored `pattern` names `source` or a folder above it,
@@ -647,22 +570,10 @@ struct ResticService: ResticClient {
         }
         // As arguments, not an --exclude-file: restic expands $VAR in a
         // file's lines (0.19.1, probed: a folder named "a$HOME" stayed in).
-        if plan.skipsTimeMachineExclusions {
-            let reading = TimeMachineExclusions.reading(for: source, preferences: timeMachinePreferences)
-            for item in reading.items {
-                args += ["--exclude", Self.globEscaped(item)]
-            }
-            for note in reading.notes {
-                RunTranscript.current?.note(note)
-            }
-        }
-        // The ticked developer groups' markers: restic leaves out the
-        // contents of any folder holding one and keeps the marker itself.
-        for marker in BackupPlan.developerMarkers(for: plan.developerGroups) {
+        for marker in plan.developerMarkers {
             args += ["--exclude-if-present", marker]
         }
-        if plan.excludeCaches { args.append("--exclude-caches") }
-        if plan.oneFileSystem { args.append("--one-file-system") }
+        args.append("--exclude-caches")
         if plan.excludeCloudFiles { args.append("--exclude-cloud-files") }
         args += ["--tag", Self.planTag(plan.id)]
         for tag in plan.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {

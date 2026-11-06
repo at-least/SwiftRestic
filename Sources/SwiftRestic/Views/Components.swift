@@ -1050,27 +1050,6 @@ enum FilePicker {
         panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
-
-    @MainActor
-    static func chooseSettingsDestination() -> URL? {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "SwiftRestic Settings.json"
-        panel.allowedContentTypes = [.json]
-        panel.canCreateDirectories = true
-        panel.prompt = "Export"
-        return panel.runModal() == .OK ? panel.url : nil
-    }
-
-    @MainActor
-    static func chooseSettingsFile() -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.json]
-        panel.prompt = "Import"
-        return panel.runModal() == .OK ? panel.urls.first : nil
-    }
 }
 
 extension View {
@@ -1317,5 +1296,14 @@ struct NestedMonthMenu<Item, Label: View>: View {
         )) {
             Text(verbatim: rowText(item))
         }
+    }
+}
+
+struct RowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.forward")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 }

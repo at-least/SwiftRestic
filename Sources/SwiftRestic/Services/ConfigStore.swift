@@ -96,10 +96,9 @@ struct AppConfiguration: Codable, Sendable {
 /// its slot (`lastRunAt`), so they wait for it instead of all starting at
 /// launch; no backup carries their ids yet, so they have no last backup.
 /// The plans are saved one path each with the next save. A plan saved with
-/// older builds' developer switch on (`excludeDeveloperFiles`, one switch
-/// that passed the rules at each run) gets every group ticked, so its
-/// backups leave out what they did, and what the groups added since leave
-/// out too; its list sheds the rules the groups now pass.
+/// older builds' single developer switch on (`excludeDeveloperFiles`) gets
+/// both switches on, so its backups leave out what they did; its list sheds
+/// the rules they now pass.
 private struct StoredPlan: Decodable {
     var plan: BackupPlan
     var sources: [String] = []
@@ -135,8 +134,9 @@ private struct StoredPlan: Decodable {
     var plans: [BackupPlan] {
         split.map { plan in
             var plan = plan
-            if legacySkipsDeveloperFiles, !plan.excludeDeveloperFiles {
-                plan.setSkipsDeveloperFiles(true)
+            if legacySkipsDeveloperFiles {
+                plan.skipsDeveloperFiles = true
+                plan.skipsMachines = true
                 plan.excludePatterns = plan.withoutSwitchRules(plan.excludePatterns)
             }
             return plan
@@ -265,7 +265,6 @@ actor ConfigStore {
         try data.write(to: fileURL, options: [.atomic])
     }
 
-    /// The document as `config.json` and an exported settings file hold it.
     static func encoded(_ configuration: AppConfiguration) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

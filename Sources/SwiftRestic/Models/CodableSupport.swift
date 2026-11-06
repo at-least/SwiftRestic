@@ -103,14 +103,6 @@ final class DecodeNoteBox: @unchecked Sendable {
         defer { lock.unlock() }
         return storage.map { "“\($0.field)” \($0.detail)" }
     }
-
-    /// The fields alone, for a reader that keeps nothing it decoded
-    /// (`SettingsFile.read`): no detail's "read as …" holds there.
-    var fields: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage.map(\.field)
-    }
 }
 
 extension Sequence where Element: Identifiable, Element.ID == UUID {

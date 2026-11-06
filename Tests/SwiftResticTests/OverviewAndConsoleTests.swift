@@ -9,29 +9,6 @@ struct OverviewMetricsTests {
         return record
     }
 
-    @Test("Recent problems reads a standing cause as one row with its count, newest first, the newest run its own")
-    func problemGroups() {
-        let documents = UUID()
-        let code = UUID()
-        let repository = UUID()
-        func problem(_ planID: UUID?, _ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome, hour: Int) -> RunRecord {
-            var record = RunRecord(kind: kind, planID: planID, repositoryID: repository, startedAt: utcDate("2026-10-01 00:00:00").addingTimeInterval(Double(hour) * 3600))
-            record.outcome = outcome
-            return record
-        }
-        let warnings = (0 ..< 7).map { problem(documents, .backup, .completedWithErrors, hour: $0 * 24) }
-        let failure = problem(code, .backup, .failed, hour: 30)
-        let documentsFailed = problem(documents, .backup, .failed, hour: 20)
-        let check = problem(nil, .check, .completedWithErrors, hour: 10)
-        var generator = SeededGenerator(seed: 7)
-        let groups = OverviewMetrics.problemGroups(warnings.shuffled(using: &generator) + [failure, documentsFailed, check])
-        #expect(groups.map(\.count) == [7, 1, 1, 1])
-        #expect(groups.map(\.newest.id) == [warnings[6].id, failure.id, documentsFailed.id, check.id])
-        // The same plan failing is its own row, not folded into its warnings.
-        #expect(Set(groups.map(\.newest.outcome)) == [.completedWithErrors, .failed])
-        #expect(OverviewMetrics.problemGroups([]).isEmpty)
-    }
-
     private func plan(_ name: String, repository: UUID?) -> BackupPlan {
         namedPlan(name, repositoryID: repository)
     }
@@ -689,8 +666,8 @@ struct OverviewMetricsTests {
         ).count == 2)
     }
 
-    @Test("a repository's problems are the week's problems that ran against it, of every kind")
-    func problemsOfOneRepository() {
+    @Test("the week's problems count every kind of run, a check's and a prune's too")
+    func problemsOfEveryKind() {
         let nas = UUID()
         let since = utcDate("2026-09-01 00:00:00")
         func problem(_ kind: RunRecord.Kind, in repository: UUID?, at day: String) -> RunRecord {
@@ -709,9 +686,6 @@ struct OverviewMetricsTests {
         fine.outcome = .succeeded
 
         let runs = [backup, check, prune, elsewhere, old, fine]
-        #expect(OverviewMetrics.problems(in: runs, since: since, repositoryID: nas).map(\.id)
-            == [backup.id, check.id, prune.id])
-        // The same week as the app-wide set, which still counts every one.
         #expect(OverviewMetrics.problems(in: runs, since: since).count == 4)
     }
 

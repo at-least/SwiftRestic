@@ -370,14 +370,6 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
-    nonisolated func foldersBesideManifests(
-        _ manifests: [String: [String]],
-        inChain chainKey: String,
-        repositoryID: UUID
-    ) async throws -> [FolderBesideManifest] {
-        try await read(repositoryID) { try await $0.foldersBesideManifests(manifests, inChain: chainKey) }
-    }
-
     nonisolated func changes(
         underPath path: String,
         inChain chainKey: String,

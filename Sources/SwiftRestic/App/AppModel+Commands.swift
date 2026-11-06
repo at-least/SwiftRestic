@@ -138,12 +138,9 @@ extension AppModel {
             } else {
                 landing = "Backups already written to the repository are not deleted."
             }
-            let message = switch activity[id]?.work {
-            case .removeFromEarlierBackups?:
-                "Removing items from earlier backups will be stopped. \(landing)"
-            case .backup?: "The running backup will be stopped. \(landing)"
-            case nil: "This Mac stops backing up “\(name)”. \(landing)"
-            }
+            let message = activity[id] != nil
+                ? "The running backup will be stopped. \(landing)"
+                : "This Mac stops backing up “\(name)”. \(landing)"
             return ConfirmationCopy(title: "Remove “\(name)”?", message: message)
         case let .deleteRepository(id):
             guard let repository = repository(id: id) else { return nil }
@@ -180,8 +177,6 @@ extension AppModel {
                 title: "Rebuild the search index for “\(label(of: repository))”?",
                 message: "The index is read again from the repository. Searches are slower until it finishes."
             )
-        case let .importSettings(file):
-            return importConfirmationCopy(for: file)
         }
     }
 }

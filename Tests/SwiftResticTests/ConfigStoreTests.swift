@@ -281,7 +281,7 @@ struct TolerantDecodingTests {
     func defaultExcludesSpareGit() throws {
         let decoded = try decode(BackupPlan.self, #"{"name":"Docs"}"#)
         for plan in [BackupPlan(), decoded] {
-            #expect(plan.skipsFinderFiles && plan.skipsSystemFiles, "the defaults must still apply")
+            #expect(plan.excludesToPass.contains(".DS_Store"), "the defaults must still apply")
             #expect(!plan.excludesToPass.contains { $0.contains(".git") })
         }
     }
@@ -316,9 +316,6 @@ struct TolerantDecodingTests {
             "/Library/Caches",
             "/Library/Logs",
         ])
-        #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles) == [".DS_Store", "~/.Trash"])
-        #expect(BackupPlan.defaultExcludes(in: ExcludeCategory.finderFiles.union(ExcludeCategory.systemFiles))
-            == BackupPlan.defaultExcludes)
         // Whatever the path: a rule naming nothing under it matches nothing.
         var plan = BackupPlan()
         plan.path = "~/dotfiles"
@@ -326,73 +323,70 @@ struct TolerantDecodingTests {
         #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes)
     }
 
-    @Test("every developer group is ticked for new plans, none for ones saved without the key, and the ticks round-trip")
-    func developerFilesOnForNewPlans() throws {
-        #expect(BackupPlan().developerGroups == ExcludeCategory.developerGroups)
-        #expect(BackupPlan().excludeDeveloperFiles)
-        #expect(try decode(BackupPlan.self, #"{"name":"Docs"}"#).developerGroups.isEmpty)
+    @Test("the developer switch is on and the machines' off for new plans, both off for ones saved without a key, and both round-trip")
+    func developerSwitchDefaults() throws {
+        #expect(BackupPlan().skipsDeveloperFiles && !BackupPlan().skipsMachines)
+        let bare = try decode(BackupPlan.self, #"{"name":"Docs"}"#)
+        #expect(!bare.skipsDeveloperFiles && !bare.skipsMachines)
         // No dates in a fresh plan, so no strategy to match the encoder's.
-        for groups in [ExcludeCategory.developerGroups, [.python, .rust], []] {
+        for (developer, machines) in [(true, false), (false, true), (true, true), (false, false)] {
             var plan = BackupPlan()
-            plan.developerGroups = groups
+            plan.skipsDeveloperFiles = developer
+            plan.skipsMachines = machines
             let data = try JSONEncoder().encode(plan)
-            #expect(try JSONDecoder().decode(BackupPlan.self, from: data).developerGroups == groups)
-            // Under its own key, by name: older builds' key was one switch
-            // that meant rules without rows.
+            let read = try JSONDecoder().decode(BackupPlan.self, from: data)
+            #expect(read.skipsDeveloperFiles == developer && read.skipsMachines == machines)
             let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-            #expect(object["skipDeveloperGroups"] as? [String] == groups.map(\.rawValue))
+            #expect(object["skipDeveloperGroups"] == nil)
             #expect(object["excludeDeveloperFiles"] == nil)
         }
-        let read = try decode(BackupPlan.self, #"{"skipDeveloperGroups":["rust","cobol","python"]}"#)
-        #expect(read.developerGroups == [.python, .rust])
     }
 
-    @Test("each switch passes its rules while on, beside the plan's own patterns, each once")
+    @Test("older builds' ticked groups turn on the switch that now holds them")
+    func legacyGroupsBecomeSwitches() throws {
+        func read(_ groups: String) throws -> BackupPlan {
+            try decode(BackupPlan.self, "{\"skipDeveloperGroups\":\(groups)}")
+        }
+        let none = try read("[]")
+        #expect(!none.skipsDeveloperFiles && !none.skipsMachines)
+        let python = try read(#"["python"]"#)
+        #expect(python.skipsDeveloperFiles && !python.skipsMachines)
+        let simulators = try read(#"["simulators"]"#)
+        #expect(simulators.skipsDeveloperFiles && simulators.skipsMachines)
+        let machines = try read(#"["rust","machines","cobol"]"#)
+        #expect(machines.skipsDeveloperFiles && machines.skipsMachines)
+    }
+
+    @Test("switches and every plan's fixed rules make the run, beside the plan's own patterns, each once")
     func switchesMakeTheRun() {
         var plan = BackupPlan()
-        plan.skipsFinderFiles = false
-        plan.skipsSystemFiles = false
-        plan.developerGroups = []
+        plan.skipsDeveloperFiles = false
         plan.excludePatterns = ["*.iso", "**/.venv"]
-        #expect(plan.excludesToPass == ["*.iso", "**/.venv"])
-
-        plan.skipsFinderFiles = true
-        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash", "*.iso", "**/.venv"])
-        plan.skipsSystemFiles = true
         #expect(plan.excludesToPass == BackupPlan.defaultExcludes + ["*.iso", "**/.venv"])
+        #expect(plan.developerMarkers.isEmpty)
 
-        // A group's checkbox: its rules, kept in the groups' order whatever
-        // order they were ticked in; a rule also typed is passed once.
-        plan.skipsSystemFiles = false
-        plan.setSkips(.rust, true)
-        plan.setSkips(.python, true)
-        #expect(plan.developerGroups == [.python, .rust])
-        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash"]
-            + BackupPlan.developerExcludes(groups: [.python, .rust]) + ["*.iso"])
-        #expect(plan.excludePatterns == ["*.iso", "**/.venv"])
+        plan.skipsDeveloperFiles = true
+        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + ["*.iso"])
         #expect(plan.withoutSwitchRules(plan.excludePatterns) == ["*.iso"])
+        #expect(plan.developerMarkers == [".rustc_info.json", "project.assets.json"])
 
-        plan.setSkipsDeveloperFiles(true)
-        #expect(plan.developerGroups == ExcludeCategory.developerGroups)
-        plan.setSkipsDeveloperFiles(false)
-        #expect(!plan.excludeDeveloperFiles)
-        #expect(plan.excludesToPass == [".DS_Store", "~/.Trash", "*.iso", "**/.venv"])
+        plan.skipsMachines = true
+        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.machineExcludes + ["*.iso"])
     }
 
-    @Test("the switches read back from a list that held their rules: any default on, a group by most of its rules")
+    @Test("the switches read back from recorded rules: a group by most of its rules")
     func switchesReadFromRecordedRules() {
+        func rules(_ group: ExcludeCategory) -> [String] {
+            ExcludeRule.developer.filter { $0.category == group }.map(\.pattern)
+        }
         var plan = BackupPlan()
-        // One Finder rule, no system one; Python whole, JavaScript but two
-        // of its rules, which a user may have typed.
-        plan.readSwitches(fromRecorded: ["~/.Trash", "*.iso"]
-            + BackupPlan.developerExcludes(groups: [.python])
-            + ["**/node_modules", "**/.next"])
-        #expect(plan.skipsFinderFiles)
-        #expect(!plan.skipsSystemFiles)
-        #expect(plan.developerGroups == [.python])
-        plan.readSwitches(fromRecorded: Array(BackupPlan.developerExcludes.dropFirst()))
-        #expect(plan.developerGroups == ExcludeCategory.developerGroups)
-        #expect(!plan.skipsFinderFiles && !plan.skipsSystemFiles)
+        // JavaScript but two of its rules, which a user may have typed.
+        plan.readSwitches(fromRecorded: ["*.iso", "**/node_modules", "**/.next"])
+        #expect(!plan.skipsDeveloperFiles && !plan.skipsMachines)
+        plan.readSwitches(fromRecorded: rules(.python))
+        #expect(plan.skipsDeveloperFiles && !plan.skipsMachines)
+        plan.readSwitches(fromRecorded: rules(.machines))
+        #expect(!plan.skipsDeveloperFiles && plan.skipsMachines)
     }
 
     @Test("a run leaves out the rules that name its source or a folder above it, and only those")
@@ -466,15 +460,13 @@ struct TolerantDecodingTests {
               "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
               "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes"]),
         ]
-        #expect(groups.map(\.0) == ExcludeCategory.developerGroups)
+        #expect(groups.map(\.0) == ExcludeCategory.rebuildableGroups + ExcludeCategory.machineGroups)
         for (group, folders, home) in groups {
-            #expect(BackupPlan.developerExcludes(groups: [group]) == folders + home, "\(group)")
+            #expect(ExcludeRule.developer.filter { $0.category == group }.map(\.pattern) == folders + home, "\(group)")
         }
-        #expect(BackupPlan.developerExcludes == groups.flatMap { $0.folders + $0.home })
+        #expect(BackupPlan.developerExcludes + BackupPlan.machineExcludes == groups.flatMap { $0.folders + $0.home })
         // Rust's target and .NET's obj go by their markers.
-        #expect(BackupPlan.developerMarkers(for: ExcludeCategory.developerGroups) == [".rustc_info.json", "project.assets.json"])
-        #expect(BackupPlan.developerMarkers(for: [.python, .dotnet]) == ["project.assets.json"])
-        #expect(BackupPlan.developerMarkers(for: []).isEmpty)
+        #expect(ExcludeRule.developerMarkers.map(\.pattern) == [".rustc_info.json", "project.assets.json"])
     }
 
     @Test("every rule the app offers is labelled, once, and sits in an app category")
@@ -484,14 +476,13 @@ struct TolerantDecodingTests {
         for rule in rules {
             #expect(!rule.what.isEmpty && !rule.why.isEmpty, "\(rule.pattern)")
         }
-        #expect(ExcludeRule.defaults.allSatisfy { !ExcludeCategory.developerGroups.contains($0.category) })
+        let developerGroups = ExcludeCategory.rebuildableGroups + ExcludeCategory.machineGroups
+        #expect(ExcludeRule.defaults.allSatisfy { !developerGroups.contains($0.category) })
         #expect((ExcludeRule.developer + ExcludeRule.developerMarkers)
-            .allSatisfy { ExcludeCategory.developerGroups.contains($0.category) })
-        #expect(ExcludeRule.developerMarkers.map(\.line)
-            == ["Folders holding .rustc_info.json", "Folders holding project.assets.json"])
+            .allSatisfy { developerGroups.contains($0.category) })
     }
 
-    @Test("a plan saved before the Skip switches reads them from its list, which keeps only the user's own patterns")
+    @Test("a plan's list sheds the rules the app now passes itself, keeping the user's own patterns")
     func listsBecomeSwitchesAtLoad() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -499,7 +490,7 @@ struct TolerantDecodingTests {
 
         let home = NSHomeDirectory()
         let defaults = String(decoding: try JSONEncoder().encode(BackupPlan.defaultExcludes), as: UTF8.self)
-        let python = String(decoding: try JSONEncoder().encode(["*.iso"] + BackupPlan.developerExcludes(groups: [.python])), as: UTF8.self)
+        let python = String(decoding: try JSONEncoder().encode(["*.iso"] + BackupPlan.developerExcludes), as: UTF8.self)
         let json = """
         {
           "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
@@ -530,8 +521,6 @@ struct TolerantDecodingTests {
         let loaded = try await store.load()
         #expect(loaded.decodeNotes.isEmpty)
         let plans = loaded.configuration.plans
-        #expect(plans.map(\.skipsFinderFiles) == [true, true, true, true, true, false, false, false])
-        #expect(plans.map(\.skipsSystemFiles) == [true, true, true, true, true, false, false, true])
         #expect(plans.map(\.excludePatterns) == [
             // The defaults leave the list for their switches, whatever the
             // path; the user's own stay, in their order — **/node_modules,
@@ -541,30 +530,27 @@ struct TolerantDecodingTests {
             // A split plan's folders each.
             [],
             [],
-            // Saved without the key: the defaults, so both switches on.
             [],
-            // A list emptied by hand: both off, nothing left out.
             [],
             // A ticked group's rules leave the list too.
             ["*.iso"],
-            // Saved with the switches: the list as it stands, a typed rule
-            // of a switch that is off included.
-            [".DS_Store"],
+            // Now passed by every plan, so a typed copy leaves the list.
+            [],
         ])
-        #expect(plans[6].developerGroups == [.python])
+        #expect(plans[6].skipsDeveloperFiles)
 
         try await store.save(loaded.configuration)
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         let saved = try #require((object["plans"] as? [[String: Any]])?.first)
-        #expect(saved["skipsFinderFiles"] as? Bool == true)
-        #expect(saved["skipsSystemFiles"] as? Bool == true)
+        #expect(saved["skipsFinderFiles"] == nil)
+        #expect(saved["excludeCaches"] == nil)
         let reloaded = try await store.load().configuration.plans
         #expect(reloaded.map(\.excludePatterns) == plans.map(\.excludePatterns))
         #expect(reloaded.map(\.excludesToPass) == plans.map(\.excludesToPass))
     }
 
-    @Test("a plan saved with older builds' developer switch on gets every group ticked, the groups' rules leaving its list")
-    func legacyDeveloperSwitchBecomesGroupsAtLoad() async throws {
+    @Test("a plan saved with older builds' single developer switch on gets both switches, their rules leaving its list")
+    func legacyDeveloperSwitchBecomesSwitchesAtLoad() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -587,13 +573,14 @@ struct TolerantDecodingTests {
         try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
         let store = ConfigStore(directory: directory)
         let loaded = try await store.load().configuration
-        #expect(loaded.plans.map(\.developerGroups) == [ExcludeCategory.developerGroups, [], []])
+        #expect(loaded.plans.map(\.skipsDeveloperFiles) == [true, false, false])
+        #expect(loaded.plans.map(\.skipsMachines) == [true, false, false])
         #expect(loaded.plans.map(\.excludePatterns) == [["*.iso"], ["*.iso"], ["*.iso"]])
-        #expect(loaded.plans[0].excludesToPass == BackupPlan.developerExcludes + ["*.iso"])
+        #expect(loaded.plans[0].excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.machineExcludes + ["*.iso"])
 
         try await store.save(loaded)
         let reloaded = try await store.load().configuration
-        #expect(reloaded.plans.map(\.developerGroups) == loaded.plans.map(\.developerGroups))
+        #expect(reloaded.plans.map(\.skipsDeveloperFiles) == loaded.plans.map(\.skipsDeveloperFiles))
         #expect(reloaded.plans.map(\.excludePatterns) == loaded.plans.map(\.excludePatterns))
     }
 

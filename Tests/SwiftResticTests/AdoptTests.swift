@@ -115,12 +115,9 @@ struct AdoptTests {
         #expect(model.label(of: draft) == "Docs")
         #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
-        // No switch's rule was recorded: every switch reads off.
-        #expect(!draft.skipsFinderFiles && !draft.skipsSystemFiles && !draft.excludeDeveloperFiles)
+        // No switch's rule was recorded: both switches read off.
+        #expect(!draft.skipsDeveloperFiles && !draft.skipsMachines)
         #expect(draft.tags == ["travel"])
-        // The editor's own defaults keep what restic does not record.
-        #expect(draft.excludeCaches == BackupPlan().excludeCaches)
-        #expect(draft.oneFileSystem == BackupPlan().oneFileSystem)
         #expect(draft.hooks.isEmpty)
         // The app has never run this plan; its stamps say so.
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
@@ -140,7 +137,8 @@ struct AdoptTests {
             let made = try snapshot("on" + path, time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
             loadModel(model, repository: repository, listing: [made])
             let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-            #expect(draft.developerGroups == ExcludeCategory.developerGroups, "path \(path)")
+            #expect(draft.skipsDeveloperFiles, "path \(path)")
+            #expect(!draft.skipsMachines, "path \(path)")
             // In the app's spelling, so each reads as its rule.
             #expect(draft.path == path)
             #expect(draft.excludePatterns == ["*.iso"], "path \(path)")
@@ -153,16 +151,17 @@ struct AdoptTests {
         let made1 = try snapshot("older", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: older)
         loadModel(model, repository: repository, listing: [made1])
         let olderDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(olderDraft.developerGroups == ExcludeCategory.developerGroups)
+        #expect(olderDraft.skipsDeveloperFiles)
         #expect(olderDraft.excludePatterns == ["*.iso"])
         #expect(olderDraft.excludesToPass.contains(all[0]))
 
-        // One group's rules recorded: that group alone is ticked.
-        let pythonOnly = ["*.iso"] + BackupPlan.developerExcludes(groups: [.python])
+        // One group's rules recorded by a build that ticked languages one by
+        // one: the switch reads on, and the machines' stays off.
+        let pythonOnly = ["*.iso"] + ExcludeRule.developer.filter { $0.category == .python }.map(\.pattern)
         let made2 = try snapshot("python", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: pythonOnly)
         loadModel(model, repository: repository, listing: [made2])
         let pythonDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(pythonDraft.developerGroups == [.python])
+        #expect(pythonDraft.skipsDeveloperFiles && !pythonDraft.skipsMachines)
         #expect(pythonDraft.excludePatterns == ["*.iso"])
 
         // Part of the set is the user's own rows, copied as they were.
@@ -170,7 +169,7 @@ struct AdoptTests {
         let made = try snapshot("off", time: "2026-10-01T10:00:00Z", tags: [tag], excludes: partial)
         loadModel(model, repository: repository, listing: [made])
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(!draft.excludeDeveloperFiles)
+        #expect(!draft.skipsDeveloperFiles)
         #expect(draft.excludePatterns == partial)
     }
 
@@ -187,7 +186,6 @@ struct AdoptTests {
         )
         loadModel(model, repository: repository, listing: [made])
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(draft.skipsFinderFiles && draft.skipsSystemFiles)
         #expect(draft.excludePatterns == ["/Users/someone/elsewhere"])
     }
 
