@@ -52,63 +52,6 @@ struct ConfigStoreTests {
         #expect(loaded.runs.count == 1)
     }
 
-    @Test("an app-wide rate limit saved by an earlier build moves to the repositories reached over a network, once")
-    func appWideRateLimitsMove() async throws {
-        let directory = temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        // An earlier build's one pair in Settings held back every
-        // repository, a disk on this Mac too.
-        let json = """
-        {
-          "repositories": [
-            {"name": "Desk Drive", "kind": "local", "localPath": "/Volumes/Archive SSD/restic"},
-            {"name": "Home Folder", "kind": "local", "localPath": "~/restic"},
-            {"name": "NAS Share", "kind": "local", "localPath": "/Volumes/NAS/restic"},
-            {"name": "NAS", "kind": "sftp", "sftpHost": "nas.local", "sftpPath": "/volume1/restic"},
-            {"name": "Cloud", "kind": "b2", "b2Bucket": "photos"}
-          ],
-          "plans": [],
-          "runs": [],
-          "settings": {"uploadLimitKiBps": 512, "downloadLimitKiBps": 2048,
-                       "networkShares": [{"id": "6A1E1A2B-0000-4000-8000-000000000001",
-                                          "volumeName": "NAS", "url": "smb://me@nas.local/NAS"}]}
-        }
-        """
-        let file = directory.appendingPathComponent("config.json")
-        try Data(json.utf8).write(to: file)
-
-        // Each repository by what the app calls it — where it is; the names
-        // that earlier build stored are not read.
-        func limits(_ configuration: AppConfiguration) -> [String: [Int]] {
-            Dictionary(uniqueKeysWithValues: configuration.repositories.map {
-                ($0.label(among: configuration.repositories), [$0.uploadLimitKiBps, $0.downloadLimitKiBps])
-            })
-        }
-        let store = ConfigStore(directory: directory)
-        let loaded = try await store.load()
-        var expected = [
-            "Archive SSD": [0, 0], "restic": [0, 0],
-            "NAS": [512, 2048], "nas.local": [512, 2048], "photos": [512, 2048],
-        ]
-        #expect(limits(loaded.configuration) == expected)
-        #expect(loaded.decodeNotes.isEmpty)
-
-        // Saved by this build, the pair is gone from the settings, so a
-        // limit lifted afterwards stays lifted.
-        var edited = loaded.configuration
-        let cloud = try #require(edited.repositories.firstIndex { $0.kind == .b2 })
-        edited.repositories[cloud].uploadLimitKiBps = 0
-        try await store.save(edited)
-        let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
-        let settings = try #require(saved?["settings"] as? [String: Any])
-        #expect(settings["uploadLimitKiBps"] == nil)
-        #expect(settings["downloadLimitKiBps"] == nil)
-        expected["photos"] = [0, 2048]
-        #expect(limits(try await store.load().configuration) == expected)
-    }
-
     @Test("a plan an earlier build saved with several folders becomes one plan per folder; the first keeps its id and stamps")
     func multiFolderPlansSplit() async throws {
         let directory = temporaryDirectory()
@@ -894,25 +837,6 @@ struct TolerantDecodingTests {
             "“retention.keepLast” -1 is out of range — read as 0",
             "“retention.keepDaily” -7 is out of range — read as 0",
         ])
-    }
-
-    @Test("a plan that freed space itself leaves its repository's cleanup on, and only then")
-    func runPruneTurnsOnCleanup() throws {
-        let repository = UUID()
-        let other = UUID()
-        func plan(_ repository: UUID, retention: String) -> String {
-            #"{"id": "\#(UUID().uuidString)", "repositoryID": "\#(repository.uuidString)", "path": "/x", "retention": \#(retention)}"#
-        }
-        let json = """
-        {"repositories": [{"id": "\(repository.uuidString)", "kind": "local", "localPath": "/a"},
-                          {"id": "\(other.uuidString)", "kind": "local", "localPath": "/b"}],
-         "plans": [\(plan(repository, retention: #"{"isEnabled": true, "keepDaily": 3, "runPrune": true}"#)),
-                   \(plan(other, retention: #"{"isEnabled": true, "keepDaily": 3, "runPrune": false}"#))]}
-        """
-        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: Data(json.utf8))
-        #expect(configuration.repository(id: repository)?.maintenance.pruneEnabled == true)
-        #expect(configuration.repository(id: other)?.maintenance.pruneEnabled == false)
-        #expect(configuration.plans.first?.retention.keepDaily == 3)
     }
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")

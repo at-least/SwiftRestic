@@ -7,72 +7,24 @@ import Foundation
 /// a long time — so the scheduler treats a repository under maintenance as busy
 /// and defers backups to it rather than letting them collide.
 struct MaintenancePolicy: Codable, Sendable, Hashable {
-    var checkEnabled: Bool = true
-    var checkIntervalDays: Int = 7
-    /// Percentage of pack data to actually read and verify. 0 checks structure
-    /// only, which is fast; reading data is thorough and slow.
-    var checkReadDataPercent: Int = 0
-    /// How many slices a scheduled check reads the data in, the next one
-    /// each time (`--read-data-subset=n/N`), so every pack is read once
-    /// every N checks; 0 for the percentage above. A structure-only check
-    /// passed a pack with one bit flipped that its slice caught (restic
-    /// 0.19.1).
-    var checkDataSlices: Int = 0
-    /// The slice the next scheduled check reads, 1 … `checkDataSlices`.
-    var nextCheckDataSlice: Int = 1
-
-    enum CheckDepth: Hashable, Sendable {
-        case structure
-        case rotating
-        case percent(Int)
-    }
-
+    static let checkIntervalDays = 7
+    static let pruneIntervalDays = 30
     static let rotatingSlices = 12
 
-    var checkDepth: CheckDepth {
-        get {
-            if checkDataSlices > 0 { return .rotating }
-            return checkReadDataPercent > 0 ? .percent(checkReadDataPercent) : .structure
-        }
-        set {
-            switch newValue {
-            case .structure: (checkDataSlices, checkReadDataPercent) = (0, 0)
-            case .rotating: (checkDataSlices, checkReadDataPercent) = (Self.rotatingSlices, 0)
-            case let .percent(percent): (checkDataSlices, checkReadDataPercent) = (0, percent)
-            }
-        }
-    }
+    /// The slice the next scheduled check reads, 1 … `rotatingSlices`.
+    var nextCheckDataSlice: Int = 1
 
-    var scheduledDataSubset: CheckDataSubset? {
-        if checkDataSlices > 0 { return .slice(min(max(1, nextCheckDataSlice), checkDataSlices), of: checkDataSlices) }
-        return checkReadDataPercent > 0 ? .percent(checkReadDataPercent) : nil
-    }
-
-    /// A new repository's depth by where it is (the user's pick): its data
-    /// read in slices where reading costs only time — this Mac's disks, a
-    /// network share, an SFTP server; the structure alone where reading may
-    /// be billed — a cloud provider, an rclone remote, a REST server on a
-    /// metered host — until chosen in the editor.
-    static func defaultCheckDepth(for kind: Repository.Kind) -> CheckDepth {
+    /// A scheduled check's data by where the repository is (the user's pick):
+    /// its data read in slices where reading costs only time — this Mac's
+    /// disks, a network share, an SFTP server — so every pack is read once
+    /// every `rotatingSlices` checks; the structure alone where reading may
+    /// be billed. A structure-only check passed a pack with one bit flipped
+    /// that its slice caught (restic 0.19.1).
+    func scheduledDataSubset(for kind: Repository.Kind) -> CheckDataSubset? {
         switch kind {
-        case .local, .sftp: .rotating
-        case .rest, .s3, .b2, .azure, .gcs, .rclone: .structure
+        case .local, .sftp: .slice(min(max(1, nextCheckDataSlice), Self.rotatingSlices), of: Self.rotatingSlices)
+        case .rest, .s3, .b2, .azure, .gcs, .rclone: nil
         }
-    }
-
-    /// Off here and for a repository saved without the key — pruning rewrites
-    /// pack files and can take a long time — while a repository added from
-    /// now on starts from `forNewRepository`.
-    var pruneEnabled: Bool = false
-    var pruneIntervalDays: Int = 30
-
-    /// Prune on: retention runs after every backup, and only a prune frees
-    /// what it removed. A repository saved before keeps its own settings.
-    static func forNewRepository(kind: Repository.Kind) -> MaintenancePolicy {
-        var policy = MaintenancePolicy()
-        policy.pruneEnabled = true
-        policy.checkDepth = defaultCheckDepth(for: kind)
-        return policy
     }
 
     var lastCheckAt: Date?
@@ -82,13 +34,7 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        checkEnabled = c.value(.checkEnabled, default: true)
-        checkIntervalDays = c.value(.checkIntervalDays, default: 7)
-        checkReadDataPercent = c.value(.checkReadDataPercent, default: 0)
-        checkDataSlices = c.value(.checkDataSlices, default: 0)
         nextCheckDataSlice = c.value(.nextCheckDataSlice, default: 1)
-        pruneEnabled = c.value(.pruneEnabled, default: false)
-        pruneIntervalDays = c.value(.pruneIntervalDays, default: 30)
         lastCheckAt = c.optional(.lastCheckAt)
         lastPruneAt = c.optional(.lastPruneAt)
     }
@@ -96,16 +42,10 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     /// A repository that has never had the task run counts from when it was
     /// added, not from now — otherwise adding a repository would immediately
     /// kick off a check or a long prune.
-    func nextDate(for task: MaintenanceTask, addedAt: Date) -> Date? {
+    func nextDate(for task: MaintenanceTask, addedAt: Date) -> Date {
         switch task {
-        case .check:
-            guard checkEnabled, checkIntervalDays > 0 else { return nil }
-            return (lastCheckAt ?? addedAt)
-                .addingTimeInterval(TimeInterval(checkIntervalDays) * 86_400)
-        case .prune:
-            guard pruneEnabled, pruneIntervalDays > 0 else { return nil }
-            return (lastPruneAt ?? addedAt)
-                .addingTimeInterval(TimeInterval(pruneIntervalDays) * 86_400)
+        case .check: (lastCheckAt ?? addedAt).addingTimeInterval(TimeInterval(Self.checkIntervalDays) * 86_400)
+        case .prune: (lastPruneAt ?? addedAt).addingTimeInterval(TimeInterval(Self.pruneIntervalDays) * 86_400)
         }
     }
 }

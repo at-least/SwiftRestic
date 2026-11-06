@@ -48,39 +48,11 @@ struct AppConfiguration: Codable, Sendable {
         // file stores `StoredPlan`s, whose decode unfolds older builds'
         // `sources` into one plan per folder — read as the property's
         // `[BackupPlan]`, that split would be lost.
-        let storedPlans = c.value(.plans, default: [StoredPlan]())
-        plans = storedPlans.flatMap(\.plans)
-        turnOnCleanup(forPlansThatPruned: storedPlans)
+        plans = c.value(.plans, default: [StoredPlan]()).flatMap(\.plans)
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: runs))
-        let stored = c.value(.settings, default: StoredSettings())
-        settings = stored.settings
-        moveAppWideRateLimits(upload: stored.uploadLimitKiBps, download: stored.downloadLimitKiBps)
-    }
-
-    /// Older builds freed space through a plan's own "Also clean up". That
-    /// switch is gone; the repository's periodic cleanup takes over, or a
-    /// repository saved with cleanup off would stop freeing what retention
-    /// removes.
-    private mutating func turnOnCleanup(forPlansThatPruned storedPlans: [StoredPlan]) {
-        for stored in storedPlans where stored.legacyPrunesAfterRetention && stored.plan.retention.isEnabled {
-            guard let index = repositories.firstIndex(where: { $0.id == stored.plan.repositoryID }) else { continue }
-            repositories[index].maintenance.pruneEnabled = true
-        }
-    }
-
-    /// Older builds held one pair of rate limits in the
-    /// settings, for every repository, a disk on this Mac too. It stays
-    /// with the repositories reached over a network — every kind but a
-    /// local folder, and a local folder on a saved network share — which it
-    /// was set for; the settings no longer write it, so it moves once.
-    private mutating func moveAppWideRateLimits(upload: Int, download: Int) {
-        guard upload > 0 || download > 0 else { return }
-        for index in repositories.indices where repositories[index].usesNetwork(shares: settings.networkShares) {
-            if upload > 0 { repositories[index].uploadLimitKiBps = upload }
-            if download > 0 { repositories[index].downloadLimitKiBps = download }
-        }
+        settings = c.value(.settings, default: settings)
     }
 
     func repository(id: UUID?) -> Repository? {
@@ -103,24 +75,10 @@ private struct StoredPlan: Decodable {
     var plan: BackupPlan
     var sources: [String] = []
     var legacySkipsDeveloperFiles = false
-    var legacyPrunesAfterRetention = false
 
     private enum LegacyKeys: String, CodingKey {
         case sources
         case excludeDeveloperFiles
-        case retention
-    }
-
-    private struct LegacyRetention: Decodable {
-        var runPrune = false
-
-        private enum CodingKeys: String, CodingKey { case runPrune }
-
-        init() {}
-
-        init(from decoder: any Decoder) throws {
-            runPrune = try decoder.container(keyedBy: CodingKeys.self).value(.runPrune, default: false)
-        }
     }
 
     init(from decoder: any Decoder) throws {
@@ -128,7 +86,6 @@ private struct StoredPlan: Decodable {
         let c = try decoder.container(keyedBy: LegacyKeys.self)
         sources = BackupPlan.withoutDuplicates(c.value(.sources, default: []))
         legacySkipsDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
-        legacyPrunesAfterRetention = c.value(.retention, default: LegacyRetention()).runPrune
     }
 
     var plans: [BackupPlan] {
@@ -155,30 +112,6 @@ private struct StoredPlan: Decodable {
             copy.staleAlertedFor = nil
             return copy
         }
-    }
-}
-
-/// `settings` as a configuration holds it, with the rate limits older
-/// builds kept there for every repository
-/// (`AppConfiguration.moveAppWideRateLimits`) — read in the same decode,
-/// so a settings object that does not read is noted once.
-private struct StoredSettings: Decodable {
-    var settings = AppSettings()
-    var uploadLimitKiBps = 0
-    var downloadLimitKiBps = 0
-
-    private enum AppWideKeys: String, CodingKey {
-        case uploadLimitKiBps, downloadLimitKiBps
-    }
-
-    init() {}
-
-    init(from decoder: any Decoder) throws {
-        self.init()
-        settings = try AppSettings(from: decoder)
-        let c = try decoder.container(keyedBy: AppWideKeys.self)
-        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: uploadLimitKiBps)
-        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: downloadLimitKiBps)
     }
 }
 

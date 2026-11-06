@@ -31,9 +31,6 @@ struct RepositoryContext: Sendable {
         if repository.uploadLimitKiBps > 0 {
             args += ["--limit-upload", String(repository.uploadLimitKiBps)]
         }
-        if repository.downloadLimitKiBps > 0 {
-            args += ["--limit-download", String(repository.downloadLimitKiBps)]
-        }
         return args
     }
 }
@@ -151,25 +148,11 @@ struct ResticService: ResticClient {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// `restic cache`: the local cache's directories with their sizes — no
-    /// repository, no password. restic measures each directory, so a Mac
-    /// whose tests left thousands of scratch repositories answers in a
-    /// dozen seconds; a user's handful answers at once.
-    func cacheReport() async throws -> ResticCacheReport {
-        let result = try await runner.run(
-            binary: binary,
-            invocation: ResticInvocation(arguments: ["cache"], timeout: 120, retainFullOutput: true)
-        )
-        guard let report = ResticCacheReport.parse(result.stdout) else {
-            throw ResticError.malformedOutput(detail: "restic cache’s table could not be read: \(result.stdout.prefix(200))")
-        }
-        return report
-    }
-
-    /// `restic cache --cleanup`: removes the directories restic marks old —
-    /// unused for `ResticCacheReport.oldAfterDays` days, a repository still
-    /// set up here included; restic rebuilds one the next time it opens
-    /// that repository. Prints "no old cache dirs found" when none is.
+    /// `restic cache --cleanup`: removes the cache directories unused for 30
+    /// days, a repository still set up here included; restic rebuilds one the
+    /// next time it opens that repository. Not `--cleanup-cache check`: a
+    /// check runs on a temporary cache and left an old directory in place
+    /// (restic 0.19.1, probed), and a cleanup beside a running reader exited 0.
     func cleanupCache() async throws {
         _ = try await runner.run(
             binary: binary,

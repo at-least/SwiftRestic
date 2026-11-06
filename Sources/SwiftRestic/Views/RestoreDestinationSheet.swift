@@ -57,10 +57,8 @@ struct RestoreDestinationRequest: Identifiable {
 ///
 /// Keep is the default every time the sheet opens and is never remembered,
 /// so Return, Return (the pane's default action, then this sheet's) never
-/// replaces anything because of an earlier session. Desktop or Other folder
-/// is remembered — only on a Restore press, and only when it changed, so
-/// radio flicks and Cancel write nothing and a launch seeded through the
-/// argument domain writes nothing either. Original location never is.
+/// replaces anything because of an earlier session. Desktop is the default
+/// every time too, the one place a restored file is easy to find.
 struct RestoreDestinationSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -71,35 +69,17 @@ struct RestoreDestinationSheet: View {
     /// Cancel and Restore call it instead of dismissing.
     var onClose: (() -> Void)?
 
-    @State private var kind: RestoreDestinationKind
+    @State private var kind: RestoreDestinationKind = .desktop
     @State private var otherFolder: URL?
     @State private var policy: RestoreOverwritePolicy = .keepExisting
     /// Nil until the detached check answers: the parent may sit on a
     /// stalled network mount, which must not stall the main actor.
     @State private var original: OriginalLocation?
-    /// A remembered folder is shown only once it is known to still exist:
-    /// restoring into a vanished one would recreate its path (under
-    /// /Volumes, for an unmounted disk).
-    @State private var otherFolderChecked: Bool
     @State private var isConfirming = false
     /// The Replace pre-check, which Cancel and the sheet's closing stop: a
     /// look at a stalled mount can outlast the user's patience, and a
     /// cancelled sheet must not start a restore when the look returns.
     @State private var confirmation: Task<Void, Never>?
-
-    static let kindKey = "RestoreDestinationKind"
-    static let folderKey = "RestoreOtherFolderPath"
-
-    init(request: RestoreDestinationRequest, onClose: (() -> Void)? = nil) {
-        self.request = request
-        self.onClose = onClose
-        let defaults = UserDefaults.standard
-        let remembered = defaults.string(forKey: Self.kindKey).flatMap(RestoreDestinationKind.init(rawValue:))
-        _kind = State(initialValue: remembered == .otherFolder ? .otherFolder : .desktop)
-        let folder = defaults.string(forKey: Self.folderKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
-        _otherFolder = State(initialValue: folder)
-        _otherFolderChecked = State(initialValue: folder == nil)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -173,11 +153,7 @@ struct RestoreDestinationSheet: View {
         }
         .padding(20)
         .frame(width: 460)
-        // Two looks, each answering on its own: a stalled mount under the
-        // item's original parent must not hold up the remembered folder's
-        // Restore, nor the other way round.
         .task { await checkOriginalLocation() }
-        .task { await checkRememberedFolder() }
         .onDisappear { confirmation?.cancel() }
     }
 
@@ -224,7 +200,7 @@ struct RestoreDestinationSheet: View {
     private var chosenFolder: URL? {
         switch kind {
         case .desktop: Self.desktop
-        case .otherFolder: otherFolderChecked ? otherFolder : nil
+        case .otherFolder: otherFolder
         case .originalLocation: nil
         }
     }
@@ -243,9 +219,7 @@ struct RestoreDestinationSheet: View {
     private var detailLine: some View {
         switch kind {
         case .desktop, .otherFolder:
-            if kind == .otherFolder, !otherFolderChecked {
-                caption("Checking…")
-            } else if !collidingNames.isEmpty {
+            if !collidingNames.isEmpty {
                 // A sentence, not a path: what is in the way, and the two
                 // ways around it.
                 caption("More than one selected item is named \(collidingNames.map { "“\($0)”" }.joined(separator: ", ")) — in one folder they would land on each other. Restore them one at a time, or to their original locations.")
@@ -320,25 +294,12 @@ struct RestoreDestinationSheet: View {
         }.value
     }
 
-    private func checkRememberedFolder() async {
-        guard let folderPath = otherFolder?.path, !otherFolderChecked else { return }
-        let folderExists = await Task.detached(priority: .userInitiated) {
-            RestoreDestinationRules.directoryExists(folderPath)
-        }.value
-        // A folder chosen while the check ran is the user's answer, not the
-        // remembered one's.
-        guard otherFolder?.path == folderPath, !otherFolderChecked else { return }
-        if !folderExists { otherFolder = nil }
-        otherFolderChecked = true
-    }
-
     private func chooseFolder() {
         guard let url = FilePicker.chooseDirectory(
             message: "Choose where to restore \(subjectName)",
             directoryURL: otherFolder ?? Self.desktop
         ) else { return }
         otherFolder = url
-        otherFolderChecked = true
         kind = .otherFolder
     }
 
@@ -408,25 +369,11 @@ struct RestoreDestinationSheet: View {
     }
 
     private func commit(_ directories: [URL], _ policy: RestoreOverwritePolicy, kind: RestoreDestinationKind) {
-        remember(kind, folder: directories[0])
         close()
         request.perform(directories, policy)
     }
 
     private func close() {
         if let onClose { onClose() } else { dismiss() }
-    }
-
-    /// Desktop or Other folder, written only when it differs from what the
-    /// defaults already answer (the argument domain included).
-    private func remember(_ kind: RestoreDestinationKind, folder: URL) {
-        guard kind != .originalLocation else { return }
-        let defaults = UserDefaults.standard
-        if defaults.string(forKey: Self.kindKey) != kind.rawValue {
-            defaults.set(kind.rawValue, forKey: Self.kindKey)
-        }
-        if kind == .otherFolder, defaults.string(forKey: Self.folderKey) != folder.path {
-            defaults.set(folder.path, forKey: Self.folderKey)
-        }
     }
 }

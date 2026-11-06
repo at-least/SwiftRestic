@@ -353,7 +353,6 @@ struct AppModelStubTests {
         // Never run, so due on the tick; its repository's upkeep is due too.
         model.configuration.plans[index].schedule.frequency = .hourly
         let repositoryIndex = try #require(model.configuration.repositories.firstIndex { $0.id == harness.repository.id })
-        model.configuration.repositories[repositoryIndex].maintenance.checkEnabled = true
         model.configuration.repositories[repositoryIndex].maintenance.lastCheckAt = nil
         // A skipped run, which a mount would catch up.
         var skipped = RunRecord(kind: .backup, planID: harness.plan.id, planName: model.label(of: harness.plan), repositoryID: harness.repository.id)
@@ -1483,7 +1482,6 @@ struct AppModelStubTests {
         #expect(await newReads() >= 1, "the listing's")
         // A due check skips and waits for the drive; the next tick reads
         // whether it is back.
-        model.configuration.repositories[index].maintenance.checkEnabled = true
         model.configuration.repositories[index].maintenance.lastCheckAt = Date.now.addingTimeInterval(-10 * 86400)
         await model.runDuePlans()
         await model.waitForMaintenance(repositoryID: id)
@@ -1512,7 +1510,6 @@ struct AppModelStubTests {
         let here = model.configuration.repositories[index].localPath
         let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
         model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
-        model.configuration.repositories[index].maintenance.checkEnabled = true
         // Last checked ten days ago: due on the tick.
         let lastChecked = Date.now.addingTimeInterval(-10 * 86400)
         model.configuration.repositories[index].maintenance.lastCheckAt = lastChecked

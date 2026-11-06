@@ -585,7 +585,7 @@ enum MaintenanceRunEngine {
                 let subset: CheckDataSubset? = if let readDataPercentOverride {
                     readDataPercentOverride > 0 ? .percent(readDataPercentOverride) : nil
                 } else {
-                    repository.maintenance.scheduledDataSubset
+                    repository.maintenance.scheduledDataSubset(for: repository.kind)
                 }
                 let summary = try await RunTranscript.$current.withValue(transcript) {
                     try await service.check(context, readDataSubset: subset)
@@ -593,6 +593,14 @@ enum MaintenanceRunEngine {
                 record.checkRead = subset?.words ?? "structure only"
                 if readDataPercentOverride == nil, case .slice = subset {
                     sink.advanceCheckDataSlice(repositoryID: repository.id)
+                }
+                if readDataPercentOverride == nil {
+                    // Housekeeping on this Mac: it must never fail the check.
+                    do {
+                        try await RunTranscript.$current.withValue(transcript) { try await service.cleanupCache() }
+                    } catch {
+                        transcript.note("restic’s old caches weren’t removed: \(error.localizedDescription)")
+                    }
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors

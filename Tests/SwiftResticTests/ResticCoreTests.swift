@@ -503,17 +503,16 @@ struct PasswordPrecedenceTests {
 
 @Suite("Rate limits")
 struct RateLimitTests {
-    @Test("a repository's own rate limits go on every command against it; none add no flag")
+    @Test("a repository's own upload limit goes on every command against it; none add no flag")
     func repositoryLimits() {
         var repository = Repository()
         repository.kind = .b2
         #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty)
 
         repository.uploadLimitKiBps = 512
-        repository.downloadLimitKiBps = 2048
         #expect(
             RepositoryContext(repository: repository, password: "p").globalArguments
-                == ["--limit-upload", "512", "--limit-download", "2048"]
+                == ["--limit-upload", "512"]
         )
     }
 }

@@ -81,14 +81,10 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// Extra `KEY=value` pairs handed to the restic child process verbatim.
     var extraEnvironment: [String: String] = [:]
 
-    /// KiB/s, 0 for unlimited: `--limit-upload` and `--limit-download` on
-    /// every restic command against this repository. restic 0.19.1 holds a
-    /// local disk to them too (measured: at 1024 KiB/s an 8 MiB backup took
-    /// 7.8 s against 0.8 s, its restore the same; at 64 KiB/s a backup's
-    /// first `ls` 7.4 s against 0.6 s), so a download limit slows every
-    /// restore, a check that reads data and a backup's first opening.
+    /// KiB/s, 0 for unlimited: `--limit-upload` on every restic command against
+    /// this repository. restic 0.19.1 holds a local disk to it too (measured:
+    /// at 1024 KiB/s an 8 MiB backup took 7.8 s against 0.8 s).
     var uploadLimitKiBps: Int = 0
-    var downloadLimitKiBps: Int = 0
 
     var maintenance = MaintenancePolicy()
     /// Shell commands run around this repository's check and prune.
@@ -126,7 +122,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         rclonePath = c.value(.rclonePath, default: "")
         extraEnvironment = c.value(.extraEnvironment, default: [:])
         uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
-        downloadLimitKiBps = c.value(.downloadLimitKiBps, default: 0)
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
         hooks = c.value(.hooks, default: [])
     }

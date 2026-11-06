@@ -45,9 +45,6 @@ final class AppModel {
 
     /// `resolveBinary` writes it whole.
     var resticSearch: ResticSearch = .searching
-    var resticCache: ResticCacheState?
-    var isWorkingOnResticCache = false
-    var resticCacheNote: String?
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views

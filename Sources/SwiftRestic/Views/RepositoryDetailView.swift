@@ -212,7 +212,7 @@ struct RepositoryDetailView: View {
                         hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
                         isRunning: model.maintenance[repositoryID]?.task == .check, now: now
                     ))
-                    if repository.maintenance.pruneEnabled {
+                    if Scheduler.cleansUp(repository, plans: model.configuration.plans) {
                         DetailRow("Last cleanup") {
                             MaintenanceRunValue(
                                 text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
@@ -224,10 +224,6 @@ struct RepositoryDetailView: View {
                             hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
                             isRunning: model.maintenance[repositoryID]?.task == .prune, now: now
                         ))
-                    } else {
-                        // Off is a fact the page states, not two rows that
-                        // vanish; Edit is its fix.
-                        DetailRow("Cleanup", Scheduler.pruneOffText)
                     }
                 }
 

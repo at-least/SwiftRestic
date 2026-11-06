@@ -1845,10 +1845,9 @@ struct CheckDataRotationTests {
         model.repository(id: id)?.maintenance.nextCheckDataSlice
     }
 
-    @Test("the sink moves the rotation on: 1→2, 12 wraps to 1, a shortened rotation stays in range, and no rotation is untouched")
+    @Test("the sink moves the rotation on: 1→2, and 12 wraps to 1")
     func rotationMovesOn() {
-        let (local, id) = makeRotationModel(with: .forNewRepository(kind: .local))
-        #expect(local.repository(id: id)?.maintenance.checkDataSlices == 12)
+        let (local, id) = makeRotationModel(with: MaintenancePolicy())
         #expect(slice(of: local, id) == 1)
         local.advanceCheckDataSlice(repositoryID: id)
         #expect(slice(of: local, id) == 2)
@@ -1856,19 +1855,6 @@ struct CheckDataRotationTests {
         local.updateRepository(id) { $0.maintenance.nextCheckDataSlice = 12 }
         local.advanceCheckDataSlice(repositoryID: id)
         #expect(slice(of: local, id) == 1)
-
-        // A rotation shortened under a stored slice still answers in range.
-        local.updateRepository(id) {
-            $0.maintenance.checkDataSlices = 4
-            $0.maintenance.nextCheckDataSlice = 9
-        }
-        local.advanceCheckDataSlice(repositoryID: id)
-        #expect(slice(of: local, id) == 2)
-
-        // No slices: nothing to advance, nothing written.
-        let (structure, structureID) = makeRotationModel(with: MaintenancePolicy())
-        structure.advanceCheckDataSlice(repositoryID: structureID)
-        #expect(slice(of: structure, structureID) == 1)
     }
 }
 

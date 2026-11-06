@@ -36,9 +36,9 @@ struct RepositoryEditorSheet: View {
     @State private var isConfirmingPasswordChange = false
     @State private var isConfirmingDiscard = false
     @State private var tab: Tab = .repository
-    /// Whether the user picked a check depth: until then a new
-    /// repository's depth follows its kind (`MaintenancePolicy.defaultCheckDepth`).
-    @State private var depthChosen = false
+    /// Asked for by the saved-password row: the password was changed on
+    /// another Mac, so what the Keychain holds no longer opens it.
+    @State private var isReplacingSavedPassword = false
     @State private var rcloneSetup: RcloneSetup?
     /// Bumped when the app becomes active, so remotes set up in Terminal
     /// meanwhile appear without leaving the sheet.
@@ -71,7 +71,7 @@ struct RepositoryEditorSheet: View {
         Edit(draft: draft, password: password, providerSecret: providerSecret)
     }
 
-    /// Bounds Test Connection and Save's check: against a REST server that
+    /// Bounds Save's check: against a REST server that
     /// refuses connections restic 0.19.1 retried for over ten minutes, with
     /// the sheet's buttons grey all the while.
     private static let probeTimeout: TimeInterval = 60
@@ -80,8 +80,6 @@ struct RepositoryEditorSheet: View {
         // A new repository opens as `Repository()`: a local folder not yet
         // chosen. A saved one always has its location (Save requires it).
         isNew = repository.kind == .local && repository.localPath.isEmpty
-        var repository = repository
-        if isNew { repository.maintenance = .forNewRepository(kind: repository.kind) }
         _draft = State(initialValue: repository)
         self.onCreated = onCreated
         #if DEBUG
@@ -93,21 +91,17 @@ struct RepositoryEditorSheet: View {
 
     private enum Status: Equatable {
         case ok(String)
-        /// An expected state, not a problem: a new repository's empty
-        /// location, which Save fills.
-        case info(String)
         case failure(String)
 
         var text: String {
             switch self {
-            case let .ok(message), let .info(message), let .failure(message): message
+            case let .ok(message), let .failure(message): message
             }
         }
 
         var symbolName: String {
             switch self {
             case .ok: "checkmark.circle.fill"
-            case .info: "info.circle"
             case .failure: "xmark.octagon.fill"
             }
         }
@@ -115,7 +109,6 @@ struct RepositoryEditorSheet: View {
         var color: Color {
             switch self {
             case .ok: Theme.success
-            case .info: .secondary
             case .failure: Theme.danger
             }
         }
@@ -143,8 +136,7 @@ struct RepositoryEditorSheet: View {
 
             Divider()
 
-            // Test Connection's answer, and Save's or Change Password's,
-            // beside the buttons on either tab: at the end of the scrolled
+            // Save's or Change Password's answer, beside the buttons on either tab: at the end of the scrolled
             // form it landed below the fold, or behind the Hooks tab.
             if let status {
                 Label(status.text, systemImage: status.symbolName)
@@ -156,16 +148,13 @@ struct RepositoryEditorSheet: View {
             }
 
             HStack {
-                // A greyed Save or Test Connection owes the user the reason
-                // at the button — a mismatched confirm password must not be
+                // A greyed Save owes the user the reason at the button — a mismatched confirm password must not be
                 // a hunt across fields.
                 if let reason = missingRequirement {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Button("Test Connection") { Task { await test(initializeIfMissing: false) } }
-                    .disabled(!canSubmit || isWorking)
                 if isWorking { ProgressView().controlSize(.small) }
                 Spacer()
                 // Cancel waits with Save while work is in flight: dismissing
@@ -190,9 +179,7 @@ struct RepositoryEditorSheet: View {
             .padding(12)
         }
         // Resizable, not fixed: the SFTP notes do not fit a fixed 600x660
-        // sheet at default font sizes without scrolling, which buries the
-        // maintenance section. A minimum keeps it usable; the user can grow
-        // it.
+        // sheet at default font sizes without scrolling.
         .frame(minWidth: 600, idealWidth: 660, minHeight: 560, idealHeight: 660)
         .task {
             // Snapshot before the keychain await: an edit typed during the
@@ -297,9 +284,18 @@ struct RepositoryEditorSheet: View {
             Section("Location") { locationFields }
 
             Section("Encryption") {
-                // A grouped form draws its fields without a border, so an
-                // empty one needs its prompt to be seen at all.
-                SecureField("Repository password", text: $password, prompt: Text(passwordPrompt))
+                // The Keychain's password stays out of sight until it needs
+                // replacing: this field is not how a password is changed.
+                if hasStoredPassword == true, !isReplacingSavedPassword {
+                    LabeledContent("Password", value: "Saved in Keychain")
+                    Button("Password Changed on Another Mac…") { isReplacingSavedPassword = true }
+                } else if !isNew, storedSecrets == nil, !secretsReadFailed {
+                    LabeledContent("Password") { ProgressView().controlSize(.small) }
+                } else {
+                    // A grouped form draws its fields without a border, so an
+                    // empty one needs its prompt to be seen at all.
+                    SecureField("Repository password", text: $password, prompt: Text(passwordPrompt))
+                }
                 if isNew {
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
                 }
@@ -359,63 +355,20 @@ struct RepositoryEditorSheet: View {
                 }
             }
 
-            Section("Bandwidth") {
-                limitField("Upload limit (KiB/s)", $draft.uploadLimitKiBps)
-                limitField("Download limit (KiB/s)", $draft.downloadLimitKiBps)
-                Text("Backups upload; restores and checks that read data download. The limits apply to a drive attached to this Mac too.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // A limit an older build saved on a local disk stays visible, so it
+            // can be cleared: restic holds a local disk to it too.
+            if draft.usesNetwork(shares: model.configuration.settings.networkShares) || draft.uploadLimitKiBps > 0 {
+                Section("Bandwidth") {
+                    uploadLimitField
+                }
             }
-
-            Section("Maintenance") {
-                Toggle("Check periodically", isOn: $draft.maintenance.checkEnabled)
-                    .editorSwitches()
-                Stepper(value: $draft.maintenance.checkIntervalDays, in: 1 ... 365) {
-                    LabeledContent("Every", value: Format.plural(draft.maintenance.checkIntervalDays, "day"))
-                }
-                .disabled(!draft.maintenance.checkEnabled)
-                Picker("Data to read", selection: Binding(
-                    get: { draft.maintenance.checkDepth },
-                    set: { draft.maintenance.checkDepth = $0; depthChosen = true }
-                )) {
-                    Text("Structure only").tag(MaintenancePolicy.CheckDepth.structure)
-                    Text("A twelfth of the data each check").tag(MaintenancePolicy.CheckDepth.rotating)
-                    Text("5% of the data").tag(MaintenancePolicy.CheckDepth.percent(5))
-                    Text("25% of the data").tag(MaintenancePolicy.CheckDepth.percent(25))
-                    Text("All of the data").tag(MaintenancePolicy.CheckDepth.percent(100))
-                }
-                .disabled(!draft.maintenance.checkEnabled)
-                .onChange(of: draft.kind) { _, kind in
-                    if isNew, !depthChosen { draft.maintenance.checkDepth = MaintenancePolicy.defaultCheckDepth(for: kind) }
-                }
-                if draft.maintenance.checkEnabled {
-                    Text(Self.depthCaption(draft.maintenance))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Toggle("Clean up periodically", isOn: $draft.maintenance.pruneEnabled)
-                    .editorSwitches()
-                Stepper(value: $draft.maintenance.pruneIntervalDays, in: 1 ... 365) {
-                    LabeledContent("Every", value: Format.plural(draft.maintenance.pruneIntervalDays, "day"))
-                }
-                .disabled(!draft.maintenance.pruneEnabled)
-                ExpandableCaption(
-                    summary: "A cleanup frees the space of backups retention removed.",
-                    detail: "It can run for a long time, and backups to this repository wait until it finishes."
-                )
-            }
-
         }
         .formStyle(.grouped)
     }
 
     /// The repository's own password changed in place: restic adds a key
     /// for the new one and removes the old, then the Keychain follows
-    /// (`AppModel.changeRepositoryPassword`). Not the field above, which
-    /// only corrects what the Keychain holds.
+    /// (`AppModel.changeRepositoryPassword`).
     private var changePasswordGroup: some View {
         DisclosureGroup("Change Password", isExpanded: $isChangingPassword) {
             SecureField("New password", text: $newPassword)
@@ -491,8 +444,6 @@ struct RepositoryEditorSheet: View {
             Section("In the cloud") {
                 Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
                 Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
-                Text(Repository.Kind.azure.displayName).tag(Repository.Kind.azure)
-                Text(Repository.Kind.gcs.displayName).tag(Repository.Kind.gcs)
             }
             Section("Through a gateway") {
                 Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
@@ -646,7 +597,7 @@ struct RepositoryEditorSheet: View {
     private var passwordPrompt: String {
         if isNew { return "Required" }
         if secretsReadFailed { return "Not read from Keychain" }
-        return hasStoredPassword == false ? "Required" : "Saved in Keychain"
+        return "Required"
     }
 
     private func loadExistingSecrets() async {
@@ -704,13 +655,6 @@ struct RepositoryEditorSheet: View {
         storedSecrets.map { !($0.password ?? "").isEmpty }
     }
 
-    @discardableResult
-    private func test(initializeIfMissing: Bool) async -> Bool {
-        isWorking = true
-        defer { isWorking = false }
-        return await probe(initializeIfMissing: initializeIfMissing)
-    }
-
     /// The probe itself, without touching `isWorking`: `save()` holds the flag
     /// across the probe *and* the persistence that follows, so the buttons stay
     /// disabled until the sheet actually closes and a second click cannot
@@ -740,10 +684,7 @@ struct RepositoryEditorSheet: View {
                 return true
             }
             guard initializeIfMissing else {
-                // Where a new repository goes, nothing there yet is the
-                // expected first answer; for an edit it is a problem.
-                let answer = EditorRequirements.noRepositoryYet(isNew: isNew)
-                status = isNew ? .info(answer) : .failure(answer)
+                status = .failure(EditorRequirements.noRepositoryHere)
                 return false
             }
             _ = try await service.initializeRepository(context)
@@ -758,34 +699,18 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// A bandwidth limit in KiB/s, restic's unit: empty is no limit (0),
-    /// shown as the prompt. Typeable, not a stepper; out-of-range input is
-    /// clamped on commit, never mid-keystroke, the assignment refreshing the
-    /// field even when the clamp lands on the value it already held.
-    private func limitField(_ title: String, _ binding: Binding<Int>) -> some View {
+    /// Stored in KiB/s, restic's unit; said in MB/s. Empty is no limit (0),
+    /// shown as the prompt. Clamped on commit, never mid-keystroke.
+    private var uploadLimitField: some View {
         TextField(
-            title,
-            value: Binding<Int?>(
-                get: { binding.wrappedValue == 0 ? nil : binding.wrappedValue },
-                set: { binding.wrappedValue = min(1_000_000, max(0, $0 ?? 0)) }
+            "Upload limit (MB/s)",
+            value: Binding<Double?>(
+                get: { draft.uploadLimitKiBps == 0 ? nil : Double(draft.uploadLimitKiBps) / 1024 },
+                set: { draft.uploadLimitKiBps = min(1_000_000, max(0, Int((($0 ?? 0) * 1024).rounded()))) }
             ),
-            format: .number.grouping(.never),
+            format: .number.precision(.fractionLength(0 ... 1)).grouping(.never),
             prompt: Text("Unlimited")
         )
-    }
-
-    static func depthCaption(_ maintenance: MaintenancePolicy) -> String {
-        switch maintenance.checkDepth {
-        case .structure:
-            "Checks the structure only — damaged data can pass."
-        case .rotating:
-            "Each check reads the next twelfth of the backed-up data, so all of it is read every "
-                + "\(MaintenancePolicy.rotatingSlices) checks — every \(maintenance.checkIntervalDays * MaintenancePolicy.rotatingSlices) days at this interval."
-        case .percent(100):
-            "Each check reads all of the backed-up data back."
-        case let .percent(percent):
-            "Each check reads \(percent)% of the backed-up data, picked at random."
-        }
     }
 
     private func save(verifying: Bool = true) async {

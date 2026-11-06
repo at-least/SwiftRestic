@@ -49,6 +49,7 @@ extension AppModel {
         // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(
             in: configuration.repositories,
+            plans: configuration.plans,
             busyRepositoryIDs: busy.union(maintenanceAwaitingServer)
         ) {
             runMaintenance(repositoryID: due.repository.id, task: due.task, askedByUser: false)

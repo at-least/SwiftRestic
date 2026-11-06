@@ -34,16 +34,10 @@ enum EditorRequirements {
         ResticPath.normalized(PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? "")
     }
 
-    /// Test Connection's answer when no repository is at the location: a
-    /// new repository's Save creates one there, an edit's Save creates
-    /// nothing — its plans' backups would fail (restic exit 10) against the
-    /// empty location, which the editor cannot change: another location is
-    /// another repository.
-    static func noRepositoryYet(isNew: Bool) -> String {
-        isNew
-            ? "No repository at that location yet. Saving will create one."
-            : "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository."
-    }
+    /// An edit's check finding nothing at the location: its plans' backups
+    /// would fail (restic exit 10) against it, and the editor cannot change a
+    /// location: another location is another repository.
+    static let noRepositoryHere = "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository."
 
     /// Whether an edit's Save asks restic first: when it changes what
     /// reaches restic — the location, a credential, the environment — or

@@ -9,6 +9,7 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     private var backupScript: Result<BackupOutcome, Error> =
         .success(BackupOutcome(summary: nil, itemErrors: [], exitCode: 0))
+    private var cleanupCacheScript: Result<Void, Error> = .success(())
     private var forgetScript: Result<Int, Error> = .success(0)
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
     private var pruneScript: Result<String, Error> = .success("")
@@ -36,6 +37,11 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func onBackup(_ result: Result<BackupOutcome, Error>) -> Self {
         locked { backupScript = result }
+        return self
+    }
+
+    func onCleanupCache(_ result: Result<Void, Error>) -> Self {
+        locked { cleanupCacheScript = result }
         return self
     }
 
@@ -149,10 +155,10 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     var checkSubsets: [CheckDataSubset?] { locked { checkSubsetLog } }
     var transcriptBound: [String: Bool] { locked { bound } }
 
-    func cacheReport() async throws -> ResticCacheReport {
-        ResticCacheReport(directory: "/tmp/restic-cache", count: 0, oldCount: 0, totalBytes: 0)
+    func cleanupCache() async throws {
+        record("cleanupCache")
+        try locked { cleanupCacheScript }.get()
     }
-    func cleanupCache() async throws {}
 
     func version() async throws -> String {
         record("version")

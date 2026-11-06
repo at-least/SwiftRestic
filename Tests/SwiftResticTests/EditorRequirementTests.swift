@@ -226,7 +226,6 @@ struct EditorRequirementTests {
             )
         }
         #expect(!reaches { _ in })
-        #expect(!reaches { $0.maintenance.checkEnabled.toggle() })
         #expect(!reaches { $0.hooks = [BackupHook()] })
         #expect(reaches { $0.sftpPath = "/volume1/restik" })
         #expect(reaches { $0.sftpPort = "2222" })
@@ -303,12 +302,4 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.keepsStoredProviderSecret(secretFieldLabel: "Secret access key", readFailed: false, typedSecret: "") == false)
     }
 
-    @Test("Test Connection's answer for a path with no repository says what Save will do in this mode")
-    func missingRepositoryWords() {
-        #expect(EditorRequirements.noRepositoryYet(isNew: true)
-            == "No repository at that location yet. Saving will create one.")
-        // An edit's Save creates nothing: its plans would fail against it.
-        #expect(EditorRequirements.noRepositoryYet(isNew: false)
-            == "No repository is at this location, so its backups would fail. If the repository moved, add it at its new location with Add Repository.")
-    }
 }

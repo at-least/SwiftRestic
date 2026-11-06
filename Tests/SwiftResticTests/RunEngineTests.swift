@@ -810,10 +810,35 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log.contains("stamp:check"))
     }
 
+    @Test("a scheduled check removes restic's old caches, one asked for by hand doesn't, and a cleanup failure leaves the check standing and in the log")
+    func scheduledCheckCleansTheCache() async throws {
+        let repository = Repository()
+        func check(override: Int?, client: MockResticClient) async -> RecordingSink {
+            let sink = RecordingSink()
+            await MaintenanceRunEngine.perform(
+                repository: repository, task: .check, readDataPercentOverride: override,
+                sink: sink.serving(client)
+            )
+            return sink
+        }
+        let scheduled = MockResticClient().onCheck(.success(ResticSummary()))
+        _ = await check(override: nil, client: scheduled)
+        #expect(scheduled.callLog.contains("cleanupCache"))
+
+        let byHand = MockResticClient().onCheck(.success(ResticSummary()))
+        _ = await check(override: 5, client: byHand)
+        #expect(!byHand.callLog.contains("cleanupCache"))
+
+        let refused = MockResticClient()
+            .onCheck(.success(ResticSummary()))
+            .onCleanupCache(.failure(ResticError.commandFailed(exitCode: 1, message: "Fatal: boom")))
+        let sink = await check(override: nil, client: refused)
+        #expect(sink.deliveredRecords.first?.outcome == .succeeded)
+    }
+
     @Test("a scheduled check reads the rotation's next slice, says so and moves it on; one asked for by hand reads what it was asked")
     func checkReadsTheRotation() async throws {
         var repository = Repository()
-        repository.maintenance = .forNewRepository(kind: .local)
         repository.maintenance.nextCheckDataSlice = 3
         func check(override: Int?, answer: Result<ResticSummary?, Error> = .success(ResticSummary())) async -> (RecordingSink, MockResticClient) {
             let sink = RecordingSink()

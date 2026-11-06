@@ -5,7 +5,6 @@ struct SettingsView: View {
     /// The pane the window reopens on. UserDefaults, not
     /// `configuration.settings`: it is window state, not a preference.
     @AppStorage("lastSettingsPane") private var lastSettingsPane = 0
-    @State private var isConfirmingCacheCleanup = false
     @Environment(AppModel.self) private var model
     @State private var removingShare: NetworkShare?
 
@@ -43,7 +42,7 @@ struct SettingsView: View {
                 .tag(2)
                 .tabItem { Label("Webhooks", systemImage: "point.3.connected.trianglepath.dotted") }
             resticTab(model: model)
-                .frame(width: Self.width, height: 380)
+                .frame(width: Self.width, height: 190)
                 .tag(3)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
@@ -188,21 +187,23 @@ struct SettingsView: View {
     private func resticTab(model: AppModel) -> some View {
         @Bindable var model = model
         return Form {
-            Section("Executable") {
-                HStack {
-                    TextField(
-                        "Path",
-                        text: $model.configuration.settings.resticPathOverride,
-                        prompt: Text(model.binary?.url.path ?? (model.binaryProblem == nil ? "Searching the usual locations…" : ""))
-                    )
-                    Button("Choose…") {
-                        if let url = FilePicker.chooseExecutable() {
-                            model.configuration.settings.resticPathOverride = url.path
+            Section {
+                // The search finds restic for nearly everyone: the path is
+                // only asked for when it failed, or kept visible once typed.
+                if model.binaryProblem != nil || !model.configuration.settings.resticPathOverride.isEmpty {
+                    HStack {
+                        TextField(
+                            "Path",
+                            text: $model.configuration.settings.resticPathOverride,
+                            prompt: Text(model.binary?.url.path ?? "")
+                        )
+                        Button("Choose…") {
+                            if let url = FilePicker.chooseExecutable() {
+                                model.configuration.settings.resticPathOverride = url.path
+                            }
                         }
                     }
                 }
-                // The field's prompt is the path in use when none is typed,
-                // so the path is not repeated in a row of its own.
                 if model.isResticAvailable {
                     LabeledContent("Version", value: model.resticVersion.isEmpty ? "—" : model.resticVersion)
                 } else if let problem = model.binaryProblem {
@@ -215,71 +216,8 @@ struct SettingsView: View {
                     Button("Find Again") { Task { await model.resolveBinary() } }
                 }
             }
-
-            // restic keeps one cache folder per repository it has opened
-            // here and never removes one; the only user action that exists
-            // is its own cleanup, so it lives where the restic facts sit —
-            // with the cost said before it runs.
-            Section("Cache") {
-                resticCacheRows(model: model)
-            }
         }
         .formStyle(.grouped)
-    }
-
-    @ViewBuilder
-    private func resticCacheRows(model: AppModel) -> some View {
-        switch model.resticCache {
-        case let .measured(report):
-            LabeledContent("Size") {
-                Text("\(Format.bytes(report.totalBytes)) in \(Format.plural(report.count, "folder"))")
-                    .textSelection(.enabled)
-            }
-            Text("One folder per repository restic has opened on this Mac. " + AppModel.unusedLine(report))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                // Where it is, as a button rather than a path to read.
-                Button("Show in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report.directory)])
-                }
-                Button("Remove Caches Unused for \(ResticCacheReport.oldAfterDays) Days") { isConfirmingCacheCleanup = true }
-                    .disabled(report.oldCount == 0 || model.isWorkingOnResticCache)
-                if model.isWorkingOnResticCache { ProgressView().controlSize(.small) }
-                if let note = model.resticCacheNote {
-                    Text(note)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .confirmationDialog(
-                "Remove \(Format.plural(report.oldCount, "cache folder")) restic has not used for \(ResticCacheReport.oldAfterDays) days?",
-                isPresented: $isConfirmingCacheCleanup,
-                titleVisibility: .visible
-            ) {
-                Button("Remove") { Task { await model.cleanupResticCache() } }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(
-                    "A repository still set up here loses its cache too if unused that long; restic rebuilds it next time. Nothing in any repository is touched."
-                )
-            }
-        case let .failed(message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(Theme.warning)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Measure Again") { Task { await model.measureResticCache() } }
-                .disabled(model.isWorkingOnResticCache)
-        case nil:
-            HStack {
-                ProgressView().controlSize(.small)
-                Text("Measuring…")
-                    .foregroundStyle(.secondary)
-            }
-            .task { await model.measureResticCache() }
-        }
     }
 }
 

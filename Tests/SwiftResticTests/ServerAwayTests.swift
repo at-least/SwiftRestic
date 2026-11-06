@@ -23,7 +23,6 @@ struct ServerAwayTests {
         repository.kind = .rest
         // Never dialled: the probe below answers for it.
         repository.restURL = "http://127.0.0.1:9/app"
-        repository.maintenance.checkEnabled = false
         repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default", "SWIFTRESTIC_TRACE": traceFile.path]
 
         var plan = BackupPlan()

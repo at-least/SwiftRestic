@@ -8,8 +8,7 @@ written by agents for agents, and the code itself is the documentation.
 SwiftRestic is a native macOS backup app in the spirit of Arq, with
 [restic](https://restic.net) doing the work underneath. It backs up folders
 on a schedule to local disks, SFTP, S3-compatible storage, Backblaze B2,
-Azure Blob Storage, Google Cloud Storage, rclone remotes and restic REST
-servers; browses and restores any backup; keeps a searchable index of every
+rclone remotes and restic REST servers; browses and restores any backup; keeps a searchable index of every
 file in every backup; runs retention, prune and check for each repository;
 and reports through macOS notifications, webhooks, Slack, Discord and
 Healthchecks.io.

@@ -612,59 +612,64 @@ struct MaintenanceSchedulingTests {
 
     @Test("a freshly added repository counts from when it was added, not from zero")
     func newRepositoryIsNotImmediatelyDue() {
-        let repository = repository { $0.maintenance.checkIntervalDays = 7 }
+        let repository = repository { _ in }
         // Adding a repository must not kick off a check — or, worse, a prune —
         // the moment it appears in the sidebar.
         #expect(Scheduler.dueMaintenance(
             in: [repository],
+            plans: [],
             now: utcDate("2026-09-05 00:00:00")
         ).isEmpty)
 
-        let due = Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-09 00:00:00"))
+        let due = Scheduler.dueMaintenance(in: [repository], plans: [], now: utcDate("2026-09-09 00:00:00"))
         #expect(due.map(\.task) == [.check])
     }
 
-    @Test("prune is chosen over check when both have fallen due")
-    func pruneWinsOverCheck() {
-        let repository = repository {
-            $0.maintenance.checkIntervalDays = 1
-            $0.maintenance.pruneEnabled = true
-            $0.maintenance.pruneIntervalDays = 1
-        }
-        let due = Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-10 00:00:00"))
-        #expect(due.map(\.task) == [.prune])
+    private func plan(on repository: Repository, retention: RetentionPolicy = RetentionPolicy()) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.repositoryID = repository.id
+        plan.path = "/x"
+        plan.retention = retention
+        return plan
     }
 
-    @Test("a repository added from now on prunes 30 days after it was added; one saved without the key stays off")
-    func newRepositoryPrunes() {
+    @Test("a cleanup comes due only where a plan removes old backups, and is chosen over a check")
+    func pruneNeedsRetention() {
+        let repository = repository { _ in }
+        let now = utcDate("2026-10-10 00:00:00")
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: repository)], now: now).map(\.task) == [.prune])
+        // Retention off, or on another repository's plan: nothing to free, so
+        // an append-only server is never asked for a prune it refuses.
+        var keepsAll = RetentionPolicy()
+        keepsAll.isEnabled = false
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: repository, retention: keepsAll)], now: now).map(\.task) == [.check])
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: self.repository { _ in })], now: now).map(\.task) == [.check])
+    }
+
+    @Test("checks run 7 days and cleanups 30 days after a repository is added")
+    func fixedIntervals() {
         let added = utcDate("2026-10-09 00:00:00")
-        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .prune, addedAt: added) == utcDate("2026-11-08 00:00:00"))
-        #expect(MaintenancePolicy.forNewRepository(kind: .local).nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
-        #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == nil)
+        #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == utcDate("2026-11-08 00:00:00"))
+        #expect(MaintenancePolicy().nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
     }
 
-    @Test("a new repository's checks read its data in twelve slices where reading costs only time; a cloud's reads the structure, and one saved before keeps its setting")
-    func newRepositoryCheckDepth() throws {
+    @Test("a scheduled check reads the data in twelve slices where reading costs only time, the structure where it may be billed, whatever an older build stored")
+    func scheduledCheckDepth() throws {
         for kind in [Repository.Kind.local, .sftp] {
-            let policy = MaintenancePolicy.forNewRepository(kind: kind)
-            #expect(policy.checkDepth == .rotating, "\(kind)")
-            #expect(policy.scheduledDataSubset == .slice(1, of: 12), "\(kind)")
+            #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == .slice(1, of: 12), "\(kind)")
         }
         for kind in [Repository.Kind.rest, .s3, .b2, .azure, .gcs, .rclone] {
-            #expect(MaintenancePolicy.forNewRepository(kind: kind).checkDepth == .structure, "\(kind)")
-            #expect(MaintenancePolicy.forNewRepository(kind: kind).scheduledDataSubset == nil, "\(kind)")
+            #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == nil, "\(kind)")
         }
-        var policy = MaintenancePolicy.forNewRepository(kind: .local)
+        var policy = MaintenancePolicy()
         policy.nextCheckDataSlice = 3
-        #expect(policy.scheduledDataSubset == .slice(3, of: 12))
-        policy.checkDepth = .percent(5)
-        #expect(policy.scheduledDataSubset == .percent(5))
-        #expect(policy.checkDataSlices == 0)
-        policy.checkDepth = .structure
-        #expect(policy.scheduledDataSubset == nil)
-        let saved = try JSONDecoder().decode(MaintenancePolicy.self, from: Data(#"{"checkEnabled":true,"checkIntervalDays":7,"checkReadDataPercent":5}"#.utf8))
-        #expect(saved.checkDepth == .percent(5))
-        #expect(saved.checkDataSlices == 0)
+        #expect(policy.scheduledDataSubset(for: .local) == .slice(3, of: 12))
+        // Stored by an older build: switches ignored, a stored slice kept.
+        let saved = try JSONDecoder().decode(MaintenancePolicy.self, from: Data(#"{"checkEnabled":false,"checkIntervalDays":90,"checkReadDataPercent":5,"pruneEnabled":false,"nextCheckDataSlice":4}"#.utf8))
+        #expect(saved.scheduledDataSubset(for: .local) == .slice(4, of: 12))
+        #expect(saved.scheduledDataSubset(for: .s3) == nil)
+        let added = utcDate("2026-10-09 00:00:00")
+        #expect(saved.nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
         #expect(CheckDataSubset.slice(3, of: 12).words == "part 3 of 12")
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
         #expect(CheckDataSubset.percent(5).words == "5% of the data")
@@ -723,22 +728,14 @@ struct MaintenanceSchedulingTests {
         }
     }
 
-    @Test("a disabled task never comes due")
-    func disabledTasksNeverDue() {
-        let repository = repository {
-            $0.maintenance.checkEnabled = false
-            $0.maintenance.pruneEnabled = false
-        }
-        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2027-01-01 00:00:00")).isEmpty)
-    }
-
     @Test("a busy repository is skipped entirely")
     func busyRepositoryIsSkipped() {
-        let repository = repository { $0.maintenance.checkIntervalDays = 1 }
+        let repository = repository { _ in }
         let now = utcDate("2026-09-10 00:00:00")
-        #expect(Scheduler.dueMaintenance(in: [repository], now: now).count == 1)
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [], now: now).count == 1)
         #expect(Scheduler.dueMaintenance(
             in: [repository],
+            plans: [],
             now: now,
             busyRepositoryIDs: [repository.id]
         ).isEmpty)
@@ -746,15 +743,15 @@ struct MaintenanceSchedulingTests {
 
     @Test("running a task pushes the next one out by a full interval")
     func lastRunMovesTheSchedule() {
-        var repository = repository { $0.maintenance.checkIntervalDays = 7 }
+        var repository = repository { _ in }
         repository.maintenance.lastCheckAt = utcDate("2026-09-09 00:00:00")
-        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-12 00:00:00")).isEmpty)
-        #expect(Scheduler.dueMaintenance(in: [repository], now: utcDate("2026-09-16 00:00:01")).count == 1)
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [], now: utcDate("2026-09-12 00:00:00")).isEmpty)
+        #expect(Scheduler.dueMaintenance(in: [repository], plans: [], now: utcDate("2026-09-16 00:00:01")).count == 1)
     }
 
     @Test("the repository page's Last check reads the newest check run with how it ended, the stamp only without one")
     func lastMaintenanceReadsTheRecord() {
-        var repository = repository { $0.maintenance.checkIntervalDays = 7 }
+        var repository = repository { _ in }
         let now = utcDate("2026-09-10 12:00:00")
         func check(_ outcome: RunRecord.Outcome, at stamp: String, repository id: UUID? = nil) -> RunRecord {
             var run = RunRecord(kind: .check, planName: "repo", repositoryID: id ?? repository.id, startedAt: utcDate(stamp))
@@ -804,28 +801,9 @@ struct MaintenanceSchedulingTests {
         #expect(last([]) == ago)
     }
 
-    @Test("Remove from Earlier Backups names the cleanup date the repository page does, a timed pause's end included")
-    func freedSpaceFollowsTheHold() {
-        let repository = repository {
-            $0.maintenance.pruneEnabled = true
-            $0.maintenance.pruneIntervalDays = 30
-        }
-        let now = utcDate("2026-09-10 00:00:00")
-        let prune = utcDate("2026-10-01 00:00:00")
-        #expect(Scheduler.freedSpaceSentence(itemCount: 1, repository: repository, hold: nil, now: now)
-            == "Its space is freed at the next cleanup, \(Format.timestamp(prune)).")
-        let end = utcDate("2026-10-05 00:00:00")
-        #expect(Scheduler.freedSpaceSentence(itemCount: 2, repository: repository, hold: .paused(until: end), now: now)
-            == "Their space is freed at the next cleanup, \(Format.timestamp(end)).")
-    }
-
     @Test("the repository page's Next check and Next cleanup wait under a hold, and move to a timed hold's end")
     func nextMaintenanceUnderAHold() {
-        let repository = repository {
-            $0.maintenance.checkIntervalDays = 7
-            $0.maintenance.pruneEnabled = true
-            $0.maintenance.pruneIntervalDays = 30
-        }
+        let repository = repository { _ in }
         let now = utcDate("2026-09-10 00:00:00")
         let prune = utcDate("2026-10-01 00:00:00")
         // The check fell due on the 8th.
@@ -848,9 +826,6 @@ struct MaintenanceSchedulingTests {
             == Format.timestamp(prune))
         #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: false, awaitingServer: false, now: now)
             == Format.timestamp(prune))
-
-        let off = self.repository { $0.maintenance.checkEnabled = false }
-        #expect(Scheduler.nextMaintenanceText(.check, of: off, among: [off], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Off")
     }
 
     @Test("a check waiting for its repository's drive is no last check, and Next check says what it waits for")
@@ -859,7 +834,6 @@ struct MaintenanceSchedulingTests {
         var repository = repository {
             $0.kind = .local
             $0.localPath = "/Volumes/\(volume)/restic"
-            $0.maintenance.checkIntervalDays = 7
             $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
         }
         let now = utcDate("2026-09-10 12:00:00")
@@ -884,7 +858,6 @@ struct MaintenanceSchedulingTests {
         var server = self.repository {
             $0.kind = .rest
             $0.restURL = "http://nas.local:8000/backups"
-            $0.maintenance.checkIntervalDays = 7
             $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
         }
         #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == "When “nas.local” can be reached")
