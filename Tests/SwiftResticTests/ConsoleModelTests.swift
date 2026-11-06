@@ -57,7 +57,6 @@ struct ConsoleModelTests {
     @Test("Return while a command runs arms nothing: a confirmed command would have nowhere to run")
     func submitWhileRunningArmsNothing() async throws {
         let console = ConsoleModel()
-        console.persistHistory = { _ in }
         let (started, startedSignal) = AsyncStream<Void>.makeStream()
         let (release, releaseSignal) = AsyncStream<Void>.makeStream()
         console.runCommand = { _, _ in
@@ -120,7 +119,6 @@ struct ConsoleModelTests {
         #expect(console.history.first == "prune")
         // The pruned command carries no secret, so it reaches the
         // configuration for future sessions too.
-        #expect(app.configuration.settings.consoleHistory.first == "prune")
         #expect(console.pendingDestructive == nil)
     }
 
@@ -136,21 +134,6 @@ struct ConsoleModelTests {
 
         #expect(console.pendingDestructive == nil)
         #expect(console.history.first == "snapshots --compact")
-    }
-
-    @Test("secret-bearing commands reach the session's history but not the configuration")
-    func secretFilter() async throws {
-        let (app, console, root) = try makeHarness()
-        defer { try? FileManager.default.removeItem(at: root) }
-        app.consoleDidAppear()
-        console.commandText = "key add new-key"
-        // `key` is a destructive subcommand, so it arms first.
-        console.run()
-        console.confirmPending()
-        await console.waitForCommand()
-
-        #expect(console.history.first == "key add new-key")
-        #expect(app.configuration.settings.consoleHistory.isEmpty)
     }
 
     @Test("re-running a command moves it to the top instead of duplicating it")
@@ -169,39 +152,6 @@ struct ConsoleModelTests {
         await console.waitForCommand()
 
         #expect(console.history == ["snapshots", "version"])
-    }
-
-    @Test("a pane re-entry keeps the session's history, secrets included")
-    func appearKeepsSessionHistory() async throws {
-        let (app, console, root) = try makeHarness()
-        defer { try? FileManager.default.removeItem(at: root) }
-        app.consoleDidAppear()
-        // Secret-carrying but non-destructive, so seedHistory's plain run()
-        // executes it: `key …` would only arm the confirmation.
-        await seedHistory(["snapshots", "snapshots --password-file secret.txt"], console: console)
-        #expect(console.history.count == 2)
-        #expect(app.configuration.settings.consoleHistory == ["snapshots"])
-
-        // Leave the pane and come back: the session's own history — secret
-        // included — is what the sidebar shows, not the shorter persisted
-        // list. Overwriting it here would launder the command away.
-        app.consoleDidAppear()
-        #expect(console.history == ["snapshots --password-file secret.txt", "snapshots"])
-    }
-
-    @Test("removing a history entry removes it from both surfaces")
-    func removeFromHistory() async throws {
-        let (app, console, root) = try makeHarness()
-        defer { try? FileManager.default.removeItem(at: root) }
-        app.consoleDidAppear()
-        console.commandText = "snapshots"
-        console.run()
-        await console.waitForCommand()
-
-        console.removeFromHistory("snapshots")
-
-        #expect(console.history.isEmpty)
-        #expect(app.configuration.settings.consoleHistory.isEmpty)
     }
 
     /// Seeds history through real runs, the only writer the model allows.
@@ -256,13 +206,11 @@ struct ConsoleModelTests {
 }
 
 extension ConsoleModelTests {
-    @Test("a pane re-entry ends an in-flight recall walk and keeps the session's history")
+    @Test("the window opening again ends an in-flight recall walk and keeps the session's history")
     func appearEndsRecallWalk() async throws {
         let (app, console, root) = try makeHarness()
         defer { try? FileManager.default.removeItem(at: root) }
         app.consoleDidAppear()
-        // Two of the three commands carry secrets, so the persisted list is
-        // shorter than the session's history.
         await seedHistory(["aaa", "password one", "password two"], console: console)
         #expect(console.history.count == 3)
 
@@ -275,24 +223,9 @@ extension ConsoleModelTests {
         #expect(console.history == ["password two", "password one", "aaa"])
     }
 
-    @Test("a history-sidebar click ends an in-flight recall walk and shows the entry")
-    func pickingFromHistoryEndsTheRecallWalk() async throws {
-        let (app, console, root) = try makeHarness()
-        defer { try? FileManager.default.removeItem(at: root) }
-        app.consoleDidAppear()
-        await seedHistory(["snapshots --compact", "version"], console: console)
-
-        #expect(console.recallPrevious(current: "ls") == "version")
-
-        console.pickFromHistory("snapshots --compact")
-        #expect(console.commandText == "snapshots --compact")
-        #expect(console.recallNext() == nil)
-    }
-
     @Test("a running command's stream owns the output pane, so Clear waits for stillness")
     func clearOutputWaitsForStillness() async throws {
         let console = ConsoleModel()
-        console.persistHistory = { _ in }
         let (started, startedSignal) = AsyncStream<Void>.makeStream()
         let (release, releaseSignal) = AsyncStream<Void>.makeStream()
         console.runCommand = { _, _ in

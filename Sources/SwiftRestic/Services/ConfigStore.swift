@@ -11,7 +11,6 @@ struct AppSettings: Codable, Sendable, Hashable {
     var networkShares: [NetworkShare] = []
     /// The console's last commands, newest first. Persisted so a command
     /// that worked survives closing the sheet.
-    var consoleHistory: [String] = []
 
     init() {}
 
@@ -28,7 +27,6 @@ struct AppSettings: Codable, Sendable, Hashable {
         schedulePause = c.optional(.schedulePause)
         notificationChannels = c.value(.notificationChannels, default: [StoredChannel]()).compactMap(\.channel)
         networkShares = c.value(.networkShares, default: networkShares)
-        consoleHistory = c.value(.consoleHistory, default: consoleHistory)
     }
 }
 

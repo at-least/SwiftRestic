@@ -95,8 +95,6 @@ struct RootDetailView: View {
                         onAdopt: { onAdoptGroup(repositoryID, $0) },
                         onSearchAllBackups: onSearchAllBackups
                     )
-                case .console:
-                    ResticConsoleView()
                 case .findFiles:
                     FindFilesView()
                 case .activity:
@@ -108,8 +106,8 @@ struct RootDetailView: View {
                 }
             }
         }
-        // Find Files and the console need restic: a binary lost while either
-        // is open must move the selection off it.
+        // Find Files needs restic: a binary lost while it is open must move
+        // the selection off it.
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }

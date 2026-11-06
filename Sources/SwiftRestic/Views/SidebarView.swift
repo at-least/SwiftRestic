@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The split view's sidebar: Activity, then each repository with its plans
-/// always in view beneath it, then restic Console — two levels, the HIG's most for a sidebar
+/// always in view beneath it — two levels, the HIG's most for a sidebar
 /// ("When a data hierarchy is deeper than two levels, consider using a
 /// split view interface that includes a content list between the sidebar
 /// items and detail view"). The repository's row opens its page, which is
@@ -90,14 +90,6 @@ struct SidebarView: View {
                         childRows(child, of: repository, shelves: shelves)
                     }
                 }
-            }
-
-            // Last: a power tool, a place rather than an action, so a row
-            // and not a footer button (the user's call).
-            Section {
-                Label("restic Console", systemImage: "terminal")
-                    .tag(SidebarItem.console)
-                    .disabled(!model.repositoryCommands(for: router.selection).canOpenConsole)
             }
         }
         .listStyle(.sidebar)
@@ -355,24 +347,20 @@ struct SidebarView: View {
             // the menus, which need the kind's own pieces.
             let page = SidebarItem.otherGroup(repositoryID: repository.id, id: group.id)
             switch group {
-            case let .plan(id, snapshots):
+            case let .plan(id, _):
                 groupRow(
                     page: page,
                     label: labels[group.id]!,
                     repository: repository
                 )
                 .contextMenu {
-                    planGroupMenu(
-                        planID: id, snapshots: snapshots, repository: repository,
-                        formerPlan: shelves.formerPlan(of: group),
-                        isAdoptable: shelves.adoptablePath(of: group, localHost: model.localHostname) != nil
-                    )
+                    if shelves.adoptablePath(of: group, localHost: model.localHostname) != nil {
+                        Button("Continue Backups…") { onAdoptGroup(repository.id, id) }
+                    }
                 }
-            case let .lineage(lineage):
+            case .lineage:
                 // `otherLabels` labels every group it is given.
                 groupRow(page: page, label: labels[group.id]!, repository: repository)
-                    // Its backups and its files: no plan to open or adopt.
-                    .contextMenu { showMenuItems(page, snapshots: lineage.snapshots, repository: repository) }
             }
         }
     }
@@ -410,39 +398,6 @@ struct SidebarView: View {
         .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
     }
 
-    /// A plan-UUID group's menu: an adoptable group's verb first, a moved
-    /// plan's history opens that plan, and every group gets its way in —
-    /// its page's Backups (a group's page has no Files tab).
-    @ViewBuilder
-    private func planGroupMenu(
-        planID: UUID,
-        snapshots: [Snapshot],
-        repository: Repository,
-        formerPlan: BackupPlan?,
-        isAdoptable: Bool
-    ) -> some View {
-        if isAdoptable {
-            Button("Continue Backups…") {
-                onAdoptGroup(repository.id, planID)
-            }
-        }
-        if let formerPlan {
-            Button("Show Plan") {
-                router.selection = .plan(formerPlan.id)
-            }
-        }
-        showMenuItems(.orphanPlan(repositoryID: repository.id, planID: planID), snapshots: snapshots, repository: repository)
-    }
-
-    /// Show Backups — the page's Backups tab, its newest backup open: the
-    /// way into a group's backups from its row. A group's page has no Files
-    /// tab, so no Show Files.
-    @ViewBuilder
-    private func showMenuItems(_ page: SidebarItem, snapshots: [Snapshot], repository: Repository) -> some View {
-        Button("Show Backups") {
-            router.showBackup(snapshots[0].id, on: page, repositoryID: repository.id)
-        }
-    }
 }
 
 /// A repository's children, as the leading indentation of top-level List

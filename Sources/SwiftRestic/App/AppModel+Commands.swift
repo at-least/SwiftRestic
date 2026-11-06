@@ -92,7 +92,7 @@ extension AppModel {
         case let .plan(planID): plan(id: planID)?.repositoryID
         case let .orphanPlan(id, _): id
         case let .lineage(id, _): id
-        case .console, .findFiles, .activity, nil: nil
+        case .findFiles, .activity, nil: nil
         }
         return repository(id: id)?.id
     }

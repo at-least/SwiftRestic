@@ -246,10 +246,9 @@ extension AppModel {
         // aborted — its monitor must hear that the run started.
         tasks.cancelSlots()
         // A confirmed-destructive console command must not outlive the app:
-        // quitting cancels it as its sheet's dismissal would. Awaited, not
-        // merely cancelled — the console's unwind persists the command
-        // history through `persistHistory`, and a command landing during
-        // the final flushSave below would race the process exit.
+        // quitting cancels it. Awaited, not merely cancelled: a command that
+        // may change the backups schedules its refresh on the way out, and
+        // that must not race the sweep below.
         console.cancelRunningCommand()
         await console.waitForCommand()
         // The index backfill before the sweep below: cancelled, its walk

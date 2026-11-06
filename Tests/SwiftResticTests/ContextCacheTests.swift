@@ -113,7 +113,7 @@ struct ContextCacheTests {
         #expect(loads.value == 2, "a limit a context carries must invalidate it")
         #expect(context.globalArguments == ["--limit-upload", "512"])
 
-        model.configuration.settings.consoleHistory = ["snapshots --json"]
+        model.configuration.settings.notifyOnSuccess.toggle()
         _ = try await model.context(for: limited)
         #expect(loads.value == 2, "a setting no context reads must not invalidate it")
     }

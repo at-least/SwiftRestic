@@ -138,7 +138,6 @@ enum SidebarItem: Hashable {
     /// folders are its identity, so the page survives regrouping and the
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
-    case console
     /// Find Files: a page with no row — the toolbar's search field is its
     /// way in, and a row would be a second one — reached
     /// from Repository ▸ Find Files (⇧⌘F) off a page with a
@@ -150,14 +149,12 @@ enum SidebarItem: Hashable {
 
 extension SidebarItem {
     /// The views the page's toolbar switches between: a plan's Overview |
-    /// Backups | Files, a group's under Other backups Overview | Backups —
-    /// its backups name no folder of this Mac for a Files tab to list —
-    /// and none for every other page.
+    /// Backups | Files, and none for every other page. A group under Other
+    /// backups is one view, its backups.
     var pageTabs: [PageTab] {
         switch self {
         case .plan: PageTab.allCases
-        case .orphanPlan, .lineage: [.overview, .backups]
-        case .repository, .console, .findFiles, .activity: []
+        case .orphanPlan, .lineage, .repository, .findFiles, .activity: []
         }
     }
 

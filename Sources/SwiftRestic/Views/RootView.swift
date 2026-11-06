@@ -322,7 +322,7 @@ struct RootView: View {
                 router.filesSearchText[roots] = query
             }
         case "concepts": openWindow(id: SwiftResticApp.helpWindowID)
-        case "console": router.selection = .console
+        case "console": openWindow(id: SwiftResticApp.consoleWindowID)
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — the selection happens in
         // `RootDetailView`'s snapshots onChange.
@@ -454,8 +454,6 @@ struct RootView: View {
                     prefillRepositoryID: nil, selection: router.selection, shown: router.findRepositoryID
                 ))
             }
-        case .showConsole:
-            router.selection = .console
         case .runSelectedPlan:
             runSelectedPlan()
         case let .stopPlan(id):

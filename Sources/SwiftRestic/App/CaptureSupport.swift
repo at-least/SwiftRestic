@@ -94,7 +94,6 @@ extension AppDelegate {
                 stops.append(("restore", { router.showBackup(latest.id, on: page, repositoryID: repository.id) }))
             }
         }
-        stops.append(("console", { router.selection = .console }))
         stops.append(("activity", { router.selection = .activity }))
 
         for stop in stops {

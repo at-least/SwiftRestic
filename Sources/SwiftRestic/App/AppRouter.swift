@@ -16,9 +16,6 @@ final class AppRouter {
         case newPlanIn(UUID)
         case newRepository
         case showFind
-        /// Repository ▸ restic Console: a pane switch, not a sheet, but it
-        /// waits out an open sheet like every other menu ask.
-        case showConsole
         case runSelectedPlan
         // The Plan and Repository menus' targeted asks carry their target
         // rather than read the selection when consumed: the ask may wait for
@@ -100,7 +97,7 @@ final class AppRouter {
     /// the page, as typed in the toolbar's search field. Transient; a
     /// record switch clears it, and so does a route to a backup
     /// (`showBackup`), the search belonging to the backup it ran in — the
-    /// tab shown again keeps it, as a group's Overview hands it over.
+    /// tab shown again keeps it.
     var backupsSearchText: [SidebarItem: String] = [:]
 
     /// The page whose toolbar search field takes the keyboard focus next —
@@ -165,18 +162,14 @@ final class AppRouter {
     /// Transient; the tab spends it (`FilesTree.reveal`).
     var filesRevealRequest: FileNode?
 
-    /// The chosen view where `page` offers it. A group's page has no Files:
-    /// there Files shows Backups (the user's call), and the choice stays
-    /// Files for the next plan's page.
+    /// The chosen view where `page` offers it.
     func tab(of page: SidebarItem) -> PageTab {
-        if page.pageTabs.contains(pageTab) { return pageTab }
-        if pageTab == .files, page.pageTabs.contains(.backups) { return .backups }
-        return .overview
+        page.pageTabs.contains(pageTab) ? pageTab : .overview
     }
 
     /// Sets the view for every page. Only a tab `page` offers
-    /// (`SidebarItem.pageTabs`): a route that asks a group's page for Files
-    /// is a bug to hear about.
+    /// (`SidebarItem.pageTabs`): a route that asks a page without it is a bug
+    /// to hear about.
     func setTab(_ tab: PageTab, of page: SidebarItem) {
         precondition(page.pageTabs.contains(tab), "\(page) has no \(tab.menuTitle) tab")
         pageTab = tab
@@ -244,7 +237,9 @@ final class AppRouter {
         }
         backupsSearchText[page] = nil
         backupSelection[page] = snapshotID
-        setTab(.backups, of: page)
+        // A group's page is its backups, with no tab to turn; the choice
+        // stays as it was for the next plan's page.
+        if page.pageTabs.contains(.backups) { setTab(.backups, of: page) }
         selection = page
     }
 
@@ -293,11 +288,9 @@ final class AppRouter {
             return repositories.contains { $0.id == repositoryID }
                 ? .repository(repositoryID)
                 : landing
-        case .console where repositories.isEmpty || !isResticAvailable,
-             .findFiles where repositories.isEmpty || !isResticAvailable:
-            // Their menu items are disabled against the same state; a
-            // selection parked on either pane must not outlive the menu
-            // item that opens it.
+        case .findFiles where repositories.isEmpty || !isResticAvailable:
+            // Its menu item is disabled against the same state; a selection
+            // parked on the page must not outlive the item that opens it.
             return landing
         default:
             return selection

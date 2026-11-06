@@ -504,8 +504,8 @@ struct FilesBrowserView: View {
 }
 
 extension View {
-    /// A page's Overview | Backups | Files — a group's Overview | Backups
-    /// (`SidebarItem.pageTabs`) — in the middle of the window toolbar:
+    /// A plan's page's Overview | Backups | Files in the middle of the window
+    /// toolbar:
     /// Apple's guidance for switching a main window's view (the HIG's
     /// center area holds the common controls), clear of the trailing
     /// corner, where the search field sits.

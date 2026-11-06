@@ -1,26 +1,21 @@
 import SwiftUI
 
-/// Runs restic commands directly, for the things the UI does not cover.
-///
-/// A first-class pane with its own history sidebar, not a sheet: its output
-/// and running commands survive switching panes because the state lives in
+/// Runs restic commands directly, for the things the UI does not cover: a
+/// utility window of its own, as Recovery's Terminal is. Its output and a
+/// running command outlive the window because the state lives in
 /// `ConsoleModel` on the model, not here.
 struct ResticConsoleView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        HStack(spacing: 0) {
-            historySidebar
+        VStack(spacing: 0) {
+            controls
             Divider()
-            VStack(spacing: 0) {
-                controls
-                Divider()
-                outputPane
-                Divider()
-                footer
-            }
+            outputPane
+            Divider()
+            footer
         }
-        .navigationTitle("restic Console")
+        .frame(minWidth: 560, minHeight: 360)
         .onAppear { model.consoleDidAppear() }
         .confirmationDialog(
             "Run this command?",
@@ -37,42 +32,6 @@ struct ResticConsoleView: View {
         } message: {
             Text("`restic \(CommandLineTokenizer.render(model.console.pendingDestructive?.arguments ?? []))` can change or delete data. Add --dry-run first if you are unsure.")
         }
-    }
-
-    private var historySidebar: some View {
-        VStack(spacing: 0) {
-            if model.console.history.isEmpty {
-                ContentUnavailableView(
-                    "No history yet",
-                    systemImage: "clock.arrow.circlepath",
-                    description: Text("Commands you run are kept here for future sessions, unless they carry a secret.")
-                )
-            } else {
-                List {
-                    Section("History") {
-                        ForEach(model.console.history, id: \.self) { entry in
-                            Button {
-                                model.console.pickFromHistory(entry)
-                            } label: {
-                                Text(entry)
-                                    .font(.system(.callout, design: .monospaced))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                            .help(entry)
-                            .contextMenu {
-                                Button("Remove from History", role: .destructive) {
-                                    model.console.removeFromHistory(entry)
-                                }
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-            }
-        }
-        .frame(width: 230)
     }
 
     private var controls: some View {

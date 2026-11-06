@@ -211,6 +211,7 @@ struct SwiftResticApp: App {
 
     private static let mainWindowID = "main"
     static let helpWindowID = "help"
+    static let consoleWindowID = "console"
 
     var body: some Scene {
         // `Window`, not `WindowGroup`: a group is multi-instance, so the menu
@@ -284,6 +285,12 @@ struct SwiftResticApp: App {
             ConceptsView()
         }
         .defaultSize(width: 480, height: 600)
+
+        Window("restic Console", id: Self.consoleWindowID) {
+            ResticConsoleView()
+                .environment(model)
+        }
+        .defaultSize(width: 720, height: 480)
     }
 
     /// An ask for the root view, which also opens the window: an intent
@@ -426,7 +433,7 @@ struct SwiftResticApp: App {
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(!r.canRefreshAll)
-            Button("restic Console") { ask(.showConsole) }
+            Button("restic Console") { openWindow(id: Self.consoleWindowID) }
                 .disabled(!r.canOpenConsole)
 
             Divider()

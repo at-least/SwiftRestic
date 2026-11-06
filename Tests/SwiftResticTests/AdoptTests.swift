@@ -245,7 +245,7 @@ struct AdoptTests {
 
         #expect(await model.adoptDraft(repositoryID: home.id, planID: music.id) == nil)
         // The page agrees on which variant it is.
-        #expect(model.shelves(for: home.id).otherGroupPage(.plan(music.id), repositories: model.configuration.repositories, localHost: localHost)?.formerPlan == music)
+        #expect(model.shelves(for: home.id).otherGroupPage(.plan(music.id), repositories: model.configuration.repositories, localHost: localHost)?.isAdoptable == false)
     }
 
     @Test("an untagged group has no UUID to adopt")

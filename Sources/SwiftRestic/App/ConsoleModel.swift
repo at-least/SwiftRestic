@@ -8,23 +8,20 @@ struct PendingCommand {
     let text: String
 }
 
-/// Owned by `AppModel` rather than the view: as a first-class pane it must
-/// survive pane switches — navigation cancels nothing; a running command
-/// ends by its Stop button, its repository's deletion, or quitting
-/// (`AppModel.shutdown`).
+/// Owned by `AppModel` rather than the window: closing the window cancels
+/// nothing; a running command ends by its Stop button, its repository's
+/// deletion, or quitting (`AppModel.shutdown`).
 ///
-/// The two things it needs from the world — running a command and persisting
-/// history — arrive as closures injected by `AppModel` at wiring, so the
-/// console carries no back-reference to its owner. They cannot be init
-/// parameters — the closures capture the owner, and the owner owns this —
-/// so an unwired console traps rather than drop a confirmed command.
+/// `runCommand` arrives as a closure injected by `AppModel` at wiring, so the
+/// console carries no back-reference to its owner. It cannot be an init
+/// parameter — it captures the owner, and the owner owns this — so an unwired
+/// console traps rather than drop a confirmed command.
 @MainActor
 @Observable
 final class ConsoleModel {
     var runCommand: (_ repositoryID: UUID, _ arguments: [String]) async -> String = { _, _ in
         preconditionFailure("the console was never wired")
     }
-    var persistHistory: ([String]) -> Void = { _ in preconditionFailure("the console was never wired") }
 
     var repositoryID: UUID?
     var commandText = "snapshots --compact"
@@ -34,7 +31,7 @@ final class ConsoleModel {
     /// the picker may move on while it runs, and deletion needs the run's own
     /// answer to "would cancelling this still the removed repository's work?".
     private(set) var runningRepositoryID: UUID?
-    /// Newest first, as typed — what the history sidebar offers back.
+    /// Newest first, as typed, for this session only — what ↑ and ↓ walk.
     private(set) var history: [String] = []
     /// The command waiting on its destructive-confirmation dialog, with the
     /// text as it was when armed — the field stays editable while the dialog
@@ -49,14 +46,8 @@ final class ConsoleModel {
     private var recalledDraft: String?
     private var runTask: Task<Void, Never>?
 
-    func appear(repositoryID defaultRepositoryID: UUID?, persistedHistory: [String]) {
+    func appear(repositoryID defaultRepositoryID: UUID?) {
         if repositoryID == nil { repositoryID = defaultRepositoryID }
-        // The session's history outranks the persisted list once it exists:
-        // a secret-carrying command lives only here, and re-reading the
-        // filtered list on every pane re-entry would launder it out of the
-        // sidebar. A fresh session reads the persisted list; removals persist
-        // immediately, so an emptied session stays emptied.
-        if history.isEmpty { history = persistedHistory }
         endRecall()
     }
 
@@ -98,20 +89,14 @@ final class ConsoleModel {
         pendingDestructive = nil
     }
 
-    func removeFromHistory(_ entry: String) {
-        history.removeAll { $0 == entry }
-        endRecall()
-        persist()
-    }
-
     /// The entry ↑ should show: the newest history entry first, then one
     /// older per press, clamped at the oldest. `current` is what the field
     /// holds right now — the draft remembered before the first recall.
     ///
     /// The draft is fixed when the walk starts: edits made to a recalled
     /// entry mid-walk are discarded when ↓ returns to the draft, matching
-    /// shell behavior. Submitting, a history-sidebar click, the pane going
-    /// away, or the history changing ends the walk.
+    /// shell behavior. Submitting, the window opening again, or the history
+    /// changing ends the walk.
     func recallPrevious(current: String) -> String? {
         guard !history.isEmpty else { return nil }
         if let index = historyIndex {
@@ -134,11 +119,6 @@ final class ConsoleModel {
         return history[historyIndex!]
     }
 
-    func pickFromHistory(_ entry: String) {
-        endRecall()
-        commandText = entry
-    }
-
     private func endRecall() {
         historyIndex = nil
         recalledDraft = nil
@@ -158,9 +138,8 @@ final class ConsoleModel {
         output = ""
     }
 
-    /// Waits for an in-flight command: the quit path awaits the unwind so
-    /// its history persist lands (`AppModel.shutdown`); tests settle on it
-    /// too.
+    /// Waits for an in-flight command: the quit path awaits the unwind
+    /// (`AppModel.shutdown`); tests settle on it too.
     func waitForCommand() async {
         await runTask?.value
     }
@@ -191,23 +170,5 @@ final class ConsoleModel {
         // An append shifts every index a walk in progress points at; end the
         // walk rather than let ↑ land on a different command than it showed.
         endRecall()
-        persist()
-    }
-
-    /// Sensitive commands stay in this session's sidebar but never reach the
-    /// configuration file: it gets rotated and is the first thing attached to
-    /// a bug report, and a history miss is a small price next to a stored
-    /// secret.
-    private func persist() {
-        persistHistory(history.filter { !Self.mayCarrySecret($0) })
-    }
-
-    private static func mayCarrySecret(_ command: String) -> Bool {
-        let lowered = command.lowercased()
-        return lowered.contains("password")
-            || lowered.contains("secret")
-            || lowered.contains("token")
-            || lowered.contains("key add")
-            || lowered.contains("key passwd")
     }
 }

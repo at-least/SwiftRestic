@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// A repository's page, and its overview: protection in one line, the
-/// adoptable history a repository may have arrived with, and the week's
-/// problems against it — the questions asked of a backup destination, in
-/// the order they are asked — then the facts about the destination itself,
-/// Details and Maintenance.
+/// A repository's page, and its overview: protection in one line, with the
+/// history a repository may have arrived with, then the facts about the
+/// destination itself, Details and Maintenance.
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -54,8 +52,7 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private func content(_ repository: Repository) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            ProtectionCard(repositoryID: repositoryID, onAddPlan: onAddPlan)
-            OtherBackupsCard(repositoryID: repositoryID, onAdoptGroup: onAdoptGroup)
+            ProtectionCard(repositoryID: repositoryID, onAddPlan: onAddPlan, onAdoptGroup: onAdoptGroup)
 
             // Arq's storage-location page, plus the two numbers a backup
             // user asks of a destination: how big, and how full is its disk.

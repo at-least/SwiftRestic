@@ -104,7 +104,7 @@ struct AppRouterTests {
         #expect(router.takeFilesVersionHint() == nil)
     }
 
-    @Test("every page opens on its overview, and the view chosen on one page is every page's; a group's page shows Backups for Files")
+    @Test("every page opens on its overview, and the view chosen on one page is every page's; a route to a group's backups leaves that choice alone")
     func pageTabIsGlobal() {
         let router = AppRouter()
         let plan = SidebarItem.plan(UUID())
@@ -116,20 +116,18 @@ struct AppRouterTests {
         router.tabBinding(for: plan).wrappedValue = .files
         #expect(router.tab(of: plan) == .files)
         #expect(router.tab(of: other) == .files)
-        // The group has no Files; the choice stays Files for the plans.
-        #expect(router.tab(of: group) == .backups)
+        router.showBackup("s0", on: group, repositoryID: UUID())
+        #expect(router.selection == group)
+        #expect(router.backupSelection[group] == "s0")
         #expect(router.tab(of: other) == .files)
 
         router.showBackup("s1", on: other, repositoryID: UUID())
         #expect(router.tab(of: plan) == .backups)
 
-        router.tabBinding(for: group).wrappedValue = .overview
-        #expect(router.tab(of: plan) == .overview)
-
         #expect(router.tab(of: .activity) == .overview)
     }
 
-    @Test("a plan's page offers Overview, Backups and Files; a group's, either kind, Overview and Backups; every other page none")
+    @Test("a plan's page offers Overview, Backups and Files; every other page, a group's of either kind too, none")
     func pagesOfferTheirTabs() {
         let router = AppRouter()
         let repositoryID = UUID()
@@ -139,12 +137,7 @@ struct AppRouterTests {
         let key = SnapshotLineage.Key(hostname: "mac", paths: ["/Data/Music"])
         let lineage = SidebarItem.otherGroup(repositoryID: repositoryID, id: .lineage(key))
         #expect(lineage == .lineage(repositoryID: repositoryID, key: key))
-        for page in [group, lineage] {
-            #expect(page.pageTabs == [.overview, .backups])
-            router.tabBinding(for: page).wrappedValue = .backups
-            #expect(router.tab(of: page) == .backups)
-        }
-        for page: SidebarItem in [.repository(repositoryID), .activity, .console, .findFiles] {
+        for page: SidebarItem in [group, lineage, .repository(repositoryID), .activity, .findFiles] {
             #expect(page.pageTabs.isEmpty)
         }
     }
@@ -295,15 +288,13 @@ struct AppRouterTests {
             == .repository(first.id))
     }
 
-    @Test("Console and Find Files stay only while repositories exist and restic is here; otherwise they land")
-    func consoleAndFindFilesNeedARepositoryAndRestic() {
+    @Test("Find Files stays only while repositories exist and restic is here; otherwise it lands")
+    func findFilesNeedsARepositoryAndRestic() {
         let first = namedRepository("First")
-        for page: SidebarItem in [.console, .findFiles] {
-            #expect(self.revalidated(page, repositories: [first], plans: []) == page)
-            #expect(self.revalidated(page, repositories: [first], plans: [], isResticAvailable: false)
-                == .repository(first.id))
-            #expect(self.revalidated(page, repositories: [], plans: []) == nil)
-        }
+        #expect(self.revalidated(.findFiles, repositories: [first], plans: []) == .findFiles)
+        #expect(self.revalidated(.findFiles, repositories: [first], plans: [], isResticAvailable: false)
+            == .repository(first.id))
+        #expect(self.revalidated(.findFiles, repositories: [], plans: []) == nil)
     }
 
     @Test("Activity and no selection need no retargeting")

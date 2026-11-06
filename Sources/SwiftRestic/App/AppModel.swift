@@ -335,9 +335,6 @@ final class AppModel {
             await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
                 ?? ResticError.cancelled.localizedDescription
         }
-        console.persistHistory = { [weak self] history in
-            self?.configuration.settings.consoleHistory = history
-        }
     }
 
     /// Re-derives one repository's `backupShelves` from its listing, its own

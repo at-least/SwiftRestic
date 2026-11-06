@@ -10,11 +10,15 @@ import SwiftUI
 /// prominent button stays either way.
 struct ProtectionCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     /// The window's minute clock, as the sidebar's captions read it.
     @Environment(\.now) private var now
 
     let repositoryID: UUID
     let onAddPlan: () -> Void
+    /// Opens the adopt sheet for a group — the root owns the presenting
+    /// state, as for every sheet a pane raises.
+    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {
         let plans = model.plans(in: repositoryID)
@@ -54,13 +58,60 @@ struct ProtectionCard: View {
                 // sidebar's +, ⌘N or the repository row's menu. Not while the
                 // repository can't be read: a plan for a drive that isn't
                 // here is not the next step, reaching it is.
-                if plans.isEmpty, case .loaded = model.snapshotListingOutcome(for: repositoryID) {
-                    Button("New Backup Plan…", action: onAddPlan)
-                        .buttonStyle(.borderedProminent)
+                if case .loaded = model.snapshotListingOutcome(for: repositoryID) {
+                    let prompt = continuePrompt
+                    // A new Mac's way back to its history: a location added
+                    // with backups in it. Primary until the location has a
+                    // plan of its own.
+                    if let prompt {
+                        continueRow(prompt, isPrimary: plans.isEmpty)
+                    }
+                    if plans.isEmpty {
+                        if prompt == nil {
+                            Button("New Backup Plan…", action: onAddPlan)
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("New Backup Plan…", action: onAddPlan)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var continuePrompt: ContinueBackupsPrompt? {
+        model.shelves(for: repositoryID).continuePrompt(
+            repositories: model.configuration.repositories,
+            localHost: model.localHostname
+        )
+    }
+
+    private func continueRow(_ prompt: ContinueBackupsPrompt, isPrimary: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(prompt.text)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if isPrimary {
+                continueButton(prompt).buttonStyle(.borderedProminent)
+            } else {
+                continueButton(prompt)
+            }
+        }
+    }
+
+    /// One group's sheet straight away; of several, the first one's page,
+    /// which offers its own Continue Backups.
+    private func continueButton(_ prompt: ContinueBackupsPrompt) -> some View {
+        Button(prompt.isOne ? "Continue Backups…" : "Show Backups") {
+            if prompt.isOne {
+                onAdoptGroup(repositoryID, prompt.firstPlanID)
+            } else {
+                router.selection = .orphanPlan(repositoryID: repositoryID, planID: prompt.firstPlanID)
+            }
+        }
+        .help("Keep backing up from this Mac, with these backups as the history")
     }
 
     private func captionLines(_ lines: [String], symbol: String, tint: some ShapeStyle) -> some View {
@@ -71,95 +122,6 @@ struct ProtectionCard: View {
                 Image(systemName: symbol).foregroundStyle(tint)
             }
             .font(.caption)
-        }
-    }
-}
-
-/// The repository page's Other backups card — the adopt flow's landing place,
-/// for a repository added with history already in it: one row per adoptable
-/// plan-UUID group, with the group's own Adopt as a Backup Plan beside it. An
-/// exception to "the sidebar lists them": the rows carry a verb, the card
-/// exists only while something can be adopted, and the groups it leaves out — a
-/// moved plan's, an untagged lineage's — stay visible in the sidebar beside it,
-/// counted by the Details split rather than restated here. It hides while the
-/// listing has not succeeded, and adopting the last group empties it away.
-struct OtherBackupsCard: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
-
-    let repositoryID: UUID
-    /// Opens the adopt sheet for one adoptable group — the root owns the
-    /// presenting state, as for every sheet a pane raises.
-    let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
-
-    @ViewBuilder
-    var body: some View {
-        let shelves = model.shelves(for: repositoryID)
-        let groups = shelves.adoptableGroups(localHost: model.localHostname)
-        // The same rule as the Protection line: adoptable rows beside a
-        // failed read promise action on stale facts. The sidebar keeps its
-        // old groups beside the failure sentence, under its own rule.
-        if !groups.isEmpty, !listingFailed {
-            // The node's own name — "Other" only beside plans — the sidebar's
-            // derivation. No count: the card lists the adoptable groups only,
-            // and the shelf's total is the sidebar node's and the Details
-            // split's to say.
-            Card(LocalizedStringKey(SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty))) {
-                VStack(alignment: .leading, spacing: 7) {
-                    // otherLabels names every group it is given, and these
-                    // are among the shelves' own.
-                    let labels = shelves.otherLabels(
-                        repositories: model.configuration.repositories,
-                        localHost: model.localHostname
-                    )
-                    ForEach(groups) { group in
-                        if case let .plan(planID, _) = group {
-                            row(planID: planID, label: labels[group.id]!)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    /// Whether the last read of the listing failed — the card hides with
-    /// the Protection line when it did.
-    private var listingFailed: Bool {
-        if case .failed = model.snapshotListingOutcome(for: repositoryID) { return true }
-        return false
-    }
-
-    /// One adoptable group. The row opens the group's page — the in-page
-    /// row grammar, hover and trailing chevron — and Adopt as a Backup Plan
-    /// sits before the chevron as its own control, Retry's grammar: never a
-    /// button inside a button.
-    private func row(planID: UUID, label: SnapshotLineage.Label) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                router.selection = .orphanPlan(repositoryID: repositoryID, planID: planID)
-            } label: {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(label.title)
-                            .lineLimit(1)
-                        if let caption = label.caption {
-                            Text(caption.text)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 12)
-                }
-            }
-            .buttonStyle(HoverableButtonStyle())
-            .accessibilityLabel(([label.title] + [label.caption?.text].compactMap { $0 }).joined(separator: ": ") + ". Show these backups")
-            Button("Continue Backups…") { onAdoptGroup(repositoryID, planID) }
-                .controlSize(.small)
-                .help("Keep backing up this folder from this Mac, with these backups as its history")
-                .accessibilityLabel("Continue backups of \(label.title)")
-            RowChevron()
         }
     }
 }

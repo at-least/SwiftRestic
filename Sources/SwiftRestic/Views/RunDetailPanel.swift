@@ -302,13 +302,13 @@ struct RunFixButton: View {
 /// asks before running it.
 struct ConsoleRouteButton: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
+    @Environment(\.openWindow) private var openWindow
     let repositoryID: UUID
 
     var body: some View {
         Button("Show restic Console") {
             model.pointConsole(at: repositoryID)
-            router.request(.showConsole)
+            openWindow(id: SwiftResticApp.consoleWindowID)
         }
         // The Repository menu's console item's own rule.
         .disabled(!model.isResticAvailable)

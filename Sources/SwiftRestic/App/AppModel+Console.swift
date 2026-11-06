@@ -2,15 +2,12 @@ import Foundation
 
 extension AppModel {
     func consoleDidAppear() {
-        console.appear(
-            repositoryID: configuration.repositories.first?.id,
-            persistedHistory: configuration.settings.consoleHistory
-        )
+        console.appear(repositoryID: configuration.repositories.first?.id)
     }
 
-    /// Points the console at a repository before routing to it — the pane's
-    /// appear fills only an empty picker, so a route left to it would open
-    /// on whichever repository the console last had, or the first.
+    /// Points the console at a repository before opening its window — the
+    /// window's appear fills only an empty picker, so a route left to it
+    /// would open on whichever repository the console last had, or the first.
     func pointConsole(at repositoryID: UUID) {
         console.repositoryID = repositoryID
     }

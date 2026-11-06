@@ -233,7 +233,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        for selection: SidebarItem? in [nil, .activity, .console, .repository(repository.id),
+        for selection: SidebarItem? in [nil, .activity, .repository(repository.id),
                                          .orphanPlan(repositoryID: repository.id, planID: UUID())] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
@@ -365,7 +365,7 @@ struct CommandStateTests {
         #expect(model.commandRepositoryID(for: .lineage(repositoryID: UUID(), key: lineage)) == nil)
         #expect(model.planCommands(for: .lineage(repositoryID: repository.id, key: lineage)).planID == nil)
         #expect(model.commandRepositoryID(for: .repository(UUID())) == nil)
-        for selection: SidebarItem? in [.activity, .console, nil] {
+        for selection: SidebarItem? in [.activity, nil] {
             #expect(model.commandRepositoryID(for: selection) == nil)
         }
 
@@ -407,7 +407,7 @@ struct CommandStateTests {
         let gone = makeRepository("Gone")
         let orphan = makePlan("Orphan", on: gone)
         model.configuration.plans = [plan, orphan]
-        for selection: SidebarItem? in [.activity, .console, nil, .plan(orphan.id), .repository(gone.id), .findFiles] {
+        for selection: SidebarItem? in [.activity, nil, .plan(orphan.id), .repository(gone.id), .findFiles] {
             #expect(model.findFilesRepositoryID(prefillRepositoryID: nil, selection: selection, shown: nil) == first.id,
                     "selection \(String(describing: selection))")
         }
@@ -442,7 +442,7 @@ struct CommandStateTests {
         for selection: SidebarItem? in [
             .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: deleted),
             .lineage(repositoryID: repository.id, key: untagged.lineageKey),
-            .repository(repository.id), .activity, .console, nil,
+            .repository(repository.id), .activity, nil,
         ] {
             #expect(model.filesSearchRoots(for: selection) == nil, "selection \(String(describing: selection))")
         }
