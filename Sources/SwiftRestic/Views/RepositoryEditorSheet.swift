@@ -69,11 +69,6 @@ struct RepositoryEditorSheet: View {
         Edit(draft: draft, password: password, providerSecret: providerSecret)
     }
 
-    /// Bounds Save's check: against a REST server that
-    /// refuses connections restic 0.19.1 retried for over ten minutes, with
-    /// the sheet's buttons grey all the while.
-    private static let probeTimeout: TimeInterval = 60
-
     init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
         // A new repository opens as `Repository()`: a local folder not yet
         // chosen. A saved one always has its location (Save requires it).
@@ -661,7 +656,7 @@ struct RepositoryEditorSheet: View {
                 providerSecret: providerSecret.isEmpty ? nil : providerSecret
             )
 
-            if try await service.repositoryExists(context, timeout: Self.probeTimeout) {
+            if try await service.repositoryExists(context, timeout: EditorRequirements.probeTimeout) {
                 status = .ok("Connected to the existing repository.")
                 return true
             }
@@ -673,7 +668,7 @@ struct RepositoryEditorSheet: View {
             status = .ok("Created a new repository.")
             return true
         } catch ResticError.timedOut {
-            status = .failure("No answer from the repository in \(Int(Self.probeTimeout)) seconds — check that it is reachable.")
+            status = .failure("No answer from the repository in \(Int(EditorRequirements.probeTimeout)) seconds — check that it is reachable.")
             return false
         } catch {
             status = .failure(error.localizedDescription)

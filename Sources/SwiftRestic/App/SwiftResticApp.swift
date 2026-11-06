@@ -119,12 +119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Access was granted or taken away, or that the login item was approved
     /// or removed under Login Items, so every activation asks again — here
     /// rather than in Settings, so the plan editor catches
-    /// up while no Settings window exists. Two tasks, so neither answer
-    /// waits on the other's round trip. The model arrives with the scene's
+    /// up while no Settings window exists. Separate tasks, so no answer
+    /// waits on another's round trip. The model arrives with the scene's
     /// task; an activation before that is covered by bootstrap's own reads.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
         Task { await model?.refreshLoginItemStatus() }
+        Task { await model?.findResticIfRefused() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -239,8 +240,10 @@ struct SwiftResticApp: App {
             CommandGroup(replacing: .newItem) {
                 // With no repository yet, through adding one
                 // (`RootView.startNewPlan`).
+                let commands = model.repositoryCommands(for: router.selection)
                 Button("New Backup Plan…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
+                    .disabled(!commands.canNewPlan)
 
                 Button("Add Repository…") {
                     // Through the router's pending intent: the ask survives
@@ -249,6 +252,7 @@ struct SwiftResticApp: App {
                     ask(.newRepository)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!commands.canAddRepository)
             }
             // The menu's first item is the app's own help, as the HIG's Help
             // menu has it. With no Help Book, macOS's own item only said

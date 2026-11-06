@@ -134,6 +134,7 @@ final class AppModel {
     /// Whether SwiftRestic — and so its restic — may read what Full Disk
     /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
     var fullDiskAccess: FullDiskAccessStatus = .unknown
+    var binarySearchGeneration = 0
     /// The probe behind `fullDiskAccess`. Injectable because the real one
     /// answers for whatever process macOS holds responsible — under
     /// xcodebuild that is Xcode, not the terminal — so a test asserting on

@@ -25,6 +25,29 @@ enum ResticAbsence: Equatable, Sendable {
     }
 
     var sentence: String { words + "." }
+
+    /// Where the app waits for restic: the Welcome page and the banner over
+    /// every other page.
+    var headline: String {
+        switch self {
+        case .missing: "SwiftRestic needs restic to back up."
+        case .needsUpdate, .unusable: sentence
+        }
+    }
+
+    /// What to do, when the app can say it in a line; else the refusal's own
+    /// words, which name the path it found.
+    var guidance: String? {
+        self == .missing ? "Install it, then come back. SwiftRestic finds it on its own." : nil
+    }
+
+    var installCommand: String? {
+        switch self {
+        case .missing: "brew install restic"
+        case .needsUpdate: "brew upgrade restic"
+        case .unusable: nil
+        }
+    }
 }
 
 enum ResticError: Error, LocalizedError, Equatable {

@@ -108,8 +108,11 @@ struct SidebarView: View {
             Menu {
                 // Into the repository on screen, as ⌘N does — with none
                 // yet, through adding one.
+                let commands = model.repositoryCommands(for: router.selection)
                 Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
+                    .disabled(!commands.canNewPlan)
                 Button("Add Repository…") { onNewRepository() }
+                    .disabled(!commands.canAddRepository)
             } label: {
                 Label("Add", systemImage: "plus")
                     .labelStyle(.iconOnly)

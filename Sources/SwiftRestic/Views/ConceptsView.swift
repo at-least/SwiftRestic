@@ -14,7 +14,7 @@ struct ConceptsView: View {
     private let tasks: [Topic] = [
         Topic(
             title: "Back up a folder",
-            text: "Choose File ▸ New Backup Plan, pick the folder and a repository, and click Create Plan. Its first backup starts within a minute; after that it runs on its schedule while SwiftRestic is open."
+            text: "Choose File ▸ New Backup Plan, pick the folder and a repository, and click Create Plan. Its first backup starts right away; after that it runs on its schedule while SwiftRestic is open."
         ),
         Topic(
             title: "Get a file back",

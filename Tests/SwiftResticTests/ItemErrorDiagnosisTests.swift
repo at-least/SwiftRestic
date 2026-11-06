@@ -144,16 +144,17 @@ struct ItemErrorDiagnosisTests {
         #expect(paths(.filePermissions(1), record).isEmpty)
     }
 
-    @Test("sources that reach macOS-protected data are recognised, measured paths only")
+    @Test("sources that reach macOS-protected data are recognised")
     func protectedSources() {
         let home = "/Users/u"
         for source in ["~", "/Users/u", "/Users", "/", "/Users/u/Library", "/Users/u/Library/Mail/V10",
                        "/users/U/library/safari", "/Users/u/Library/Application Support",
+                       "/Users/u/Documents", "~/Documents", "/Users/u/Desktop/Taxes", "/Users/u/Downloads",
                        "/Users/u/./Library/../Library/Messages", "/Library/Application Support/com.apple.TCC/TCC.db"] {
             #expect(ProtectedLocations.needsFullDiskAccess(source, home: home), "\(source)")
         }
-        for source in ["/Users/u/Documents", "/Users/u/Library/Preferences", "/Users/u/LibraryX",
-                       "/Users/u/Library/MailX", "/Volumes/NAS", "/Users/other", "~/Documents",
+        for source in ["/Users/u/Library/Preferences", "/Users/u/LibraryX", "/Users/u/DocumentsX",
+                       "/Users/u/Library/MailX", "/Volumes/NAS", "/Users/other", "/Users/u/Projects",
                        // A new plan's empty path, before anything is typed.
                        "", "  "] {
             #expect(!ProtectedLocations.needsFullDiskAccess(source, home: home), "\(source)")

@@ -92,10 +92,14 @@ extension AppModel {
     /// ID, which a click opens; a run notification's is the run's ID.
     nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
 
+    private func announcesFirstBackup(_ record: RunRecord) -> Bool {
+        record.kind == .backup && record.outcome == .succeeded && plan(id: record.planID)?.announcesFirstBackup == true
+    }
+
     func wantsNotification(for record: RunRecord) -> Bool {
         let settings = configuration.settings
         switch record.outcome {
-        case .succeeded: return settings.notifyOnSuccess
+        case .succeeded: return settings.notifyOnSuccess || announcesFirstBackup(record)
         case .completedWithErrors, .failed:
             // As stored: `append(record:)` counted it before the history cap
             // trimmed the backups before it, and a run merged into a standing
@@ -110,16 +114,24 @@ extension AppModel {
         }
     }
 
-    func notify(about record: RunRecord) {
-        guard wantsNotification(for: record), Self.supportsNotifications else { return }
+    func notify(about record: RunRecord, now: Date = .now) {
+        guard wantsNotification(for: record) else { return }
+        // Disarmed before the bundle check, so one plan is told once under
+        // any host.
+        var firstBackup: (title: String, body: String)?
+        if announcesFirstBackup(record), let planID = record.planID, let plan = plan(id: planID) {
+            firstBackup = Self.firstBackupNotification(plan: plan, among: configuration.plans, now: now)
+            updatePlan(planID) { $0.announcesFirstBackup = false }
+        }
+        guard Self.supportsNotifications else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = Self.notificationTitle(
+        content.title = firstBackup?.title ?? Self.notificationTitle(
             for: record,
             plans: configuration.plans,
             repositories: configuration.repositories
         )
-        content.body = Self.notificationBody(for: record)
+        content.body = firstBackup?.body ?? Self.notificationBody(for: record)
         deliver(UNNotificationRequest(
             identifier: record.id.uuidString,
             content: content,
@@ -167,6 +179,14 @@ extension AppModel {
     static let notificationSettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(Bundle.main.bundleIdentifier!)"
     )!
+
+    static func firstBackupNotification(plan: BackupPlan, among plans: [BackupPlan], now: Date) -> (title: String, body: String) {
+        let next = plan.schedule.nextRunDate(after: plan.lastRunAt, now: now)
+        return (
+            title: "“\(plan.label(among: plans))” is backed up",
+            body: next.map { "Next backup: \(Format.tileTimestamp($0))" } ?? "It backs up again when you click Back Up Now."
+        )
+    }
 
     static func notificationTitle(
         for record: RunRecord,

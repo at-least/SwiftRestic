@@ -8,6 +8,7 @@ struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(\.openSettings) private var openSettings
+    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
 
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
     /// rows the pane needs land with the first listing, so the selection
@@ -37,17 +38,22 @@ struct RootDetailView: View {
             // is why.
             // Only once the search for restic has answered: until then the
             // binary is unknown, not missing.
-            if case let .refused(error, problem) = model.resticSearch {
+            // On Welcome the setup state says it instead.
+            if case let .refused(error, problem) = model.resticSearch, router.selection != nil {
+                let absence = ResticAbsence(refusal: error)
                 // Built in place, not posted: the condition is the model's
                 // binary state, so there is nothing to dismiss.
                 BannerView(
                     banner: Banner(
-                        title: ResticAbsence(refusal: error).words,
-                        message: problem,
+                        title: absence.headline,
+                        message: absence.guidance ?? problem,
                         isError: true
                     ),
                     isDismissible: false,
-                    settingsAction: { openSettings() }
+                    settingsAction: {
+                        settingsPane = SettingsView.resticPane
+                        openSettings()
+                    }
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
@@ -168,17 +174,15 @@ struct WelcomeView: View {
                 .frame(width: 84, height: 84)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
-                // The one prominent step. With no repository yet it starts
-                // there and carries on to the plan (`RootView.startNewPlan`),
-                // so "Add Repository" would be its own first half.
-                Button("New Backup Plan…", action: onAddPlan)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                if model.configuration.repositories.isEmpty {
-                    Text("A backup plan backs up to a repository — you set one up first.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            if case let .refused(error, problem) = model.resticSearch {
+                ResticSetupView(absence: ResticAbsence(refusal: error), problem: problem)
+            } else {
+                VStack(spacing: 16) {
+                    Text("Keep a copy of your folders on another disk or in the cloud.")
+                        .multilineTextAlignment(.center)
+                    Button("Back Up a Folder…", action: onAddPlan)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                 }
             }
 
@@ -186,5 +190,41 @@ struct WelcomeView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// What Welcome shows until restic is here: nothing else on the page can be
+/// saved without it. It clears itself (`AppModel.findResticIfRefused`).
+private struct ResticSetupView: View {
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
+    let absence: ResticAbsence
+    let problem: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(absence.headline)
+                .font(.headline)
+            Text(absence.guidance ?? problem)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            if let command = absence.installCommand {
+                HStack(spacing: 8) {
+                    Text(command)
+                        .monospaced()
+                        .textSelection(.enabled)
+                    Button("Copy Command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(command, forType: .string)
+                    }
+                }
+            }
+            Button("Open Settings…") {
+                settingsPane = SettingsView.resticPane
+                openSettings()
+            }
+        }
+        .frame(maxWidth: 420)
     }
 }

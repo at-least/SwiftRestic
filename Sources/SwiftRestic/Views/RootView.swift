@@ -15,10 +15,13 @@ struct RootView: View {
     /// retention's fix. Back to Files when the sheet goes.
     @State private var editingPlanTab: PlanEditorSheet.Tab = .files
     @State private var editingRepository: Repository?
-    /// "New Backup Plan" asked with no repository yet: the repository
-    /// editor is up for it, and once it has saved one the plan editor
-    /// follows, in it (`startNewPlan`, `continuePlanAfterRepository`).
+    /// The repository editor is up for a first plan, and once it has saved
+    /// one the plan editor follows, in it (`continuePlanAfterRepository`).
     @State private var planAfterRepository: PlanAfterRepository?
+    /// "New Backup Plan" asked with no repository yet.
+    @State private var isShowingFirstBackup = false
+    /// The first-run sheet was left for the repository editor's other kinds.
+    @State private var wantsOtherLocation = false
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
@@ -61,7 +64,7 @@ struct RootView: View {
             onEditPlan: { editingPlan = $0 },
             onNewPlan: startNewPlan(in:),
             onEditRepository: { editingRepository = $0 },
-            onNewRepository: { editingRepository = Repository() },
+            onNewRepository: addRepository,
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
             onRemoveRepository: { pendingConfirmation = .deleteRepository($0.id) },
             onAdoptGroup: adoptGroup
@@ -83,8 +86,15 @@ struct RootView: View {
     private func presented<V: View>(over content: V) -> some View {
         content
         .sheet(item: $editingPlan, onDismiss: { editingPlanTab = .files }) { plan in
-            PlanEditorSheet(plan: plan, initialTab: editingPlanTab)
+            PlanEditorSheet(plan: plan, initialTab: editingPlanTab, onCreated: { router.selection = .plan($0) })
                 .environment(model)
+        }
+        .sheet(isPresented: $isShowingFirstBackup, onDismiss: continueWithOtherLocation) {
+            FirstBackupSheet(
+                onCreated: { router.selection = .plan($0) },
+                onOtherLocation: { wantsOtherLocation = true }
+            )
+            .environment(model)
         }
         .sheet(item: $editingRepository, onDismiss: continuePlanAfterRepository) { repository in
             // A new repository lands on its own page, where "New Backup
@@ -211,16 +221,33 @@ struct RootView: View {
         case created(UUID)
     }
 
-    /// "New Backup Plan", from whichever control: the plan editor — or,
-    /// with no repository to back up to yet, the repository editor first,
-    /// as Arq asks where before what. Adding one is the plan's first step,
-    /// not a reason to sit disabled.
+    /// "New Backup Plan", from whichever control: the plan editor — or, with
+    /// no repository to back up to yet, the first-run sheet, which makes both.
     private func startNewPlan(in repositoryID: UUID?) {
         guard model.configuration.repositories.isEmpty else {
             editingPlan = newPlan(in: repositoryID)
             return
         }
+        // Its Back Up asks restic; the page behind says how to get it.
+        guard model.isResticAvailable else {
+            NSSound.beep()
+            return
+        }
+        isShowingFirstBackup = true
+    }
+
+    private func continueWithOtherLocation() {
+        guard wantsOtherLocation else { return }
+        wantsOtherLocation = false
         planAfterRepository = .awaiting
+        editingRepository = Repository()
+    }
+
+    private func addRepository() {
+        guard model.isResticAvailable else {
+            NSSound.beep()
+            return
+        }
         editingRepository = Repository()
     }
 
@@ -252,6 +279,12 @@ struct RootView: View {
     /// before `bootstrap()` finishes, when there is nothing to select yet.
     private func applyCapturePaneOverride() {
         guard !didApplyCaptureOverride else { return }
+        // An empty configuration's sheet, so ahead of the guard below.
+        if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] == "firstBackup", !model.isBootstrapping {
+            didApplyCaptureOverride = true
+            isShowingFirstBackup = true
+            return
+        }
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
         else { return }
         didApplyCaptureOverride = true
@@ -406,7 +439,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil
+        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFirstBackup
             || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -421,7 +454,7 @@ struct RootView: View {
         case let .newPlanIn(id):
             startNewPlan(in: model.repository(id: id)?.id)
         case .newRepository:
-            editingRepository = Repository()
+            addRepository()
         case .showFind:
             // A plan's page searches its own files on its Files tab, the
             // toolbar's field focused; every other pane all backups.

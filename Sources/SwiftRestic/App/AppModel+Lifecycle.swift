@@ -270,7 +270,24 @@ extension AppModel {
         await flushSave()
     }
 
+    /// Looks for restic again: installed or chosen while the app runs. Coming
+    /// out of a refusal, the listings failed for want of it are read now.
+    func findResticAgain() async {
+        var wasRefused = false
+        if case .refused = resticSearch { wasRefused = true }
+        await resolveBinary()
+        if wasRefused, isResticAvailable { await refreshAllSnapshots() }
+    }
+
+    /// Coming back from Terminal is the only sign restic was installed.
+    func findResticIfRefused() async {
+        guard case .refused = resticSearch else { return }
+        await findResticAgain()
+    }
+
     func resolveBinary() async {
+        binarySearchGeneration += 1
+        let generation = binarySearchGeneration
         do {
             // The locate probes stat every candidate path (and every PATH
             // entry) — filesystem work, so it runs off the main actor even
@@ -291,8 +308,11 @@ extension AppModel {
             guard version.isSupported else {
                 throw ResticError.resticTooOld(path: located.url.path, found: version.dotted)
             }
+            // Typing a path looks once per keystroke; the last one answers.
+            guard generation == binarySearchGeneration else { return }
             resticSearch = .found(located, version: output)
         } catch {
+            guard generation == binarySearchGeneration else { return }
             resticSearch = .refused(error, problem: error.localizedDescription)
         }
     }

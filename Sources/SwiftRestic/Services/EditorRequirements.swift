@@ -34,6 +34,29 @@ enum EditorRequirements {
         ResticPath.normalized(PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? "")
     }
 
+    /// Bounds Save's check: against a REST server that refuses connections
+    /// restic 0.19.1 retried for over ten minutes, with the sheet's buttons
+    /// grey all the while.
+    static let probeTimeout: TimeInterval = 60
+
+    /// The first-run sheet's greyed Back Up, in the order it asks.
+    static func firstBackup(
+        source: String,
+        folder: String,
+        password: String,
+        confirmPassword: String,
+        among repositories: [Repository]
+    ) -> String? {
+        if source.isEmpty { return "Choose a folder to back up." }
+        if folder.isEmpty { return "Choose where the backups go." }
+        var location = Repository()
+        location.localPath = folder
+        return repository(
+            location, password: password, confirmPassword: confirmPassword,
+            isNew: true, hasStoredPassword: nil, among: repositories
+        )
+    }
+
     /// An edit's check finding nothing at the location: its plans' backups
     /// would fail (restic exit 10) against it, and the editor cannot change a
     /// location: another location is another repository.

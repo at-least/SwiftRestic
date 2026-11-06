@@ -43,6 +43,8 @@ struct PlanEditorSheet: View {
     /// `Mode.adopt`'s completion: the presenting surface selects the new
     /// plan and turns its page to Backups, which are its states to move.
     private let onAdopted: ((UUID) -> Void)?
+    /// `Mode.new`'s completion: the window moves to the new plan's page.
+    private let onCreated: ((UUID) -> Void)?
     private let isNew: Bool
     /// The schedule default the adopt draft opened with, so the Schedule tab
     /// can say why it picked Manual — a fact of the prefill, not of the
@@ -51,11 +53,18 @@ struct PlanEditorSheet: View {
 
     enum Tab: CaseIterable { case files, schedule, retention }
 
-    init(plan: BackupPlan, mode: Mode? = nil, initialTab: Tab = .files, onAdopted: ((UUID) -> Void)? = nil) {
+    init(
+        plan: BackupPlan,
+        mode: Mode? = nil,
+        initialTab: Tab = .files,
+        onAdopted: ((UUID) -> Void)? = nil,
+        onCreated: ((UUID) -> Void)? = nil
+    ) {
         var plan = plan
         let mode = mode ?? (plan.path.isEmpty ? .new : .editing)
         self.mode = mode
         self.onAdopted = onAdopted
+        self.onCreated = onCreated
         isNew = mode != .editing
         adoptDefaultedToManual = mode == .adopt && plan.schedule.frequency == .manual
         _tab = State(initialValue: initialTab)
@@ -164,7 +173,12 @@ struct PlanEditorSheet: View {
                             draft.path = PathListEntry.value(for: draft.path, expandsTildeInPath: true, escapesGlobs: false) ?? ""
                         }
                         if registersLoginItem { model.requestStartsAtLogin(true) }
-                        model.upsert(plan: draft)
+                        if isNew {
+                            model.createPlan(draft)
+                            onCreated?(draft.id)
+                        } else {
+                            model.upsert(plan: draft)
+                        }
                         saveSharePasswords()
                         dismiss()
                         return
@@ -309,26 +323,17 @@ struct PlanEditorSheet: View {
     }
 
     private var registersLoginItem: Bool {
-        LoginItemAdvice.registersOnSave(
-            draft: draft,
-            among: model.configuration.plans,
-            offer: LoginItemAdvice.offer(
-                startsAtLogin: model.startsAtLogin,
-                needsApproval: model.loginItemNeedsApproval,
-                isInstallable: model.loginItemInstallable
-            )
-        )
+        model.registersLoginItemOnSave(draft)
     }
 
     private var missingRequirement: String? {
         EditorRequirements.plan(draft, isNew: isNew, among: model.configuration.plans)
     }
 
-    /// The first backup of a new scheduled plan starts within a minute of
-    /// the button that saves it — Create for a fresh plan, Adopt for a
-    /// prefilled one whose path is here. The scheduler ticks once a
-    /// minute and a never-run plan counts as immediately due. Stated on the
-    /// Schedule tab, beside the picker that could avoid it.
+    /// What the button that saves a new scheduled plan starts: Create runs it
+    /// at once (`AppModel.createPlan`); Adopt leaves it to the scheduler's
+    /// next tick, a minute at most, as a never-run plan counts as due.
+    /// Stated on the Schedule tab, beside the picker that could avoid it.
     private var startsFirstBackupOnCreate: Bool {
         isNew && LoginItemAdvice.isScheduled(draft)
     }
@@ -567,7 +572,7 @@ struct PlanEditorSheet: View {
                 if startsFirstBackupOnCreate {
                     Text(mode == .adopt
                         ? "Its next backup starts within a minute."
-                        : "Its first backup starts within a minute of creating it."
+                        : "Its first backup starts when you create it."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

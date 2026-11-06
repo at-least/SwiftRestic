@@ -18,6 +18,10 @@ struct PlanCommandState: Equatable {
 
 struct RepositoryCommandState: Equatable {
     var repositoryID: UUID?
+    /// A new repository's Save asks restic, so neither form opens without it:
+    /// a plan needs a repository to go in.
+    var canAddRepository = false
+    var canNewPlan = false
     var canFind = false
     var canRefreshAll = false
     /// restic Console, the menu's and the sidebar row's: the console
@@ -68,6 +72,8 @@ extension AppModel {
 
     func repositoryCommands(for selection: SidebarItem?) -> RepositoryCommandState {
         var state = RepositoryCommandState()
+        state.canAddRepository = isResticAvailable
+        state.canNewPlan = isResticAvailable || !configuration.repositories.isEmpty
         state.canFind = !configuration.repositories.isEmpty && isResticAvailable
         state.canRefreshAll = state.canFind
         state.canOpenConsole = state.canFind

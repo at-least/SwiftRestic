@@ -319,6 +319,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// (`StaleAlert`): one notification per stretch, re-armed by a newer
     /// success.
     var staleAlertedFor: Date?
+    /// Created here and not yet backed up: its first success is announced
+    /// whatever `notifyOnSuccess` says. Off for an adopted plan and a plan
+    /// saved before this existed, whose first backup is long past.
+    var announcesFirstBackup = false
     /// Leave out online-only cloud files (iCloud Drive, OneDrive), with
     /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
     /// before the option reads it off, so its backups do not change under it.
@@ -336,7 +340,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, repositoryID, path, excludePatterns, tags, schedule, retention
         case hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
-        case skipsDeveloperFiles, skipsMachines
+        case skipsDeveloperFiles, skipsMachines, announcesFirstBackup
     }
 
     /// Read, never written. `isEnabled`: a plan an older build switched off
@@ -362,6 +366,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
+        announcesFirstBackup = c.value(.announcesFirstBackup, default: false)
         excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
         // A plan saved without either key asked for neither, so its backups
         // do not change under a switch it never turned on.
@@ -473,6 +478,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
         merged.staleAlertedFor = staleAlertedFor
+        merged.announcesFirstBackup = announcesFirstBackup
         return merged
     }
 }

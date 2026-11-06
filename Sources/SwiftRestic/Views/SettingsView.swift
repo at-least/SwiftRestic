@@ -2,9 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     private static let width: CGFloat = 560
+    static let paneKey = "lastSettingsPane"
+    static let resticPane = 3
     /// The pane the window reopens on. UserDefaults, not
     /// `configuration.settings`: it is window state, not a preference.
-    @AppStorage("lastSettingsPane") private var lastSettingsPane = 0
+    @AppStorage(Self.paneKey) private var lastSettingsPane = 0
     @Environment(AppModel.self) private var model
     @State private var removingShare: NetworkShare?
 
@@ -39,7 +41,7 @@ struct SettingsView: View {
                 .tabItem { Label("Notifications", systemImage: "bell") }
             resticTab(model: model)
                 .frame(width: Self.width, height: 190)
-                .tag(3)
+                .tag(Self.resticPane)
                 .tabItem { Label("restic", systemImage: "terminal") }
         }
         .confirmationDialog(
@@ -67,6 +69,9 @@ struct SettingsView: View {
         .task {
             await model.refreshFullDiskAccess()
             await model.refreshLoginItemStatus()
+        }
+        .onChange(of: model.configuration.settings.resticPathOverride) {
+            Task { await model.findResticAgain() }
         }
     }
 
@@ -187,7 +192,7 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     // Beside its cause: the healthy pane has nothing to find
                     // again, so it ends at the Version row.
-                    Button("Find Again") { Task { await model.resolveBinary() } }
+                    Button("Find Again") { Task { await model.findResticAgain() } }
                 }
             }
         }
