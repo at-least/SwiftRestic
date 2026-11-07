@@ -160,8 +160,17 @@ extension SnapshotLineage {
         }
         // Only reachable while the lineages lag the listing, which the
         // model's didSet rules out; the folders still say which backup.
-        let folders = record.paths.map { ($0 as NSString).lastPathComponent }
+        let folders = record.paths.map(Self.component)
         return folders.isEmpty ? "Backup" : folders.joined(separator: ", ")
+    }
+
+    /// A restic-sourced path's last component, cut by bytes
+    /// (`ResticPath.basename`): an NSString cut re-aligns at a grapheme and
+    /// can swallow the separator behind a Prepend character such as U+0600.
+    static func component(of path: String) -> String {
+        let normalized = ResticPath.normalized(path)
+        let last = ResticPath.basename(of: normalized)
+        return last.isEmpty ? normalized : last
     }
 
     private static func title(of lineage: SnapshotLineage, plans: [BackupPlan]) -> String {
@@ -172,7 +181,7 @@ extension SnapshotLineage {
     }
 
     static func folderTitle(_ paths: [String]) -> String {
-        let names = paths.map { ($0 as NSString).lastPathComponent }
+        let names = paths.map(Self.component)
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
     }
 

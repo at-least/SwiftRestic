@@ -935,12 +935,10 @@ struct ResticService: ResticClient {
     }
 
     /// A single file Keep left alone, with the counters a restore summary
-    /// carries (one file seen, none restored, one skipped). The callers also
-    /// note it in the run's log, which would otherwise hold no command at
-    /// all.
+    /// carries (none restored, one skipped). The callers also note it in the
+    /// run's log, which would otherwise hold no command at all.
     private static func keptFileSummary() -> ResticSummary {
         var summary = ResticSummary()
-        summary.totalFiles = 1
         summary.filesRestored = 0
         summary.filesSkipped = 1
         return summary

@@ -86,10 +86,6 @@ enum ResticPath {
         folder == "/" ? "/" : folder + "/"
     }
 
-    static func child(of folder: String, named name: String) -> String {
-        insidePrefix(of: folder) + name
-    }
-
     /// What follows `folder` in `path`, cut by bytes; nil unless `path` is
     /// strictly inside `folder`.
     static func relative(_ path: String, below folder: String) -> String? {

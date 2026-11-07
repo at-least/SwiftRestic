@@ -36,8 +36,8 @@ struct RetentionPreview: Sendable, Equatable {
             )
         }
         self.init(
-            kept: groups.flatMap { $0.keep ?? [] }.sorted { $0.time > $1.time },
-            removed: groups.flatMap { $0.remove ?? [] }.sorted { $0.time > $1.time }
+            kept: groups.flatMap { $0.keep ?? [] }.sorted(by: SnapshotLineage.newestFirst),
+            removed: groups.flatMap { $0.remove ?? [] }.sorted(by: SnapshotLineage.newestFirst)
         )
     }
 

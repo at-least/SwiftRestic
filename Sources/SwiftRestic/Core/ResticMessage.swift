@@ -10,7 +10,10 @@ import Foundation
 enum ResticMessage: Sendable, Equatable {
     case status(ResticStatus)
     case summary(ResticSummary)
-    case verboseStatus(ResticVerboseStatus)
+    /// Per-item progress from `--verbose`, which the app's own commands
+    /// never pass (the console's raw stdout shows them as text). Carried
+    /// without a payload: nothing reads one, and the log drops these lines.
+    case verboseStatus
     case error(ResticErrorMessage)
     case exitError(ResticExitError)
     case initialized(ResticInitialized)
@@ -18,7 +21,9 @@ enum ResticMessage: Sendable, Equatable {
     case node(SnapshotNode)
     case change(ResticDiffChange)
     case statistics(ResticDiffStatistics)
-    case unknown(type: String)
+    /// A `message_type` newer restic invented — restic growing, fine to
+    /// ignore. Its raw line still reaches the log and the console.
+    case unknown
     /// A line carrying a `message_type` we know whose payload failed to
     /// decode — restic's schema moved under us. Kept apart from `unknown`:
     /// an unrecognised type is restic growing (fine to ignore), a malformed
@@ -99,21 +104,6 @@ struct ResticSummary: Sendable, Equatable, Decodable {
         case filesSkipped = "files_skipped"
         case numErrors = "num_errors"
         case suggestPrune = "suggest_prune"
-    }
-}
-
-/// Per-item line emitted by `backup --verbose --json`.
-struct ResticVerboseStatus: Sendable, Equatable, Decodable {
-    var action: String
-    var item: String
-    var duration: Double?
-    var dataSize: Int64?
-    /// `restore --verbose=2` uses `size` where `backup` uses `data_size`.
-    var size: Int64?
-
-    private enum CodingKeys: String, CodingKey {
-        case action, item, duration, size
-        case dataSize = "data_size"
     }
 }
 
@@ -286,7 +276,7 @@ enum ResticMessageDecoder {
             case "summary":
                 return .summary(try jsonDecoder.decode(ResticSummary.self, from: data))
             case "verbose_status":
-                return .verboseStatus(try jsonDecoder.decode(ResticVerboseStatus.self, from: data))
+                return .verboseStatus
             case "error":
                 return .error(try jsonDecoder.decode(ResticErrorMessage.self, from: data))
             case "exit_error":
@@ -302,7 +292,7 @@ enum ResticMessageDecoder {
             case "statistics":
                 return .statistics(try jsonDecoder.decode(ResticDiffStatistics.self, from: data))
             default:
-                return .unknown(type: probe.messageType)
+                return .unknown
             }
         } catch {
             return .malformed(type: probe.messageType, reason: Self.briefFailure(error))

@@ -14,7 +14,10 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     /// patterns omits the key) — what a plan-UUID group's page shows and
     /// what the adopt sheet prefills from.
     var excludes: [String]
-    var summary: ResticSummary?
+    /// What the backup that made this snapshot added — the one field of
+    /// restic's `summary` object anything reads. Listings are the app's
+    /// largest arrays, so the rest of the object is not carried.
+    var dataAdded: Int64?
     /// The snapshot `restic rewrite` made this one from: the one just
     /// before, not the first of a chain (0.19.1, probed: a third rewrite's
     /// `original` named the second's ID, already gone). Nil for a backup's
@@ -24,6 +27,12 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     private enum CodingKeys: String, CodingKey {
         case id, time, paths, hostname, tags, excludes, summary, original
         case shortID = "short_id"
+    }
+
+    /// restic's `summary` object, narrowed to the one field anything reads.
+    private struct Summary: Decodable {
+        var dataAdded: Int64?
+        private enum CodingKeys: String, CodingKey { case dataAdded = "data_added" }
     }
 
     init(from decoder: any Decoder) throws {
@@ -36,11 +45,9 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         hostname = try c.decodeIfPresent(String.self, forKey: .hostname)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
-        summary = try c.decodeIfPresent(ResticSummary.self, forKey: .summary)
+        dataAdded = try c.decodeIfPresent(Summary.self, forKey: .summary)?.dataAdded
         original = try c.decodeIfPresent(String.self, forKey: .original)
     }
-
-    var dataAdded: Int64? { summary?.dataAdded }
 
     static func == (lhs: Snapshot, rhs: Snapshot) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -94,8 +101,7 @@ extension SnapshotNode {
     /// Synthesises a directory node for a path restic never handed us as JSON —
     /// used for the snapshot's own root paths at the top of the browsers.
     static func directory(path: String) -> SnapshotNode {
-        let name = (path as NSString).lastPathComponent
-        return SnapshotNode(name: name.isEmpty ? path : name, type: .dir, path: path)
+        SnapshotNode(name: SnapshotLineage.component(of: path), type: .dir, path: path)
     }
 }
 
@@ -108,7 +114,7 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
 
     var id: String { path }
     var isDirectory: Bool { type == .dir }
-    var name: String { (path as NSString).lastPathComponent }
+    var name: String { SnapshotLineage.component(of: path) }
 
     /// Identity is the path, matching `id`; equality and hashing follow.
     static func == (lhs: FindMatch, rhs: FindMatch) -> Bool { lhs.path == rhs.path }

@@ -7,7 +7,6 @@ enum ResticError: Error, LocalizedError, Equatable {
     case commandFailed(exitCode: Int32, message: String)
     case cancelled
     case repositoryMissing
-    case planMissing
     case itemNotListed(name: String)
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
@@ -89,8 +88,6 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "The operation was stopped."
         case .repositoryMissing:
             return "This backup location is no longer set up in SwiftRestic."
-        case .planMissing:
-            return "This plan is no longer set up in SwiftRestic."
         case let .itemNotListed(name):
             return "“\(name)” is no longer listed in the chosen backup — refresh and try again."
         case let .passwordMissing(name):

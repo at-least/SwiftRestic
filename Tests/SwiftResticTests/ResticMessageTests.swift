@@ -35,34 +35,15 @@ struct ResticMessageTests {
         #expect(status.fractionComplete == 1)
     }
 
-    @Test("backup --verbose reports each file as a verbose_status line")
-    func backupVerboseStatus() throws {
-        // The struct keeps the fields the app shows; the extra `_in_repo` and
-        // `total_files` keys must simply be tolerated.
-        let line = #"{"message_type":"verbose_status","action":"new","item":"/restic-capture/src/a.txt","duration":0.004700167,"data_size":12,"data_size_in_repo":94,"metadata_size":0,"metadata_size_in_repo":0,"total_files":0}"#
-        guard case let .verboseStatus(verbose)? = ResticMessageDecoder.decode(line: line) else {
-            Issue.record("expected a verbose_status message")
-            return
-        }
-        #expect(verbose.action == "new")
-        #expect(verbose.item == "/restic-capture/src/a.txt")
-        #expect(verbose.dataSize == 12)
-        #expect(verbose.duration != nil)
-    }
-
-    @Test("restore --verbose=2 spells the size `size`, not `data_size`")
-    func restoreVerboseStatus() throws {
-        // The two commands disagree on the field name; decoding only the backup
-        // spelling would leave every restore line without a size.
-        let line = #"{"message_type":"verbose_status","action":"restored","item":"/restic-capture/src/sub/b.txt","size":7}"#
-        guard case let .verboseStatus(verbose)? = ResticMessageDecoder.decode(line: line) else {
-            Issue.record("expected a verbose_status message")
-            return
-        }
-        #expect(verbose.action == "restored")
-        #expect(verbose.item == "/restic-capture/src/sub/b.txt")
-        #expect(verbose.size == 7)
-        #expect(verbose.dataSize == nil)
+    @Test("a verbose_status line is recognised and dropped, whatever its shape")
+    func verboseStatus() throws {
+        // The app's own commands never pass --verbose; the case exists so the
+        // log's drop rule catches the line, and the console shows restic's
+        // raw stdout either way. backup's and restore's spellings both land.
+        let backup = #"{"message_type":"verbose_status","action":"new","item":"/restic-capture/src/a.txt","duration":0.004700167,"data_size":12,"data_size_in_repo":94,"metadata_size":0,"metadata_size_in_repo":0,"total_files":0}"#
+        #expect(ResticMessageDecoder.decode(line: backup) == .verboseStatus)
+        let restore = #"{"message_type":"verbose_status","action":"restored","item":"/restic-capture/src/sub/b.txt","size":7}"#
+        #expect(ResticMessageDecoder.decode(line: restore) == .verboseStatus)
     }
 
     @Test("backup summary")
@@ -276,13 +257,7 @@ struct ResticMessageTests {
 
     @Test("an unrecognised message_type degrades instead of failing")
     func unknownMessageType() {
-        guard case let .unknown(type)? = ResticMessageDecoder.decode(
-            line: #"{"message_type":"something_new","x":1}"#
-        ) else {
-            Issue.record("expected an unknown message")
-            return
-        }
-        #expect(type == "something_new")
+        #expect(ResticMessageDecoder.decode(line: #"{"message_type":"something_new","x":1}"#) == .unknown)
     }
 
     @Test("a known message_type that fails to decode is malformed, not unknown")
