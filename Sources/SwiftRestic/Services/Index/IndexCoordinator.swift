@@ -370,6 +370,9 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
+    /// No production caller — Search All Backups reads
+    /// `searchWithSummaries`; this is the property tests' oracle for the
+    /// membership split.
     nonisolated func searchWithMembership(
         matching query: String,
         inSnapshot snapshotID: String,

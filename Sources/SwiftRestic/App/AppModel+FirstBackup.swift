@@ -8,7 +8,7 @@ extension AppModel {
         var plan = plan
         plan.announcesFirstBackup = true
         upsert(plan: plan)
-        if LoginItemAdvice.isScheduled(plan), isResticAvailable {
+        if plan.isScheduled, isResticAvailable {
             runBackup(planID: plan.id)
         }
     }

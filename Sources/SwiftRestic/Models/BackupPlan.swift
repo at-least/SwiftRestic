@@ -460,8 +460,14 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
+    /// The scheduler owns this plan's timing, complete or not — distinct
+    /// from `runsOnSchedule`, which also asks that the plan can run.
+    var isScheduled: Bool {
+        schedule.frequency != .manual
+    }
+
     var runsOnSchedule: Bool {
-        schedule.frequency != .manual && isConfigurationComplete
+        isScheduled && isConfigurationComplete
     }
 
     func dueSlot(at now: Date, calendar: Calendar = .current) -> Date? {

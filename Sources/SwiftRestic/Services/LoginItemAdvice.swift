@@ -25,11 +25,6 @@ enum LoginItemAdvice {
         return .startAtLogin
     }
 
-    /// Whether the scheduler runs this plan by itself at all.
-    static func isScheduled(_ plan: BackupPlan) -> Bool {
-        plan.schedule.frequency != .manual
-    }
-
     /// The plan editor's offer: only when saving turns a schedule on — a
     /// new scheduled plan, or a manual one whose draft is scheduled. An ordinary edit of a plan already on its schedule says
     /// nothing; Settings' switch carries the steady state.
@@ -41,7 +36,7 @@ enum LoginItemAdvice {
         needsApproval: Bool,
         isInstallable: Bool
     ) -> Offer? {
-        guard isScheduled(draft), isNew || !(initial.map(isScheduled) ?? false) else { return nil }
+        guard draft.isScheduled, isNew || !(initial.map({ $0.isScheduled }) ?? false) else { return nil }
         return offer(startsAtLogin: startsAtLogin, needsApproval: needsApproval, isInstallable: isInstallable)
     }
 
@@ -49,7 +44,7 @@ enum LoginItemAdvice {
     /// button that saves it. Only the first: a later plan never undoes a switch
     /// the user turned off in Settings.
     static func registersOnSave(draft: BackupPlan, among plans: [BackupPlan], offer: Offer?) -> Bool {
-        offer == .startAtLogin && isScheduled(draft) && !plans.contains(where: isScheduled)
+        offer == .startAtLogin && draft.isScheduled && !plans.contains(where: { $0.isScheduled })
     }
 
     static func caption(for offer: Offer) -> String {

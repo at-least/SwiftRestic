@@ -666,6 +666,8 @@ final class SnapshotIndex: @unchecked Sendable {
     /// the later arrival first. Only the exact spelling `restic ls` emits
     /// resolves (absolute, no `//`, no trailing `/`); anything else is an
     /// unknown path and answers `[]`.
+    /// No production caller — the Files view reads the chain-restricted
+    /// form below; this is the tests' chain-blind oracle.
     func versions(ofPath path: String) async throws -> [IndexVersion] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
@@ -845,6 +847,9 @@ final class SnapshotIndex: @unchecked Sendable {
     /// After `limit` hits the walk keeps reading only names equal to the last
     /// hit's, so ties are cut by path, not by rowid. A hit's kind is its kind
     /// in the newest indexed snapshot holding it.
+    /// No production caller: the property tests' plain search oracle, that
+    /// the composed searches (`searchWithSummaries`, `searchWithMembership`)
+    /// must agree with.
     func searchPaths(matching query: String, limit: Int) async throws -> [SearchHit] {
         let match = Self.ftsQuery(from: query)
         guard !match.isEmpty, limit > 0 else { return [] }

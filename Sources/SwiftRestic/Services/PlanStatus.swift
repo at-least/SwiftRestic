@@ -242,7 +242,7 @@ enum PlanStatus {
         isBackingUp: Bool = false,
         now: Date = .now
     ) -> TileFace {
-        guard plan.schedule.frequency != .manual else {
+        guard plan.isScheduled else {
             // The row asks when; "Manually" answered how. The schedule row
             // above it keeps the word.
             return TileFace(value: "When you click Back Up Now", help: nil)
@@ -287,7 +287,7 @@ enum PlanStatus {
         existingRepositoryIDs: Set<UUID>,
         now: Date = .now
     ) -> String? {
-        guard plan.schedule.frequency != .manual else { return nil }
+        guard plan.isScheduled else { return nil }
         if Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty {
             return "Not scheduled"
         }
@@ -338,7 +338,7 @@ enum PlanStatus {
             }
             return PlanCaption(text: "Last backup \(relative(lastBackupAt))")
         }
-        if plan.schedule.frequency != .manual,
+        if plan.isScheduled,
            Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty
         {
             return PlanCaption(text: "Not scheduled")

@@ -339,7 +339,7 @@ struct PlanEditorSheet: View {
     /// next tick, a minute at most, as a never-run plan counts as due.
     /// Stated on the Schedule tab, beside the picker that could avoid it.
     private var startsFirstBackupOnCreate: Bool {
-        isNew && LoginItemAdvice.isScheduled(draft)
+        isNew && draft.isScheduled
     }
 
     /// The plan's identity, above the tabs and so on screen from every one
@@ -595,7 +595,7 @@ struct PlanEditorSheet: View {
                     isInstallable: model.loginItemInstallable
                 ), offer != .startAtLogin {
                     LoginItemOfferLine(offer: offer)
-                } else if draft.schedule.frequency != .manual {
+                } else if draft.isScheduled {
                     Text("Runs while SwiftRestic is open, and catches up after the Mac sleeps.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

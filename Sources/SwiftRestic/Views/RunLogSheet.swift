@@ -3,7 +3,7 @@ import SwiftUI
 /// A run's log, read from `Logs/<run-id>.log`: what restic printed, line by
 /// line, with the versions and the verdict around it. A sheet rather than
 /// an inline pane, so Activity's table keeps its height; a log can run to
-/// hundreds of kilobytes, which is what the text view below is for.
+/// hundreds of kilobytes, which is what `LogTextView` is for.
 struct RunLogSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss

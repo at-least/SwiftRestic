@@ -204,7 +204,7 @@ extension AppModel {
     /// (`runSkippedPlansAfterMount`). Locate is for a disk renamed: it never
     /// mounts under the saved name.
     func driveAwayOutcome(_ repository: Repository) -> SnapshotListingOutcome {
-        let next = plans(in: repository.id).contains(where: LoginItemAdvice.isScheduled)
+        let next = plans(in: repository.id).contains(where: { $0.isScheduled })
             ? "Connect it and backups continue on their own."
             : "Connect it to read its backups."
         return .failed(
