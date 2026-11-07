@@ -7,7 +7,7 @@ final class PlanEditorUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A file added to Also exclude (+, the open panel) is in the first backup
+    /// A file added to Exclude (+, the open panel) is in the first backup
     /// and not in the next one: the newest backup restored holds the folder's
     /// other file alone.
     @MainActor
@@ -23,10 +23,10 @@ final class PlanEditorUITests: XCTestCase {
         app.buttons[AccessibilityID.Plan.editExcluded].click()
         let save = app.buttons[AccessibilityID.PlanEditor.save]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
-        // Also exclude's bar opens below the fold: XCUITest calls it hittable
-        // there, and the click lands on whatever covers it. Scrolled up first.
+        // Exclude's + is in view as the editor opens, no scrolling: above
+        // the Cancel and Save bar. XCUITest calls a + below the fold hittable
+        // too, and the click lands on whatever covers it.
         let add = app.buttons[AccessibilityID.PathList.add]
-        app.sheets.firstMatch.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -1000)
         XCTAssertLessThan(add.frame.maxY, save.frame.minY)
         add.click()
         UITest.choose(secret, in: app)

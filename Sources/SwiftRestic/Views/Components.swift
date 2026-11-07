@@ -743,8 +743,8 @@ struct ItemErrorHintsView: View {
                 }
             } message: {
                 Text(excluding.count == 1
-                    ? "The plan’s next backups exclude it — backups already made keep it. The plan editor lists it under Also exclude, where − takes it out again."
-                    : "The plan’s next backups exclude them — backups already made keep them. The plan editor lists them under Also exclude, where − takes each out again.")
+                    ? "The plan’s next backups exclude it — backups already made keep it. The plan editor lists it under Exclude, where − takes it out again."
+                    : "The plan’s next backups exclude them — backups already made keep them. The plan editor lists them under Exclude, where − takes each out again.")
             }
         }
     }
@@ -850,7 +850,7 @@ struct UnreadableItemLine: View {
                 Button("Exclude") { model.exclude(paths: [path], fromPlan: plan.id) }
             }
         } message: {
-            Text("The plan’s next backups exclude \(path ?? "") — backups already made keep it. The plan editor lists it under Also exclude, where − takes it out again.")
+            Text("The plan’s next backups exclude \(path ?? "") — backups already made keep it. The plan editor lists it under Exclude, where − takes it out again.")
         }
         .task(id: path) {
             await existence.check(path)

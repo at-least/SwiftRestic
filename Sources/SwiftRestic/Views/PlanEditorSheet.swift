@@ -471,7 +471,26 @@ struct PlanEditorSheet: View {
                     FullDiskAccessButton()
                 }
             }
-            // What the app leaves out; the list below holds only what the
+            // The user's own list first: what the tab is opened for (the plan
+            // page's Excluded Items Edit…). Below the switches, its + opened
+            // under the editor's fold.
+            Section {
+                PathListEditor(
+                    title: "Exclude",
+                    paths: $draft.excludePatterns,
+                    placeholder: "Type a pattern, such as **/*.iso",  // a String variable, so not parsed as Markdown
+                    browseMessage: "Choose folders and files to exclude from backups",
+                    browsePrompt: "Exclude",
+                    escapesPickedGlobs: true
+                )
+            } header: {
+                Text("Exclude")
+            } footer: {
+                Text("In a pattern, * matches within a name and ** across folders.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            // What the app leaves out; the list above holds only what the
             // user added.
             Section {
                 Text(PlanSkips.always)
@@ -492,25 +511,9 @@ struct PlanEditorSheet: View {
                     }
                 }
             } header: {
-                Text("Exclude")
+                Text("Also exclude")
             }
             .editorSwitches()
-            Section {
-                PathListEditor(
-                    title: "Also exclude",
-                    paths: $draft.excludePatterns,
-                    placeholder: "Type a pattern, such as **/*.iso",  // a String variable, so not parsed as Markdown
-                    browseMessage: "Choose folders and files to exclude from backups",
-                    browsePrompt: "Exclude",
-                    escapesPickedGlobs: true
-                )
-            } header: {
-                Text("Also exclude")
-            } footer: {
-                Text("In a pattern, * matches within a name and ** across folders.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
     }
