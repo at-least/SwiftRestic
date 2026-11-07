@@ -564,7 +564,7 @@ struct RepositoryEditorSheet: View {
     /// asks for the password before Save.
     private var encryptionHint: String? {
         if isNew {
-            return "Everything is encrypted with it, and it can’t be recovered — keep it in your password manager."
+            return PasswordWords.recoveryWarning
         }
         if secretsReadFailed {
             return "Leave this blank to keep whatever password the Keychain holds, or enter the password to replace it."

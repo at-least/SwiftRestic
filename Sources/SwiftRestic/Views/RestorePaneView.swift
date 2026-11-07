@@ -1111,3 +1111,16 @@ private enum BrowserListGrammar {
         return parent == "/" ? nil : parent
     }
 }
+
+private struct FailureUnavailableView: View {
+    let title: LocalizedStringKey
+    let message: String
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message).textSelection(.enabled)
+        }
+    }
+}

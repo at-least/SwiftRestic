@@ -2,57 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// An editor sheet's tabs: a segmented picker over the chosen pane, where a
-/// SwiftUI `TabView` would be an `NSTabView`. That one sizes its tab control
-/// only when its own frame changes size. In a sheet held below its ideal
-/// height by a short window — the main window at its 652 pt minimum — the
-/// last change comes before the control can size itself, and the control
-/// stays 0×0, drawn as a box reading "R…": `NSTabViewSegmentedControl` at
-/// 0×0 beside an intrinsic 160.5×24 (macOS 27.0.1). A relayout
-/// left it so; only another size change of the tab view fixed it.
-///
-/// A pane is built when first shown and kept after, as a `TabView` keeps its
-/// tabs: a pane's task starts on its first visit, and a half-typed field
-/// survives a look at another tab. A hidden pane is disabled, so the Tab key
-/// cannot walk into it.
-struct SheetTabs<Tab: Hashable, Pane: View>: View {
-    @Binding var selection: Tab
-    let tabs: [Tab]
-    let title: (Tab) -> String
-    @ViewBuilder let pane: (Tab) -> Pane
-
-    @State private var shown: Set<Tab> = []
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Picker("Tab", selection: $selection) {
-                ForEach(tabs, id: \.self) { tab in
-                    Text(title(tab)).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-
-            ZStack {
-                ForEach(tabs, id: \.self) { tab in
-                    if tab == selection || shown.contains(tab) {
-                        let isSelected = tab == selection
-                        pane(tab)
-                            .opacity(isSelected ? 1 : 0)
-                            .allowsHitTesting(isSelected)
-                            .disabled(!isSelected)
-                            .accessibilityHidden(!isSelected)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .onChange(of: selection, initial: true) { _, tab in
-            shown.insert(tab)
-        }
-    }
-}
 
 /// Banners built in place (rather than posted to the queue) have nothing to
 /// dismiss, so they hide the close button.
@@ -207,43 +156,6 @@ struct NetworkSharePasswordRows: View {
     }
 }
 
-/// Activity's drawer's rows. Not `LabeledContent`: outside a `Form` it renders
-/// the value hard against the label. They go in a `Grid` so values line up.
-struct DetailRow<Value: View>: View {
-    let label: String
-    @ViewBuilder var value: () -> Value
-
-    init(_ label: String, @ViewBuilder value: @escaping () -> Value) {
-        self.label = label
-        self.value = value
-    }
-
-    var body: some View {
-        GridRow(alignment: .firstTextBaseline) {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 110, alignment: .trailing)
-            value()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
-extension DetailRow where Value == Text {
-    init(_ label: String, _ value: String) {
-        self.init(label) { Text(value) }
-    }
-}
-
-struct DetailGrid<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
-            content()
-        }
-    }
-}
 
 /// A form caption whose teaching text sits behind an info button: the
 /// summary line is always visible, the rest for whoever wants it — the
@@ -357,39 +269,6 @@ struct OperationProgressView: View {
     }
 }
 
-/// The restore strip: while a restore runs, its progress is a fact above
-/// whatever surface is on screen, wired to the model's cancel. A restore
-/// outlives the pane that started it, so the strip's home is the window's
-/// detail column, above every pane; the panes add no copy of their own.
-struct RestoreProgressStrip: View {
-    @Environment(AppModel.self) private var model
-    /// Replaces an empty description. The app-level strip over the panes has
-    /// no other context to name the work; the sheets sit beside the entry
-    /// point that started the restore, so they show the bare description.
-    var fallbackTitle: String? = nil
-
-    var body: some View {
-        if let progress = model.restoreActivity {
-            OperationProgressView(
-                title: title,
-                progress: progress,
-                startedAt: nil,
-                onCancel: { model.cancelRestore() }
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
-        }
-    }
-
-    private var title: String {
-        if model.restoreDescription.isEmpty, let fallbackTitle {
-            return fallbackTitle
-        }
-        return model.restoreDescription
-    }
-}
 
 /// Orange on the glyph only, the words secondary — the contrast rule the
 /// sidebar's captions follow.
@@ -408,43 +287,6 @@ struct WarningLine: View {
     }
 }
 
-/// A retention dry-run's spinner and failure (`RetentionPreviewLoad`). Two
-/// independent `if`s: a failure stands alone, the answer being cleared.
-struct RetentionPreviewStatus: View {
-    let isLoading: Bool
-    let failure: String?
-    let working: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        if isLoading {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(working)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        if let failure {
-            WarningLine(text: Format.firstSentence(failure))
-                .help(failure)
-            Button("Try Again", action: onRetry)
-                .controlSize(.small)
-        }
-    }
-}
-
-struct FailureUnavailableView: View {
-    let title: LocalizedStringKey
-    let message: String
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message).textSelection(.enabled)
-        }
-    }
-}
 
 /// Why a Snapshots value may read "—", in visible text: under the plan page's
 /// Backups section, and as the repository page's Status section body. The tooltips carry the same
@@ -1027,11 +869,65 @@ struct UnreadableItemLine: View {
     }
 }
 
-struct RowChevron: View {
-    var body: some View {
-        Image(systemName: "chevron.forward")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
+/// Where a search looks: this plan, or everything. Finder's search scope, in
+/// the two places a search shows its results. Picking the other one hands the
+/// query over.
+struct SearchScopePicker: View {
+    enum Scope: Hashable {
+        case thisPlan
+        case allBackups
     }
+
+    let scope: Scope
+    let onChange: () -> Void
+
+    var body: some View {
+        Picker("Search", selection: Binding(
+            get: { scope },
+            set: { if $0 != scope { onChange() } }
+        )) {
+            Text("This Plan").tag(Scope.thisPlan)
+            Text("All Backups").tag(Scope.allBackups)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+}
+
+/// A broken search index's failure, with its way out. Nothing the index
+/// answered can be trusted as "nothing matches" while this stands.
+struct IndexFailureView: View {
+    @Environment(AppRouter.self) private var router
+    let title: String
+    let message: String
+    let repositoryID: UUID
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Rebuild Search Index…") {
+                router.request(.confirm(.rebuildIndex(repositoryID)))
+            }
+        }
+    }
+}
+
+/// The files panes' empty state, shared word for word and glyph for glyph:
+/// the path is indexed, and no backup in the location holds a version of it.
+struct NoBackupHoldsItYet: View {
+    var body: some View {
+        ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
+    }
+}
+
+/// What a fresh password field says under itself, on both onboarding
+/// surfaces that ask for one (the first backup's sheet, the location
+/// editor) — one fact, one spelling.
+enum PasswordWords {
+    static let recoveryWarning =
+        "Everything is encrypted with it, and it can’t be recovered — keep it in your password manager."
 }

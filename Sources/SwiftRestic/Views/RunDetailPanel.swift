@@ -422,3 +422,41 @@ private struct RevealRow: View {
         }
     }
 }
+
+/// Activity's drawer's rows. Not `LabeledContent`: outside a `Form` it renders
+/// the value hard against the label. They go in a `Grid` so values line up.
+private struct DetailRow<Value: View>: View {
+    let label: String
+    @ViewBuilder var value: () -> Value
+
+    init(_ label: String, @ViewBuilder value: @escaping () -> Value) {
+        self.label = label
+        self.value = value
+    }
+
+    var body: some View {
+        GridRow(alignment: .firstTextBaseline) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 110, alignment: .trailing)
+            value()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+extension DetailRow where Value == Text {
+    init(_ label: String, _ value: String) {
+        self.init(label) { Text(value) }
+    }
+}
+
+private struct DetailGrid<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
+            content()
+        }
+    }
+}

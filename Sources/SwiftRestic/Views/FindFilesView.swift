@@ -387,49 +387,4 @@ struct FindFilesView: View {
     }
 }
 
-/// Where a search looks: this plan, or everything. Finder's search scope, in
-/// the two places a search shows its results. Picking the other one hands the
-/// query over.
-struct SearchScopePicker: View {
-    enum Scope: Hashable {
-        case thisPlan
-        case allBackups
-    }
 
-    let scope: Scope
-    let onChange: () -> Void
-
-    var body: some View {
-        Picker("Search", selection: Binding(
-            get: { scope },
-            set: { if $0 != scope { onChange() } }
-        )) {
-            Text("This Plan").tag(Scope.thisPlan)
-            Text("All Backups").tag(Scope.allBackups)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-    }
-}
-
-/// A broken search index's failure, with its way out. Nothing the index
-/// answered can be trusted as "nothing matches" while this stands.
-struct IndexFailureView: View {
-    @Environment(AppRouter.self) private var router
-    let title: String
-    let message: String
-    let repositoryID: UUID
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Rebuild Search Index…") {
-                router.request(.confirm(.rebuildIndex(repositoryID)))
-            }
-        }
-    }
-}

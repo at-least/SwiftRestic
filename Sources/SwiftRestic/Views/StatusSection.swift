@@ -118,3 +118,12 @@ struct StatusSection: View {
         }
     }
 }
+
+private struct RowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.forward")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
+    }
+}

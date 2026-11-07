@@ -750,3 +750,189 @@ private struct RetentionOutcomePreview: View {
         }
     }
 }
+
+/// An editor sheet's tabs: a segmented picker over the chosen pane, where a
+/// SwiftUI `TabView` would be an `NSTabView`. That one sizes its tab control
+/// only when its own frame changes size. In a sheet held below its ideal
+/// height by a short window — the main window at its 652 pt minimum — the
+/// last change comes before the control can size itself, and the control
+/// stays 0×0, drawn as a box reading "R…": `NSTabViewSegmentedControl` at
+/// 0×0 beside an intrinsic 160.5×24 (macOS 27.0.1). A relayout
+/// left it so; only another size change of the tab view fixed it.
+///
+/// A pane is built when first shown and kept after, as a `TabView` keeps its
+/// tabs: a pane's task starts on its first visit, and a half-typed field
+/// survives a look at another tab. A hidden pane is disabled, so the Tab key
+/// cannot walk into it.
+private struct SheetTabs<Tab: Hashable, Pane: View>: View {
+    @Binding var selection: Tab
+    let tabs: [Tab]
+    let title: (Tab) -> String
+    @ViewBuilder let pane: (Tab) -> Pane
+
+    @State private var shown: Set<Tab> = []
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Picker("Tab", selection: $selection) {
+                ForEach(tabs, id: \.self) { tab in
+                    Text(title(tab)).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            ZStack {
+                ForEach(tabs, id: \.self) { tab in
+                    if tab == selection || shown.contains(tab) {
+                        let isSelected = tab == selection
+                        pane(tab)
+                            .opacity(isSelected ? 1 : 0)
+                            .allowsHitTesting(isSelected)
+                            .disabled(!isSelected)
+                            .accessibilityHidden(!isSelected)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onChange(of: selection, initial: true) { _, tab in
+            shown.insert(tab)
+        }
+    }
+}
+
+/// A retention dry-run's spinner and failure (`RetentionPreviewLoad`). Two
+/// independent `if`s: a failure stands alone, the answer being cleared.
+private struct RetentionPreviewStatus: View {
+    let isLoading: Bool
+    let failure: String?
+    let working: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        if isLoading {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(working)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        if let failure {
+            WarningLine(text: Format.firstSentence(failure))
+                .help(failure)
+            Button("Try Again", action: onRetry)
+                .controlSize(.small)
+        }
+    }
+}
+
+/// The start-at-login step only the user can take, as the plan editor shows
+/// it. The rules for when it shows are `LoginItemAdvice`'s; this reads only
+/// model state, never the daemon.
+struct LoginItemOfferLine: View {
+    let offer: LoginItemAdvice.Offer
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(LoginItemAdvice.caption(for: offer))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if offer == .awaitingApproval {
+                Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
+                    .controlSize(.small)
+            }
+        }
+    }
+}
+
+/// A plan's scripts, closed until one exists: most plans have none.
+struct HookSection: View {
+    @Binding var hooks: [BackupHook]
+    @State private var isExpanded: Bool
+    @State private var removing: BackupHook?
+
+    init(hooks: Binding<[BackupHook]>) {
+        _hooks = hooks
+        _isExpanded = State(initialValue: !hooks.wrappedValue.isEmpty)
+    }
+
+    var body: some View {
+        Section {
+            DisclosureGroup("Scripts", isExpanded: $isExpanded) {
+                ForEach($hooks) { $hook in
+                    row($hook)
+                }
+                Button("Add Script") { hooks.append(BackupHook()) }
+                // Verbatim: a literal is a LocalizedStringKey, which SwiftUI
+                // parses as Markdown.
+                Text(verbatim: "Runs through /bin/sh with the app’s own privileges, which are not sandboxed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                DisclosureGroup("Environment variables") {
+                    Text(Self.variableReference)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Remove “\(removing?.displayName ?? "")”?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible,
+            presenting: removing
+        ) { hook in
+            Button("Remove") { hooks.removeAll { $0.id == hook.id } }
+        } message: { _ in
+            Text("Nothing is deleted on disk.")
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ hook: Binding<BackupHook>) -> some View {
+        Picker("Run", selection: hook.event) {
+            ForEach(BackupHook.Event.allCases) { event in
+                Text(event.displayName).tag(event)
+            }
+        }
+        TextEditor(text: hook.command)
+            .font(.system(.callout, design: .monospaced))
+            .frame(minHeight: 60)
+            .accessibilityLabel(Text("Command"))
+        HStack {
+            if hook.wrappedValue.event == .beforeBackup {
+                Picker("If it fails", selection: hook.failureBehaviour) {
+                    ForEach(BackupHook.FailureBehaviour.allCases) { behaviour in
+                        Text(behaviour.displayName).tag(behaviour)
+                    }
+                }
+            } else {
+                // By the time it runs the backup is already done.
+                LabeledContent("If it fails", value: "Recorded in Activity")
+            }
+            Button("Remove") { removing = hook.wrappedValue }
+        }
+    }
+
+    private static let variableReference = """
+    SWIFTRESTIC_EVENT             beforeBackup | afterBackup
+    SWIFTRESTIC_PLAN_NAME         plan’s folder name
+    SWIFTRESTIC_PLAN_ID           plan UUID
+    SWIFTRESTIC_REPO_NAME         repository’s drive, folder, host, bucket or remote
+    SWIFTRESTIC_REPO_ID           repository UUID
+    SWIFTRESTIC_OUTCOME           starting | succeeded | completedWithErrors | failed | skipped
+    SWIFTRESTIC_SNAPSHOT_ID       set once the backup is written
+    SWIFTRESTIC_ERROR             set only when something failed
+    SWIFTRESTIC_FILES_NEW         file count
+    SWIFTRESTIC_FILES_CHANGED     file count
+    SWIFTRESTIC_BYTES_PROCESSED   bytes
+    SWIFTRESTIC_DATA_ADDED        bytes written to the repository
+    SWIFTRESTIC_DURATION_SECONDS  seconds
+    """
+}

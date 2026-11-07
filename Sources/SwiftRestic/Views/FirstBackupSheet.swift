@@ -60,7 +60,7 @@ struct FirstBackupSheet: View {
                 Section("Set a password") {
                     SecureField("Password", text: $password, prompt: Text("Required"))
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
-                    Text("Everything is encrypted with it, and it can’t be recovered — keep it in your password manager.")
+                    Text(PasswordWords.recoveryWarning)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

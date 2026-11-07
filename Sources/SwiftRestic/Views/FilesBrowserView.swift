@@ -516,95 +516,9 @@ struct FilesBrowserView: View {
     }
 }
 
-extension View {
-    /// A plan's page's Overview | Backups | Files in the middle of the window
-    /// toolbar:
-    /// Apple's guidance for switching a main window's view (the HIG's
-    /// center area holds the common controls), clear of the trailing
-    /// corner, where the search field sits.
-    func pageTabPicker(_ selection: Binding<PageTab>, tabs: [PageTab]) -> some View {
-        toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: selection) {
-                    // The View menu's words too (⌘1–⌘3).
-                    ForEach(tabs, id: \.self) { tab in
-                        Text(tab.menuTitle).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                // Each segment as wide as the three's were.
-                .frame(width: 80 * CGFloat(tabs.count))
-            }
-        }
-    }
-}
 
-extension View {
-    /// A plan's page's search, in the window toolbar's trailing field — the
-    /// HIG's place for it ("Put a search field at the trailing side of the
-    /// toolbar for many common uses"): the plan's files across every backup.
-    /// Typed on another tab, the page turns to Files, where the hits list. ⌘F
-    /// focuses it (`AppRouter.searchFocus`).
-    func pageSearch(page: SidebarItem, roots: FileNode?, prompt: String) -> some View {
-        modifier(PageSearch(page: page, roots: roots, prompt: prompt))
-    }
 
-    /// The toolbar's field on a page with no Files tab: Return hands the query
-    /// to Search All Backups, which answers as it is typed from then on.
-    func allBackupsSearch() -> some View {
-        modifier(AllBackupsSearchField())
-    }
-}
 
-private struct AllBackupsSearchField: ViewModifier {
-    @Environment(AppRouter.self) private var router
-    @State private var text = ""
-
-    func body(content: Content) -> some View {
-        content
-            .searchable(text: $text, placement: .toolbar, prompt: Text("Search all backups"))
-            .onSubmit(of: .search) {
-                router.openFind(query: text)
-                text = ""
-            }
-    }
-}
-
-private struct PageSearch: ViewModifier {
-    @Environment(AppRouter.self) private var router
-    let page: SidebarItem
-    /// The chain the tab lists; nil for a plan with no repository, which has
-    /// nothing to search.
-    let roots: FileNode?
-    let prompt: String
-    @FocusState private var isFocused: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .searchable(text: text, placement: .toolbar, prompt: Text(verbatim: prompt))
-            .searchFocused($isFocused)
-            .onChange(of: router.searchFocus, initial: true) { _, asked in
-                guard asked == page else { return }
-                router.searchFocus = nil
-                // A turn later: ⌘F may have switched the tab in this update,
-                // and the field takes the focus once it is there.
-                Task { @MainActor in isFocused = true }
-            }
-    }
-
-    private var text: Binding<String> {
-        Binding(
-            get: { roots.flatMap { router.filesSearchText[$0] } ?? "" },
-            set: { newValue in
-                guard let roots else { return }
-                router.filesSearchText[roots] = newValue
-                if !newValue.isEmpty, router.tab(of: page) != .files {
-                    router.setTab(.files, of: page)
-                }
-            }
-        )
-    }
-}
 
 private struct FilesPaneIdentity: Hashable {
     let node: FileNode

@@ -113,7 +113,7 @@ struct FileVersionsView: View {
     private var list: some View {
         if versions.isEmpty {
             // The empty state says why, while the index reads.
-            ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
+            NoBackupHoldsItYet()
         } else {
             List(selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) {
                 // A history past one month is grouped by month, as the

@@ -180,7 +180,7 @@ private struct FolderPaneActions: View {
                     }
                 } else {
                     // Saying why is the pane's banner's job, while the index reads.
-                    ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
+                    NoBackupHoldsItYet()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

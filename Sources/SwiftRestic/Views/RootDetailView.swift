@@ -162,3 +162,37 @@ struct WelcomeView: View {
         }
     }
 }
+
+/// The restore strip: while a restore runs, its progress is a fact above
+/// whatever surface is on screen, wired to the model's cancel. A restore
+/// outlives the pane that started it, so the strip's home is the window's
+/// detail column, above every pane; the panes add no copy of their own.
+private struct RestoreProgressStrip: View {
+    @Environment(AppModel.self) private var model
+    /// Replaces an empty description. The app-level strip over the panes has
+    /// no other context to name the work; the sheets sit beside the entry
+    /// point that started the restore, so they show the bare description.
+    var fallbackTitle: String? = nil
+
+    var body: some View {
+        if let progress = model.restoreActivity {
+            OperationProgressView(
+                title: title,
+                progress: progress,
+                startedAt: nil,
+                onCancel: { model.cancelRestore() }
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+        }
+    }
+
+    private var title: String {
+        if model.restoreDescription.isEmpty, let fallbackTitle {
+            return fallbackTitle
+        }
+        return model.restoreDescription
+    }
+}

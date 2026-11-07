@@ -166,3 +166,70 @@ private struct BackupRow: View {
 
     private static let markWidth: CGFloat = 14
 }
+
+/// What a page's Backups tab says while it lists no backup, once a
+/// listing has succeeded: "No backups yet", or — a plan's page whose
+/// repository holds others — PlanStatus.noneFromThisPlanFact. Before that
+/// it is still being read, and after a failure it says why. A plan's page offers its verb
+/// under the words — the pane would otherwise hold nothing to do; a
+/// group's page has no plan to run, so the words stand alone.
+struct BackupsStatusRow: View {
+    @Environment(AppModel.self) private var model
+    let repositoryID: UUID
+    let planID: UUID?
+
+    var body: some View {
+        let outcome = model.snapshotListingOutcome(for: repositoryID)
+        if model.loadingSnapshots.contains(repositoryID) || outcome == .idle {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading backups…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if case let .failed(message, fix) = outcome {
+            VStack(alignment: .leading, spacing: 4) {
+                // Orange only on the glyph, the words secondary — the
+                // plan rows' contrast rule.
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
+                    Text(Format.firstSentence(message))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .font(.caption)
+                if let fix {
+                    RunFixButton(fix: fix)
+                        .controlSize(.small)
+                } else {
+                    Button("Try Again") {
+                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                    }
+                    .controlSize(.small)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                // A plan's page says which kind of empty this is, as the
+                // Overview's count line does; a group's page, or a
+                // repository with nothing of anyone's, the plain fact.
+                Text(
+                    planID != nil && !model.snapshots(for: repositoryID).isEmpty
+                        ? PlanStatus.noneFromThisPlanFact
+                        : "No backups yet"
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                if let planID {
+                    Button("Back Up Now") { model.runBackup(planID: planID) }
+                        // The rule every Back Up Now follows.
+                        .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
+                        .controlSize(.small)
+                }
+            }
+        }
+    }
+}

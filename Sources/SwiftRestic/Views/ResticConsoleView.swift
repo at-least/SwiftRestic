@@ -6,6 +6,7 @@ import SwiftUI
 /// `ConsoleModel` on the model, not here.
 struct ResticConsoleView: View {
     @Environment(AppModel.self) private var model
+    @State private var finder = LogFinder()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,14 +105,18 @@ struct ResticConsoleView: View {
         .padding(12)
     }
 
+    @ViewBuilder
     private var outputPane: some View {
-        ScrollView {
-            Text(model.console.output.isEmpty ? "Output appears here." : model.console.output)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(model.console.output.isEmpty ? .secondary : .primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if model.console.output.isEmpty {
+            Text("Output appears here.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
+        } else {
+            // restic check on a large repository can print hundreds of
+            // thousands of lines — the log sheet's lazily laid-out text view,
+            // not a SwiftUI Text.
+            LogTextView(text: model.console.output, finder: finder)
         }
     }
 
@@ -122,6 +127,10 @@ struct ResticConsoleView: View {
                 NSPasteboard.general.setString(model.console.output, forType: .string)
             }
             .disabled(model.console.output.isEmpty)
+            Button("Find…") { finder.showFindBar() }
+                .keyboardShortcut("f")
+                .disabled(model.console.output.isEmpty)
+                .help("Search the output (⌘F)")
             Button("Clear") { model.console.clearOutput() }
                 .disabled(model.console.output.isEmpty || model.console.isRunning)
             Spacer()
