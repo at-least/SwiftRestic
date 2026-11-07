@@ -82,6 +82,9 @@ struct SchedulingTests {
             let due = schedule.nextRunDate(after: ahead, now: now, calendar: calendar)
             let fresh = schedule.nextRunDate(after: nil, now: now, calendar: calendar)
             #expect(due == fresh, "\(frequency)")
+            // Past the window clock's lag a stamp is a clock's, not this minute's run.
+            let justPast = now.addingTimeInterval(Schedule.windowClockLag + 1)
+            #expect(schedule.nextRunDate(after: justPast, now: now, calendar: calendar) == fresh, "\(frequency)")
         }
     }
 

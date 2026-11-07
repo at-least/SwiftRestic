@@ -76,10 +76,16 @@ struct Schedule: Codable, Sendable, Hashable {
         }
     }
 
+    /// How far behind the moment the window's now can be: its minute clock.
+    static let windowClockLag: TimeInterval = 60
+
     func nextRunDate(after lastRun: Date?, now: Date = .now, calendar: Calendar = .current) -> Date? {
         // A stamp after now comes from a clock that was set ahead; kept, it
         // would cover every slot until that date and the plan would not run.
-        let lastRun = lastRun.flatMap { $0 <= now ? $0 : nil }
+        // Within a minute of now it is a run of this minute: the window's now
+        // is the minute's start (TimelineView(.everyMinute)), and dropping
+        // the stamp made the page say Due now until the minute turned.
+        let lastRun = lastRun.flatMap { $0 <= now.addingTimeInterval(Self.windowClockLag) ? $0 : nil }
         switch frequency {
         case .manual:
             return nil
