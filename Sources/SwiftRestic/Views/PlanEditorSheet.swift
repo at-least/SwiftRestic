@@ -189,6 +189,7 @@ struct PlanEditorSheet: View {
                     }
                     adopt()
                 }
+                .accessibilityIdentifier(AccessibilityID.PlanEditor.save)
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 // In adopt mode the group must still be there: with the
@@ -525,6 +526,7 @@ struct PlanEditorSheet: View {
                     Text(frequency.displayName).tag(frequency)
                 }
             }
+            .accessibilityIdentifier(AccessibilityID.PlanEditor.frequency)
 
             switch draft.schedule.frequency {
             case .manual:

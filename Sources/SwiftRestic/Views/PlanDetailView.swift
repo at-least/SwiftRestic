@@ -269,9 +269,13 @@ struct PlanDetailView: View {
             now: now
         )
         return Section {
-            LabeledContent("Runs", value: plan.schedule.summary)
+            LabeledContent("Runs") {
+                Text(plan.schedule.summary)
+                    .accessibilityIdentifier(AccessibilityID.Plan.runs)
+            }
             LabeledContent("Next backup") {
                 Text(next.value)
+                    .accessibilityIdentifier(AccessibilityID.Plan.nextBackup)
                     .modifier(TileHelp(help: next.help))
             }
         } header: {
@@ -279,6 +283,7 @@ struct PlanDetailView: View {
                 Text("Schedule")
                 Spacer()
                 Button("Edit…") { router.request(.editPlan(plan.id, tab: .schedule)) }
+                    .accessibilityIdentifier(AccessibilityID.Plan.editSchedule)
                     .controlSize(.small)
                     .help("Change when this plan runs")
             }
@@ -388,6 +393,7 @@ struct PlanDetailView: View {
                 Text("Excluded Items")
                 Spacer()
                 Button("Edit…") { router.request(.editPlan(plan.id, tab: .files)) }
+                    .accessibilityIdentifier(AccessibilityID.Plan.editExcluded)
                     .controlSize(.small)
                     .help("Change what this plan excludes")
             }

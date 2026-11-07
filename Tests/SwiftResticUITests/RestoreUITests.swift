@@ -15,19 +15,7 @@ final class RestoreUITests: XCTestCase {
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
 
-        app.radioButtons["Files"].click()
-        let restoreButton = app.buttons[AccessibilityID.FilesPane.restore]
-        XCTAssertTrue(restoreButton.waitForExistence(timeout: 30))
-        XCTAssertTrue(restoreButton.waitForEnabled())
-        restoreButton.click()
-
-        app.radioButtons["Other folder"].click()
-        app.buttons[AccessibilityID.RestoreSheet.chooseFolder].click()
-        UITest.choose(restored, in: app)
-        let restore = app.buttons[AccessibilityID.RestoreSheet.restore]
-        XCTAssertTrue(restore.waitForEnabled())
-        restore.click()
-
+        UITest.restorePlanFolder(into: restored, in: app)
         let file = try XCTUnwrap(UITest.waitForFile(named: "hello.txt", under: restored))
         XCTAssertEqual(try Data(contentsOf: file), try Data(contentsOf: folders.sourceFile))
         attachScreenshot()

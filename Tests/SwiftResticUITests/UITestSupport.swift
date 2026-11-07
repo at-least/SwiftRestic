@@ -102,6 +102,24 @@ enum UITest {
         return nil
     }
 
+    /// The plan's folder as of its newest backup, restored from its Files tab
+    /// into `folder` ("Other folder" in the destination sheet). Returns once
+    /// the restore is over: Restore… is back on.
+    static func restorePlanFolder(into folder: URL, in app: XCUIApplication) {
+        app.radioButtons["Files"].click()
+        let restoreButton = app.buttons[AccessibilityID.FilesPane.restore]
+        XCTAssertTrue(restoreButton.waitForEnabled())
+        restoreButton.click()
+        app.radioButtons["Other folder"].click()
+        app.buttons[AccessibilityID.RestoreSheet.chooseFolder].click()
+        choose(folder, in: app)
+        let restore = app.buttons[AccessibilityID.RestoreSheet.restore]
+        XCTAssertTrue(restore.waitForEnabled())
+        restore.click()
+        XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
+        XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
+    }
+
     /// The open panel the app's FilePicker runs, driven element by element:
     /// keys sent before a part of it was up went elsewhere, and Choose took
     /// whatever folder the panel happened to have selected.
@@ -120,7 +138,11 @@ enum UITest {
         path.typeKey("a", modifierFlags: [.command])
         path.typeText(folder.path + "\n")
         XCTAssertTrue(goTo.waitForNonExistence(timeout: 10))
-        XCTAssertTrue(panel.popUpButtons["where popup"].waitForValue(folder.lastPathComponent))
+        // Go to Folder opens a folder, or a file's folder with the file selected.
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory))
+        let shown = isDirectory.boolValue ? folder : folder.deletingLastPathComponent()
+        XCTAssertTrue(panel.popUpButtons["where popup"].waitForValue(shown.lastPathComponent))
         panel.buttons["OKButton"].click()
         XCTAssertTrue(panel.waitForNonExistence(timeout: 10))
     }

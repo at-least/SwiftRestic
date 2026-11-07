@@ -515,6 +515,7 @@ struct PathListEditor: View {
             // a pattern is typed into the bar's field beside it.
             HStack(spacing: 0) {
                 ListBarButton(symbol: "plus", title: "Choose items") { browse() }
+                    .accessibilityIdentifier(AccessibilityID.PathList.add)
                 Divider()
                     .frame(height: 14)
                 ListBarButton(symbol: "minus", title: "Remove") { remove(selection) }
