@@ -76,6 +76,14 @@ struct ExternalDisk: Equatable, Sendable {
 
     /// A volume whose facts macOS won't give is not offered: "Other…" still reaches it.
     static func mounted() -> [ExternalDisk] {
+        #if DEBUG
+        // The UI tests' disk (SwiftResticUITests): a folder standing in for the
+        // only disk on the Mac. Not a disk image: macOS gives an attached image
+        // no isInternal, so it is never offered.
+        if let path = ProcessInfo.processInfo.environment["SWIFTRESTIC_DISK"] {
+            return [ExternalDisk(name: (path as NSString).lastPathComponent, path: path)]
+        }
+        #endif
         let keys: [URLResourceKey] = [
             .volumeNameKey, .volumeIsInternalKey, .volumeIsLocalKey, .volumeIsReadOnlyKey, .volumeIsRootFileSystemKey,
         ]

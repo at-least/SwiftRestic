@@ -1,18 +1,20 @@
 import XCTest
 
-/// What every UI test starts from: a folder of its own to back up, an empty
-/// one to keep the backups in and a throwaway configuration, all under the
-/// runner's temporary directory.
+/// What every UI test starts from, under the runner's temporary directory: a
+/// folder of its own to back up, a folder the app takes for the Mac's one
+/// external disk (SWIFTRESTIC_DISK, Debug builds) and a throwaway configuration.
 struct UITestFolders {
     let root: URL
     var config: URL { root.appendingPathComponent("config") }
     var source: URL { root.appendingPathComponent("source") }
-    var backups: URL { root.appendingPathComponent("backups") }
+    var disk: URL { root.appendingPathComponent("Test Disk") }
+    /// Where the first-run sheet keeps the backups on a disk.
+    var repository: URL { disk.appendingPathComponent("SwiftRestic Backups") }
     var sourceFile: URL { source.appendingPathComponent("hello.txt") }
 
     static func make(_ name: String) throws -> UITestFolders {
         let folders = UITestFolders(root: FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID().uuidString)"))
-        for dir in [folders.config, folders.source, folders.backups] {
+        for dir in [folders.config, folders.source, folders.disk] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         try Data("hello\n".utf8).write(to: folders.sourceFile)
@@ -25,6 +27,7 @@ enum UITest {
     static func launch(_ folders: UITestFolders) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SWIFTRESTIC_CONFIG_DIR"] = folders.config.path
+        app.launchEnvironment["SWIFTRESTIC_DISK"] = folders.disk.path
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         return app
@@ -49,12 +52,10 @@ enum UITest {
         app.buttons[AccessibilityID.FirstBackup.chooseSource].click()
         choose(folders.source, in: app)
         XCTAssertTrue(app.staticTexts[AccessibilityID.FirstBackup.source].waitForValue(tilde(folders.source)))
-        XCTAssertTrue(requirement.waitForValue("Choose where the backups go."))
 
-        app.popUpButtons[AccessibilityID.FirstBackup.disk].click()
-        app.menuItems["Other…"].click()
-        choose(folders.backups, in: app)
-        XCTAssertEqual(app.popUpButtons[AccessibilityID.FirstBackup.disk].value as? String, tilde(folders.backups))
+        // One disk on the Mac is the sheet's answer on its own, so the next
+        // question is the password.
+        XCTAssertTrue(app.popUpButtons[AccessibilityID.FirstBackup.disk].waitForValue(folders.disk.lastPathComponent))
         XCTAssertTrue(requirement.waitForValue("Set a password to save it."))
 
         let password = app.secureTextFields[AccessibilityID.FirstBackup.password]
@@ -74,7 +75,7 @@ enum UITest {
 
         // The plan page the sheet lands on counts the backup restic just made.
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue("1 backup", timeout: 120))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: folders.backups.appendingPathComponent("config").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folders.repository.appendingPathComponent("config").path))
     }
 
     /// A path as the app shows it, ~ for the user's home. Not
@@ -101,19 +102,29 @@ enum UITest {
         return nil
     }
 
-    /// The open panel the app's FilePicker runs: Go to Folder with the path,
-    /// then its Choose button.
+    /// The open panel the app's FilePicker runs, driven element by element:
+    /// keys sent before a part of it was up went elsewhere, and Choose took
+    /// whatever folder the panel happened to have selected.
     static func choose(_ folder: URL, in app: XCUIApplication) {
-        let choose = app.buttons["Choose"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        // Go to Folder opens holding the last path typed into it; typing
-        // after it made a path that went nowhere.
-        app.typeKey("a", modifierFlags: [.command])
-        app.typeText(folder.path)
-        app.typeKey(.return, modifierFlags: [])
-        choose.click()
-        XCTAssertTrue(choose.waitForNonExistence(timeout: 10))
+        let panel = app.dialogs["open-panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 10))
+        let goTo = app.sheets["GoToWindow"]
+        let path = goTo.textFields["PathTextField"]
+        // A ⌘⇧G sent as the panel appears is lost: send it until the sheet is up.
+        // Only for a panel a button opens: one the Disk picker's Other… opens
+        // never showed Go to Folder (resent for 20 s, or after a click on it).
+        let deadline = Date().addingTimeInterval(20)
+        repeat {
+            panel.typeKey("g", modifierFlags: [.command, .shift])
+        } while !path.waitForExistence(timeout: 2) && Date() < deadline
+        XCTAssertTrue(path.exists)
+        // Go to Folder opens holding the last path typed into it.
+        path.typeKey("a", modifierFlags: [.command])
+        path.typeText(folder.path + "\n")
+        XCTAssertTrue(goTo.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(panel.popUpButtons["where popup"].waitForValue(folder.lastPathComponent))
+        panel.buttons["OKButton"].click()
+        XCTAssertTrue(panel.waitForNonExistence(timeout: 10))
     }
 }
 
