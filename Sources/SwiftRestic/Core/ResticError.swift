@@ -164,8 +164,10 @@ enum ResticError: Error, LocalizedError, Equatable {
     }
 
     /// What a missing rclone is called everywhere: the repository editor's
-    /// check before restic runs, and a run's failure after.
-    static let rcloneMissing = "rclone is not installed. Install it with brew install rclone."
+    /// check before restic runs, and a run's failure after. With rclone
+    /// inside the app, a missing one is a damaged install — nothing on the
+    /// Mac stands in.
+    static let rcloneMissing = "SwiftRestic is damaged. Install it again."
 
     /// Exit 10's cause and fix, for every kind of location; a disk's also
     /// gets Locate beside it (`RunFix.locate`).

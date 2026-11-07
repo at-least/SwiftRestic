@@ -408,7 +408,11 @@ actor ResticRunner {
         }
         let extraPaths = ResticBinary.helperDirectories + ["/bin", "/usr/sbin", "/sbin"]
         let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
-        var merged = existing
+        // The app's own helpers first: restic shells out to rclone by name,
+        // and the pinned one, not a brew rclone on the inherited PATH, is
+        // what every test ran.
+        var merged = [Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path]
+        merged += existing
         for path in extraPaths where !merged.contains(path) { merged.append(path) }
         env["PATH"] = merged.joined(separator: ":")
         // Keep restic's own progress printer quiet; we drive progress from JSON.

@@ -520,12 +520,20 @@ struct RepositoryEditorSheet: View {
         switch rcloneSetup {
         case nil:
             LabeledContent("Remote") { ProgressView().controlSize(.small) }
-        case .notInstalled:
+        case .damaged:
             Text(ResticError.rcloneMissing).foregroundStyle(.secondary)
         case let .unreadable(message):
             Text(message).foregroundStyle(.secondary)
         case let .remotes(remotes) where remotes.isEmpty:
-            Text(RcloneSetup.noRemotes).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(RcloneSetup.noRemotes)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Reveal rclone") {
+                    NSWorkspace.shared.activateFileViewerSelecting([RcloneBinary.bundled.url])
+                }
+                .controlSize(.small)
+            }
         case let .remotes(remotes):
             Picker("Remote", selection: $draft.rcloneRemote) {
                 if draft.rcloneRemote.isEmpty { Text("Choose").tag("") }
@@ -607,14 +615,16 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// The rclone binary restic would run. The lookup stats the PATH — off
-    /// the main actor, the same rule resolveBinary's own probe follows.
-    private static func locateRclone() async -> URL? {
-        await Task.detached(operation: { ResticBinary.locateHelper(named: "rclone") }).value
+    /// The rclone binary restic would run: the bundled one, as every run
+    /// does. Gone or not runnable, the app is damaged — nothing on the Mac
+    /// stands in.
+    private static func locateRclone() -> URL? {
+        let url = RcloneBinary.bundled.url
+        return ResticBinary.isExecutableFile(atPath: url.path) ? url : nil
     }
 
     private func loadRcloneSetup() async -> RcloneSetup {
-        guard let rclone = await Self.locateRclone() else { return .notInstalled }
+        guard let rclone = Self.locateRclone() else { return .damaged }
         return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
     }
 
@@ -647,7 +657,7 @@ struct RepositoryEditorSheet: View {
         // restic shells out to rclone for this backend; catch a missing helper
         // here rather than letting it surface as an opaque failure from restic.
         if draft.requiresRcloneBinary,
-           await Self.locateRclone() == nil
+           Self.locateRclone() == nil
         {
             status = .failure(ResticError.rcloneMissing)
             return false

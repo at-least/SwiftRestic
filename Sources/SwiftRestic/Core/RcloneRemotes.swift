@@ -13,13 +13,19 @@ struct RcloneRemote: Sendable, Hashable {
 /// What the repository editor offers for a new rclone repository's Remote:
 /// only remotes rclone already has, so setting one up stays rclone's job.
 enum RcloneSetup: Equatable {
-    case notInstalled
+    /// The bundled rclone is gone or not runnable — a damaged install; no
+    /// rclone on the Mac stands in (`RcloneBinary`).
+    case damaged
     case unreadable(String)
     case remotes([RcloneRemote])
 
     static let passwordProtected = "rclone’s configuration is password-protected, and SwiftRestic can’t unlock it. "
         + "To use rclone here, remove the password in Terminal with rclone config."
-    static let noRemotes = "No rclone remotes yet. Set one up in Terminal with rclone config, then come back here."
+    /// Setting a remote up stays Terminal's job, whoever's rclone does it —
+    /// the user's own, or the copy inside the app (revealed beside this
+    /// sentence when there is nothing to list).
+    static let noRemotes = "No rclone remotes yet. Set one up in Terminal with rclone config, then come back here. "
+        + "SwiftRestic’s own rclone works for this even if none is installed on your Mac."
 }
 
 /// Lists the remotes configured in the user's rclone installation.
@@ -88,5 +94,16 @@ struct RcloneRemoteLister: Sendable {
             guard !name.isEmpty else { return nil }
             return RcloneRemote(name: name, type: type)
         }
+    }
+}
+
+/// The one rclone the app runs; `Tools/fetch-rclone.sh` pins it and
+/// `Tools/embed-helpers.sh` puts it here. Not looked for on the Mac: an
+/// rclone the tests never ran could reach different remotes.
+struct RcloneBinary: Sendable {
+    var url: URL
+
+    static var bundled: RcloneBinary {
+        RcloneBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/rclone"))
     }
 }
