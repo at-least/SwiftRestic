@@ -36,6 +36,7 @@ struct FirstBackupSheet: View {
                                     source = url.path
                                 }
                             }
+                            .accessibilityIdentifier(AccessibilityID.FirstBackup.chooseSource)
                         }
                     }
                 }
@@ -51,6 +52,7 @@ struct FirstBackupSheet: View {
                         Divider()
                         Text("Other…").tag(Self.otherTag)
                     }
+                    .accessibilityIdentifier(AccessibilityID.FirstBackup.disk)
                     Button("Use a Server or Cloud Storage…") {
                         onOtherLocation()
                         dismiss()
@@ -59,7 +61,9 @@ struct FirstBackupSheet: View {
                 }
                 Section("Set a password") {
                     SecureField("Password", text: $password, prompt: Text("Required"))
+                        .accessibilityIdentifier(AccessibilityID.FirstBackup.password)
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
+                        .accessibilityIdentifier(AccessibilityID.FirstBackup.confirmPassword)
                     Text(PasswordWords.recoveryWarning)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -91,6 +95,7 @@ struct FirstBackupSheet: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier(AccessibilityID.FirstBackup.requirement)
                 }
                 if isWorking { ProgressView().controlSize(.small) }
                 Spacer()
@@ -98,6 +103,7 @@ struct FirstBackupSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .disabled(isWorking)
                 Button("Back Up") { Task { await backUp() } }
+                    .accessibilityIdentifier(AccessibilityID.FirstBackup.backUp)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(missingRequirement != nil || isWorking)

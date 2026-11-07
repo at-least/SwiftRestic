@@ -158,6 +158,7 @@ struct WelcomeView: View {
                 Button("Back Up a Folder…", action: onAddPlan)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .accessibilityIdentifier(AccessibilityID.Welcome.backUpAFolder)
             }
         }
     }

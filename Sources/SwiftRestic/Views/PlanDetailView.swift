@@ -239,7 +239,10 @@ struct PlanDetailView: View {
         // under the plan its page and the sidebar count it under.
         let snapshots = planBackups(plan)
         return Section {
-            LabeledContent("Total") { snapshotsValue(plan, snapshots: snapshots) }
+            LabeledContent("Total") {
+                snapshotsValue(plan, snapshots: snapshots)
+                    .accessibilityIdentifier(AccessibilityID.Plan.total)
+            }
             LabeledContent("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
             LabeledContent("History", value: plan.retention.summary)
         } header: {

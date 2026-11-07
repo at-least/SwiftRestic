@@ -30,7 +30,7 @@ refuse_concurrent_test_session() {
 # certificate: locally that must still fail, or every rebuild quietly
 # returns to asking the Keychain for the passwords.
 xcodebuild_arguments=(
-    -project SwiftRestic.xcodeproj -scheme SwiftRestic -configuration Debug
+    -project SwiftRestic.xcodeproj -scheme "${xcodebuild_scheme:-SwiftRestic}" -configuration Debug
     -destination "platform=macOS,arch=$(uname -m)"
 )
 if [ "${SWIFTRESTIC_ADHOC_SIGN:-}" = "1" ]; then
