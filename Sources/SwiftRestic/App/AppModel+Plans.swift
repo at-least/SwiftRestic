@@ -110,7 +110,7 @@ extension AppModel {
         } else {
             activity[id] = nil
             planProgress[id] = nil
-            backupRunTokens[id] = nil
+            retireRunToken(for: .plan(id))
         }
         removeFromBackupQueue(id)
         configuration.plans.removeAll { $0.id == id }

@@ -58,6 +58,66 @@ enum BackupStamp: Equatable, Sendable {
     case nothing, whole
 }
 
+/// The pre-run gate the backup and maintenance engines walk, stated once:
+/// the saved shares `paths` need are reconnected first (the hooks may have
+/// mounted them); a share that refused fails the run in the skip's words,
+/// never asking restic, the editor that holds the share's password being
+/// the fix; a local repository's drive that is away skips the run —
+/// restic's "does not exist" could not tell it from a moved folder (both
+/// exit 10, "Fatal: repository does not exist: unable to open config file",
+/// restic 0.19.1); a network repository's server out of reach skips it
+/// within seconds — restic would retry such a server for about a quarter
+/// of an hour, then fail.
+@MainActor
+enum ReachabilityGate {
+    enum Verdict {
+        /// Run. Carries the reconnect failures, for a partial skip's words
+        /// later in the run (a folder whose share would not mount).
+        case clear(reconnectFailures: [String: String])
+        /// A saved share refused to mount — its password, its name, its
+        /// access, a leftover folder, the Keychain. Only the user clears
+        /// this, so the run fails in the skip's words. `sources` are the
+        /// needed paths sitting on the refused volumes, `reasons` their
+        /// refusals by volume.
+        case refusedShare(sources: [String], reasons: [String: String], volumes: [String])
+        /// The repository's drive is away; the run is skipped.
+        case driveAway(reason: String)
+        /// The repository's server is out of reach; the run is skipped.
+        case serverAway(reason: String)
+    }
+
+    static func verdict(
+        of repository: Repository,
+        needing paths: [String],
+        sink: some RunEngineSink,
+        transcript: RunTranscript
+    ) async -> Verdict {
+        let failures = await reconnectAwayShares(of: paths, transcript: transcript, sink: sink)
+        let refused = failures.filter(\.isRefusal)
+        if !refused.isEmpty {
+            let volumes = refused.map(\.volumeName)
+            return .refusedShare(
+                sources: paths.filter { VolumePresence.volumeName(of: $0).map(volumes.contains) == true },
+                reasons: refused.reasonsByVolume,
+                volumes: volumes
+            )
+        }
+        if repository.kind == .local {
+            if await sink.isDriveAway(repository) {
+                return .driveAway(reason: RunRecord.skippedReason(
+                    sources: [repository.resolvedLocalPath],
+                    reconnectFailures: failures.reasonsByVolume
+                ))
+            }
+        } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
+            return .serverAway(reason: RunRecord.serverUnreachableReason(
+                repositoryName: sink.label(of: repository), why: why
+            ))
+        }
+        return .clear(reconnectFailures: failures.reasonsByVolume)
+    }
+}
+
 @MainActor
 protocol RunEngineSink: AnyObject {
     /// What every surface calls the repository (`AppModel.label(of:)`): the
@@ -193,47 +253,25 @@ enum BackupRunEngine {
                 }
             }
 
-            // Network shares this run needs that are away — the repository's
-            // folder, the plan's — mounted with their saved passwords before
-            // the checks below read them as drives that are away. After the
-            // hooks, which may have mounted them.
-            let neededPaths = (repository.kind == .local ? [repository.resolvedLocalPath] : [])
-                + [plan.resolvedPath]
-            let shareFailures = await reconnectAwayShares(
-                of: neededPaths,
-                transcript: transcript,
-                sink: sink
-            )
-            reconnectFailures = shareFailures.reasonsByVolume
-
-            // A share that refused — its password, its name, access, a
-            // leftover folder, the Keychain — comes back only when the user
-            // acts, so the run fails in the skip's words, without asking
-            // restic: a problem like any failure, with the editor that holds
-            // the share's password as its fix (`refusedShares`). One out of
-            // reach is a drive that is away: the checks below skip the run.
-            let refused = shareFailures.filter(\.isRefusal)
-            if !refused.isEmpty {
-                let volumes = refused.map(\.volumeName)
+            // The gate: this run's shares — the repository's folder, the
+            // plan's — reconnected, a refusal failed in the skip's words,
+            // the drive or server that is away skipped.
+            switch await ReachabilityGate.verdict(
+                of: repository,
+                needing: (repository.kind == .local ? [repository.resolvedLocalPath] : [])
+                    + [plan.resolvedPath],
+                sink: sink,
+                transcript: transcript
+            ) {
+            case let .clear(failures):
+                reconnectFailures = failures
+            case let .refusedShare(sources, reasons, volumes):
                 record.outcome = .failed
                 record.refusedShares = volumes
-                record.failureMessage = RunRecord.skippedReason(
-                    sources: neededPaths.filter { VolumePresence.volumeName(of: $0).map(volumes.contains) == true },
-                    reconnectFailures: refused.reasonsByVolume
-                )
+                record.failureMessage = RunRecord.skippedReason(sources: sources, reconnectFailures: reasons)
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 break run
-            }
-
-            // The repository's drive away (after the hooks, which may mount
-            // it): skipped as for the folders' drive, never asking restic,
-            // whose "does not exist" could not tell it from a moved folder
-            // (both exit 10, "Fatal: repository does not exist: unable to
-            // open config file", restic 0.19.1).
-            if await sink.isDriveAway(repository) {
-                let reason = RunRecord.skippedReason(
-                    sources: [repository.resolvedLocalPath], reconnectFailures: reconnectFailures
-                )
+            case let .driveAway(reason):
                 record.outcome = .skipped
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
@@ -241,14 +279,7 @@ enum BackupRunEngine {
                 // why: a refresh would reconnect the share again.
                 sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
                 break run
-            }
-
-            // A network repository's server out of reach (after the hooks,
-            // which may bring up the way to it): skipped as a drive that is
-            // away is, within seconds, never asking restic — which retries
-            // such a server for about a quarter of an hour, then fails.
-            if repository.kind != .local, case let .unreachable(why)? = await sink.probeServer(of: repository) {
-                let reason = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
+            case let .serverAway(reason):
                 record.outcome = .skipped
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
@@ -483,45 +514,36 @@ enum MaintenanceRunEngine {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
 
-            // The repository's network share, away and saved: mounted with
-            // its saved password before restic is asked, as for a backup.
-            // A share that refused fails the run in those words rather than
-            // restic's "repository does not exist". Its drive still away —
-            // no share saved, or one out of reach — the run waits for it,
-            // as a backup does: Skipped, unstamped, so the task stays due,
-            // and the scheduler leaves it alone until the drive is back
-            // (`markDriveAway`).
-            if repository.kind == .local {
-                let failures = await reconnectAwayShares(
-                    of: [repository.resolvedLocalPath],
-                    transcript: transcript,
-                    sink: sink
-                )
-                if failures.contains(where: \.isRefusal) {
-                    record.outcome = .failed
-                    record.refusedShares = failures.filter(\.isRefusal).map(\.volumeName)
-                    record.failureMessage = RunRecord.skippedReason(
-                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
-                    )
-                    break run
-                }
-                if await sink.isDriveAway(repository) {
-                    record.outcome = .skipped
-                    record.detailText = RunRecord.skippedReason(
-                        sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume
-                    )
-                    sink.markDriveAway(repositoryID: repository.id)
-                    await finish(
-                        record: &record, repository: repository, transcript: transcript, sink: sink
-                    )
-                    return
-                }
-            } else if case let .unreachable(why)? = await sink.probeServer(of: repository) {
-                // Its server out of reach: the task waits for it as for a
-                // drive — Skipped, unstamped, left alone until the network
-                // changes or a listing reads the repository again.
+            // The gate, as a backup walks it. Refused, the run fails in the
+            // skip's words; its drive or server still away — no share saved,
+            // or one out of reach — the run waits for it, Skipped,
+            // unstamped, so the task stays due and the scheduler leaves it
+            // alone until the drive is back (`markDriveAway`) or the
+            // network changes (`markServerAway`).
+            switch await ReachabilityGate.verdict(
+                of: repository,
+                needing: repository.kind == .local ? [repository.resolvedLocalPath] : [],
+                sink: sink,
+                transcript: transcript
+            ) {
+            case .clear:
+                break
+            case let .refusedShare(sources, reasons, volumes):
+                record.outcome = .failed
+                record.refusedShares = volumes
+                record.failureMessage = RunRecord.skippedReason(sources: sources, reconnectFailures: reasons)
+                break run
+            case let .driveAway(reason):
                 record.outcome = .skipped
-                record.detailText = RunRecord.serverUnreachableReason(repositoryName: sink.label(of: repository), why: why)
+                record.detailText = reason
+                sink.markDriveAway(repositoryID: repository.id)
+                await finish(
+                    record: &record, repository: repository, transcript: transcript, sink: sink
+                )
+                return
+            case let .serverAway(reason):
+                record.outcome = .skipped
+                record.detailText = reason
                 sink.markServerAway(repositoryID: repository.id)
                 await finish(
                     record: &record, repository: repository, transcript: transcript, sink: sink

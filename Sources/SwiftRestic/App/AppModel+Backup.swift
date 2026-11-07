@@ -26,8 +26,7 @@ extension AppModel {
 
         // Back Up Now on a plan waiting its turn starts it now, out of line.
         removeFromBackupQueue(planID)
-        installPlanActivity(plan: plan, repository: repository)
-        activity[planID]?.askedByUser = askedByUser
+        installPlanActivity(plan: plan, repository: repository, askedByUser: askedByUser)
         tasks.install(Task { [weak self] in
             if let self {
                 await BackupRunEngine.perform(plan: plan, repository: repository, sink: self)
@@ -44,8 +43,8 @@ extension AppModel {
     func unwindPlanRun(_ planID: UUID) {
         tasks.clear(.plan(planID))
         // The token retires with the strip, so a hop from this run drops
-        // from here on — the same rule as restore's unwind.
-        backupRunTokens[planID] = nil
+        // from here on.
+        retireRunToken(for: .plan(planID))
         activity[planID] = nil
         planProgress[planID] = nil
         reconcileSleepAssertion()
@@ -124,9 +123,17 @@ extension AppModel {
     /// they run inside `perform`, sequenced on the main actor before the
     /// unwind clears the strip — only the runner-invoked reporter runs on a
     /// background thread and hops over unsequenced.
-    func installPlanActivity(plan: BackupPlan, repository: Repository) {
-        backupRunTokens[plan.id] = UUID()
-        activity[plan.id] = PlanActivity(repositoryID: repository.id, planName: label(of: plan))
+    func installPlanActivity(
+        plan: BackupPlan,
+        repository: Repository,
+        askedByUser: Bool = true
+    ) {
+        rotateRunToken(for: .plan(plan.id))
+        activity[plan.id] = PlanActivity(
+            repositoryID: repository.id,
+            planName: label(of: plan),
+            askedByUser: askedByUser
+        )
         planProgress[plan.id] = OperationProgress()
         reconcileSleepAssertion()
     }
@@ -177,21 +184,14 @@ extension AppModel: BackupRunEngine.Sink {
     }
 
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
-        let token = backupRunTokens[planID]
-        return { [weak self] progress in
-            Task { @MainActor in
-                // The token, not the strip's existence, is the guard: after
-                // run N unwinds, a hop from run N must drop even though run
-                // N+1 has already installed its own strip. The write lands
-                // in `planProgress` — its own observable storage — so the
-                // tick invalidates the running strip, not every view that
-                // reads the plan's phase.
-                guard let self, self.backupRunTokens[planID] == token else { return }
-                // A status queued behind the end of copying would put the
-                // numbers back, frozen, under "Removing old backups…".
-                guard self.activity[planID]?.phase.isPastCopying != true else { return }
-                self.planProgress[planID] = progress
-            }
+        hopWriter(for: .plan(planID)) { model, progress in
+            // The write lands in `planProgress` — its own observable
+            // storage — so the tick invalidates the running strip, not every
+            // view that reads the plan's phase.
+            // A status queued behind the end of copying would put the
+            // numbers back, frozen, under "Removing old backups…".
+            guard model.activity[planID]?.phase.isPastCopying != true else { return }
+            model.planProgress[planID] = progress
         }
     }
 
@@ -205,13 +205,6 @@ extension AppModel: BackupRunEngine.Sink {
         } else {
             snapshotListingOutcomes[repositoryID] = .failed(reason)
         }
-    }
-
-    func addStartPing(_ event: NotificationEvent) {
-        let channels = configuration.settings.notificationChannels
-        tasks.addBackground(Task.detached {
-            _ = await NotificationPoster.broadcast(event, to: channels)
-        })
     }
 
     func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {

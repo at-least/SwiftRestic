@@ -191,18 +191,15 @@ final class AppModel {
     /// restore; kept beside the task because the task alone cannot be asked
     /// what it is working on.
     var restoreRepositoryID: UUID?
-    /// Which restore run the progress strip belongs to. Rotated when a run
-    /// unwinds so a progress hop still in flight from that run drops instead
-    /// of resurrecting the cleared strip. See `restoreProgressReporter()`.
-    @ObservationIgnored var restoreRunToken = UUID()
-    /// Which backup run each plan's progress strip belongs to — the same
-    /// run-identity rule as `restoreRunToken`, for the plan strips: a hop
-    /// still in flight when run N unwinds must drop instead of writing into
-    /// run N+1's strip. Rotated by `installPlanActivity`. (Maintenance keeps
-    /// its own map — `maintenanceRunTokens`.)
-    @ObservationIgnored var backupRunTokens: [UUID: UUID] = [:]
-    /// The maintenance mirror of `backupRunTokens`, keyed by repository.
-    @ObservationIgnored var maintenanceRunTokens: [UUID: UUID] = [:]
+    /// Which run each slot's progress strip belongs to — the one late-hop
+    /// guard for the plan strips, the maintenance lines and the restore
+    /// strip. A runner's reader thread builds its writer
+    /// (`hopWriter(for:write:)`) and captures the token; the token rotates
+    /// when a strip is installed and retires when it unwinds, so a hop still
+    /// in flight when run N unwinds drops instead of writing into run N+1's
+    /// strip, which nothing else would ever clear. Restore alone rotates at
+    /// its unwind: its reporter is built before the strip is installed.
+    @ObservationIgnored var runTokens: [TaskRegistry.Slot: UUID] = [:]
 
     let store: ConfigStore
     let secrets: SecretStore
@@ -386,6 +383,39 @@ final class AppModel {
                     message: error.localizedDescription,
                     isError: true
                 ))
+            }
+        }
+    }
+}
+
+extension AppModel {
+    /// Gives a slot's new strip its own run identity, so writers built for
+    /// the previous run (`hopWriter`) drop from here on.
+    func rotateRunToken(for slot: TaskRegistry.Slot) {
+        runTokens[slot] = UUID()
+    }
+
+    /// Retires the slot's identity with its strip. A late hop's captured
+    /// token then matches nothing.
+    func retireRunToken(for slot: TaskRegistry.Slot) {
+        runTokens[slot] = nil
+    }
+
+    /// The one late-hop guard for progress writes: a runner's reader thread
+    /// gets this closure, the write hops to the main actor, and it drops
+    /// unless the slot still runs the run that built it. The token, not the
+    /// strip's existence, is the guard: after run N unwinds, a hop from
+    /// run N must drop even though run N+1 has already installed its own
+    /// strip.
+    func hopWriter<Value: Sendable>(
+        for slot: TaskRegistry.Slot,
+        write: @escaping @MainActor (AppModel, Value) -> Void
+    ) -> @Sendable (Value) -> Void {
+        let token = runTokens[slot]
+        return { [weak self] value in
+            Task { @MainActor in
+                guard let self, self.runTokens[slot] == token else { return }
+                write(self, value)
             }
         }
     }

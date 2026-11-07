@@ -84,7 +84,7 @@ extension AppModel {
     /// carries a new run token, so a line still in flight from the previous
     /// job drops instead of writing into this one.
     func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool = true) {
-        maintenanceRunTokens[repositoryID] = UUID()
+        rotateRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = MaintenanceActivity(task: task, askedByUser: askedByUser)
         reconcileSleepAssertion()
     }
@@ -98,7 +98,7 @@ extension AppModel {
         tasks.clear(.maintenance(repositoryID))
         // The token retires with the strip, so a late hop from this job
         // drops.
-        maintenanceRunTokens[repositoryID] = nil
+        retireRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = nil
         reconcileSleepAssertion()
     }
@@ -145,15 +145,8 @@ extension AppModel {
 
 extension AppModel: MaintenanceRunEngine.Sink {
     func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
-        let token = maintenanceRunTokens[repositoryID]
-        return { [weak self] line in
-            Task { @MainActor in
-                // The token, not the activity's existence, is the guard: a
-                // line from job N must drop once job N+1 has installed its
-                // own activity.
-                guard let self, self.maintenanceRunTokens[repositoryID] == token else { return }
-                self.maintenance[repositoryID]?.lastOutput = line
-            }
+        hopWriter(for: .maintenance(repositoryID)) { model, line in
+            model.maintenance[repositoryID]?.lastOutput = line
         }
     }
 

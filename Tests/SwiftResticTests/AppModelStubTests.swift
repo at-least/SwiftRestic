@@ -1823,7 +1823,7 @@ struct AppModelStubTests {
         let removed = harness.plan.id
         harness.model.activity[removed] = PlanActivity(of: harness.plan)
         harness.model.planProgress[removed] = OperationProgress()
-        harness.model.backupRunTokens[removed] = UUID()
+        harness.model.rotateRunToken(for: .plan(removed))
 
         harness.model.deleteRepository(id: harness.repository.id)
 
@@ -1838,7 +1838,7 @@ struct AppModelStubTests {
         // cannot drift apart.
         #expect(harness.model.activity[removed] == nil)
         #expect(harness.model.planProgress[removed] == nil)
-        #expect(harness.model.backupRunTokens[removed] == nil)
+        #expect(harness.model.runTokens[.plan(removed)] == nil)
 
         await harness.model.shutdown()
     }

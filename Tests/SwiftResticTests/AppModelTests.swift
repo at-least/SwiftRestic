@@ -1788,7 +1788,7 @@ struct CheckDataRotationTests {
 }
 
 /// A progress hop still in flight when a run unwinds must not write into the
-/// next run's strip — the run-identity rule `restoreRunToken` gives restores,
+/// next run's strip — the run-identity rule the run tokens give every slot,
 /// pinned here at the seam the engines use.
 @Suite("Run reporters answer to their own run")
 @MainActor
@@ -1817,7 +1817,7 @@ struct RunReporterTokenTests {
 
         // Run 1 unwinds: token and strip are retired, exactly as the engine
         // task does.
-        model.backupRunTokens[plan.id] = nil
+        model.retireRunToken(for: .plan(plan.id))
         model.activity[plan.id] = nil
         model.planProgress[plan.id] = nil
         // A hop still in flight must not resurrect the cleared strip.
@@ -1854,7 +1854,7 @@ struct RunReporterTokenTests {
 
         // Job 1 unwinds: token and activity are retired; a line still in
         // flight must not resurrect either.
-        model.maintenanceRunTokens[repository.id] = nil
+        model.retireRunToken(for: .maintenance(repository.id))
         model.maintenance[repository.id] = nil
         reporter("run 1: pruning…")
         await drainReporterHops()

@@ -152,7 +152,7 @@ extension AppModel {
     /// it is cleared by the in-flight refresh's own `defer`.)
     func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil
-        maintenanceRunTokens[id] = nil
+        retireRunToken(for: .maintenance(id))
         snapshots[id] = nil
         repositoryStats[id] = nil
         snapshotListingOutcomes[id] = nil

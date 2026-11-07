@@ -10,12 +10,8 @@ extension AppModel {
     /// unwind) is what keeps such a late hop from resurrecting the strip,
     /// which nothing else would ever clear.
     func restoreProgressReporter() -> @Sendable (OperationProgress) -> Void {
-        let token = restoreRunToken
-        return { [weak self] progress in
-            Task { @MainActor in
-                guard let self, self.restoreRunToken == token else { return }
-                self.restoreActivity = progress
-            }
+        hopWriter(for: .restore) { model, progress in
+            model.restoreActivity = progress
         }
     }
 
@@ -268,8 +264,10 @@ extension AppModel {
             self.restoreDescription = ""
             self.restoreRepositoryID = nil
             // After the strip clears: any progress hop from this run still
-            // in flight must find a changed token and drop.
-            self.restoreRunToken = UUID()
+            // in flight must find a changed token and drop. Rotated, not
+            // retired — the next restore's reporter is built before its
+            // strip is installed, so the slot always carries an identity.
+            self.rotateRunToken(for: .restore)
             self.tasks.clear(.restore)
         }, in: .restore)
     }
