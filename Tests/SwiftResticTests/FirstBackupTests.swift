@@ -37,6 +37,15 @@ struct FirstBackupTests {
         }
         #expect(reason(source: "", folder: "") == "Choose a folder to back up.")
         #expect(reason(folder: "") == "Choose where the backups go.")
+        // The repository inside what it backs up: every backup would carry
+        // restic's own files (a 6-byte folder backed up as 97 KB).
+        let inside = "Keep the backups outside the folder you’re backing up."
+        #expect(reason(folder: "/Users/u/Documents", password: "") == inside)
+        #expect(reason(folder: "/Users/u/Documents/") == inside)
+        #expect(reason(folder: "/Users/u/Documents/Backups") == inside)
+        #expect(reason(source: "/", folder: "/Volumes/Disk/SwiftRestic Backups") == inside)
+        #expect(reason(folder: "/Users/u/Documents2/Backups") == nil)
+        #expect(reason(source: "/Users/u/Documents/Backups", folder: "/Users/u/Documents") == nil)
         #expect(reason(password: "") == "Set a password to save it.")
         #expect(reason(confirm: "other") == "The passwords don’t match.")
         #expect(reason() == nil)
