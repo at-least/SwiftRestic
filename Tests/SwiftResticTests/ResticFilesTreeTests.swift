@@ -1,12 +1,12 @@
 import Foundation
 import Testing
 
-@Suite("restic Files tree", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic Files tree", .serialized)
 struct ResticFilesTreeTests {
     @MainActor
     @Test("a plan's tree is its folder as the disk holds it: unmarked while the index reads, then a newer file not backed up, a deleted one and a deleted folder's items the backups' alone, an excluded hidden one not at all; a folder gone says so")
     func treeListsTheDisk() async throws {
-        let binary = try ResticAvailability.binary()
+        let binary = try PinnedRestic.binary()
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticDiskTree-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -24,7 +24,7 @@ struct ResticFilesTreeTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "disk-tree-test"
-        let service = try ResticAvailability.service()
+        let service = try PinnedRestic.service()
         let context = RepositoryContext(repository: repository, password: password)
         _ = try await service.initializeRepository(context)
         var plan = BackupPlan()
@@ -36,10 +36,9 @@ struct ResticFilesTreeTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.settings.resticPathOverride = binary.url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
-        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]), resticExecutable: binary.url)
         // The launch's listing is empty, and the index takes it whole.
         await model.bootstrap()
         await model.tasks.drain()
@@ -116,7 +115,7 @@ struct ResticFilesTreeTests {
         let calls: URL
 
         init() async throws {
-            let binary = try ResticAvailability.binary()
+            let binary = try PinnedRestic.binary()
             let base = FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticReadAhead-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -133,7 +132,7 @@ struct ResticFilesTreeTests {
             repository.kind = .local
             repository.localPath = root.appendingPathComponent("repo").path
             let password = "read-ahead-test"
-            let service = try ResticAvailability.service()
+            let service = try PinnedRestic.service()
             let context = RepositoryContext(repository: repository, password: password)
             _ = try await service.initializeRepository(context)
             var plan = BackupPlan()
@@ -152,10 +151,9 @@ struct ResticFilesTreeTests {
             var configuration = AppConfiguration()
             configuration.repositories = [repository]
             configuration.plans = [plan]
-            configuration.settings.resticPathOverride = wrapper.path
             let store = ConfigStore(directory: root.appendingPathComponent("config"))
             try await store.save(configuration)
-            model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+            model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]), resticExecutable: wrapper)
             repositoryID = repository.id
             // A local, not the property: `files` is not set yet, so a closure
             // over the property would capture self half-initialized.
@@ -290,7 +288,7 @@ struct ResticFilesTreeTests {
     @MainActor
     @Test("an index search's full page is not called cut short; one hit past the cap is")
     func searchTruncationAtTheCap() async throws {
-        try ResticAvailability.binary()
+        try PinnedRestic.binary()
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticSearchCap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -301,7 +299,7 @@ struct ResticFilesTreeTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "search-cap-test"
-        _ = try await ResticAvailability.service().initializeRepository(RepositoryContext(repository: repository, password: password))
+        _ = try await PinnedRestic.service().initializeRepository(RepositoryContext(repository: repository, password: password))
 
         // Two plans of one repository: one a full page of notes, one a page
         // and one more. Finder files kept out, so the counts are the writes.
@@ -324,10 +322,9 @@ struct ResticFilesTreeTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [full, over]
-        configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
-        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]), resticExecutable: try PinnedRestic.binary().url)
         await model.bootstrap()
         await model.tasks.drain()
 

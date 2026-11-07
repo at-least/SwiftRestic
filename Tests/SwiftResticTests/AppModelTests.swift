@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 /// Exercises the glue between the scheduler, `ResticService` and the stored run
 /// history — the layer where a real backup can succeed while the app still
 /// records it wrongly.
-@Suite("AppModel backup flow", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("AppModel backup flow", .serialized)
 @MainActor
 struct AppModelTests {
     private struct Harness {
@@ -63,13 +63,8 @@ struct AppModelTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        if let stub {
-            configuration.settings.resticPathOverride = stub.url.path
-        } else {
-            // The restic under test, through the same override: the model's
-            // own lookup would find the installed one.
-            configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
-            _ = try await ResticAvailability.service()
+        if stub == nil {
+            _ = try await PinnedRestic.service()
                 .initializeRepository(RepositoryContext(repository: repository, password: "test-password"))
         }
 
@@ -79,7 +74,8 @@ struct AppModelTests {
 
         let model = AppModel(
             store: store,
-            secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)])
+            secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
+            resticExecutable: try stub?.url ?? PinnedRestic.binary().url
         )
         await model.bootstrap()
 
@@ -1976,14 +1972,16 @@ struct ConfigurationSaveTests {
 
         let saves = (1 ... 3).map { index in
             Task { @MainActor in
-                model.configuration.settings.resticPathOverride = "/bin/restic\(index)"
+                var channel = NotificationChannel()
+                channel.url = "https://save\(index).invalid"
+                model.configuration.settings.notificationChannels = [channel]
                 await model.flushSave()
             }
         }
         for save in saves { await save.value }
 
         let saved = try await ConfigStore(directory: root).load().configuration
-        #expect(saved.settings.resticPathOverride == "/bin/restic3")
+        #expect(saved.settings.notificationChannels.map(\.url) == ["https://save3.invalid"])
     }
 
     @Test("a configuration write that fails is announced, and does not latch the unreadable state")
@@ -2019,7 +2017,7 @@ extension ConfigurationSaveTests {
             .appendingPathComponent("SwiftResticSaveDuringLoad-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         var stored = AppConfiguration()
-        stored.settings.resticPathOverride = "/stored"
+        stored.settings.notifyOnSuccess = true
         stored.runs = (0 ..< 200_000).map { RunRecord(kind: .backup, planName: "Plan \($0)") }
         try await ConfigStore(directory: root).save(stored)
 
@@ -2027,117 +2025,106 @@ extension ConfigurationSaveTests {
         let boot = Task { await model.bootstrap() }
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.configuration.runs.isEmpty, "the load finished before the edit; the test proves nothing")
-        model.configuration.settings.resticPathOverride = "/edited"
+        model.configuration.settings.notifyOnSuccess = false
         await model.flushSave()
         // Read at once: bootstrap's own saves, if any, are debounced.
         struct Settings: Decodable {
-            struct Values: Decodable { let resticPathOverride: String }
+            struct Values: Decodable { let notifyOnSuccess: Bool }
             let settings: Values
         }
         let live = try Data(contentsOf: root.appendingPathComponent("config.json"))
-        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.resticPathOverride == "/stored")
+        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.notifyOnSuccess)
         await boot.value
     }
 }
 
 @Suite("locating restic")
 @MainActor
-struct ResolveBinaryTests {
-    /// A model whose restic path is a script running `body`, in a folder
-    /// the caller removes.
-    private func scriptedModel(running body: String) throws -> (model: AppModel, root: URL, path: String) {
+struct CheckResticTests {
+    /// A model whose restic is a script running `body`, in a folder the caller removes.
+    private func scriptedModel(running body: String) throws -> (model: AppModel, root: URL) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticScriptedBinary-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let program = root.appendingPathComponent("restic")
         try "#!/bin/sh\n\(body)\n".write(to: program, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
-        model.configuration.settings.resticPathOverride = program.path
-        return (model, root, program.path)
+        return (AppModel(store: ConfigStore(directory: root), secrets: .inMemory(), resticExecutable: program), root)
     }
 
-    private func resolve(printing versionLine: String) async throws -> (AppModel, String) {
-        let (model, root, path) = try scriptedModel(running: "echo '\(versionLine)'")
-        defer { try? FileManager.default.removeItem(at: root) }
-        await model.resolveBinary()
-        return (model, path)
-    }
-
-    @Test("a program at the restic path that cannot answer `restic version` is no restic: the app says why")
-    func failedVersionIsAProblem() async throws {
-        let (model, root, _) = try scriptedModel(running: "echo 'not restic' >&2\nexit 1")
-        defer { try? FileManager.default.removeItem(at: root) }
-        await model.resolveBinary()
+    private func expectDamaged(_ model: AppModel) {
         #expect(!model.isResticAvailable)
-        #expect(model.binaryProblem != nil)
+        #expect(model.isResticDamaged)
         #expect(model.resticVersion == "")
+        #expect(throws: ResticError.damagedInstall) { try model.service() }
+        #expect(ResticError.damagedInstall.localizedDescription == "SwiftRestic is damaged. Install it again.")
     }
 
-    @Test("a restic older than the minimum is refused at launch, its version and the fix named, and named as old everywhere else")
-    func olderResticIsRefused() async throws {
-        let (model, path) = try await resolve(printing: "restic 0.18.1 compiled with go1.25.1 on darwin/arm64")
-        #expect(!model.isResticAvailable)
-        #expect(model.resticVersion == "")
-        // Not Homebrew's restic: no brew command to offer.
-        #expect(model.binaryProblem == "SwiftRestic needs restic 0.19.1 or later. The restic at \(path) is 0.18.1. Update it, or set the path to a newer one in Settings.")
-        #expect(model.resticAbsence == .needsUpdate)
-        // What a run asking for restic meets is the same refusal, not "not found".
-        #expect(throws: ResticError.resticTooOld(path: path, found: "0.18.1")) { try model.service() }
-    }
-
-    @Test("Homebrew's restic, wherever its link is, is told to update with brew")
-    func homebrewAdvice() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticCellar-\(UUID().uuidString)").resolvingSymlinksInPath()
+    @Test("a bundled restic that is gone is a damaged install, with no search for another")
+    func missingHelperIsDamaged() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticNoHelper-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let cellar = root.appendingPathComponent("Cellar/restic/0.18.1/bin")
-        try FileManager.default.createDirectory(at: cellar, withIntermediateDirectories: true)
-        try "".write(to: cellar.appendingPathComponent("restic"), atomically: true, encoding: .utf8)
-        let link = root.appendingPathComponent("restic")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: cellar.appendingPathComponent("restic"))
-        #expect(ResticBinary.isHomebrews(link.path))
-        #expect(!ResticBinary.isHomebrews(root.appendingPathComponent("Cellar").path))
-        #expect(ResticError.resticTooOld(path: link.path, found: "0.18.1").localizedDescription
-            == "SwiftRestic needs restic 0.19.1 or later. The restic at \(link.path) is 0.18.1. Update it with brew upgrade restic, or set the path to a newer one in Settings.")
+        let model = AppModel(
+            store: ConfigStore(directory: root), secrets: .inMemory(),
+            resticExecutable: root.appendingPathComponent("restic")
+        )
+        await model.checkRestic()
+        expectDamaged(model)
     }
 
-    @Test("a refused restic is not in use while its version is asked: the scheduler sees none until it is accepted")
-    func refusedResticIsNeverInUse() async throws {
-        // Answers only once the test lets it: the window the check must not leave open.
+    @Test("a bundled restic that cannot answer `restic version` is a damaged install")
+    func failedVersionIsDamaged() async throws {
+        let (model, root) = try scriptedModel(running: "echo 'not restic' >&2\nexit 1")
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.checkRestic()
+        expectDamaged(model)
+    }
+
+    @Test("an answer that names no restic is a damaged install")
+    func unreadableVersionIsDamaged() async throws {
+        let (model, root) = try scriptedModel(running: "echo hello")
+        defer { try? FileManager.default.removeItem(at: root) }
+        await model.checkRestic()
+        expectDamaged(model)
+    }
+
+    @Test("restic is not in use while its version is asked: the scheduler sees none until it answers")
+    func notInUseWhileChecking() async throws {
         let gate = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticSlowVersionGate-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: gate) }
-        let (model, root, _) = try scriptedModel(running:
-            "while [ ! -e '\(gate.path)' ]; do sleep 0.05; done\necho 'restic 0.18.1 compiled with go1.25.1 on darwin/arm64'")
+        let (model, root) = try scriptedModel(running:
+            "while [ ! -e '\(gate.path)' ]; do sleep 0.05; done\necho 'restic 0.19.1 compiled with go1.26.4 on darwin/arm64'")
         defer { try? FileManager.default.removeItem(at: root) }
-        let resolving = Task { await model.resolveBinary() }
-        // Long enough for the locate to finish and `restic version` to start.
+        let checking = Task { await model.checkRestic() }
         for _ in 0 ..< 40 {
             try await Task.sleep(for: .milliseconds(25))
             #expect(!model.isResticAvailable)
+            #expect(!model.isResticDamaged)
         }
         try "".write(to: gate, atomically: true, encoding: .utf8)
-        await resolving.value
-        #expect(!model.isResticAvailable)
-        #expect(model.resticAbsence == .needsUpdate)
+        await checking.value
+        #expect(model.isResticAvailable)
+        #expect(model.resticVersion == "restic 0.19.1 compiled with go1.26.4 on darwin/arm64")
     }
 
-    @Test("a program whose answer names no version is refused, not guessed at")
-    func unreadableVersionIsRefused() async throws {
-        let (model, path) = try await resolve(printing: "hello")
-        #expect(!model.isResticAvailable)
-        #expect(model.binaryProblem == "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic.")
-        #expect(model.resticAbsence == .unusable)
-    }
-
-    @Test("the minimum and anything newer are taken")
-    func supportedResticIsTaken() async throws {
-        for line in ["restic 0.19.1 compiled with go1.26.4 on darwin/arm64", "restic 0.20.0 compiled with go1.27.0 on darwin/arm64"] {
-            let (model, _) = try await resolve(printing: line)
-            #expect(model.isResticAvailable, "\(line)")
-            #expect(model.binaryProblem == nil, "\(line)")
-            #expect(model.resticVersion == line)
-        }
+    @Test("a restic path in an old configuration is ignored: nothing on disk can bypass the pinned restic")
+    func oldPathOverrideIsIgnored() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticOldOverride-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appendingPathComponent("ran")
+        let impostor = root.appendingPathComponent("restic")
+        try "#!/bin/sh\ntouch '\(marker.path)'\necho 'restic 9.9.9 impostor'\n".write(to: impostor, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: impostor.path)
+        try #"{"settings": {"resticPathOverride": "\#(impostor.path)"}}"#
+            .write(to: root.appendingPathComponent("config.json"), atomically: true, encoding: .utf8)
+        let pinned = try PinnedRestic.binary().url
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory(), resticExecutable: pinned)
+        model.loginItemStateReader = { .off }
+        await model.bootstrap()
+        #expect(model.binary?.url == pinned)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+        await model.shutdown()
     }
 }
 
@@ -2427,7 +2414,7 @@ struct UnreadableConfigurationTests {
             return (names, try names.map { try Data(contentsOf: configDirectory.appendingPathComponent($0)) })
         }
         let before = try snapshot()
-        model.configuration.settings.resticPathOverride = "/edited"
+        model.configuration.settings.notifyOnSuccess.toggle()
         await model.flushSave()
         let after = try snapshot()
         #expect(after.names == before.names, "a save changed the configuration files")

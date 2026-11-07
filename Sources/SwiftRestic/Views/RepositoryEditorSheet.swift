@@ -390,7 +390,7 @@ struct RepositoryEditorSheet: View {
         if model.busyRepositoryIDs.contains(draft.id) {
             return BackupPlan.busyRepositoryReason
         }
-        if let absence = model.resticAbsence { return absence.sentence }
+        if model.isResticDamaged { return MenuBarStatus.damagedLine }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
     }
 

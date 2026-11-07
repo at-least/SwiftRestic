@@ -85,6 +85,7 @@ fi
 
 ACTION="${1:-build}"
 source Tools/xcodebuild-common.sh
+Tools/fetch-restic.sh >/dev/null
 
 if [ "$ACTION" = "test" ]; then
     refuse_concurrent_test_session
@@ -110,28 +111,30 @@ if [ "$ACTION" = "test" ] && runner_restarted "$log"; then
 fi
 
 # A successful exit is not enough: xcodebuild reports success even when a
-# filter or a stale project file selects zero tests — the swift-testing
+# filter or a stale project file selects zero tests: the swift-testing
 # summary line is then absent entirely. Only checked when xcodebuild itself
 # succeeded, so a compile failure is not mislabelled as an empty run.
-# SWIFTRESTIC_TEST_DISALLOW_SKIP (set in CI) goes one step further: the
-# integration suites skip when restic is missing, and a job that silently
-# skipped them would still be green, so their suite line must appear in the
-# log. (An environment variable cannot do this check inside the tests:
-# xcodebuild does not forward the shell environment to the test process.)
-# Locally, without that variable, a missing suite only draws a warning — the
-# skip still happens, but it is no longer silent. The grep string must stay
-# in sync with the @Suite("restic integration") name in
-# Tests/SwiftResticTests/ResticIntegrationTests.swift and with swift-testing's
-# "Suite ... started" console line.
 if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     if ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
         echo "error: test run reported success without executing any tests" >&2
         status=1
-    elif [ "${SWIFTRESTIC_TEST_DISALLOW_SKIP:-0}" = "1" ] && ! grep -q 'Suite "restic integration" started' "$log"; then
-        echo "error: SWIFTRESTIC_TEST_DISALLOW_SKIP is set but the restic integration suite did not run — is restic installed?" >&2
+    fi
+fi
+
+# The app in the build folder must carry the pinned restic under a seal that
+# holds: what the tests ran on is what ships.
+if [ "$status" -eq 0 ]; then
+    app="$(xcodebuild "${xcodebuild_arguments[@]}" -showBuildSettings 2>/dev/null \
+        | awk -F' = ' '/^ *TARGET_BUILD_DIR = /{dir=$2} /^ *WRAPPER_NAME = /{name=$2} END{print dir"/"name}')"
+    pinned="$(Tools/fetch-restic.sh)"
+    if ! codesign --verify --deep --strict "$app"; then
+        echo "error: $app fails codesign --verify --deep --strict" >&2
         status=1
-    elif [ "${CI:-false}" = "false" ] && ! grep -q 'Suite "restic integration" started' "$log"; then
-        echo "warning: the restic integration suite did not run, so this result is missing real-restic coverage — is restic installed? (brew install restic)" >&2
+    elif [ "$("$app/Contents/Helpers/restic" version)" != "$("$pinned" version)" ]; then
+        echo "error: $app/Contents/Helpers/restic is not the pinned restic" >&2
+        status=1
+    else
+        echo "bundled: $("$app/Contents/Helpers/restic" version)"
     fi
 fi
 exit "$status"

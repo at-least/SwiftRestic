@@ -1,13 +1,13 @@
 import Foundation
 import Testing
 
-/// No restic binary is configured, so an executed command settles on the
-/// binary-not-found error — that is enough to prove execution happened and
-/// its aftermath (output, running flag, history) was recorded.
+/// restic is never checked, so an executed command settles on the
+/// damaged-install error: enough to prove execution happened and its
+/// aftermath (output, running flag, history) was recorded.
 @Suite("Console pane model")
 @MainActor
 struct ConsoleModelTests {
-    /// A model with no restic override and an isolated config directory, so
+    /// A model with an isolated config directory, so
     /// nothing touches the login Keychain or a real configuration.
     private func makeHarness() throws -> (app: AppModel, console: ConsoleModel, root: URL) {
         let root = FileManager.default.temporaryDirectory
@@ -35,6 +35,31 @@ struct ConsoleModelTests {
         app.pointConsole(at: other.id)
         app.consoleDidAppear()
         #expect(console.repositoryID == other.id)
+    }
+
+    @Test("`self-update` is refused in any position, and restic is never run: it would overwrite the signed bundled binary")
+    func selfUpdateIsRefused() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticSelfUpdate-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appendingPathComponent("ran")
+        let program = root.appendingPathComponent("restic")
+        try "#!/bin/sh\ntouch '\(marker.path)'\n".write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        let app = AppModel(
+            store: ConfigStore(directory: root.appendingPathComponent("config")),
+            secrets: .inMemory([repository.id: (password: "p", providerSecret: nil)]), resticExecutable: program
+        )
+        app.resticState = .ready(ResticBinary(url: program), version: "")
+        app.configuration.repositories = [repository]
+        for arguments in [["self-update"], ["--verbose", "self-update", "--output", "/tmp/x"]] {
+            let output = await app.runConsoleCommand(repositoryID: repository.id, arguments: arguments)
+            #expect(output == "restic updates come with SwiftRestic.")
+        }
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
     }
 
     @Test("a destructive command arms a confirmation instead of running")

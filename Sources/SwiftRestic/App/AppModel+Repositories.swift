@@ -257,11 +257,8 @@ extension AppModel {
     /// the protocol, and this is the one place the concrete binary-backed
     /// implementation is chosen.
     func service() throws -> any ResticClient {
-        switch resticSearch {
-        case let .found(binary, _): return ResticService(runner: runner, binary: binary.url)
-        case let .refused(error, _): throw error
-        case .searching: throw ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
-        }
+        guard case let .ready(binary, _) = resticState else { throw ResticError.damagedInstall }
+        return ResticService(runner: runner, binary: binary.url)
     }
 }
 

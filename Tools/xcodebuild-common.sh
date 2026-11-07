@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# What build.sh, Tools/sqlite-floor.sh and Tools/restic-version.sh share
+# What build.sh and Tools/sqlite-floor.sh share
 # about running xcodebuild. Sourced from the repository root.
 
 # Two xcodebuild test sessions on one machine stomp each other's testmanagerd

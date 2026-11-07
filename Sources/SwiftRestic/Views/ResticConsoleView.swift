@@ -125,6 +125,10 @@ struct ResticConsoleView: View {
             Button("Clear") { model.console.clearOutput() }
                 .disabled(model.console.output.isEmpty || model.console.isRunning)
             Spacer()
+            Text(model.resticVersion)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
         .padding(12)
     }

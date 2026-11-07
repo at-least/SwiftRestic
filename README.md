@@ -17,8 +17,9 @@ Cloud locations set up earlier keep working; new ones go through rclone.
 ## Requirements
 
 - macOS 15 or later.
-- restic 0.19.1 or later on this Mac (`brew install restic`). The app does
-  not download or update restic.
+- Nothing else for most people. restic 0.19.1 is inside the app, and the app
+  runs only that copy, whatever else is on the Mac. restic's BSD 2-Clause
+  license is in the About window. restic updates come with app updates.
 - rclone, only for rclone remotes (`brew install rclone`), with the remote
   already configured with `rclone config`.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
@@ -28,12 +29,15 @@ Cloud locations set up earlier keep working; new ones go through rclone.
 ## Build, run and test
 
 ```sh
-brew install restic xcodegen
+brew install xcodegen
 ./build.sh                     # regenerate the Xcode project, then build
-./build.sh test                # unit tests and end-to-end tests against the installed restic
-Tools/restic-version.sh 0.19.1 # the real-restic suites on one restic release
+./build.sh test                # unit tests and end-to-end tests against the bundled restic
 open SwiftRestic.xcodeproj     # or work in Xcode
 ```
+
+The build downloads the pinned restic from GitHub into `.build/` once and
+checks its SHA-256. To move to a new restic, change the version and both
+checksums in `Tools/fetch-restic.sh`, then run the tests.
 
 Debug builds are signed with the author's Apple Development certificate. On
 another Mac, build ad hoc:
@@ -43,7 +47,8 @@ SWIFTRESTIC_ADHOC_SIGN=1 ./build.sh test
 ```
 
 Release builds are ad hoc signed with the hardened runtime off. Distribution
-would need a Developer ID, the hardened runtime and notarization.
+would need a Developer ID, the hardened runtime and notarization, for the app
+and for the restic inside it.
 
 ## Where it keeps things
 

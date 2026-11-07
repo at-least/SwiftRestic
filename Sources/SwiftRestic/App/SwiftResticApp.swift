@@ -125,7 +125,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
         Task { await model?.refreshLoginItemStatus() }
-        Task { await model?.findResticIfRefused() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

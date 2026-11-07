@@ -44,8 +44,8 @@ final class AppModel {
         return items
     }
 
-    /// `resolveBinary` writes it whole.
-    var resticSearch: ResticSearch = .searching
+    /// `checkRestic` writes it whole.
+    var resticState: ResticState = .checking
     var activity: [UUID: PlanActivity] = [:]
     /// Live backup progress per plan, in its own observable storage: a
     /// restic status tick (~1/sec) lands here and invalidates only the views
@@ -139,10 +139,12 @@ final class AppModel {
     /// symlinks on every render. It feeds only what the surfaces offer:
     /// registering keeps its own live check.
     @ObservationIgnored let loginItemInstallable: Bool
+    /// An init parameter and never configuration, so nothing on disk can
+    /// point the app at another restic. Only tests pass one.
+    @ObservationIgnored let resticExecutable: URL
     /// Whether SwiftRestic — and so its restic — may read what Full Disk
     /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
     var fullDiskAccess: FullDiskAccessStatus = .unknown
-    var binarySearchGeneration = 0
     /// The probe behind `fullDiskAccess`. Injectable because the real one
     /// answers for whatever process macOS holds responsible — under
     /// xcodebuild that is Xcode, not the terminal — so a test asserting on
@@ -303,8 +305,10 @@ final class AppModel {
         serverProbe: ServerProbe = .network,
         volumeProbe: VolumeProbe = .fileSystem,
         defaults: UserDefaults = .standard,
-        localHostname: String = ResticService.localHostname
+        localHostname: String = ResticService.localHostname,
+        resticExecutable: URL = ResticBinary.bundled.url
     ) {
+        self.resticExecutable = resticExecutable
         self.store = store
         self.secrets = secrets
         self.shareMounter = shareMounter

@@ -44,6 +44,8 @@ targets:
     platform: macOS
     sources:
       - path: Sources/SwiftRestic
+      - path: Support/Credits.rtf
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftRestic
@@ -53,6 +55,10 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Support/SwiftRestic.entitlements
         COMBINE_HIDPI_IMAGES: YES
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/../Frameworks"]
+    postBuildScripts:
+      - name: Embed restic
+        script: '"$SRCROOT/Tools/embed-restic.sh"'
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: GRDB
 

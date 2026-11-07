@@ -11,47 +11,13 @@ concurrency:
 
 jobs:
   test:
-    name: Tests (macOS, Homebrew's restic)
+    name: Tests (macOS)
     # macos-26 defaults to Xcode 26.6; macos-15's Xcode 16.4 SDK does not
     # mark UNNotificationSettings Sendable, which Swift 6 strict concurrency
     # rejects in AppModel+Notifications.
     runs-on: macos-26
     env:
-      # A silent skip is a lie in CI: with this set, a missing restic fails the
-      # run instead of letting every integration suite skip. The guard itself
-      # lives in build.sh, which greps the log for the integration suite's
-      # start line.
-      SWIFTRESTIC_TEST_DISALLOW_SKIP: "1"
       # The runner has no Apple Development certificate; see build.sh.
-      SWIFTRESTIC_ADHOC_SIGN: "1"
-    steps:
-      - uses: actions/checkout@v4
-
-      # Unpinned on purpose: this job is the one that meets a new restic
-      # release first. The pinned job below says whether a failure here is
-      # restic's change or the app's.
-      - name: Install restic and xcodegen
-        run: brew install restic xcodegen
-
-      # build.sh regenerates the project (xcodegen snapshots the file list),
-      # runs xcodebuild test, and fails both on a failed run and on a run that
-      # executed no tests at all.
-      - name: Run the suite
-        run: ./build.sh test
-
-  restic-version:
-    name: Real-restic suites (restic ${{ matrix.restic }}, ${{ matrix.role }})
-    runs-on: macos-26
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Must equal ResticVersion.minimumSupported; ResticVersionTests
-          # reads this line. When a newer restic becomes the one the app is
-          # built against, it gets its own entry here.
-          - restic: "0.19.1"
-            role: oldest supported
-    env:
       SWIFTRESTIC_ADHOC_SIGN: "1"
     steps:
       - uses: actions/checkout@v4
@@ -59,15 +25,8 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      # Downloads that release from GitHub, checks its SHA-256, and runs every
-      # suite that drives a real restic on it; fails unless the tests show
-      # they ran on that version.
-      - name: Run the real-restic suites
-        run: Tools/restic-version.sh "${{ matrix.restic }}" restic-${{ matrix.restic }}.log
-
-      - name: Keep the log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: restic-${{ matrix.restic }}-log
-          path: restic-${{ matrix.restic }}.log
+      # build.sh regenerates the project (xcodegen snapshots the file list),
+      # runs xcodebuild test, and fails both on a failed run and on a run that
+      # executed no tests at all.
+      - name: Run the suite
+        run: ./build.sh test

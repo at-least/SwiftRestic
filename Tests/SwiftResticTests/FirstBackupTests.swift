@@ -4,7 +4,7 @@ import Testing
 @Suite("first backup")
 @MainActor
 struct FirstBackupTests {
-    /// Against the installed restic: the sheet's whole job is what restic
+    /// Against the pinned restic: the sheet's whole job is what restic
     /// makes on disk.
     private func makeModel() throws -> (model: AppModel, root: URL) {
         let root = FileManager.default.temporaryDirectory
@@ -12,7 +12,7 @@ struct FirstBackupTests {
             .resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let model = AppModel(store: ConfigStore(directory: root.appendingPathComponent("config")), secrets: .inMemory())
-        model.resticSearch = .found(try ResticAvailability.binary(), version: "")
+        model.resticState = .ready(try PinnedRestic.binary(), version: "")
         // Never the daemon: xctest lives under /Applications, so it counts as
         // installed and the first scheduled plan would really register it.
         model.loginItemStateReader = { .off }
@@ -90,12 +90,11 @@ struct FirstBackupTests {
         await model.shutdown()
     }
 
-    @Test("with no restic a created plan is saved and does not start")
+    @Test("with a damaged restic a created plan is saved and does not start")
     func createdPlanWithoutRestic() async throws {
         let (model, root) = try makeModel()
         defer { try? FileManager.default.removeItem(at: root) }
-        let notFound = ResticError.binaryNotFound(searched: [])
-        model.resticSearch = .refused(notFound, problem: notFound.localizedDescription)
+        model.resticState = .damaged
         var plan = BackupPlan()
         plan.path = root.path
         model.createPlan(plan)
@@ -136,7 +135,7 @@ struct FirstBackupTests {
         let folder = root.appendingPathComponent("Disk/Backups").path
         var existing = Repository()
         existing.localPath = folder
-        _ = try await ResticService(runner: model.runner, binary: try ResticAvailability.binary().url)
+        _ = try await ResticService(runner: model.runner, binary: try PinnedRestic.binary().url)
             .initializeRepository(RepositoryContext(repository: existing, password: "right", providerSecret: nil))
 
         await #expect(throws: ResticError.self) {
@@ -251,77 +250,23 @@ struct FirstBackupTests {
     }
 }
 
-@Suite("finding restic again")
+@Suite("a damaged restic")
 @MainActor
-struct FindResticAgainTests {
-    private let workingVersion = "restic 0.19.1 compiled with go1.27.1 on darwin/arm64"
-
-    private func makeModel(pathExists: Bool) throws -> (model: AppModel, root: URL, program: URL) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticFindAgain-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let program = root.appendingPathComponent("restic")
-        if pathExists { try install(program) }
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
-        model.configuration.settings.resticPathOverride = program.path
-        return (model, root, program)
-    }
-
-    private func install(_ program: URL) throws {
-        try "#!/bin/sh\necho '\(workingVersion)'\n".write(to: program, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-    }
-
-    @Test("coming back after installing restic clears the block, with no relaunch")
-    func activationFindsInstalledRestic() async throws {
-        let (model, root, program) = try makeModel(pathExists: false)
-        defer { try? FileManager.default.removeItem(at: root) }
-        await model.resolveBinary()
-        #expect(!model.isResticAvailable)
-        await model.findResticIfRefused()
-        #expect(!model.isResticAvailable, "nothing installed yet")
-
-        try install(program)
-        await model.findResticIfRefused()
-        #expect(model.isResticAvailable)
-    }
-
-    @Test("a working restic is not looked for again on every activation")
-    func activationLeavesAWorkingRestic() async throws {
-        let (model, root, program) = try makeModel(pathExists: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        await model.resolveBinary()
-        #expect(model.isResticAvailable)
-        try FileManager.default.removeItem(at: program)
-        await model.findResticIfRefused()
-        #expect(model.isResticAvailable, "only a refusal looks again")
-    }
-
-    @Test("without restic neither form that needs it opens")
+struct DamagedResticFormsTests {
+    @Test("while restic is damaged a new location cannot open; a plan into one that exists still can")
     func formsWaitForRestic() async throws {
-        let (model, root, program) = try makeModel(pathExists: false)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticDamagedForms-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        await model.resolveBinary()
+        let model = AppModel(
+            store: ConfigStore(directory: root), secrets: .inMemory(),
+            resticExecutable: root.appendingPathComponent("restic")
+        )
+        await model.checkRestic()
         var commands = model.repositoryCommands(for: nil)
         #expect(!commands.canAddRepository && !commands.canNewPlan)
-
-        // A plan needs no restic to save into a repository that exists.
         model.configuration.repositories = [Repository()]
         commands = model.repositoryCommands(for: nil)
         #expect(!commands.canAddRepository && commands.canNewPlan)
-
-        try install(program)
-        await model.findResticAgain()
-        #expect(model.repositoryCommands(for: nil).canAddRepository)
-    }
-
-    @Test("a missing restic says what to do, and an old one how to update")
-    func setupWords() {
-        #expect(ResticAbsence.missing.headline == "SwiftRestic needs restic to back up.")
-        #expect(ResticAbsence.missing.guidance == "Install it, then come back. SwiftRestic finds it on its own.")
-        #expect(ResticAbsence.missing.installCommand == "brew install restic")
-        #expect(ResticAbsence.needsUpdate.installCommand == "brew upgrade restic")
-        #expect(ResticAbsence.unusable.installCommand == nil && ResticAbsence.unusable.guidance == nil)
     }
 }
 
@@ -341,8 +286,8 @@ struct LocateRepositoryTests {
             store: ConfigStore(directory: root.appendingPathComponent("config")),
             secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
         )
-        model.resticSearch = .found(try ResticAvailability.binary(), version: "")
-        _ = try await ResticAvailability.service().initializeRepository(
+        model.resticState = .ready(try PinnedRestic.binary(), version: "")
+        _ = try await PinnedRestic.service().initializeRepository(
             RepositoryContext(repository: repository, password: Self.password, providerSecret: nil)
         )
         model.configuration.repositories = [repository]
@@ -403,7 +348,7 @@ struct LocateRepositoryTests {
         await model.refreshSnapshots(repositoryID: repository.id)
         var other = Repository()
         other.localPath = root.appendingPathComponent("Other").path
-        _ = try await ResticAvailability.service().initializeRepository(
+        _ = try await PinnedRestic.service().initializeRepository(
             RepositoryContext(repository: other, password: Self.password, providerSecret: nil)
         )
         await #expect(throws: LocateRefusal.differentRepository(name: model.label(of: repository))) {
@@ -428,7 +373,7 @@ struct LocateRepositoryTests {
 
         var locked = Repository()
         locked.localPath = root.appendingPathComponent("Locked").path
-        _ = try await ResticAvailability.service().initializeRepository(
+        _ = try await PinnedRestic.service().initializeRepository(
             RepositoryContext(repository: locked, password: "another", providerSecret: nil)
         )
         await #expect(throws: LocateRefusal.wrongPassword(name: name)) {
@@ -496,7 +441,7 @@ struct RepositoryBackUpNowTests {
     func repositoryCommands() {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticBackUpNow-\(UUID().uuidString)")), secrets: .inMemory())
-        model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
+        model.resticState = .ready(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
         var repository = Repository()
         repository.localPath = "/r"
         var empty = Repository()

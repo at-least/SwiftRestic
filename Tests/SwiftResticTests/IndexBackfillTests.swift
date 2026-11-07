@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 import Testing
 
-@Suite("index backfill", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("index backfill", .serialized)
 struct IndexBackfillTests {
     private static let password = "integration-test-password"
 
@@ -48,7 +48,7 @@ struct IndexBackfillTests {
         plan.path = source.path
 
         let context = RepositoryContext(repository: repository, password: Self.password)
-        let service = try ResticAvailability.service()
+        let service = try PinnedRestic.service()
         _ = try await service.initializeRepository(context)
         return Scene(root: root, source: source, repository: repository, plan: plan, context: context, service: service)
     }

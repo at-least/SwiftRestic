@@ -7,8 +7,6 @@ import SwiftUI
 struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(\.openSettings) private var openSettings
-    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
 
     /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
     /// rows the pane needs land with the first listing, so the selection
@@ -33,25 +31,12 @@ struct RootDetailView: View {
             RestoreProgressStrip(fallbackTitle: "Restoring…")
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
-            // is why.
-            // Only once the search for restic has answered: until then the
-            // binary is unknown, not missing.
-            // On Welcome the setup state says it instead.
-            if case let .refused(error, problem) = model.resticSearch, router.selection != nil {
-                let absence = ResticAbsence(refusal: error)
-                // Built in place, not posted: the condition is the model's
-                // binary state, so there is nothing to dismiss.
+            // is why. Built in place, not posted: the condition is the model's
+            // state, so there is nothing to dismiss.
+            if model.isResticDamaged, router.selection != nil {
                 BannerView(
-                    banner: Banner(
-                        title: absence.headline,
-                        message: absence.guidance ?? problem,
-                        isError: true
-                    ),
-                    isDismissible: false,
-                    settingsAction: {
-                        settingsPane = SettingsView.resticPane
-                        openSettings()
-                    }
+                    banner: Banner(title: MenuBarStatus.damagedLine, message: "", isError: true),
+                    isDismissible: false
                 )
             }
             BannerQueue()
@@ -102,8 +87,8 @@ struct RootDetailView: View {
                 }
             }
         }
-        // Search All Backups needs restic: a binary lost while it is open must move
-        // the selection off it.
+        // Search All Backups needs restic: a damaged one must move the
+        // selection off it.
         .onChange(of: model.isResticAvailable) {
             onRevalidateSelection()
         }
@@ -157,11 +142,7 @@ struct WelcomeView: View {
     var body: some View {
         ContentUnavailableView {
             Label {
-                if case let .refused(error, _) = model.resticSearch {
-                    Text(ResticAbsence(refusal: error).headline)
-                } else {
-                    Text("SwiftRestic")
-                }
+                Text("SwiftRestic")
             } icon: {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
@@ -169,57 +150,15 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
             }
         } description: {
-            if case let .refused(error, problem) = model.resticSearch {
-                ResticSetupDescription(absence: ResticAbsence(refusal: error), problem: problem)
-            } else {
-                Text("Keep a copy of your folders on another disk or in the cloud.")
-            }
+            Text(model.isResticDamaged
+                ? MenuBarStatus.damagedLine
+                : "Keep a copy of your folders on another disk or in the cloud.")
         } actions: {
-            if case let .refused(error, _) = model.resticSearch {
-                ResticSetupActions(absence: ResticAbsence(refusal: error))
-            } else {
+            if !model.isResticDamaged {
                 Button("Back Up a Folder…", action: onAddPlan)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
             }
-        }
-    }
-}
-
-/// What Welcome says until restic is here: nothing else on the page can be
-/// saved without it. It clears itself (`AppModel.findResticIfRefused`).
-private struct ResticSetupDescription: View {
-    let absence: ResticAbsence
-    let problem: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(absence.guidance ?? problem)
-            if let command = absence.installCommand {
-                Text(command)
-                    .monospaced()
-                    .textSelection(.enabled)
-            }
-        }
-    }
-}
-
-private struct ResticSetupActions: View {
-    @Environment(\.openSettings) private var openSettings
-    @AppStorage(SettingsView.paneKey) private var settingsPane = 0
-    let absence: ResticAbsence
-
-    var body: some View {
-        if let command = absence.installCommand {
-            Button("Copy Command") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(command, forType: .string)
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        Button("Open Settings…") {
-            settingsPane = SettingsView.resticPane
-            openSettings()
         }
     }
 }

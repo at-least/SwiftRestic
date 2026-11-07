@@ -138,6 +138,11 @@ enum CommandLineTokenizer {
         arguments.contains { destructiveSubcommands.contains($0) }
     }
 
+    /// Checked token by token, as `isDestructive` is.
+    static func updatesRestic(_ arguments: [String]) -> Bool {
+        arguments.contains("self-update")
+    }
+
     /// Whether a command may change the backups the app lists: the
     /// destructive ones, and `tag` and `copy`, which confirm nothing but
     /// write snapshots. Checked token by token, as `isDestructive` is.

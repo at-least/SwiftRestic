@@ -35,7 +35,6 @@ struct ServerAwayTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.settings.resticPathOverride = stub.url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
 
@@ -43,7 +42,8 @@ struct ServerAwayTests {
         let model = AppModel(
             store: store,
             secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
-            serverProbe: ServerProbe { _, _ in await answer.current }
+            serverProbe: ServerProbe { _, _ in await answer.current },
+            resticExecutable: stub.url
         )
         await model.bootstrap()
 
@@ -115,14 +115,13 @@ struct ServerAwayTests {
         var configuration = AppConfiguration()
         configuration.repositories = [hung, fine]
         configuration.plans = [hungPlan, finePlan]
-        configuration.settings.resticPathOverride = stub.url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
 
         let model = AppModel(store: store, secrets: .inMemory([
             hung.id: (password: "test-password", providerSecret: nil),
             fine.id: (password: "test-password", providerSecret: nil),
-        ]))
+        ]), resticExecutable: stub.url)
         model.launchListingGrace = .milliseconds(500)
         let boot = Task { await model.bootstrap() }
 

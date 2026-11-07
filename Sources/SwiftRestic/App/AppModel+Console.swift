@@ -21,6 +21,11 @@ extension AppModel {
     /// check or prune does, so the sidebar, the Files tabs and the counts
     /// do not list what restic no longer holds until the next refresh.
     func runConsoleCommand(repositoryID: UUID, arguments: [String]) async -> String {
+        // `self-update` would overwrite the bundled restic and break the
+        // app's signature. Both the official and Homebrew's 0.19.1 have it.
+        if CommandLineTokenizer.updatesRestic(arguments) {
+            return "restic updates come with SwiftRestic."
+        }
         guard let repository = repository(id: repositoryID) else {
             return "No such backup location."
         }

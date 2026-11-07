@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@Suite("preview session", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("preview session", .serialized)
 @MainActor
 struct PreviewSessionTests {
     private struct Scene {
@@ -26,7 +26,7 @@ struct PreviewSessionTests {
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
         let password = "preview-session-test"
-        _ = try await ResticAvailability.service().initializeRepository(RepositoryContext(repository: repository, password: password))
+        _ = try await PinnedRestic.service().initializeRepository(RepositoryContext(repository: repository, password: password))
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = data.path
@@ -36,14 +36,13 @@ struct PreviewSessionTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.settings.resticPathOverride = try ResticAvailability.binary().url.path
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
-        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]))
+        let model = AppModel(store: store, secrets: .inMemory([repository.id: (password: password, providerSecret: nil)]), resticExecutable: try PinnedRestic.binary().url)
         await model.bootstrap()
         await model.tasks.drain()
 
-        let service = try ResticAvailability.service()
+        let service = try PinnedRestic.service()
         let context = try await model.context(for: repository)
         _ = try await service.backup(context, plan: plan)
         let listing = try await service.snapshots(context, planID: nil, timeout: 60)

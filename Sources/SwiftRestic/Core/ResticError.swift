@@ -1,58 +1,8 @@
 import Foundation
 
-/// Why the app has no restic to run, in a few words for the surfaces that
-/// name it beside something else (a menu row, a disabled button's reason);
-/// Settings shows the whole error.
-enum ResticAbsence: Equatable, Sendable {
-    case missing
-    case needsUpdate
-    case unusable
-
-    init(refusal error: any Error) {
-        switch error as? ResticError {
-        case .resticTooOld?: self = .needsUpdate
-        case .binaryNotFound?: self = .missing
-        default: self = .unusable
-        }
-    }
-
-    var words: String {
-        switch self {
-        case .missing: "restic is missing"
-        case .needsUpdate: "restic needs an update"
-        case .unusable: "restic can’t be used"
-        }
-    }
-
-    var sentence: String { words + "." }
-
-    /// Where the app waits for restic: the Welcome page and the banner over
-    /// every other page.
-    var headline: String {
-        switch self {
-        case .missing: "SwiftRestic needs restic to back up."
-        case .needsUpdate, .unusable: sentence
-        }
-    }
-
-    /// What to do, when the app can say it in a line; else the refusal's own
-    /// words, which name the path it found.
-    var guidance: String? {
-        self == .missing ? "Install it, then come back. SwiftRestic finds it on its own." : nil
-    }
-
-    var installCommand: String? {
-        switch self {
-        case .missing: "brew install restic"
-        case .needsUpdate: "brew upgrade restic"
-        case .unusable: nil
-        }
-    }
-}
-
 enum ResticError: Error, LocalizedError, Equatable {
-    case binaryNotFound(searched: [String])
-    case binaryNotExecutable(path: String)
+    /// The restic inside the app is missing or broken: nothing on the Mac stands in.
+    case damagedInstall
     /// `message` is restic's own text when it gave one.
     case commandFailed(exitCode: Int32, message: String)
     case cancelled
@@ -80,8 +30,6 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// beside the landing could not be moved into place. The staged copy is
     /// gone; whatever the destination held before is untouched.
     case stagedFileMoveFailed(path: String, reason: String)
-    case resticTooOld(path: String, found: String)
-    case resticVersionUnreadable(path: String)
     /// A folder stands where a Replace restore would put a file — one item
     /// or several. Left to restic, several items fail on it ("directory not
     /// empty") after restic puts the file's mode on the folder, taking its
@@ -106,11 +54,8 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case let .binaryNotFound(searched):
-            return "Couldn’t find the restic executable. Looked in: \(searched.joined(separator: ", ")). "
-                + "Install it with brew install restic, or set the path in Settings."
-        case let .binaryNotExecutable(path):
-            return "The file at \(path) is not executable."
+        case .damagedInstall:
+            return "SwiftRestic is damaged. Install it again."
         case let .commandFailed(code, message):
             let base: String?
             switch code {
@@ -159,14 +104,9 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .idleStalled(seconds):
             return "Nothing moved for \(Format.duration(seconds)), so it was stopped. Check the location’s connection and try again."
         case let .malformedOutput(detail):
-            return "restic finished, but its answer couldn’t be read (\(detail)). A restic update may have changed its output."
+            return "restic finished, but its answer couldn’t be read (\(detail))."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file couldn’t be written at \(path): \(reason). Nothing at the destination was changed."
-        case let .resticTooOld(path, found):
-            let update = ResticBinary.isHomebrews(path) ? "Update it with brew upgrade restic" : "Update it"
-            return "SwiftRestic needs restic \(ResticVersion.minimumSupported.dotted) or later. The restic at \(path) is \(found). \(update), or set the path to a newer one in Settings."
-        case let .resticVersionUnreadable(path):
-            return "The program at \(path) didn’t report a restic version. Set the path to restic in Settings, or install it with brew install restic."
         case let .snapshotsNotRemoved(removed, refused, reason):
             let cause = reason.isEmpty ? "" : " (\(reason))"
             let advice = "Turn off removing old backups, or allow deletions on this storage."

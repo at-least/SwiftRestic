@@ -32,7 +32,7 @@ struct DragRestoreProviderTests {
         #expect(unresolved.registeredTypeIdentifiers.isEmpty)
         #expect(model.banners.contains {
             $0.title == "Couldn’t restore “a.txt”"
-                && $0.message == ResticError.binaryNotFound(searched: ResticBinary.searchPaths).localizedDescription
+                && $0.message == ResticError.damagedInstall.localizedDescription
         })
     }
 }

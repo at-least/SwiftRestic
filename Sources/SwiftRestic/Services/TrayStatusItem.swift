@@ -48,7 +48,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             hasNoRepositories: model.configuration.repositories.isEmpty,
             runs: model.configuration.runs,
             rows: model.protectionRows(for: model.configuration.plans, now: .now),
-            resticAbsence: model.resticAbsence
+            isResticDamaged: model.isResticDamaged
         )
     }
 
@@ -60,20 +60,20 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     /// brings the face back.
     private func refresh() {
         let state = currentState()
-        applyFace(for: state, hold: model.overallScheduleHold, resticAbsence: model.resticAbsence)
+        applyFace(for: state, hold: model.overallScheduleHold, isResticDamaged: model.isResticDamaged)
         armPulse(for: state)
 
         withObservationTracking {
             _ = currentState()
             _ = model.overallScheduleHold
-            _ = model.resticAbsence
+            _ = model.isResticDamaged
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
     }
 
     private func applyFace(
-        for state: MenuBarStatus.IconState, hold: ScheduleHold?, resticAbsence: ResticAbsence?
+        for state: MenuBarStatus.IconState, hold: ScheduleHold?, isResticDamaged: Bool
     ) {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
@@ -93,7 +93,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // exclamation mark stays readable under it. The words go to VoiceOver.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
         button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(
-            for: state, hold: hold, resticAbsence: resticAbsence,
+            for: state, hold: hold, isResticDamaged: isResticDamaged,
             isWorking: MenuBarStatus.isWorking(
                 activity: model.activity, maintenance: model.maintenance,
                 isRestoring: model.isRestoring, isConsoleRunning: model.console.isRunning
@@ -157,7 +157,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             plans: model.configuration.plans,
             repositories: model.configuration.repositories,
             activity: model.activity,
-            resticAbsence: model.resticAbsence,
+            isResticDamaged: model.isResticDamaged,
             lockedRepositories: model.lockedRepositories,
             problem: { problems[$0] },
             protection: { model.protectionSummary(repositoryID: $0, now: .now) }
@@ -179,7 +179,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         for line in MenuBarStatus.trayLines(
             verdict: MenuBarStatus.verdict(
                 rows: model.protectionRows(for: model.configuration.plans, now: .now),
-                resticAbsence: model.resticAbsence,
+                isResticDamaged: model.isResticDamaged,
                 hasNoRepositories: hasNoRepositories,
                 problemLine: problemLine,
                 problemID: problemRunID
@@ -194,7 +194,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 isRestoring: model.isRestoring,
                 hasNoRepositories: hasNoRepositories,
                 hold: hold,
-                resticAbsence: model.resticAbsence,
+                isResticDamaged: model.isResticDamaged,
                 plans: model.configuration.plans,
                 repositories: model.configuration.repositories,
                 nextRun: model.nextScheduledRun

@@ -50,7 +50,7 @@ extension AppModel {
         let rows = MenuBarStatus.planRows(
             plans: configuration.plans,
             activity: activity,
-            resticAbsence: resticAbsence,
+            isResticDamaged: !isResticAvailable,
             lockedRepositories: lockedRepositories
         )
         state.canBackUpAll = rows.contains { $0.action == .backUp && $0.isEnabled }

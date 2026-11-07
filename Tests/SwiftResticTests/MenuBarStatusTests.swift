@@ -33,7 +33,7 @@ struct MenuBarStatusTests {
         onSSD.repositoryID = ssd.id
         let summary = ProtectionSummary(text: "2 of 2 plans up to date · Last backup 1 hour ago", showsResume: false)
         let groups = MenuBarStatus.planGroups(
-            plans: [onNAS, onSSD], repositories: [nas, ssd], activity: [:], resticAbsence: nil,
+            plans: [onNAS, onSSD], repositories: [nas, ssd], activity: [:], isResticDamaged: false,
             protection: { id in id == nas.id ? summary : nil }
         )
         // In a submenu the title already names the repository.
@@ -357,7 +357,7 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
 
         let groups = MenuBarStatus.planGroups(
-            plans: [code, photos, quiet], repositories: [home], activity: [:], resticAbsence: nil,
+            plans: [code, photos, quiet], repositories: [home], activity: [:], isResticDamaged: false,
             problem: { $0 == code.id ? failed : nil }, now: now, relative: Self.ago
         )
         #expect(groups.first?.newsLines == ["Code: Failed — 2 hours ago"])
@@ -372,13 +372,13 @@ struct MenuBarStatusTests {
         plan.path = "/Users/someone/Documents"
         let reason = "“Home NAS” is running a cleanup — backups wait until it finishes."
         let locked = MenuBarStatus.planRows(
-            plans: [plan], activity: [:], resticAbsence: nil,
+            plans: [plan], activity: [:], isResticDamaged: false,
             lockedRepositories: [repository.id: reason]
         )
         #expect(locked.first?.action == .backUp)
         #expect(locked.first?.isEnabled == false)
         #expect(locked.first?.disabledReason == reason)
-        let free = MenuBarStatus.planRows(plans: [plan], activity: [:], resticAbsence: nil)
+        let free = MenuBarStatus.planRows(plans: [plan], activity: [:], isResticDamaged: false)
         #expect(free.first?.isEnabled == true)
         #expect(free.first?.disabledReason == nil)
     }
@@ -389,24 +389,18 @@ struct MenuBarStatusTests {
         plan.repositoryID = UUID()
         plan.path = "/Users/someone/Documents"
         let next = Date(timeIntervalSince1970: 1_800_000_000)
-        #expect(MenuBarStatus.resticMissingLine(.missing) == "restic is missing — backups are on hold")
-        #expect(MenuBarStatus.resticMissingLine(nil) == nil)
         #expect(MenuBarStatus.headline(
-            activity: [:], resticAbsence: .missing, plans: [], repositories: [], nextRun: (plan, next)
+            activity: [:], isResticDamaged: true, plans: [], repositories: [], nextRun: (plan, next)
         ) == nil)
         #expect(MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan, next)) != nil)
 
         let rows = MenuBarStatus.planRows(
-            plans: [plan], activity: [:], resticAbsence: .missing,
+            plans: [plan], activity: [:], isResticDamaged: true,
             lockedRepositories: [plan.repositoryID!: "“Home NAS” is running a cleanup — backups wait until it finishes."]
         )
         #expect(rows.first?.isEnabled == false)
         // The cause no wait cures leads.
-        #expect(rows.first?.disabledReason == "restic is missing")
-
-        #expect(MenuBarStatus.resticMissingLine(.needsUpdate) == "restic needs an update — backups are on hold")
-        #expect(MenuBarStatus.planRows(plans: [plan], activity: [:], resticAbsence: .needsUpdate).first?.disabledReason
-            == "restic needs an update")
+        #expect(rows.first?.disabledReason == "SwiftRestic is damaged. Install it again.")
     }
 
     @Test("a recent failure and a recent warning both lead, newest first")
@@ -777,10 +771,10 @@ struct MenuBarStatusTests {
     func verdict() {
         let runID = UUID()
         func verdict(
-            _ rows: [ProtectionRow], absence: ResticAbsence? = nil, noRepositories: Bool = false, problem: String? = nil
+            _ rows: [ProtectionRow], isResticDamaged: Bool = false, noRepositories: Bool = false, problem: String? = nil
         ) -> MenuBarStatus.TrayLine? {
             MenuBarStatus.verdict(
-                rows: rows, resticAbsence: absence, hasNoRepositories: noRepositories,
+                rows: rows, isResticDamaged: isResticDamaged, hasNoRepositories: noRepositories,
                 problemLine: problem, problemID: problem == nil ? nil : runID
             )
         }
@@ -790,7 +784,7 @@ struct MenuBarStatusTests {
         #expect(verdict([fine]) == .status("All plans up to date"))
         #expect(verdict([overdue, fine]) == .status("Old: Not backed up for 9 days"))
         #expect(verdict([overdue], problem: "Check on NAS failed") == .problem(text: "Check on NAS failed", runID: runID))
-        #expect(verdict([fine], absence: .missing) == .status("restic is missing — backups are on hold"))
+        #expect(verdict([fine], isResticDamaged: true) == .status("SwiftRestic is damaged. Install it again."))
         // A listing still being read, or a first backup running: nobody can vouch yet.
         #expect(verdict([fine, protectionRow("Reading", isKnown: false, isProtected: false)]) == nil)
         #expect(verdict([protectionRow("First", isProtected: false, isRunning: true)]) == nil)
@@ -800,21 +794,21 @@ struct MenuBarStatusTests {
 
     @Test("the icon warns for what the verdict warns about, a hold included, with work running or not")
     func iconFollowsTheVerdict() {
-        func state(rows: [ProtectionRow], absence: ResticAbsence? = nil, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
+        func state(rows: [ProtectionRow], isResticDamaged: Bool = false, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
                 activity: activity, maintenance: [:], isRestoring: false, isConsoleRunning: false,
-                hasNoRepositories: false, runs: [], rows: rows, resticAbsence: absence
+                hasNoRepositories: false, runs: [], rows: rows, isResticDamaged: isResticDamaged
             )
         }
         let fine = protectionRow("Fine", isProtected: true)
         #expect(state(rows: [fine]) == .idle)
-        #expect(state(rows: [fine], absence: .missing) == .problem)
+        #expect(state(rows: [fine], isResticDamaged: true) == .problem)
         #expect(state(rows: [protectionRow("Old", isProtected: false)]) == .problem)
         #expect(state(rows: [protectionRow("Gone", isKnown: false, isProtected: false, didFail: true)]) == .problem)
         #expect(state(rows: [protectionRow("Reading", isKnown: false, isProtected: false)]) == .idle)
         #expect(state(rows: [protectionRow("Old", isProtected: false)], activity: [UUID(): activity()]) == .problem)
         #expect(state(rows: [fine], activity: [UUID(): activity()]) == .running)
-        #expect(state(rows: [fine], absence: .missing, activity: [UUID(): activity()]) == .problem)
+        #expect(state(rows: [fine], isResticDamaged: true, activity: [UUID(): activity()]) == .problem)
     }
 
     @Test("work in flight does not hide a standing failure, and a plan's own run does not read as its problem")
@@ -852,7 +846,7 @@ struct MenuBarStatusTests {
         let scans = plan(name: "Scans")
         let photos = plan(name: "Photos")
 
-        let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, scans, photos], activity: [:], resticAbsence: nil)
+        let idle = MenuBarStatus.planRows(plans: [nightly, incomplete, scans, photos], activity: [:], isResticDamaged: false)
         #expect(idle.map(\.planID) == [nightly.id, incomplete.id, scans.id, photos.id])
         #expect(idle[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Back Up “Nightly” Now", action: .backUp, isEnabled: true))
         #expect(idle[1].action == .backUp)
@@ -860,25 +854,25 @@ struct MenuBarStatusTests {
         #expect(idle[1].title == "Back Up “Untitled Plan” Now")
         #expect(idle[2].title == "Back Up “Scans” Now")
 
-        let noRestic = MenuBarStatus.planRows(plans: [nightly], activity: [:], resticAbsence: .missing)
+        let noRestic = MenuBarStatus.planRows(plans: [nightly], activity: [:], isResticDamaged: true)
         #expect(noRestic.first?.isEnabled == false)
 
         let running = MenuBarStatus.planRows(
             plans: [nightly, photos],
             activity: [nightly.id: activity(phase: .backingUp)],
-            resticAbsence: nil
+            isResticDamaged: false
         )
         #expect(running[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stop “Nightly” Backup", action: .stop, isEnabled: true))
         #expect(running[1].title == "Back Up “Photos” Now")
         #expect(running[1].isEnabled)
         // A stop is a stop whatever the run is doing — a hook, retention.
-        let hooks = MenuBarStatus.planRows(plans: [nightly], activity: [nightly.id: activity(phase: .runningHooks)], resticAbsence: nil)
+        let hooks = MenuBarStatus.planRows(plans: [nightly], activity: [nightly.id: activity(phase: .runningHooks)], isResticDamaged: false)
         #expect(hooks.first?.action == .stop)
 
         let stopping = MenuBarStatus.planRows(
             plans: [nightly],
             activity: [nightly.id: activity(phase: .cancelling)],
-            resticAbsence: nil
+            isResticDamaged: false
         )
         #expect(stopping.first == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stopping “Nightly”…", action: .none, isEnabled: false))
     }
@@ -900,7 +894,7 @@ struct MenuBarStatusTests {
             plans: [photos, archive, documents],
             repositories: [offsite, home],
             activity: [:],
-            resticAbsence: nil
+            isResticDamaged: false
         )
         // Repositories in configuration order, plans in the order given —
         // from the model that is `configuration.plans`'s order.
@@ -914,7 +908,7 @@ struct MenuBarStatusTests {
             plans: [documents],
             repositories: [home],
             activity: [documents.id: activity(phase: .backingUp)],
-            resticAbsence: nil
+            isResticDamaged: false
         )
         #expect(running.map(\.title) == ["Home Disk"])
         #expect(running[0].rows.map(\.title) == ["Stop “Documents” Backup"])
@@ -923,7 +917,7 @@ struct MenuBarStatusTests {
             plans: [documents],
             repositories: [home],
             activity: [:],
-            resticAbsence: nil
+            isResticDamaged: false
         )
         #expect(single.map(\.title) == ["Home Disk"])
         #expect(!MenuBarStatus.showsGroupsAsSubmenus(single))
@@ -931,7 +925,7 @@ struct MenuBarStatusTests {
         // A repository with no plans gets no group, so it does not make one
         // repository's rows a submenu.
         let empty = repository(named: "Empty")
-        let withEmpty = MenuBarStatus.planGroups(plans: [documents], repositories: [home, empty], activity: [:], resticAbsence: nil)
+        let withEmpty = MenuBarStatus.planGroups(plans: [documents], repositories: [home, empty], activity: [:], isResticDamaged: false)
         #expect(withEmpty.map(\.title) == ["Home Disk"])
         #expect(!MenuBarStatus.showsGroupsAsSubmenus(withEmpty))
     }
@@ -955,11 +949,11 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, needs attention")
         #expect(MenuBarStatus.accessibilityDescription(for: .running, hold: nil) == "SwiftRestic, work in progress")
 
-        // Restic missing has no face of its own; its words join the label
+        // A damaged install has no face of its own; its words join the label
         // the way the menu's leading line words it.
-        #expect(MenuBarStatus.accessibilityDescription(for: .idle, resticAbsence: .missing)
-            == "SwiftRestic, restic is missing — backups are on hold")
-        #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil, resticAbsence: nil)
+        #expect(MenuBarStatus.accessibilityDescription(for: .idle, isResticDamaged: true)
+            == "SwiftRestic, SwiftRestic is damaged. Install it again.")
+        #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil, isResticDamaged: false)
             == "SwiftRestic")
     }
 }

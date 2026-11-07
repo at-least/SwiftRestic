@@ -195,10 +195,10 @@ extension AppModel {
         let loginItem = await Task.detached { readLoginItemState() }.value
         startsAtLogin = loginItem == .enabled
         loginItemState = loginItem
-        await resolveBinary()
+        await checkRestic()
         // The loading state covers configuration plus the binary probe: both
         // decide what the first real screen looks like (panes, or the
-        // restic-is-missing banner). The snapshot refresh below can take
+        // damaged-install banner). The snapshot refresh below can take
         // minutes against a slow remote — that must never hold the UI
         // hostage behind a spinner.
         isBootstrapping = false
@@ -271,76 +271,33 @@ extension AppModel {
         await flushSave()
     }
 
-    /// Looks for restic again: installed or chosen while the app runs. Coming
-    /// out of a refusal, the listings failed for want of it are read now.
-    func findResticAgain() async {
-        var wasRefused = false
-        if case .refused = resticSearch { wasRefused = true }
-        await resolveBinary()
-        if wasRefused, isResticAvailable { await refreshAllSnapshots() }
-    }
-
-    /// Coming back from Terminal is the only sign restic was installed.
-    func findResticIfRefused() async {
-        guard case .refused = resticSearch else { return }
-        await findResticAgain()
-    }
-
-    func resolveBinary() async {
-        binarySearchGeneration += 1
-        let generation = binarySearchGeneration
+    func checkRestic() async {
+        let binary = ResticBinary(url: resticExecutable)
+        // Asked before it becomes `binary`: in between, a scheduler tick
+        // would run it unchecked.
         do {
-            // The locate probes stat every candidate path (and every PATH
-            // entry) — filesystem work, so it runs off the main actor even
-            // though the answer lands back on it.
-            let override = configuration.settings.resticPathOverride
-            let located = try await Task.detached(priority: .userInitiated) {
-                try ResticBinary.locate(userOverride: override)
-            }.value
-            // A program that cannot answer `restic version` is no restic:
-            // every run would fail. One older than the minimum is refused
-            // here, once, rather than failing or misreading run by run.
-            // Asked of the located binary before it becomes `binary`: in
-            // between, a scheduler tick would run it unchecked.
-            let output = try await ResticService(runner: runner, binary: located.url).version()
-            guard let version = ResticVersion(parsing: output) else {
-                throw ResticError.resticVersionUnreadable(path: located.url.path)
-            }
-            guard version.isSupported else {
-                throw ResticError.resticTooOld(path: located.url.path, found: version.dotted)
-            }
-            // Typing a path looks once per keystroke; the last one answers.
-            guard generation == binarySearchGeneration else { return }
-            resticSearch = .found(located, version: output)
+            let output = try await ResticService(runner: runner, binary: binary.url).version()
+            resticState = output.hasPrefix("restic ") ? .ready(binary, version: output) : .damaged
         } catch {
-            guard generation == binarySearchGeneration else { return }
-            resticSearch = .refused(error, problem: error.localizedDescription)
+            resticState = .damaged
         }
     }
 
     var binary: ResticBinary? {
-        guard case let .found(binary, _) = resticSearch else { return nil }
+        guard case let .ready(binary, _) = resticState else { return nil }
         return binary
     }
 
     var isResticAvailable: Bool { binary != nil }
 
     var resticVersion: String {
-        guard case let .found(_, version) = resticSearch else { return "" }
+        guard case let .ready(_, version) = resticState else { return "" }
         return version
     }
 
-    var binaryProblem: String? {
-        guard case let .refused(_, problem) = resticSearch else { return nil }
-        return problem
-    }
-
-    var resticAbsence: ResticAbsence? {
-        switch resticSearch {
-        case .found: nil
-        case .searching: .missing
-        case let .refused(error, _): ResticAbsence(refusal: error)
-        }
+    var isResticDamaged: Bool {
+        if case .damaged = resticState { return true }
+        return false
     }
 
     /// Optimistic: the mirror moves now, and the daemon's answer in

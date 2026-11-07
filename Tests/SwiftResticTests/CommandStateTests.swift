@@ -21,7 +21,7 @@ struct CommandStateTests {
         )
         if resticAvailable {
             // Never run: the state only asks whether restic was found.
-            model.resticSearch = .found(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
+            model.resticState = .ready(ResticBinary(url: URL(fileURLWithPath: "/usr/bin/false")), version: "")
         }
         return model
     }
@@ -307,7 +307,7 @@ struct CommandStateTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
         func trayRow() -> MenuBarStatus.PlanRow? {
-            MenuBarStatus.planRows(plans: model.configuration.plans, activity: model.activity, resticAbsence: nil).first
+            MenuBarStatus.planRows(plans: model.configuration.plans, activity: model.activity, isResticDamaged: false).first
         }
 
         model.activity[plan.id] = PlanActivity(of: plan, phase: .backingUp)

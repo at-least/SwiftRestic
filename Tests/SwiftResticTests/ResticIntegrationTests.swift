@@ -1,43 +1,33 @@
 import Foundation
 import Testing
 
-/// These are the tests that would catch a change in restic's actual behaviour
-/// rather than only in the JSON lines the unit suites quote. They are skipped
-/// when restic is not installed so the suite still runs on a bare machine.
-enum ResticAvailability {
-    /// The restic every real-restic suite runs: SWIFTRESTIC_TEST_RESTIC when
-    /// set (`Tools/restic-version.sh` and CI pass it with xcodebuild's
-    /// TEST_RUNNER_ prefix), else the one the app would find.
-    static func binary() throws -> ResticBinary {
-        try ResticBinary.locate(userOverride: ProcessInfo.processInfo.environment["SWIFTRESTIC_TEST_RESTIC"])
+/// The restic the app ships. `Tools/fetch-restic.sh`, run by build.sh and the
+/// app's build phase, puts it in `.build`.
+enum PinnedRestic {
+    private static let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
+    static func version() throws -> String {
+        let script = try String(contentsOf: repositoryRoot.appendingPathComponent("Tools/fetch-restic.sh"), encoding: .utf8)
+        let line = try #require(script.split(separator: "\n").first { $0.hasPrefix("version=") })
+        return String(line.dropFirst("version=".count))
     }
 
-    static let isInstalled = (try? binary()) != nil
+    static func binary() throws -> ResticBinary {
+        ResticBinary(url: repositoryRoot.appendingPathComponent(".build/restic/\(try version())/restic"))
+    }
 
     static func service() throws -> ResticService {
         ResticService(runner: ResticRunner(), binary: try binary().url)
     }
 }
 
-/// A run told which restic it is for must be on that restic: a variable
-/// that silently did not reach the test process would pass as a run on
-/// that version while the suites ran the installed one.
-@Suite("restic under test", .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic under test")
 struct ResticUnderTestTests {
-    @Test("the restic under test is the version the run names")
-    func versionIsTheNamedOne() async throws {
-        let binary = try ResticAvailability.binary()
-        let output = try await ResticAvailability.service().version()
-        print("restic under test: \(binary.url.path): \(output)")
-        let environment = ProcessInfo.processInfo.environment
-        // A binary named without the version it is: nothing to hold it to.
-        if environment["SWIFTRESTIC_TEST_RESTIC"] != nil {
-            #expect(environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] != nil, "SWIFTRESTIC_TEST_RESTIC is set without SWIFTRESTIC_EXPECT_RESTIC_VERSION")
-        }
-        if let expected = environment["SWIFTRESTIC_EXPECT_RESTIC_VERSION"] {
-            let version = try #require(ResticVersion(parsing: output))
-            #expect(version.dotted == expected, "\(output)")
-        }
+    @Test("the restic under test is the pinned release")
+    func versionIsThePinnedOne() async throws {
+        let output = try await PinnedRestic.service().version()
+        #expect(output.hasPrefix("restic \(try PinnedRestic.version()) "), "\(output)")
     }
 }
 
@@ -82,12 +72,12 @@ func makeResticFixture(
         root: root,
         sourceDirectory: sourceDirectory,
         context: RepositoryContext(repository: repository, password: password),
-        service: try ResticAvailability.service(),
+        service: try PinnedRestic.service(),
         plan: plan
     )
 }
 
-@Suite("restic integration", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic integration", .serialized)
 struct ResticIntegrationTests {
     private static let password = "integration-test-password"
 
@@ -429,7 +419,7 @@ struct ResticIntegrationTests {
             store: ConfigStore(directory: fixture.root.appendingPathComponent("config")),
             secrets: .inMemory([repository.id: (password: Self.password, providerSecret: nil)])
         )
-        model.resticSearch = .found(try ResticAvailability.binary(), version: "")
+        model.resticState = .ready(try PinnedRestic.binary(), version: "")
         model.configuration.repositories = [repository]
         model.snapshots[repository.id] = try await fixture.service.snapshots(fixture.context)
         return model
@@ -549,7 +539,7 @@ struct ResticIntegrationTests {
 
     private static func holdLock(on fixture: ResticFixture) async throws -> LockHolder {
         let process = Process()
-        process.executableURL = try ResticAvailability.binary().url
+        process.executableURL = try PinnedRestic.binary().url
         process.arguments = ["backup", "--stdin", "--stdin-filename", "hold"]
         var environment = ProcessInfo.processInfo.environment
         environment["RESTIC_REPOSITORY"] = fixture.root.appendingPathComponent("repo").path
@@ -598,7 +588,7 @@ struct ResticIntegrationTests {
         // disk, and the port in the string is parsed but never dialed.
         let server = "/usr/libexec/sftp-server"
         try #require(FileManager.default.isExecutableFile(atPath: server))
-        let binary = try ResticAvailability.binary()
+        let binary = try PinnedRestic.binary()
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticTests-\(UUID().uuidString)")
             .resolvingSymlinksInPath()
@@ -639,7 +629,7 @@ struct ResticIntegrationTests {
 
     @Test("the editor's connection check gives up at its timeout on a server that refuses connections")
     func repositoryExistsTimesOut() async throws {
-        let service = try ResticAvailability.service()
+        let service = try PinnedRestic.service()
         var repository = Repository()
         repository.kind = .rest
         // Port 1 refuses: restic 0.19.1 retried this for over ten minutes
@@ -1393,7 +1383,7 @@ struct ResticIntegrationTests {
 
 }
 
-@Suite("restic maintenance", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic maintenance", .serialized)
 struct ResticMaintenanceTests {
     @Test("prune reclaims space after forget, and reports in plain text")
     func prune() async throws {
@@ -1437,7 +1427,7 @@ struct ResticMaintenanceTests {
 /// is allowed to hand it up only because restic actually prints it before
 /// dying. Runs against a real repository, like the integration suite; kept
 /// apart only so the damage it inflicts can never touch another fixture.
-@Suite("restic check damage", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic check damage", .serialized)
 struct ResticCheckDamageTests {
     @Test("a damaged repository's check still carries its error count")
     func checkOnDamagedRepositoryReportsErrors() async throws {
@@ -1502,7 +1492,7 @@ private extension Data {
     }
 }
 
-@Suite("restic diff", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic diff", .serialized)
 struct ResticDiffTests {
     @Test("a modified, an added and a removed file each show up with the right modifier")
     func diffBetweenTwoSnapshots() async throws {
@@ -1554,7 +1544,7 @@ struct ResticDiffTests {
     }
 }
 
-@Suite("restic find", .serialized, .enabled(if: ResticAvailability.isInstalled))
+@Suite("restic find", .serialized)
 struct ResticFindTests {
     @Test("a file deleted from the source is still findable in an older snapshot")
     func findsFileAcrossSnapshots() async throws {

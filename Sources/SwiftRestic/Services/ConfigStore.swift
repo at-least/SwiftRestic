@@ -1,8 +1,6 @@
 import Foundation
 
 struct AppSettings: Codable, Sendable, Hashable {
-    /// Explicit path to the restic binary; empty means "search the usual places".
-    var resticPathOverride: String = ""
     var notifyOnSuccess: Bool = false
     /// The tray's Pause Backups, while it holds: every scheduled backup,
     /// check and prune waits. `nil` when nothing is paused.
@@ -20,7 +18,6 @@ struct AppSettings: Codable, Sendable, Hashable {
         // let drift apart.
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        resticPathOverride = c.value(.resticPathOverride, default: resticPathOverride)
         notifyOnSuccess = c.value(.notifyOnSuccess, default: notifyOnSuccess)
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.

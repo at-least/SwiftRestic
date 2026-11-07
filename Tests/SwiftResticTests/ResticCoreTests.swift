@@ -209,13 +209,6 @@ struct ResticErrorTests {
             ResticError.timedOut(seconds: 90).errorDescription?
                 .contains("1m 30s") == true
         )
-        let notFound = ResticError.binaryNotFound(searched: ["/opt/homebrew/bin", "/usr/bin"])
-        #expect(notFound.errorDescription?.contains("/opt/homebrew/bin, /usr/bin") == true)
-        #expect(notFound.errorDescription?.contains("brew install restic") == true)
-        #expect(
-            ResticError.binaryNotExecutable(path: "/opt/restic").errorDescription?
-                .contains("/opt/restic") == true
-        )
         #expect(ResticError.cancelled.errorDescription != nil)
         #expect(ResticError.repositoryMissing.errorDescription != nil)
     }
@@ -230,96 +223,6 @@ struct ResticErrorTests {
 
 @Suite("restic binary location")
 struct ResticBinaryTests {
-    @Test("an explicit override wins over the search paths")
-    func overrideWins() throws {
-        // /bin/echo exists and is executable on every Mac; the point is that the
-        // configured path is honoured verbatim, not that it is restic.
-        let located = try ResticBinary.locate(userOverride: "/bin/echo")
-        #expect(located.url.path == "/bin/echo")
-    }
-
-    @Test("an override typed with a tilde is read under the home folder, as every other typed path is")
-    func overrideExpandsTilde() {
-        // URL(fileURLWithPath:) expands the tilde itself; pinned, since the
-        // override is the one typed path that does not go through
-        // ResticService.expandTilde.
-        do {
-            _ = try ResticBinary.locate(userOverride: "~/nonexistent-restic-binary")
-            Issue.record("a missing override must not be accepted")
-        } catch let ResticError.binaryNotFound(searched) {
-            #expect(searched == [NSHomeDirectory() + "/nonexistent-restic-binary"])
-        } catch {
-            Issue.record("unexpected error \(error)")
-        }
-    }
-
-    @Test("an override that is not an executable file is refused")
-    func brokenOverrideIsRefused() {
-        // A missing file is a different sentence than an unexecutable one:
-        // "not executable" would send someone hunting through permissions
-        // for what is really a typo.
-        do {
-            _ = try ResticBinary.locate(userOverride: "/nonexistent-restic-binary")
-            Issue.record("a missing override must not be accepted")
-        } catch let ResticError.binaryNotFound(searched) {
-            #expect(searched == ["/nonexistent-restic-binary"])
-        } catch {
-            Issue.record("unexpected error: \(error)")
-        }
-
-        // A directory has the execute bit (0755), so the permission check alone
-        // would accept it — and the run would only fail later, at spawn time.
-        do {
-            _ = try ResticBinary.locate(userOverride: "/tmp")
-            Issue.record("a directory must not be accepted as the restic binary")
-        } catch let ResticError.binaryNotExecutable(path) {
-            #expect(path == "/tmp")
-        } catch {
-            Issue.record("unexpected error: \(error)")
-        }
-    }
-
-    @Test("a tilde in the override is expanded, not taken literally")
-    func tildeOverrideIsExpanded() {
-        // Pinning, not fixing: URL(fileURLWithPath:) itself expands "~" on
-        // this Foundation, so a home-relative override resolves. If a
-        // Foundation update ever stops expanding, this fails before anyone
-        // files the bug.
-        do {
-            _ = try ResticBinary.locate(userOverride: "~/definitely-not-here")
-            Issue.record("a missing override must not be accepted")
-        } catch let ResticError.binaryNotFound(searched) {
-            #expect(searched.count == 1)
-            #expect(!searched[0].hasPrefix("~"), "searched literally: \(searched)")
-            #expect(searched[0].hasPrefix(NSHomeDirectory()), "not home-relative: \(searched)")
-        } catch {
-            Issue.record("unexpected error: \(error)")
-        }
-    }
-
-    @Test("a blank override means 'no override', not a broken path")
-    func blankOverrideIsIgnored() {
-        // Blank must behave exactly like nil: the same binary where one exists,
-        // the same not-found error where none does. A blank override handled as
-        // a path would fail with binaryNotExecutable instead of ever reaching
-        // the search, so on a bare box both sides are concrete errors — this
-        // cannot pass vacuously the way comparing two `try?` results would.
-        let withoutOverride = Result { try ResticBinary.locate(userOverride: nil) }
-        let withBlankOverride = Result { try ResticBinary.locate(userOverride: "   ") }
-        switch (withoutOverride, withBlankOverride) {
-        case (.success(let found), .success(let blank)):
-            #expect(found.url == blank.url)
-        case (.failure(let bare as ResticError), .failure(let blank as ResticError)):
-            #expect(bare == blank, "blank override changed the failure: \(bare) vs \(blank)")
-            guard case .binaryNotFound = blank else {
-                Issue.record("blank override failed with \(blank), not binaryNotFound")
-                return
-            }
-        default:
-            Issue.record("a blank override changed the locate outcome: \(withoutOverride) vs \(withBlankOverride)")
-        }
-    }
-
     @Test("helper lookup falls back to the inherited PATH")
     func helperLookup() {
         // `sh` lives in /bin, which the hard-coded candidate list never covers:

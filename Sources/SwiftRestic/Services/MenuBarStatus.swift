@@ -29,7 +29,7 @@ enum MenuBarStatus {
         !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
     }
 
-    /// A problem is what `verdict` would lead with: restic missing, a run's
+    /// A problem is what `verdict` would lead with: a damaged install, a run's
     /// standing problem, or a plan not running that needs attention.
     static func iconState(
         activity: [UUID: PlanActivity],
@@ -39,12 +39,12 @@ enum MenuBarStatus {
         hasNoRepositories: Bool,
         runs: [RunRecord],
         rows: [ProtectionRow] = [],
-        resticAbsence: ResticAbsence? = nil,
+        isResticDamaged: Bool = false,
         now: Date = .now
     ) -> IconState {
         let isRunning = isWorking(activity: activity, maintenance: maintenance, isRestoring: isRestoring, isConsoleRunning: isConsoleRunning)
         if hasNoRepositories { return isRunning ? .running : .unconfigured }
-        let isHealthy = resticAbsence == nil
+        let isHealthy = !isResticDamaged
             && newestStandingProblem(runs: runs, now: now) == nil
             && OverviewMetrics.needingAttention(rows.filter { !$0.isRunning }).isEmpty
         if !isHealthy { return .problem }
@@ -80,7 +80,7 @@ enum MenuBarStatus {
     static func accessibilityDescription(
         for state: IconState,
         hold: ScheduleHold? = nil,
-        resticAbsence: ResticAbsence? = nil,
+        isResticDamaged: Bool = false,
         isWorking: Bool = false,
         now: Date = .now
     ) -> String {
@@ -96,9 +96,7 @@ enum MenuBarStatus {
             let summary = hold.summary(now: now)
             clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())
         }
-        if let missing = resticMissingLine(resticAbsence) {
-            clauses.append(missing)
-        }
+        if isResticDamaged { clauses.append(damagedLine) }
         guard !clauses.isEmpty else { return base }
         let separator = state == .idle ? ", " : "; "
         return base + clauses.map { separator + $0 }.joined()
@@ -163,18 +161,16 @@ enum MenuBarStatus {
         return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }
 
-    /// The line that leads the menu while restic is missing, as a hold's
-    /// does: the scheduler starts nothing without it.
-    static func resticMissingLine(_ absence: ResticAbsence?) -> String? {
-        absence.map { "\($0.words) — backups are on hold" }
-    }
+    /// Leads the menu, as a hold's line does: the scheduler starts nothing
+    /// without restic.
+    static let damagedLine = ResticError.damagedInstall.localizedDescription
 
     /// The single line above the plan buttons. `nil` while anything runs —
     /// restores and repository upkeep included: the running lines replace it
     /// rather than sitting underneath. Console work has no running line, so
     /// it does not hold the headline back. `nil` under a hold too: the hold's own
     /// line leads the menu, and a next-run headline would announce a run the
-    /// scheduler will not fire — and while restic is missing, for the same
+    /// scheduler will not fire — and while restic is damaged, for the same
     /// reason. `hasNoRepositories` answers the
     /// `unconfigured` icon face: it tells a first-time user what to do next.
     ///
@@ -186,13 +182,13 @@ enum MenuBarStatus {
         isRestoring: Bool = false,
         hasNoRepositories: Bool = false,
         hold: ScheduleHold? = nil,
-        resticAbsence: ResticAbsence? = nil,
+        isResticDamaged: Bool = false,
         plans: [BackupPlan],
         repositories: [Repository],
         nextRun: (plan: BackupPlan, date: Date)?
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
-        guard hold == nil, resticAbsence == nil else { return nil }
+        guard hold == nil, !isResticDamaged else { return nil }
         if hasNoRepositories { return "No backup location set" }
         guard let nextRun else { return "No backups scheduled" }
         // The plan page's Next backup tile spells the same moment in these
@@ -224,7 +220,7 @@ enum MenuBarStatus {
     static func planRows(
         plans: [BackupPlan],
         activity: [UUID: PlanActivity],
-        resticAbsence: ResticAbsence?,
+        isResticDamaged: Bool,
         lockedRepositories: [UUID: String] = [:]
     ) -> [PlanRow] {
         plans.map { plan in
@@ -239,10 +235,10 @@ enum MenuBarStatus {
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
-                    isEnabled: plan.isConfigurationComplete && resticAbsence == nil && lockReason == nil,
+                    isEnabled: plan.isConfigurationComplete && !isResticDamaged && lockReason == nil,
                     // The Backup menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
-                        : resticAbsence?.words ?? lockReason
+                        : isResticDamaged ? damagedLine : lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
@@ -329,7 +325,7 @@ enum MenuBarStatus {
         plans: [BackupPlan],
         repositories: [Repository],
         activity: [UUID: PlanActivity],
-        resticAbsence: ResticAbsence?,
+        isResticDamaged: Bool,
         lockedRepositories: [UUID: String] = [:],
         problem: (UUID) -> RunRecord? = { _ in nil },
         protection: (UUID) -> ProtectionSummary? = { _ in nil },
@@ -341,7 +337,7 @@ enum MenuBarStatus {
             let rows = planRows(
                 plans: members,
                 activity: activity,
-                resticAbsence: resticAbsence,
+                isResticDamaged: isResticDamaged,
                 lockedRepositories: lockedRepositories
             )
             let news = members.flatMap { plan in
@@ -428,12 +424,12 @@ enum MenuBarStatus {
     /// nothing is set up, where the headline says what to do.
     static func verdict(
         rows: [ProtectionRow],
-        resticAbsence: ResticAbsence?,
+        isResticDamaged: Bool,
         hasNoRepositories: Bool,
         problemLine: String?,
         problemID: UUID?
     ) -> TrayLine? {
-        if let missing = resticMissingLine(resticAbsence) { return .status(missing) }
+        if isResticDamaged { return .status(damagedLine) }
         guard !hasNoRepositories else { return nil }
         if let problemLine, let problemID { return .problem(text: problemLine, runID: problemID) }
         if let worst = OverviewMetrics.needingAttention(rows).first {

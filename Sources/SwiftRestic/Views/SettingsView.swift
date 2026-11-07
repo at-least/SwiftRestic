@@ -4,8 +4,8 @@ struct SettingsView: View {
     private static let width: CGFloat = 560
     /// Past this a pane scrolls: its webhooks can outgrow a small screen.
     private static let maxHeight: CGFloat = 620
-    static let paneKey = "lastSettingsPane"
-    static let resticPane = 3
+    /// Not the old "lastSettingsPane": it can hold the restic pane, now gone.
+    static let paneKey = "lastSettingsTab"
     /// The pane the window reopens on. UserDefaults, not
     /// `configuration.settings`: it is window state, not a preference.
     @AppStorage(Self.paneKey) private var lastSettingsPane = 0
@@ -45,12 +45,6 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .tag(1)
                 .tabItem { Label("Notifications", systemImage: "bell") }
-            resticTab(model: model)
-                .frame(width: Self.width)
-                .frame(maxHeight: Self.maxHeight)
-                .fixedSize(horizontal: false, vertical: true)
-                .tag(Self.resticPane)
-                .tabItem { Label("restic", systemImage: "terminal") }
         }
         .confirmationDialog(
             "Remove “\(removingShare?.url ?? "")” from SwiftRestic?",
@@ -78,16 +72,12 @@ struct SettingsView: View {
             await model.refreshFullDiskAccess()
             await model.refreshLoginItemStatus()
         }
-        .onChange(of: model.configuration.settings.resticPathOverride) {
-            Task { await model.findResticAgain() }
-        }
     }
 
     private func generalTab(model: AppModel) -> some View {
         @Bindable var model = model
         return Form {
-            // First, and on General rather than the restic tab: it is the
-            // app's permission, and restic inherits it.
+            // First: it is the app's permission, and restic inherits it.
             Section("Full Disk Access") {
                 LabeledContent("Status") {
                     FullDiskAccessStatusLabel(status: model.fullDiskAccess)
@@ -167,42 +157,6 @@ struct SettingsView: View {
                 }
             }
 
-        }
-        .formStyle(.grouped)
-    }
-
-    private func resticTab(model: AppModel) -> some View {
-        @Bindable var model = model
-        return Form {
-            Section {
-                // The search finds restic for nearly everyone: the path is
-                // only asked for when it failed, or kept visible once typed.
-                if model.binaryProblem != nil || !model.configuration.settings.resticPathOverride.isEmpty {
-                    HStack {
-                        TextField(
-                            "Path",
-                            text: $model.configuration.settings.resticPathOverride,
-                            prompt: Text(model.binary?.url.path ?? "")
-                        )
-                        Button("Choose…") {
-                            if let url = FilePicker.chooseExecutable() {
-                                model.configuration.settings.resticPathOverride = url.path
-                            }
-                        }
-                    }
-                }
-                if model.isResticAvailable {
-                    LabeledContent("Version", value: model.resticVersion.isEmpty ? "—" : model.resticVersion)
-                } else if let problem = model.binaryProblem {
-                    Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                    // Beside its cause: the healthy pane has nothing to find
-                    // again, so it ends at the Version row.
-                    Button("Find Again") { Task { await model.findResticAgain() } }
-                }
-            }
         }
         .formStyle(.grouped)
     }

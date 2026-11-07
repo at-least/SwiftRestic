@@ -17,8 +17,7 @@ struct AppModelStubTests {
         var stub: StubRestic
     }
 
-    /// A model wired to the stub through the same `resticPathOverride` the
-    /// Settings screen uses. No repository is ever initialised: the stub
+    /// A model wired to the stub. No repository is ever initialised: the stub
     /// answers whatever the model asks.
     private func makeHarness(
         mode: String,
@@ -64,7 +63,6 @@ struct AppModelStubTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.settings.resticPathOverride = stub.url.path
         configuration.settings.notificationChannels = channels
 
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
@@ -74,7 +72,7 @@ struct AppModelStubTests {
         // password is expressed.
         var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         if let password { secrets[repository.id] = (password: password, providerSecret: nil) }
-        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter, volumeProbe: volumeProbe)
+        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter, volumeProbe: volumeProbe, resticExecutable: stub.url)
         await model.bootstrap()
 
         return Harness(model: model, root: root, repository: repository, plan: plan, stub: stub)
@@ -359,9 +357,7 @@ struct AppModelStubTests {
         skipped.outcome = .skipped
         model.configuration.runs = [skipped]
         let bannersBefore = model.banners.count
-        // As resolveBinary leaves it when restic is not found.
-        let notFound = ResticError.binaryNotFound(searched: ResticBinary.searchPaths)
-        model.resticSearch = .refused(notFound, problem: notFound.localizedDescription)
+        model.resticState = .damaged
 
         await model.runDuePlans()
         await model.runSkippedPlansAfterMount()
@@ -2308,7 +2304,8 @@ struct AppModelStubTests {
         )
         let relaunched = AppModel(
             store: ConfigStore(directory: harness.root.appendingPathComponent("config")),
-            secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)])
+            secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)]),
+            resticExecutable: harness.stub.url
         )
         await relaunched.bootstrap()
         #expect(relaunched.snapshots(for: harness.repository.id).count == 3)
@@ -2667,7 +2664,6 @@ struct AppModelStubTests {
         run.hasLog = true
         var configuration = AppConfiguration()
         configuration.runs = [run]
-        configuration.settings.resticPathOverride = fixture.stub.url.path
         try await ConfigStore(directory: fixture.config).save(configuration)
 
         let old = Date(timeIntervalSince1970: 1_577_836_800) // 2020-01-01
@@ -2687,7 +2683,7 @@ struct AppModelStubTests {
             ofItemAtPath: fresh.path
         )
 
-        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory())
+        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory(), resticExecutable: fixture.stub.url)
         await model.bootstrap()
         await model.shutdown()
 
@@ -2728,7 +2724,6 @@ struct AppModelStubTests {
         run.hasLog = true
         var configuration = AppConfiguration()
         configuration.runs = [run]
-        configuration.settings.resticPathOverride = fixture.stub.url.path
         try await ConfigStore(directory: fixture.config).save(configuration)
         // One element that is not a record — a hand edit, a damaged write —
         // drops the whole history to its default, with a decode note: the
@@ -2745,7 +2740,7 @@ struct AppModelStubTests {
             ofItemAtPath: log.path
         )
 
-        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory())
+        let model = AppModel(store: ConfigStore(directory: fixture.config), secrets: .inMemory(), resticExecutable: fixture.stub.url)
         await model.bootstrap()
         await model.shutdown()
 

@@ -67,9 +67,6 @@ struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
     var isDismissible = true
-    /// The fix's own button where the banner's words would only say where
-    /// it is — the restic-missing banner's "Open Settings".
-    var settingsAction: (() -> Void)? = nil
 
     /// The status palette's glyph and hue for the banner's level, so a
     /// colour means one thing app-wide: a failure's red octagon and a
@@ -120,7 +117,7 @@ struct BannerView: View {
                         // detail column for a minimum size at zero width, where
                         // a height-pinned message wraps to about a character
                         // per line, and the non-scrolling hosts (Activity, the
-                        // console, the Restore pane, the restic-missing strip)
+                        // console, the Restore pane, the damaged-install strip)
                         // then lay out thousands of points taller than the
                         // window and render blank.
                         Text(banner.message)
@@ -140,10 +137,6 @@ struct BannerView: View {
                 // where it is.
                 if let link = banner.link {
                     Button(link.title) { NSWorkspace.shared.open(link.url) }
-                        .controlSize(.small)
-                }
-                if let settingsAction {
-                    Button("Open Settings", action: settingsAction)
                         .controlSize(.small)
                 }
             }
@@ -838,18 +831,6 @@ enum FilePicker {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
         panel.message = message
-        panel.prompt = "Choose"
-        return panel.runModal() == .OK ? panel.urls.first : nil
-    }
-
-    @MainActor
-    static func chooseExecutable() -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        panel.message = "Choose the restic executable"
         panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
