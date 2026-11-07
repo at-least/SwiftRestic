@@ -144,6 +144,7 @@ struct ActivityView: View {
                 // disabled; the outcome glyphs and the Detail column keep
                 // rows scannable.
                 .alternatingRowBackgrounds(.disabled)
+                .accessibilityIdentifier(AccessibilityID.Activity.table)
                 .focusOnClick($tableIsFocused)
                 // Wiping the history is rare and final, so it is not chrome:
                 // a right-click on the list, behind the same confirmation.

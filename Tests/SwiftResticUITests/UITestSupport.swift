@@ -110,14 +110,22 @@ enum UITest {
         let restoreButton = app.buttons[AccessibilityID.FilesPane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
         restoreButton.click()
-        app.radioButtons["Other folder"].click()
+        restoreInSheet(into: folder, in: app)
+        XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
+        XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
+    }
+
+    /// The destination sheet a Restore… opens: Other folder, `folder` chosen,
+    /// Restore. The restore itself runs on after the sheet closes.
+    static func restoreInSheet(into folder: URL, in app: XCUIApplication) {
+        let other = app.radioButtons["Other folder"]
+        XCTAssertTrue(other.waitForExistence(timeout: 10))
+        other.click()
         app.buttons[AccessibilityID.RestoreSheet.chooseFolder].click()
         choose(folder, in: app)
         let restore = app.buttons[AccessibilityID.RestoreSheet.restore]
         XCTAssertTrue(restore.waitForEnabled())
         restore.click()
-        XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
-        XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
     }
 
     /// The open panel the app's FilePicker runs, driven element by element:
@@ -158,6 +166,11 @@ extension XCUIElement {
 
     func waitForValue(beginningWith prefix: String, timeout: TimeInterval = 10) -> Bool {
         let predicate = NSPredicate(format: "value BEGINSWITH %@", prefix)
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: self)], timeout: timeout) == .completed
+    }
+
+    func waitForSelected(timeout: TimeInterval = 10) -> Bool {
+        let predicate = NSPredicate(format: "selected == true")
         return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: self)], timeout: timeout) == .completed
     }
 

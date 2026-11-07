@@ -41,6 +41,23 @@ enum AccessibilityID {
         static let results = "filesSearch.results"
     }
 
+    enum FileVersions {
+        static let list = "fileVersions.list"
+        static let restore = "fileVersions.restore"
+    }
+
+    enum RepositoryEditor {
+        static let chooseFolder = "repositoryEditor.chooseFolder"
+        static let password = "repositoryEditor.password"
+        static let confirmPassword = "repositoryEditor.confirmPassword"
+        static let requirement = "repositoryEditor.requirement"
+        static let save = "repositoryEditor.save"
+    }
+
+    enum Activity {
+        static let table = "activity.table"
+    }
+
     enum RestoreSheet {
         static let chooseFolder = "restoreSheet.chooseFolder"
         static let restore = "restoreSheet.restore"

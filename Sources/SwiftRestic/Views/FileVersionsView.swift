@@ -134,6 +134,7 @@ struct FileVersionsView: View {
                 }
             }
             .listStyle(.inset)
+            .accessibilityIdentifier(AccessibilityID.FileVersions.list)
             .focusOnClick($listIsFocused)
             .contextMenu(forSelectionType: String.self) { _ in
                 EmptyView()
@@ -194,6 +195,7 @@ struct FileVersionsView: View {
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)
                     .help(blocked ?? "Look at the chosen version with Quick Look before restoring it")
                 Button("Restore…") { restoreChosen() }
+                    .accessibilityIdentifier(AccessibilityID.FileVersions.restore)
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
                     .help("Restore the chosen version of this file (Return)")

@@ -137,6 +137,7 @@ struct RepositoryEditorSheet: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier(AccessibilityID.RepositoryEditor.requirement)
                 }
                 if isWorking { ProgressView().controlSize(.small) }
                 Spacer()
@@ -155,6 +156,7 @@ struct RepositoryEditorSheet: View {
                         .disabled(isWorking)
                 }
                 Button(isNew ? "Add Backup Location" : "Save") { Task { await save() } }
+                    .accessibilityIdentifier(AccessibilityID.RepositoryEditor.save)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSubmit || isWorking)
@@ -278,9 +280,11 @@ struct RepositoryEditorSheet: View {
                     // A grouped form draws its fields without a border, so an
                     // empty one needs its prompt to be seen at all.
                     SecureField("Password", text: $password, prompt: Text(passwordPrompt))
+                        .accessibilityIdentifier(AccessibilityID.RepositoryEditor.password)
                 }
                 if isNew {
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
+                        .accessibilityIdentifier(AccessibilityID.RepositoryEditor.confirmPassword)
                 }
                 if let hint = encryptionHint {
                     Text(hint)
@@ -474,6 +478,7 @@ struct RepositoryEditorSheet: View {
                         draft.localPath = url.path
                     }
                 }
+                .accessibilityIdentifier(AccessibilityID.RepositoryEditor.chooseFolder)
             }
         case .sftp:
             TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
