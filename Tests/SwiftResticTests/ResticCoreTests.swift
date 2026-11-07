@@ -224,23 +224,13 @@ struct ResticErrorTests {
 
 @Suite("restic binary location")
 struct ResticBinaryTests {
-    @Test("helper lookup falls back to the inherited PATH")
-    func helperLookup() {
-        // `sh` lives in /bin, which the hard-coded candidate list never covers:
-        // only the PATH fallback can find it. Without the fallback, an rclone
-        // repository would fail with an opaque "command not found" in restic's
-        // stderr instead of a named missing binary.
-        let sh = ResticBinary.locateHelper(named: "sh")
-        #expect(sh?.path.hasSuffix("/sh") == true)
-        #expect(ResticBinary.locateHelper(named: "definitely-not-a-real-helper") == nil)
-    }
-
     @Test("every folder a helper is looked for in is on restic's PATH")
     func helperFoldersAreOnResticsPath() throws {
-        // The editor accepts rclone where locateHelper finds it; restic runs
-        // it from its PATH, so a folder only the lookup knows would pass the
-        // editor and fail every run with "rclone is not installed".
+        // The bundled helpers lead, so restic spawns the pinned rclone — a
+        // brew rclone on the inherited PATH must not stand in.
+        let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path
         let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
+        #expect(path.first == helpers, "\(path.first ?? "none") leads instead of \(helpers)")
         for directory in ResticBinary.helperDirectories {
             #expect(path.contains(directory), "\(directory) missing from \(path)")
         }

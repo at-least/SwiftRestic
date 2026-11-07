@@ -21,31 +21,11 @@ struct ResticBinary: Sendable {
         return FileManager.default.isExecutableFile(atPath: path)
     }
 
-    /// Where a helper restic shells out to is looked for, in order, before
-    /// the inherited PATH; restic's PATH must hold each, or a helper found
-    /// here is one restic cannot run (ResticCoreTests pins it).
+    /// The extra PATH entries restic runs with, before the system folders —
+    /// where a brew ssh lives, which an sftp location needs. rclone is not
+    /// among them: the bundled copy leads restic's PATH
+    /// (`ResticRunner.baseEnvironment`).
     static let helperDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
-
-    /// Without this the failure surfaces as an opaque "command not found" buried
-    /// in restic's stderr.
-    static func locateHelper(named name: String) -> URL? {
-        for directory in helperDirectories {
-            let candidate = "\(directory)/\(name)"
-            if Self.isExecutableFile(atPath: candidate) {
-                return URL(fileURLWithPath: candidate)
-            }
-        }
-        return onInheritedPath(name).map { URL(fileURLWithPath: $0) }
-    }
-
-    private static func onInheritedPath(_ name: String) -> String? {
-        guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else { return nil }
-        for dir in pathValue.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent(name).path
-            if Self.isExecutableFile(atPath: candidate) { return candidate }
-        }
-        return nil
-    }
 }
 
 enum ResticState {
