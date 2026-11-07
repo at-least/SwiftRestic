@@ -329,6 +329,7 @@ struct FilesBrowserView: View {
                         }
                     }
                     .listStyle(.inset)
+                    .accessibilityIdentifier(AccessibilityID.FilesSearch.results)
                     .focusOnClick($hitsAreFocused)
                     .onKeyPress(.return, phases: .down) { endSearch($0) }
                     .onKeyPress(.escape, phases: .down) { endSearch($0) }

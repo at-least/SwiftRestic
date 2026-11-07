@@ -2,6 +2,7 @@
 # The UI tests (scheme SwiftResticUITests): built here, run in a single-use
 # orchard VM from cirruslabs' Xcode image, never on this desktop, which they
 # would drive. Needs the orchard CLI's default context (the controller).
+# Arguments go to xcodebuild test-without-building (-only-testing:SwiftResticUITests/FirstBackupUITests).
 # The result bundle lands in .build/ui-test/ui.xcresult; the exit status is
 # the test run's.
 set -euo pipefail
@@ -49,8 +50,11 @@ until vm 'pgrep -x Finder >/dev/null' 2>/dev/null; do
 done
 
 tar -C "$OUT/dd/Build" -cf - Products | vm 'mkdir -p /tmp/ui && tar -C /tmp/ui -xf -'
+# Not printf ' %q' "$@" alone: with no arguments it prints '', an empty build action.
+options=""
+if [ "$#" -gt 0 ]; then options=$(printf ' %q' "$@"); fi
 status=0
-vm "cd /tmp/ui && xcodebuild test-without-building -xctestrun Products/$xctestrun -destination 'platform=macOS,arch=$(uname -m)' -resultBundlePath ui.xcresult" || status=$?
+vm "cd /tmp/ui && xcodebuild test-without-building -xctestrun Products/$xctestrun -destination 'platform=macOS,arch=$(uname -m)' -resultBundlePath ui.xcresult$options" || status=$?
 rm -rf "$OUT/ui.xcresult"
 vm 'cd /tmp/ui && tar -cf - ui.xcresult' | tar -C "$OUT" -xf -
 echo "result bundle: $OUT/ui.xcresult"

@@ -47,6 +47,7 @@ struct PlanDetailView: View {
             Button("Back Up Now") {
                 model.runBackup(planID: plan.id)
             }
+            .accessibilityIdentifier(AccessibilityID.Plan.backUpNow)
             .disabled(!commands.canBackUp)
             .modifier(TileHelp(help: commands.backUpDisabledReason))
         }

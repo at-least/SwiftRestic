@@ -107,6 +107,7 @@ struct RestoreDestinationSheet: View {
                         // are paths and sentences that need the width.
                         if kind == .otherFolder {
                             Button("Choose…") { chooseFolder() }
+                                .accessibilityIdentifier(AccessibilityID.RestoreSheet.chooseFolder)
                                 .controlSize(.small)
                                 .help("Pick the folder to restore into")
                         }
@@ -141,6 +142,7 @@ struct RestoreDestinationSheet: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Restore") { restore() }
+                    .accessibilityIdentifier(AccessibilityID.RestoreSheet.restore)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(directories == nil || model.isRestoring || isConfirming)

@@ -191,6 +191,7 @@ private struct FolderPaneActions: View {
                     .help("Open the newest backup at this folder on the Backups tab")
                 Spacer()
                 Button("Restore…") { restoreFolder() }
+                    .accessibilityIdentifier(AccessibilityID.FilesPane.restore)
                     .buttonStyle(.borderedProminent)
                     .disabled(newest == nil || model.isRestoring)
                     .help("Restore this whole folder as of the newest backup")

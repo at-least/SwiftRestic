@@ -31,6 +31,7 @@ struct FirstBackupSheet: View {
                                 .foregroundStyle(source.isEmpty ? .secondary : .primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                                .accessibilityIdentifier(AccessibilityID.FirstBackup.source)
                             Button("Choose…") {
                                 if let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") {
                                     source = url.path

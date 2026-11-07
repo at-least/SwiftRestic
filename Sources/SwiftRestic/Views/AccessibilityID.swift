@@ -6,6 +6,7 @@ enum AccessibilityID {
     }
 
     enum FirstBackup {
+        static let source = "firstBackup.source"
         static let chooseSource = "firstBackup.chooseSource"
         static let disk = "firstBackup.disk"
         static let password = "firstBackup.password"
@@ -16,5 +17,19 @@ enum AccessibilityID {
 
     enum Plan {
         static let total = "plan.total"
+        static let backUpNow = "plan.backUpNow"
+    }
+
+    enum FilesPane {
+        static let restore = "filesPane.restore"
+    }
+
+    enum FilesSearch {
+        static let results = "filesSearch.results"
+    }
+
+    enum RestoreSheet {
+        static let chooseFolder = "restoreSheet.chooseFolder"
+        static let restore = "restoreSheet.restore"
     }
 }
