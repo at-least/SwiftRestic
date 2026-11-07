@@ -128,7 +128,7 @@ struct RepositoryDetailView: View {
     }
 
     private func maintenanceSection(_ repository: Repository) -> some View {
-        Section("Maintenance") {
+        Section {
             if let activity = model.maintenance[repositoryID] {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
@@ -199,6 +199,21 @@ struct RepositoryDetailView: View {
             if model.repositoriesMissingPassword.contains(repositoryID) {
                 WarningLine(text: "Waiting for a password. Nothing is scheduled until one is saved.")
             }
+        } header: {
+            // The page shows the runs' results and progress; the header
+            // starts them, as the plan page's section headers start theirs —
+            // the same confirmations the Location menu and the sidebar row's
+            // menu ask, in the same words.
+            HStack {
+                Text("Maintenance")
+                Spacer()
+                let commands = model.repositoryCommands(for: .repository(repositoryID))
+                Button("Verify Backups…") { router.request(.confirm(.check(repositoryID))) }
+                    .disabled(!commands.canMaintain)
+                Button("Clean Up Now…") { router.request(.confirm(.prune(repositoryID))) }
+                    .disabled(!commands.canMaintain)
+            }
+            .controlSize(.small)
         }
     }
 }

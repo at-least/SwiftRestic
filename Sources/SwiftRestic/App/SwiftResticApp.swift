@@ -429,9 +429,9 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// Acts on `commandRepositoryID(for:)`. The repository page keeps no
-    /// maintenance buttons of its own: Check, Clean Up and the repairs are
-    /// here, and the first two on the sidebar row's menu. Nothing
+    /// Acts on `commandRepositoryID(for:)`. Check and Clean Up also start
+    /// from the repository page's Maintenance header and the sidebar row's
+    /// menu, through the shared confirmations; the repairs are here. Nothing
     /// destructive has a key.
     private var locationMenu: some Commands {
         CommandMenu("Location") {
