@@ -56,8 +56,8 @@ targets:
         COMBINE_HIDPI_IMAGES: YES
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/../Frameworks"]
     postBuildScripts:
-      - name: Embed restic
-        script: '"$SRCROOT/Tools/embed-restic.sh"'
+      - name: Embed helpers
+        script: '"$SRCROOT/Tools/embed-helpers.sh"'
         basedOnDependencyAnalysis: false
     dependencies:
       - package: GRDB

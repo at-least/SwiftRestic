@@ -17,11 +17,13 @@ Cloud locations set up earlier keep working; new ones go through rclone.
 ## Requirements
 
 - macOS 15 or later.
-- Nothing else for most people. restic 0.19.1 is inside the app, and the app
-  runs only that copy, whatever else is on the Mac. restic's BSD 2-Clause
-  license is in the About window. restic updates come with app updates.
-- rclone, only for rclone remotes (`brew install rclone`), with the remote
-  already configured with `rclone config`.
+- Nothing else for most people. restic 0.19.1 and rclone 1.76.0 are inside
+  the app, and the app runs only those copies, whatever else is on the Mac.
+  Both update with app updates; their licenses (restic BSD 2-Clause, rclone
+  MIT) are in the About window.
+- An rclone remote is still set up outside the app, with `rclone config` in
+  Terminal — your own rclone, or the one in the app bundle at
+  `SwiftRestic.app/Contents/Helpers/rclone`.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
   withholds `~/Documents`, `~/Desktop` and the like and backups end
   incomplete. The app asks for it when you set up your first backup.
@@ -35,9 +37,10 @@ brew install xcodegen
 open SwiftRestic.xcodeproj     # or work in Xcode
 ```
 
-The build downloads the pinned restic from GitHub into `.build/` once and
-checks its SHA-256. To move to a new restic, change the version and both
-checksums in `Tools/fetch-restic.sh`, then run the tests.
+The build downloads the pinned restic and rclone into `.build/` once and
+checks their SHA-256. To move to a new one, change the version and both
+checksums in `Tools/fetch-restic.sh` or `Tools/fetch-rclone.sh`, then run
+the tests.
 
 Debug builds are signed with the author's Apple Development certificate. On
 another Mac, build ad hoc:

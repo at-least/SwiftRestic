@@ -86,6 +86,7 @@ fi
 ACTION="${1:-build}"
 source Tools/xcodebuild-common.sh
 Tools/fetch-restic.sh >/dev/null
+Tools/fetch-rclone.sh >/dev/null
 
 if [ "$ACTION" = "test" ]; then
     refuse_concurrent_test_session
@@ -121,20 +122,25 @@ if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     fi
 fi
 
-# The app in the build folder must carry the pinned restic under a seal that
-# holds: what the tests ran on is what ships.
+# The app in the build folder must carry the pinned restic and rclone under
+# a seal that holds: what the tests ran on is what ships.
 if [ "$status" -eq 0 ]; then
     app="$(xcodebuild "${xcodebuild_arguments[@]}" -showBuildSettings 2>/dev/null \
         | awk -F' = ' '/^ *TARGET_BUILD_DIR = /{dir=$2} /^ *WRAPPER_NAME = /{name=$2} END{print dir"/"name}')"
-    pinned="$(Tools/fetch-restic.sh)"
+    pinned_restic="$(Tools/fetch-restic.sh)"
+    pinned_rclone="$(Tools/fetch-rclone.sh)"
     if ! codesign --verify --deep --strict "$app"; then
         echo "error: $app fails codesign --verify --deep --strict" >&2
         status=1
-    elif [ "$("$app/Contents/Helpers/restic" version)" != "$("$pinned" version)" ]; then
+    elif [ "$("$app/Contents/Helpers/restic" version)" != "$("$pinned_restic" version)" ]; then
         echo "error: $app/Contents/Helpers/restic is not the pinned restic" >&2
+        status=1
+    elif [ "$("$app/Contents/Helpers/rclone" version)" != "$("$pinned_rclone" version)" ]; then
+        echo "error: $app/Contents/Helpers/rclone is not the pinned rclone" >&2
         status=1
     else
         echo "bundled: $("$app/Contents/Helpers/restic" version)"
+        echo "bundled: $("$app/Contents/Helpers/rclone" version | head -1)"
     fi
 fi
 exit "$status"
