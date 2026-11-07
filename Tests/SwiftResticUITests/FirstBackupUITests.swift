@@ -15,4 +15,27 @@ final class FirstBackupUITests: XCTestCase {
         UITest.backUpFirstFolder(folders, in: app)
         attachScreenshot()
     }
+
+    /// The Disk picker's Other… with the folder being backed up: its panel
+    /// takes the keyboard (Go to Folder), and the sheet refuses the choice.
+    @MainActor
+    func testOtherFolderInsideTheSourceIsRefused() throws {
+        let folders = try UITestFolders.make("OtherFolder")
+        let app = UITest.launch(folders)
+        app.buttons[AccessibilityID.Welcome.backUpAFolder].click()
+        let backUp = app.buttons[AccessibilityID.FirstBackup.backUp]
+        XCTAssertTrue(backUp.waitForExistence(timeout: 10))
+        app.buttons[AccessibilityID.FirstBackup.chooseSource].click()
+        UITest.choose(folders.source, in: app)
+
+        let disk = app.popUpButtons[AccessibilityID.FirstBackup.disk]
+        disk.click()
+        app.menuItems["Other…"].click()
+        UITest.choose(folders.source, in: app)
+        XCTAssertTrue(disk.waitForValue(UITest.tilde(folders.source)))
+        XCTAssertTrue(app.staticTexts[AccessibilityID.FirstBackup.requirement]
+            .waitForValue("Keep the backups outside the folder you’re backing up."))
+        XCTAssertFalse(backUp.isEnabled)
+        attachScreenshot()
+    }
 }

@@ -111,8 +111,6 @@ enum UITest {
         let goTo = app.sheets["GoToWindow"]
         let path = goTo.textFields["PathTextField"]
         // A ⌘⇧G sent as the panel appears is lost: send it until the sheet is up.
-        // Only for a panel a button opens: one the Disk picker's Other… opens
-        // never showed Go to Folder (resent for 20 s, or after a click on it).
         let deadline = Date().addingTimeInterval(20)
         repeat {
             panel.typeKey("g", modifierFlags: [.command, .shift])

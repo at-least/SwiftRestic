@@ -125,8 +125,17 @@ struct FirstBackupSheet: View {
                 folder = choice
                 return
             }
-            if let url = FilePicker.chooseDirectory(message: "Choose where to keep the backups") {
-                folder = url.path
+            // After the picker's menu has finished tracking: a panel run from
+            // inside it got no key at all (not Esc, not ⌘⇧G) while the menu
+            // stayed up behind it. Not a Task or DispatchQueue.main: both
+            // still run inside the tracking, in its run-loop mode.
+            let folder = $folder
+            RunLoop.main.perform(inModes: [.default]) {
+                MainActor.assumeIsolated {
+                    if let url = FilePicker.chooseDirectory(message: "Choose where to keep the backups") {
+                        folder.wrappedValue = url.path
+                    }
+                }
             }
         }
     }
