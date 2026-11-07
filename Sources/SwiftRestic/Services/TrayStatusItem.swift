@@ -93,7 +93,12 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         // exclamation mark stays readable under it. The words go to VoiceOver.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
         button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(
-            for: state, hold: hold, resticAbsence: resticAbsence))
+            for: state, hold: hold, resticAbsence: resticAbsence,
+            isWorking: MenuBarStatus.isWorking(
+                activity: model.activity, maintenance: model.maintenance,
+                isRestoring: model.isRestoring, isConsoleRunning: model.console.isRunning
+            )
+        ))
     }
 
     /// The pulse timer lives only while the running face is up, and checks

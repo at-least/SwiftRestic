@@ -86,4 +86,53 @@ struct ServerAwayTests {
         }
         await model.shutdown()
     }
+
+    @Test("a location whose listing hangs at launch delays no other location's due plan, and its own plan waits for its listing")
+    func hungListingHoldsOnlyItsOwnPlan() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticLaunchHang-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = try StubRestic.install(in: root)
+
+        func location(_ name: String, stubMode: String) throws -> (Repository, BackupPlan) {
+            let folder = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var repository = Repository()
+            repository.localPath = folder.path
+            repository.extraEnvironment = ["SWIFTRESTIC_STUB": stubMode]
+            var plan = BackupPlan()
+            plan.repositoryID = repository.id
+            plan.path = folder.path
+            plan.retention.isEnabled = false
+            // Daily and never run: due at the scheduler's first tick.
+            plan.schedule.frequency = .daily
+            return (repository, plan)
+        }
+        let (hung, hungPlan) = try location("Hung", stubMode: "hang-listing")
+        let (fine, finePlan) = try location("Fine", stubMode: "default")
+
+        var configuration = AppConfiguration()
+        configuration.repositories = [hung, fine]
+        configuration.plans = [hungPlan, finePlan]
+        configuration.settings.resticPathOverride = stub.url.path
+        let store = ConfigStore(directory: root.appendingPathComponent("config"))
+        try await store.save(configuration)
+
+        let model = AppModel(store: store, secrets: .inMemory([
+            hung.id: (password: "test-password", providerSecret: nil),
+            fine.id: (password: "test-password", providerSecret: nil),
+        ]))
+        model.launchListingGrace = .milliseconds(500)
+        let boot = Task { await model.bootstrap() }
+
+        await eventually(within: 15) { model.configuration.runs.contains { $0.planID == finePlan.id } }
+        #expect(model.configuration.runs.contains { $0.planID == finePlan.id && $0.kind == .backup })
+        #expect(!model.configuration.runs.contains { $0.planID == hungPlan.id })
+        #expect(!model.isRunning(planID: hungPlan.id))
+        #expect(model.repositoriesAwaitingLaunchListing == [hung.id])
+
+        await model.shutdown()
+        await boot.value
+    }
 }

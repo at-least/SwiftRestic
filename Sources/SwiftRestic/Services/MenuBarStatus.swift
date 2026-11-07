@@ -5,11 +5,12 @@ import Foundation
 /// Pure and view-free, so the idle → running → finished transitions can be
 /// tested by handing it snapshots of the state.
 enum MenuBarStatus {
-    /// The four faces the menu bar icon can wear. Running beats everything
-    /// else: an animated-then-badged glyph would flicker between faces on
-    /// every run. Unconfigured beats problem: run history outlives removed
-    /// repositories, so the icon must not ask for setup over a line
-    /// announcing an old failure.
+    /// The four faces the menu bar icon can wear. Problem beats running: the
+    /// icon answers "am I safe?" first, and a failure stays one steady face
+    /// until a success heals it. A plan's own run does not count against it,
+    /// so a first backup pulses. Unconfigured beats problem: run history
+    /// outlives removed repositories, so the icon must not ask for setup over
+    /// a line announcing an old failure.
     enum IconState: Equatable {
         case unconfigured
         case idle
@@ -17,11 +18,19 @@ enum MenuBarStatus {
         case problem
     }
 
-    /// Which face the icon wears right now. Every kind of restic work counts
-    /// as running — the menu bar is the only surface that exists when the
-    /// window is closed, so work invisible there is invisible everywhere.
+    /// Every kind of restic work counts: the menu bar is the only surface
+    /// that exists when the window is closed.
+    static func isWorking(
+        activity: [UUID: PlanActivity],
+        maintenance: [UUID: MaintenanceActivity],
+        isRestoring: Bool,
+        isConsoleRunning: Bool
+    ) -> Bool {
+        !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
+    }
+
     /// A problem is what `verdict` would lead with: restic missing, a run's
-    /// standing problem, or a plan that needs attention.
+    /// standing problem, or a plan not running that needs attention.
     static func iconState(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
@@ -33,13 +42,13 @@ enum MenuBarStatus {
         resticAbsence: ResticAbsence? = nil,
         now: Date = .now
     ) -> IconState {
-        let isRunning = !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
-        if isRunning { return .running }
-        if hasNoRepositories { return .unconfigured }
+        let isRunning = isWorking(activity: activity, maintenance: maintenance, isRestoring: isRestoring, isConsoleRunning: isConsoleRunning)
+        if hasNoRepositories { return isRunning ? .running : .unconfigured }
         let isHealthy = resticAbsence == nil
             && newestStandingProblem(runs: runs, now: now) == nil
-            && OverviewMetrics.needingAttention(rows).isEmpty
-        return isHealthy ? .idle : .problem
+            && OverviewMetrics.needingAttention(rows.filter { !$0.isRunning }).isEmpty
+        if !isHealthy { return .problem }
+        return isRunning ? .running : .idle
     }
 
     /// What the icon draws for a state: the app's own line drawing (see
@@ -65,13 +74,14 @@ enum MenuBarStatus {
         }
     }
 
-    /// The face's words, with the hold when one is in force and restic
-    /// missing — neither shows in the glyph, so the words carry them
+    /// The face's words, with what the glyph can't show: a hold, restic
+    /// missing, work running under a problem's steady face
     /// ("SwiftRestic, backups paused until 3:40 PM").
     static func accessibilityDescription(
         for state: IconState,
         hold: ScheduleHold? = nil,
         resticAbsence: ResticAbsence? = nil,
+        isWorking: Bool = false,
         now: Date = .now
     ) -> String {
         let base = switch state {
@@ -81,6 +91,7 @@ enum MenuBarStatus {
         case .problem: "SwiftRestic, needs attention"
         }
         var clauses: [String] = []
+        if isWorking, state != .running { clauses.append("work in progress") }
         if let hold {
             let summary = hold.summary(now: now)
             clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())

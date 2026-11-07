@@ -212,7 +212,7 @@ extension AppModel {
 
         startNetworkMonitor()
         startMountWatcher()
-        await refreshAllSnapshots()
+        repositoriesAwaitingLaunchListing = Set(configuration.repositories.map(\.id))
         #if DEBUG
         // A capture run must photograph a deterministic state: a live scheduler
         // can fire a due plan mid-capture and put a progress row on screen.
@@ -222,6 +222,7 @@ extension AppModel {
         #else
         startScheduler()
         #endif
+        await readLocationsAtLaunch()
     }
 
     /// A plan belongs to its repository, and one pointing nowhere could

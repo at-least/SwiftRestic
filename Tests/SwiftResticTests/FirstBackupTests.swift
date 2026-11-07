@@ -124,6 +124,7 @@ struct FirstBackupTests {
 
         await model.tasks.drain()
         #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
+        await eventually(within: 5) { model.plan(id: planID)?.announcesFirstBackup == false }
         #expect(model.plan(id: planID)?.announcesFirstBackup == false)
         await model.shutdown()
     }
@@ -149,7 +150,7 @@ struct FirstBackupTests {
     }
 
     @Test("the first success is announced once, whatever the setting; another plan's is not")
-    func firstSuccessAnnouncedOnce() {
+    func firstSuccessAnnouncedOnce() async {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticFirstNotice-\(UUID().uuidString)")), secrets: .inMemory())
         var fresh = BackupPlan()
@@ -169,8 +170,45 @@ struct FirstBackupTests {
         let first = success(fresh)
         #expect(model.wantsNotification(for: first))
         model.notify(about: first)
+        await eventually(within: 5) { model.plan(id: fresh.id)?.announcesFirstBackup == false }
         #expect(model.plan(id: fresh.id)?.announcesFirstBackup == false)
         #expect(!model.wantsNotification(for: success(fresh)))
+    }
+
+    @Test("with notifications not allowed the announcement waits, and the first success after they are allowed says it once")
+    func announcementWaitsForPermission() async {
+        let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticFirstNotice-\(UUID().uuidString)")), secrets: .inMemory())
+        var plan = BackupPlan()
+        plan.path = "/fresh"
+        plan.announcesFirstBackup = true
+        model.configuration.plans = [plan]
+        func success() -> RunRecord {
+            var record = RunRecord(kind: .backup, planID: plan.id, planName: plan.path, repositoryID: nil)
+            record.outcome = .succeeded
+            return record
+        }
+
+        var refused = 0
+        model.notificationPoster = { _ in
+            refused += 1
+            throw AppModel.NotificationProblem.permissionDenied
+        }
+        model.notify(about: success())
+        await eventually(within: 5) { refused == 1 && !model.banners.isEmpty }
+        #expect(refused == 1)
+        #expect(model.plan(id: plan.id)?.announcesFirstBackup == true)
+
+        var posted: [String] = []
+        model.notificationPoster = { posted.append($0.content.body) }
+        model.notify(about: success())
+        await eventually(within: 5) { model.plan(id: plan.id)?.announcesFirstBackup == false }
+        #expect(posted.count == 1)
+        #expect(posted.first == AppModel.firstBackupNotification(plan: plan, among: [plan], now: .now).body)
+
+        model.notify(about: success())
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(posted.count == 1)
     }
 
     @Test("a first backup that ended with warnings keeps the announcement for the first success")

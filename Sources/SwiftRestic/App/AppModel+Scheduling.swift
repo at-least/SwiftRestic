@@ -8,10 +8,21 @@ extension AppModel {
     func startScheduler() {
         schedulerTask?.cancel()
         schedulerTask = Task { [weak self] in
+            await self?.waitForLaunchListings()
             while !Task.isCancelled {
                 await self?.runDuePlans()
                 try? await Task.sleep(for: Self.schedulerTick)
             }
+        }
+    }
+
+    /// The first tick waits, within `launchListingGrace`, so a launch with every
+    /// location readable starts its due work at once. Past it, a location
+    /// still being read holds only its own work, until a later tick.
+    private func waitForLaunchListings() async {
+        let deadline = ContinuousClock.now + launchListingGrace
+        while !repositoriesAwaitingLaunchListing.isEmpty, ContinuousClock.now < deadline, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
 
@@ -45,6 +56,7 @@ extension AppModel {
         // repository with no stored password has nothing runnable; treat it
         // as busy so upkeep is skipped rather than failing on every tick.
         var busy = busyRepositoryIDs.union(repositoriesMissingPassword).union(awaitingDrive).union(repositoriesWaitingForNetwork)
+            .union(repositoriesAwaitingLaunchListing)
         // A server out of reach holds its upkeep only: a backup due to it
         // still runs, and skips in seconds with its own record.
         for due in Scheduler.dueMaintenance(

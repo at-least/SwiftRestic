@@ -60,10 +60,14 @@ extension AppModel {
             guard let repositoryID = plan.repositoryID else { return false }
             return busy.contains(repositoryID) && plan.dueSlot(at: now) != nil
         }
+        // Its listing may hold a newer backup than the history knows.
+        let unread = configuration.plans.filter { plan in
+            plan.repositoryID.map(repositoriesAwaitingLaunchListing.contains) == true
+        }
         let alerts = StaleAlert.due(
             plans: configuration.plans,
             latestSnapshotTimes: latest,
-            running: runningPlanIDs.union(waitingTheirTurn.map(\.id)),
+            running: runningPlanIDs.union(waitingTheirTurn.map(\.id)).union(unread.map(\.id)),
             now: now
         )
         for alert in alerts {
@@ -116,14 +120,12 @@ extension AppModel {
 
     func notify(about record: RunRecord, now: Date = .now) {
         guard wantsNotification(for: record) else { return }
-        // Disarmed before the bundle check, so one plan is told once under
-        // any host.
         var firstBackup: (title: String, body: String)?
+        var announcedPlanID: UUID?
         if announcesFirstBackup(record), let planID = record.planID, let plan = plan(id: planID) {
             firstBackup = Self.firstBackupNotification(plan: plan, among: configuration.plans, now: now)
-            updatePlan(planID) { $0.announcesFirstBackup = false }
+            announcedPlanID = planID
         }
-        guard Self.supportsNotifications else { return }
 
         let content = UNMutableNotificationContent()
         content.title = firstBackup?.title ?? Self.notificationTitle(
@@ -132,30 +134,29 @@ extension AppModel {
             repositories: configuration.repositories
         )
         content.body = firstBackup?.body ?? Self.notificationBody(for: record)
+        // Disarmed only once accepted: with notifications not allowed, the
+        // first success after they are allowed says it instead.
         deliver(UNNotificationRequest(
             identifier: record.id.uuidString,
             content: content,
             trigger: nil
-        ))
+        ), onAccepted: { [weak self] in
+            guard let self, let announcedPlanID else { return }
+            self.updatePlan(announcedPlanID) { $0.announcesFirstBackup = false }
+        })
     }
 
-    private func deliver(_ request: UNNotificationRequest) {
+    private func deliver(_ request: UNNotificationRequest, onAccepted: @escaping @MainActor () -> Void = {}) {
         Task {
             // A notification that silently never arrives is the failure mode
             // a backup app most cannot afford: external channels banner their
             // delivery errors, and the local one must too. Denied permission
             // is the common way this happens — say it once per stretch, the
             // same transition-signal rule the stats banner follows.
-            let center = UNUserNotificationCenter.current()
-            let authorization = await center.notificationSettings().authorizationStatus
             do {
-                switch authorization {
-                case .authorized, .provisional, .ephemeral:
-                    try await center.add(request)
-                    notificationsProblemNoted = false
-                default:
-                    throw NotificationProblem.permissionDenied
-                }
+                try await notificationPoster(request)
+                notificationsProblemNoted = false
+                onAccepted()
             } catch {
                 guard !notificationsProblemNoted else { return }
                 notificationsProblemNoted = true
@@ -173,6 +174,18 @@ extension AppModel {
                     post(Banner(title: "Couldn’t send a notification", message: error.localizedDescription, level: .warning))
                 }
             }
+        }
+    }
+
+    /// A host without a notification center has nothing to refuse the request.
+    static func addToNotificationCenter(_ request: UNNotificationRequest) async throws {
+        guard supportsNotifications else { return }
+        let center = UNUserNotificationCenter.current()
+        switch await center.notificationSettings().authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            try await center.add(request)
+        default:
+            throw NotificationProblem.permissionDenied
         }
     }
 
@@ -221,7 +234,7 @@ extension AppModel {
         }
     }
 
-    private enum NotificationProblem: Error {
+    enum NotificationProblem: Error {
         case permissionDenied
     }
 }

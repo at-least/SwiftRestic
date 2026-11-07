@@ -2,9 +2,8 @@ import Foundation
 
 extension AppModel {
     /// Generous ceiling on one repository's `snapshots`/`stats` refresh: a
-    /// black-holed SFTP host or S3 endpoint would otherwise hang the
-    /// refresh — and, at launch, the scheduler that is armed once it
-    /// finishes — forever.
+    /// black-holed SFTP host or S3 endpoint would otherwise hang the refresh,
+    /// and that location's due work, forever.
     static let refreshTimeout: TimeInterval = 300
 
     /// The most backups `fileHistory` names to restic: `--snapshot` plus a
@@ -13,14 +12,25 @@ extension AppModel {
     static let fileHistoryNamedLimit = 2_000
 
     func refreshAllSnapshots() async {
-        // Concurrent, not serial: the scheduler is armed only after this
-        // returns, and one slow or unreachable remote repository must not
-        // delay another's backups.
+        // Concurrent: one slow or unreachable location must not delay another's rows.
         await withTaskGroup(of: Void.self) { group in
             for repository in configuration.repositories {
                 group.addTask { await self.refreshSnapshots(repositoryID: repository.id) }
             }
         }
+    }
+
+    func readLocationsAtLaunch() async {
+        await withTaskGroup(of: Void.self) { group in
+            for repository in configuration.repositories {
+                group.addTask { await self.readLocationAtLaunch(repositoryID: repository.id) }
+            }
+        }
+    }
+
+    private func readLocationAtLaunch(repositoryID: UUID) async {
+        await refreshSnapshots(repositoryID: repositoryID)
+        repositoriesAwaitingLaunchListing.remove(repositoryID)
     }
 
     func refreshSnapshots(repositoryID: UUID) async {
@@ -76,7 +86,7 @@ extension AppModel {
 
         // A network repository's server out of reach is not asked about
         // either: restic retries such a server for about a quarter of an
-        // hour, and the launch's scheduler waits for this listing. Its words
+        // hour, and its due work waits for this listing at launch. Its words
         // are a skipped backup's, with no banner; a network change reads it
         // again (`networkPathChanged`).
         if case let .unreachable(why)? = await probeServer(of: repository) {

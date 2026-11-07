@@ -228,7 +228,7 @@ struct MenuBarStatusTests {
         )
     }
 
-    @Test("the icon runs while anything runs, warns on a recent problem, otherwise idles or asks for setup")
+    @Test("the icon warns on a recent problem, even under work, runs while anything runs, otherwise idles or asks for setup")
     func iconStates() {
         let repository = Repository()
         let busyActivity = [UUID(): activity()]
@@ -261,14 +261,12 @@ struct MenuBarStatusTests {
         // claim setup is needed while work it can't explain is in flight.
         #expect(state(activity: busyActivity, hasNoRepositories: true) == .running)
 
-        // A recent failure is the warning face — but only when nothing runs;
-        // the menu's problem line carries the news meanwhile.
         var failed = RunRecord(planName: "Nightly")
         failed.outcome = .failed
         failed.startedAt = .now.addingTimeInterval(-60)
         failed.finishedAt = failed.startedAt
         #expect(state(runs: [failed]) == .problem)
-        #expect(state(activity: busyActivity, runs: [failed]) == .running)
+        #expect(state(activity: busyActivity, runs: [failed]) == .problem)
 
         // A seven-day-stale failure is old news, same window as problemLine.
         var stale = RunRecord(planName: "Old")
@@ -800,7 +798,7 @@ struct MenuBarStatusTests {
         #expect(verdict([], noRepositories: true) == nil)
     }
 
-    @Test("the icon warns for what the verdict warns about, a hold included, and running still wins")
+    @Test("the icon warns for what the verdict warns about, a hold included, with work running or not")
     func iconFollowsTheVerdict() {
         func state(rows: [ProtectionRow], absence: ResticAbsence? = nil, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
@@ -814,7 +812,35 @@ struct MenuBarStatusTests {
         #expect(state(rows: [protectionRow("Old", isProtected: false)]) == .problem)
         #expect(state(rows: [protectionRow("Gone", isKnown: false, isProtected: false, didFail: true)]) == .problem)
         #expect(state(rows: [protectionRow("Reading", isKnown: false, isProtected: false)]) == .idle)
-        #expect(state(rows: [protectionRow("Old", isProtected: false)], activity: [UUID(): activity()]) == .running)
+        #expect(state(rows: [protectionRow("Old", isProtected: false)], activity: [UUID(): activity()]) == .problem)
+        #expect(state(rows: [fine], activity: [UUID(): activity()]) == .running)
+        #expect(state(rows: [fine], absence: .missing, activity: [UUID(): activity()]) == .problem)
+    }
+
+    @Test("work in flight does not hide a standing failure, and a plan's own run does not read as its problem")
+    func problemOutranksRunning() {
+        func state(rows: [ProtectionRow] = [], runs: [RunRecord] = [], isRestoring: Bool = false, hasNoRepositories: Bool = false) -> MenuBarStatus.IconState {
+            MenuBarStatus.iconState(
+                activity: [:], maintenance: [:], isRestoring: isRestoring, isConsoleRunning: false,
+                hasNoRepositories: hasNoRepositories, runs: runs, rows: rows
+            )
+        }
+        var failed = RunRecord(kind: .backup, planID: UUID(), planName: "Documents")
+        failed.outcome = .failed
+        failed.startedAt = .now.addingTimeInterval(-60)
+
+        #expect(state(runs: [failed], isRestoring: true) == .problem)
+        #expect(state(isRestoring: true) == .running)
+        // A plan's first backup, or an overdue plan's catching up: the run in
+        // flight is the answer to the row's complaint.
+        let catchingUp = protectionRow("First", isProtected: false, isRunning: true)
+        #expect(state(rows: [catchingUp], isRestoring: true) == .running)
+        // Run history outlives removed locations.
+        #expect(state(runs: [failed], isRestoring: true, hasNoRepositories: true) == .running)
+        #expect(state(runs: [failed], hasNoRepositories: true) == .unconfigured)
+
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem, isWorking: true) == "SwiftRestic, needs attention; work in progress")
+        #expect(MenuBarStatus.accessibilityDescription(for: .problem) == "SwiftRestic, needs attention")
     }
 
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")

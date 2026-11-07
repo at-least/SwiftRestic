@@ -1847,6 +1847,55 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("an after-backup hook runs when the backup fails, and reads failed")
+    func afterBackupHookSeesFailure() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticHookFailed-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let marker = base.resolvingSymlinksInPath().appendingPathComponent("outcome.txt")
+        var hook = BackupHook()
+        hook.event = .afterBackup
+        hook.command = #"printf '%s' "$SWIFTRESTIC_OUTCOME" > "\#(marker.path)""#
+
+        let harness = try await makeHarness(mode: "plainfail", planHooks: [hook])
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        harness.model.runBackup(planID: harness.plan.id)
+        await harness.model.waitForRun(planID: harness.plan.id)
+
+        #expect(harness.model.configuration.runs.first?.outcome == .failed)
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "failed")
+        await harness.model.shutdown()
+    }
+
+    @Test("a status queued behind the end of copying does not put the numbers back")
+    func lateProgressAfterCopyingIsDropped() async throws {
+        let harness = try await makeHarness(mode: "hang-backup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let planID = harness.plan.id
+        model.runBackup(planID: planID)
+        let report = model.progressReporter(planID: planID)
+
+        var early = OperationProgress()
+        early.fraction = 0.5
+        report(early)
+        await eventually(within: 5) { model.planProgress[planID]?.fraction == 0.5 }
+        #expect(model.planProgress[planID]?.fraction == 0.5)
+
+        model.setActivityPhase(.applyingRetention, for: planID)
+        #expect(model.planProgress[planID] == nil)
+        var late = OperationProgress()
+        late.fraction = 0.97
+        report(late)
+        // Hops onto the main actor; give it room to land.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.planProgress[planID] == nil)
+
+        model.cancelBackup(planID: planID)
+        await model.waitForRun(planID: planID)
+        await model.shutdown()
+    }
+
     @Test("deleting a running plan cancels the run and keeps the record")
     func deletingRunningPlanCancelsAndRecords() async throws {
         let harness = try await makeHarness(mode: "hang-backup")

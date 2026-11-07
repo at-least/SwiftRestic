@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 import Network
 import Observation
 import SwiftUI
@@ -110,6 +111,13 @@ final class AppModel {
     /// scheduler leaves it alone until the network changes
     /// (`networkPathChanged`) or a listing reads the repository again.
     var maintenanceAwaitingServer: Set<UUID> = []
+    /// Locations whose first listing since launch has not ended. Their due
+    /// work waits, because the listing is what says a password is missing, a
+    /// drive is away or a share needs reconnecting; other locations don't wait.
+    @ObservationIgnored var repositoriesAwaitingLaunchListing: Set<UUID> = []
+    /// How long the first tick gives every location's listing, so a launch
+    /// with all of them readable starts its due work in that one tick.
+    @ObservationIgnored var launchListingGrace: Duration = .seconds(10)
     /// Whether `configuration` holds what bootstrap loaded. Until then no
     /// save runs: an edit made during the load would write the defaults
     /// over the file.
@@ -144,6 +152,9 @@ final class AppModel {
     /// and `refreshLoginItemStatus`. Injectable for the same reason the probe
     /// is: `SMAppService` answers for whatever process macOS holds
     /// responsible, and a test must not register anything with it.
+    /// Injectable: a test host has no notification center, and permission
+    /// cannot be turned off from a test.
+    @ObservationIgnored var notificationPoster: @MainActor (UNNotificationRequest) async throws -> Void = AppModel.addToNotificationCenter
     @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
     @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
     /// The location gate in `performSetStartsAtLogin`. Injectable because
