@@ -3,6 +3,21 @@ import Testing
 
 @Suite("Notification payloads")
 struct NotificationTests {
+    @Test("a stored plain webhook pointed at Slack, Discord or Healthchecks reads as that service; a self-hosted address stays a webhook")
+    func storedWebhookFindsItsService() throws {
+        func kind(_ url: String) throws -> NotificationChannel.Kind {
+            let json = #"{"kind":"webhook","url":"\#(url)"}"#
+            return try JSONDecoder().decode(NotificationChannel.self, from: Data(json.utf8)).kind
+        }
+        #expect(try kind("https://hooks.slack.com/services/T/B/N") == .slack)
+        #expect(try kind("https://discord.com/api/webhooks/1/x") == .discord)
+        #expect(try kind("https://hc-ping.com/abc") == .healthchecks)
+        #expect(try kind("https://hc.example.org/ping/abc") == .webhook)
+        // A service chosen by hand is not second-guessed.
+        let chosen = #"{"kind":"healthchecks","url":"https://hc.example.org/ping/abc"}"#
+        #expect(try JSONDecoder().decode(NotificationChannel.self, from: Data(chosen.utf8)).kind == .healthchecks)
+    }
+
     private func channel(_ kind: NotificationChannel.Kind, url: String) -> NotificationChannel {
         var channel = NotificationChannel()
         channel.kind = kind

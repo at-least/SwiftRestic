@@ -595,7 +595,7 @@ struct PlanEditorSheet: View {
                     isInstallable: model.loginItemInstallable
                 ), offer != .startAtLogin {
                     LoginItemOfferLine(offer: offer)
-                } else {
+                } else if draft.schedule.frequency != .manual {
                     Text("Runs while SwiftRestic is open, and catches up after the Mac sleeps.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -143,7 +143,7 @@ struct SidebarView: View {
         }
         Button("Edit Plan…") { onEditPlan(plan) }
         Divider()
-        Button("Remove Plan", role: .destructive) { onDeletePlan(plan) }
+        Button("Remove Plan…", role: .destructive) { onDeletePlan(plan) }
     }
 
     @ViewBuilder
@@ -159,10 +159,10 @@ struct SidebarView: View {
         if commands.canMaintain {
             Divider()
             Button("Verify Backups…") { router.request(.confirm(.check(repository.id))) }
-            Button("Clean Up Now") { router.request(.confirm(.prune(repository.id))) }
+            Button("Clean Up Now…") { router.request(.confirm(.prune(repository.id))) }
         }
         Divider()
-        Button("Remove from SwiftRestic", role: .destructive) {
+        Button("Remove from SwiftRestic…", role: .destructive) {
             onRemoveRepository(repository)
         }
     }

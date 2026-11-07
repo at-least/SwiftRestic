@@ -117,6 +117,26 @@ struct PlanStatusTests {
         #expect(metered.help == "This plan is due and runs once this Mac is on another network")
     }
 
+    @Test("under an open-ended hold a plan not yet due reads Waiting: no date it would really run at")
+    func heldFuturePlanWaits() {
+        var plan = completeDailyPlan()
+        plan.lastRunAt = now
+
+        let timed = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: now.addingTimeInterval(3_600)), now: now
+        )
+        #expect(timed.value != "Waiting")
+
+        let paused = PlanStatus.nextBackupTile(
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), now: now
+        )
+        #expect(paused.value == "Waiting")
+        #expect(paused.help == "This plan runs once backups resume")
+
+        let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
+        #expect(metered.value == "Waiting")
+    }
+
     @Test("a due plan whose backup is running reads Running now, never Due now")
     func runningDuePlan() {
         var plan = completeDailyPlan()

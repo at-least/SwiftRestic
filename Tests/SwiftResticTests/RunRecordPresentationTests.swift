@@ -316,7 +316,7 @@ struct RunRecordPresentationTests {
         }
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: true, repositoryBusy: false) == .pruneNow(repository))
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: false, repositoryBusy: false) == nil)
-        #expect(RunFix.pruneNow(repository).title == "Clean Up Now")
+        #expect(RunFix.pruneNow(repository).title == "Clean Up Now…")
     }
 
     @Test("a check or prune that did not end clean offers itself again; nothing else does")

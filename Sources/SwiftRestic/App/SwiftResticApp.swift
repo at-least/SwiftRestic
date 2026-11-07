@@ -356,7 +356,7 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Remove Plan") {
+            Button("Remove Plan…") {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
             .disabled(!p.canDelete)
@@ -446,7 +446,7 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
             .disabled(!r.canMaintain)
-            Button("Clean Up Now") {
+            Button("Clean Up Now…") {
                 if let id = r.repositoryID { ask(.confirm(.prune(id))) }
             }
             .disabled(!r.canMaintain)
@@ -468,7 +468,7 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.editRepository(id)) }
             }
             .disabled(!r.canEdit)
-            Button("Remove from SwiftRestic") {
+            Button("Remove from SwiftRestic…") {
                 if let id = r.repositoryID { ask(.confirm(.deleteRepository(id))) }
             }
             .disabled(!r.canRemove)

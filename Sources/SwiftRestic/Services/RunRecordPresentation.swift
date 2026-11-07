@@ -42,7 +42,7 @@ enum RunFix: Equatable {
         case .removeStaleLocks: "Unlock"
         case .newPlan: "New Backup Plan…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
-        case .pruneNow: "Clean Up Now"
+        case .pruneNow: "Clean Up Now…"
         }
     }
 

@@ -183,7 +183,7 @@ struct RunDetailPanel: View {
                 }
                 if run.kind == .prune, let detail = run.detailText {
                     Text(detail)
-                        .font(.system(.callout, design: .monospaced))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }

@@ -2366,7 +2366,7 @@ struct AppModelStubTests {
         )
         // The change that streamed before restic died is still true.
         #expect(marks.changes["/src/new.txt"]?.category == .added)
-        #expect(marks.failure?.contains("no matching ID found") == true, "failure was \(String(describing: marks.failure))")
+        #expect(marks.failure == "No matching ID found for prefix \"feedface\"")
 
         // Nothing was cached: the same switch asks restic again. Checked
         // once the hand-overs have settled — a capture is its own task,

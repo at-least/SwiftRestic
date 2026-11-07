@@ -5,6 +5,14 @@ import Testing
 struct ResticErrorTests {
     /// The exit codes restic documents, per `man restic` — the mapping the error
     /// banners are built on.
+    @Test("restic's \"Fatal:\" stays out of what a person reads; the reason after it stays, and Copy Details keeps the line whole")
+    func fatalPrefixOffScreen() {
+        let line = "Fatal: config cannot be loaded: open /Volumes/A/config: permission denied"
+        let error = ResticError.commandFailed(exitCode: 1, message: line)
+        #expect(error.errorDescription == "Config cannot be loaded: open /Volumes/A/config: permission denied")
+        #expect(error.resticDetail == line)
+    }
+
     @Test("every documented exit code maps to an explanation")
     func knownExitCodes() {
         for code: Int32 in [1, 2, 3, 10, 11, 12, 130] {
@@ -111,7 +119,7 @@ struct ResticErrorTests {
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == "U" + fatal.dropFirst("Fatal: u".count))
     }
 
     @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic couldn’t get from it")
@@ -160,7 +168,7 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
         #expect(ResticError.rcloneMissing == "rclone is not installed. Install it with brew install rclone.")
 
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == fatal)
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == "U" + fatal.dropFirst("Fatal: u".count))
     }
 
     @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")

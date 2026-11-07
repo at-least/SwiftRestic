@@ -233,7 +233,7 @@ enum PlanStatus {
     /// the page cannot show a date nothing will fire at. A plan the scheduler
     /// skips (an incomplete setup, or a repository it cannot find) says it is
     /// not scheduled. A timed `hold` moves the date to its end; under an
-    /// open-ended one a due run reads "Waiting", never "Due now". A due slot
+    /// open-ended one every run reads "Waiting": no date is promised. A due slot
     /// whose backup is in flight reads "Running now".
     static func nextBackupTile(
         for plan: BackupPlan,
@@ -264,12 +264,12 @@ enum PlanStatus {
         if isBackingUp, next <= now {
             return TileFace(value: "Running now", help: nil)
         }
-        if let hold, next <= now {
+        if let hold, next <= now || hold.resumesAt == nil {
             let when = switch hold {
             case .paused: "once backups resume"
             case .onMeteredNetwork: "once this Mac is on another network"
             }
-            return TileFace(value: "Waiting", help: "This plan is due and runs \(when)")
+            return TileFace(value: "Waiting", help: "This plan \(next <= now ? "is due and runs" : "runs") \(when)")
         }
         var help = Format.timestamp(next)
         if let hold {

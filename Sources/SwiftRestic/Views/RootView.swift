@@ -79,6 +79,9 @@ struct RootView: View {
             onRevalidateSelection: revalidateSelection
         )
         .environment(filesTree)
+        // The toolbar's material is hidden (`chrome`), so nothing else stops
+        // a scrolled list from drawing under the title.
+        .clipped()
     }
 
     /// Its own chain for the type-check limit, like the others — see the

@@ -8,10 +8,11 @@ written by agents for agents, and the code itself is the documentation.
 SwiftRestic is a native macOS backup app in the spirit of Arq, with
 [restic](https://restic.net) doing the work underneath. It backs up folders
 on a schedule to local disks, SFTP, S3-compatible storage, Backblaze B2,
-rclone remotes and restic REST servers; browses and restores any backup; keeps a searchable index of every
-file in every backup; removes old backups, frees their space and verifies each backup location;
-and reports through macOS notifications, webhooks, Slack, Discord and
-Healthchecks.io.
+rclone remotes and restic REST servers; browses and restores any backup; keeps
+a searchable index of every file in every backup; removes old backups, frees
+their space and verifies each backup location; and reports through macOS
+notifications, webhooks, Slack, Discord and Healthchecks.io. Azure and Google
+Cloud locations set up earlier keep working; new ones go through rclone.
 
 ## Requirements
 
@@ -22,7 +23,7 @@ Healthchecks.io.
   already configured with `rclone config`.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
   withholds `~/Documents`, `~/Desktop` and the like and backups end
-  incomplete. The app says so in Settings.
+  incomplete. The app asks for it when you set up your first backup.
 
 ## Build, run and test
 
@@ -64,13 +65,14 @@ would need a Developer ID, the hardened runtime and notarization.
   stale. Settings can turn it off again.
 - The app is not sandboxed. restic has to read any folder and reach the
   network, and a sandboxed app confines its children.
-- A new scheduled plan backs up within a minute of being saved. Pick
+- A new scheduled plan starts its first backup as soon as it is saved. Pick
   *Manually* if that is not wanted.
 - SFTP from a GUI app has no `SSH_AUTH_SOCK` and no terminal: use a key
   without a passphrase, or an `~/.ssh/config` entry with an `IdentityFile`,
   and connect once with `ssh` first so the host key is known.
-- Hooks run through `/bin/sh -c` with the app's privileges and are told
-  about the run through `SWIFTRESTIC_*` environment variables. Only the
+- Hooks run before or after a plan's backup, through `/bin/sh -c` with the
+  app's privileges. They are told about the run through `SWIFTRESTIC_*`
+  environment variables; `SWIFTRESTIC_OUTCOME` says how it ended. Only the
   first line of a failing hook's output is kept, and it never leaves this
   Mac.
 - The UI is English only.

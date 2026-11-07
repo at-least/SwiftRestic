@@ -63,9 +63,12 @@ struct OtherGroupView: View {
 
     private func header(_ summary: OtherGroupPageSummary) -> some View {
         HStack(spacing: 12) {
+            // Not fixedSize: the window measures its minimum at a tiny width,
+            // this text then reads hundreds of points tall, and the split
+            // view is pushed up under the title bar.
             Text(summary.explanation)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1...3)
             Spacer(minLength: 12)
             if summary.isAdoptable, case let .plan(planID) = groupID {
                 Button("Continue Backups…") { onAdopt(planID) }

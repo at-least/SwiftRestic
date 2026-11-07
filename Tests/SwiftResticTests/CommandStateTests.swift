@@ -39,6 +39,28 @@ struct CommandStateTests {
         return plan
     }
 
+    @Test("once restic has finished copying, the backup's numbers leave the progress bar: they would stand still through the steps after it")
+    func progressClearsAfterCopying() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents]
+        model.activity[documents.id] = PlanActivity(of: documents, phase: .backingUp)
+        var midway = OperationProgress()
+        midway.fraction = 0.97
+        model.planProgress[documents.id] = midway
+
+        model.setActivityPhase(.backingUp, for: documents.id)
+        #expect(model.planProgress[documents.id]?.fraction == 0.97)
+
+        for phase in [PlanActivity.Phase.applyingRetention, .runningHooks, .notifying] {
+            model.planProgress[documents.id] = midway
+            model.setActivityPhase(phase, for: documents.id)
+            #expect(model.planProgress[documents.id] == nil, "phase \(phase)")
+        }
+    }
+
     @Test("Back Up Now waits for a prune, a check or another plan's retention on its repository — restic would refuse its lock")
     func backUpWaitsForExclusiveWork() {
         let model = makeModel()

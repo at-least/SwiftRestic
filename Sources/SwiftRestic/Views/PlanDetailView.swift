@@ -217,7 +217,7 @@ struct PlanDetailView: View {
         } actions: {
             // Not Edit Plan…: the editor shows a saved plan's repository
             // without a picker and refuses to save one without a repository.
-            Button("Remove Plan") { router.request(.confirm(.deletePlan(planID))) }
+            Button("Remove Plan…") { router.request(.confirm(.deletePlan(planID))) }
         }
     }
 

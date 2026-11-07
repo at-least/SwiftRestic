@@ -169,6 +169,7 @@ extension AppModel: BackupRunEngine.Sink {
         // Stop again.
         if activity[planID]?.phase != .cancelling { activity[planID]?.phase = phase }
         activity[planID]?.isInRetentionStep = phase == .applyingRetention
+        if phase.isPastCopying { planProgress[planID] = nil }
     }
 
     func endRetentionStep(for planID: UUID) {
@@ -186,6 +187,9 @@ extension AppModel: BackupRunEngine.Sink {
                 // tick invalidates the running strip, not every view that
                 // reads the plan's phase.
                 guard let self, self.backupRunTokens[planID] == token else { return }
+                // A status queued behind the end of copying would put the
+                // numbers back, frozen, under "Removing old backups…".
+                guard self.activity[planID]?.phase.isPastCopying != true else { return }
                 self.planProgress[planID] = progress
             }
         }

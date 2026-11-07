@@ -135,10 +135,11 @@ enum ResticError: Error, LocalizedError, Equatable {
             if let words = Self.rcloneWords(message) { return words }
             let known = ResticError.knownExitCodeDescription(code)
             if message.isEmpty { return known ?? "It stopped unexpectedly. Show Log has the details." }
-            // Exit 1 is restic's every fatal error, and its message starts
-            // "Fatal:" already; a prefix only delayed the reason.
-            if code == 1 { return message }
-            return known.map { "\($0) — \(message)" } ?? message
+            let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
+            // Exit 1 is restic's every fatal error: the reason alone, as a
+            // sentence. Copy Details keeps restic's line (`resticDetail`).
+            if code == 1 { return reason.prefix(1).uppercased() + reason.dropFirst() }
+            return known.map { "\($0) — \(reason)" } ?? reason
         case .cancelled:
             return "The operation was stopped."
         case .repositoryMissing:
@@ -183,6 +184,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             return "\(Format.list(paths)) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
         }
     }
+
+    private static let fatalWord = "Fatal: "
 
     /// restic's own first sentence behind a failure whose `errorDescription`
     /// says the fix instead: kept on the run for Copy Details

@@ -13,6 +13,14 @@ struct PlanActivity: Sendable, Equatable {
         case notifying
         case cancelling
 
+        /// restic's copy has ended: its numbers no longer move.
+        var isPastCopying: Bool {
+            switch self {
+            case .applyingRetention, .runningHooks, .notifying: true
+            case .starting, .backingUp, .cancelling: false
+            }
+        }
+
         var displayName: String {
             switch self {
             case .starting: "Starting…"

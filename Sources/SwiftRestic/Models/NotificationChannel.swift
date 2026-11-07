@@ -81,6 +81,10 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         kind = c.value(.kind, default: .webhook)
         url = c.value(.url, default: "")
+        // Webhook was the picker's default. Exact hosts only, so a self-hosted
+        // address is never misread, and plain JSON pings a real Healthchecks
+        // "alive" on a failure.
+        if kind == .webhook, let service = Kind(inferringFrom: url) { kind = service }
         notifyOnSuccess = c.value(.notifyOnSuccess, default: true)
     }
 }
