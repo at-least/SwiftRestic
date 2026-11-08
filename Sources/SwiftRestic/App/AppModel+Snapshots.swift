@@ -104,9 +104,28 @@ extension AppModel {
             // listing was read, not when its reconcile reaches the index.
             let generation = nextListingGeneration()
             let listing = try await service.snapshots(context, planID: nil, timeout: Self.refreshTimeout)
-            // A stats failure must not fail the listing (the rows are the
-            // news; the size is decoration), but it must not be invisible
-            // either — the banner says what is missing while the rows stay.
+            // The repository can be deleted while its refresh is in flight; a
+            // removed entry gets no state, no rows and no banner.
+            guard configuration.repository(id: repositoryID) != nil else { return }
+            snapshots[repositoryID] = listing
+            if let runs = RunRecord.adoptingRewrites(configuration.runs, listing: listing) {
+                configuration.runs = runs
+            }
+            snapshotsGeneration[repositoryID] = generation
+            snapshotListingOutcomes[repositoryID] = .loaded
+            snapshotsLoadedAt[repositoryID] = .now
+            // Read, so its server answers: upkeep waiting for it may run.
+            maintenanceAwaitingServer.remove(repositoryID)
+            repositoriesMissingPassword.remove(repositoryID)
+            indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
+            if repository.resticID == nil {
+                await recordResticID(of: repositoryID, service: service, context: context)
+            }
+            // The size is decoration, so it is read last: the rows above are
+            // the news, and the slower stats walk must not hold them — or the
+            // upkeep they unblock — back. A stats failure must not fail the
+            // listing, but it must not be invisible either — the banner says
+            // what is missing while the rows stay.
             let stats: RepositoryStats?
             do {
                 stats = try await service.stats(context, timeout: Self.refreshTimeout)
@@ -126,24 +145,8 @@ extension AppModel {
                     ))
                 }
             }
-            // The repository can be deleted while its refresh is in flight; a
-            // removed entry gets no state, no rows and no banner.
             guard configuration.repository(id: repositoryID) != nil else { return }
-            snapshots[repositoryID] = listing
-            if let runs = RunRecord.adoptingRewrites(configuration.runs, listing: listing) {
-                configuration.runs = runs
-            }
-            snapshotsGeneration[repositoryID] = generation
             repositoryStats[repositoryID] = stats
-            snapshotListingOutcomes[repositoryID] = .loaded
-            snapshotsLoadedAt[repositoryID] = .now
-            // Read, so its server answers: upkeep waiting for it may run.
-            maintenanceAwaitingServer.remove(repositoryID)
-            repositoriesMissingPassword.remove(repositoryID)
-            indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
-            if repository.resticID == nil {
-                await recordResticID(of: repositoryID, service: service, context: context)
-            }
         } catch ResticError.cancelled {
             // A cancelled refresh is the user (or shutdown) stopping the app's
             // own work, not a repository that could not be read: no banner,
