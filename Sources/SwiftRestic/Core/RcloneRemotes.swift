@@ -106,4 +106,11 @@ struct RcloneBinary: Sendable {
     static var bundled: RcloneBinary {
         RcloneBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/rclone"))
     }
+
+    /// `bundled` when it is there and runnable; nil says a damaged install —
+    /// nothing on the Mac stands in.
+    static var runnable: RcloneBinary? {
+        let rclone = bundled
+        return ResticBinary.isExecutableFile(atPath: rclone.url.path) ? rclone : nil
+    }
 }

@@ -38,7 +38,7 @@ enum MenuBarStatus {
         isConsoleRunning: Bool,
         hasNoRepositories: Bool,
         runs: [RunRecord],
-        rows: [ProtectionRow] = [],
+        rows: [UpToDateRow] = [],
         isResticDamaged: Bool = false,
         now: Date = .now
     ) -> IconState {
@@ -96,7 +96,7 @@ enum MenuBarStatus {
             let summary = hold.summary(now: now)
             clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())
         }
-        if isResticDamaged { clauses.append(damagedLine) }
+        if isResticDamaged { clauses.append(ResticError.damagedInstall.localizedDescription) }
         guard !clauses.isEmpty else { return base }
         let separator = state == .idle ? ", " : "; "
         return base + clauses.map { separator + $0 }.joined()
@@ -161,10 +161,6 @@ enum MenuBarStatus {
         return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }
 
-    /// Leads the menu, as a hold's line does: the scheduler starts nothing
-    /// without restic.
-    static let damagedLine = ResticError.damagedInstall.localizedDescription
-
     /// The single line above the plan buttons. `nil` while anything runs —
     /// restores and repository upkeep included: the running lines replace it
     /// rather than sitting underneath. Console work has no running line, so
@@ -189,7 +185,7 @@ enum MenuBarStatus {
     ) -> String? {
         guard activity.isEmpty, maintenance.isEmpty, !isRestoring else { return nil }
         guard hold == nil, !isResticDamaged else { return nil }
-        if hasNoRepositories { return "No backup location set" }
+        if hasNoRepositories { return BackupPlan.noBackupLocationReason }
         guard let nextRun else { return "No backups scheduled" }
         // The plan page's Next backup tile spells the same moment in these
         // words; the scheduler clamps the date to now, so a due run reads
@@ -238,7 +234,7 @@ enum MenuBarStatus {
                     isEnabled: plan.isConfigurationComplete && !isResticDamaged && lockReason == nil,
                     // The Backup menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
-                        : isResticDamaged ? damagedLine : lockReason
+                        : isResticDamaged ? ResticError.damagedInstall.localizedDescription : lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
@@ -270,7 +266,7 @@ enum MenuBarStatus {
     struct PlanGroup: Equatable {
         var repositoryID: UUID
         var title: String
-        /// The repository page's Protection line ("3 of 3 plans up to date ·
+        /// The repository page's Status line ("3 of 3 plans up to date ·
         /// Last backup 3 hours ago"), so the tray answers "did my backups
         /// run?" with the window closed. Nil until the listing has loaded.
         var protection: String?
@@ -280,8 +276,8 @@ enum MenuBarStatus {
         /// another's.
         var newsLines: [String] = []
 
-        /// The Protection line where no submenu title names the repository.
-        var labeledProtection: String? {
+        /// The Status line where no submenu title names the repository.
+        var labeledStatus: String? {
             protection.map { "\(title) — \($0)" }
         }
     }
@@ -328,7 +324,7 @@ enum MenuBarStatus {
         isResticDamaged: Bool,
         lockedRepositories: [UUID: String] = [:],
         problem: (UUID) -> RunRecord? = { _ in nil },
-        protection: (UUID) -> ProtectionSummary? = { _ in nil },
+        protection: (UUID) -> UpToDateSummary? = { _ in nil },
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [PlanGroup] {
@@ -423,38 +419,38 @@ enum MenuBarStatus {
     /// while a listing is still being read or a first backup runs, and while
     /// nothing is set up, where the headline says what to do.
     static func verdict(
-        rows: [ProtectionRow],
+        rows: [UpToDateRow],
         isResticDamaged: Bool,
         hasNoRepositories: Bool,
         problemLine: String?,
         problemID: UUID?
     ) -> TrayLine? {
-        if isResticDamaged { return .status(damagedLine) }
+        if isResticDamaged { return .status(ResticError.damagedInstall.localizedDescription) }
         guard !hasNoRepositories else { return nil }
         if let problemLine, let problemID { return .problem(text: problemLine, runID: problemID) }
         if let worst = OverviewMetrics.needingAttention(rows).first {
             return .status("\(worst.planName): \(worst.stateText)")
         }
-        guard !rows.isEmpty, rows.allSatisfy(\.isProtected) else { return nil }
+        guard !rows.isEmpty, rows.allSatisfy(\.isUpToDate) else { return nil }
         return .status(allUpToDateLine)
     }
 
     static let allUpToDateLine = "All plans up to date"
 
     /// The tray's leading lines, in the order a menu open reads them: the
-    /// verdict, the hold, the named Protection line when no submenu carries
+    /// verdict, the hold, the named Status line when no submenu carries
     /// it, then the idle headline or the running lines (which replace it).
     static func trayLines(
         verdict: TrayLine?,
         holdSummary: String?,
-        labeledProtection: String?,
+        labeledStatus: String?,
         headline: String?,
         running: [RunningLine]
     ) -> [TrayLine] {
         var lines: [TrayLine] = []
         if let verdict { lines.append(verdict) }
         if let holdSummary { lines.append(.status(holdSummary)) }
-        if let labeledProtection { lines.append(.status(labeledProtection)) }
+        if let labeledStatus { lines.append(.status(labeledStatus)) }
         if let headline { lines.append(.status(headline)) }
         else { lines += running.map { .status($0.text) } }
         return lines

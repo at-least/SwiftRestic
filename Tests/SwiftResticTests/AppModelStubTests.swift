@@ -1694,7 +1694,11 @@ struct AppModelStubTests {
         let record = try #require(model.configuration.runs.first)
         #expect(record.outcome == .skipped)
         #expect(await mounts.calls == 1)
-        #expect(model.snapshotListingOutcomes[id] == .failed(try #require(record.detailText)))
+        // The drive-away verdict, not the run's bare words: the listing
+        // carries the Locate fix and the connect sentence, as a plain
+        // absence does.
+        #expect(model.snapshotListingOutcomes[id]
+            == model.driveAwayOutcome(model.configuration.repositories[index]))
 
         await model.shutdown()
     }

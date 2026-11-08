@@ -28,7 +28,7 @@ struct BackupChanges: Equatable, Sendable {
         for change in changes.values { counts.add(change.category) }
         self.counts = counts
         rows = changes
-            .sorted { $0.key.path.utf8.lexicographicallyPrecedes($1.key.path.utf8) }
+            .sorted { SnapshotIndex.bytesLess($0.key.path, $1.key.path) }
             .prefix(Self.rowLimit)
             .map { Row(id: $0.key.hex, path: $0.key.path, change: $0.value) }
     }

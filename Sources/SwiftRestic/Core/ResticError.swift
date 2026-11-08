@@ -167,7 +167,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// check before restic runs, and a run's failure after. With rclone
     /// inside the app, a missing one is a damaged install — nothing on the
     /// Mac stands in.
-    static let rcloneMissing = "SwiftRestic is damaged. Install it again."
+    static let rcloneMissing = ResticError.damagedInstall.localizedDescription
 
     /// Exit 10's cause and fix, for every kind of location; a disk's also
     /// gets Locate beside it (`RunFix.locate`).

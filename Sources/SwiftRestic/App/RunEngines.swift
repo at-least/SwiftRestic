@@ -86,6 +86,13 @@ enum ReachabilityGate {
         case serverAway(reason: String)
     }
 
+    /// Which away a skip verdict named: the repository's drive, or its
+    /// server. Travels with the reason so the listing's answer need not
+    /// re-derive it from the sentence.
+    enum Away {
+        case drive, server
+    }
+
     static func verdict(
         of repository: Repository,
         needing paths: [String],
@@ -189,10 +196,10 @@ enum BackupRunEngine {
         /// stay after retention: it reads the listing the forget left, which
         /// the index then takes.
         func refreshSnapshots(repositoryID: UUID) async
-        /// The listing of a repository whose drive the run found away, in
-        /// the run's words — its share's reconnect already tried, and not
-        /// tried again by a refresh.
-        func noteRepositoryAway(repositoryID: UUID, reason: String)
+        /// The listing of a repository whose drive or server the run found
+        /// away, in the run's words — its share's reconnect already tried,
+        /// and not tried again by a refresh.
+        func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String)
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
@@ -277,13 +284,13 @@ enum BackupRunEngine {
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
                 // The listing learns it now, not at the next launch, and
                 // why: a refresh would reconnect the share again.
-                sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
+                sink.noteRepositoryAway(repositoryID: repository.id, away: .drive, reason: reason)
                 break run
             case let .serverAway(reason):
                 record.outcome = .skipped
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                sink.noteRepositoryAway(repositoryID: repository.id, reason: reason)
+                sink.noteRepositoryAway(repositoryID: repository.id, away: .server, reason: reason)
                 break run
             }
 

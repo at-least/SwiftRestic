@@ -394,7 +394,7 @@ struct RepositoryEditorSheet: View {
         if model.busyRepositoryIDs.contains(draft.id) {
             return BackupPlan.busyRepositoryReason
         }
-        if model.isResticDamaged { return MenuBarStatus.damagedLine }
+        if model.isResticDamaged { return ResticError.damagedInstall.localizedDescription }
         return EditorRequirements.newPassword(newPassword, confirm: confirmNewPassword)
     }
 
@@ -620,17 +620,9 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// The rclone binary restic would run: the bundled one, as every run
-    /// does. Gone or not runnable, the app is damaged — nothing on the Mac
-    /// stands in.
-    private static func locateRclone() -> URL? {
-        let url = RcloneBinary.bundled.url
-        return ResticBinary.isExecutableFile(atPath: url.path) ? url : nil
-    }
-
     private func loadRcloneSetup() async -> RcloneSetup {
-        guard let rclone = Self.locateRclone() else { return .damaged }
-        return await RcloneRemoteLister(runner: model.runner).list(binary: rclone)
+        guard let rclone = RcloneBinary.runnable else { return .damaged }
+        return await RcloneRemoteLister(runner: model.runner).list(binary: rclone.url)
     }
 
     /// The typed password, else the stored one; neither throws
@@ -662,7 +654,7 @@ struct RepositoryEditorSheet: View {
         // restic shells out to rclone for this backend; catch a missing helper
         // here rather than letting it surface as an opaque failure from restic.
         if draft.requiresRcloneBinary,
-           Self.locateRclone() == nil
+           RcloneBinary.runnable == nil
         {
             status = .failure(ResticError.rcloneMissing)
             return false

@@ -2043,12 +2043,8 @@ extension ConfigurationSaveTests {
 struct CheckResticTests {
     /// A model whose restic is a script running `body`, in a folder the caller removes.
     private func scriptedModel(running body: String) throws -> (model: AppModel, root: URL) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticScriptedBinary-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let program = root.appendingPathComponent("restic")
-        try "#!/bin/sh\n\(body)\n".write(to: program, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        let program = try writeExecutableScript(body, label: "ScriptedBinary", named: "restic")
+        let root = program.deletingLastPathComponent()
         return (AppModel(store: ConfigStore(directory: root), secrets: .inMemory(), resticExecutable: program), root)
     }
 
@@ -2109,13 +2105,13 @@ struct CheckResticTests {
 
     @Test("a restic path in an old configuration is ignored: nothing on disk can bypass the pinned restic")
     func oldPathOverrideIsIgnored() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticOldOverride-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticOldOverride-\(UUID().uuidString)-ran")
+        let impostor = try writeExecutableScript(
+            "touch '\(marker.path)'\necho 'restic 9.9.9 impostor'", label: "OldOverride", named: "restic"
+        )
+        let root = impostor.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let marker = root.appendingPathComponent("ran")
-        let impostor = root.appendingPathComponent("restic")
-        try "#!/bin/sh\ntouch '\(marker.path)'\necho 'restic 9.9.9 impostor'\n".write(to: impostor, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: impostor.path)
         try #"{"settings": {"resticPathOverride": "\#(impostor.path)"}}"#
             .write(to: root.appendingPathComponent("config.json"), atomically: true, encoding: .utf8)
         let pinned = try PinnedRestic.binary().url

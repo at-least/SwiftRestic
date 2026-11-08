@@ -4,7 +4,7 @@ struct ResticBinary: Sendable {
     var url: URL
 
     /// The only restic the app runs; `Tools/fetch-restic.sh` pins it and
-    /// `Tools/embed-restic.sh` puts it here. Not looked for on the Mac: a
+    /// `Tools/embed-helpers.sh` puts it here. Not looked for on the Mac: a
     /// restic the tests never ran could change what a backup means.
     static var bundled: ResticBinary {
         ResticBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/restic"))

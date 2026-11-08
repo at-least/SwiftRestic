@@ -82,7 +82,7 @@ struct BackupShelves: Equatable {
     var hasOtherBackups: Bool { !others.isEmpty }
 
     /// How many of the repository's backups none of its plans made — the
-    /// sidebar's Other backups node, the repository page's Protection line,
+    /// sidebar's Other backups node, the repository page's Status line,
     /// its Other backups and its Snapshots split all count it from
     /// here, so no two of them can disagree.
     var otherBackupsCount: Int {

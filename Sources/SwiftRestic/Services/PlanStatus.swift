@@ -177,7 +177,7 @@ enum PlanStatus {
     /// app ran it, else its newest snapshot's own time: history a plan
     /// arrives with (adopted, or a repository added with its snapshots
     /// already in it) is still its last backup. The sidebar caption, the
-    /// repository page's Protection line and the plan page's Last backup
+    /// repository page's Status line and the plan page's Last backup
     /// row all read this one moment, so the same backup cannot read three
     /// ways side by side.
     static func lastBackupAt(plan: BackupPlan, latestSnapshot: Snapshot?) -> Date? {

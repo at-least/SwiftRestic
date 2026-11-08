@@ -9,11 +9,11 @@ extension AppModel {
         configuration.plans.filter { $0.repositoryID == repositoryID }
     }
 
-    /// These plans' Protection rows as of `now` — one derivation for the
-    /// repository page's Protection line and its sidebar row's warning. Read from
+    /// These plans' Status rows as of `now` — one derivation for the
+    /// repository page's Status section and its sidebar row's warning. Read from
     /// a view body, the lookups below still register that view's
     /// observation of the state they touch.
-    func protectionRows(for plans: [BackupPlan], now: Date) -> [ProtectionRow] {
+    func protectionRows(for plans: [BackupPlan], now: Date) -> [UpToDateRow] {
         OverviewMetrics.protectionRows(
             plans: plans,
             latestSnapshot: { repositoryID, planID in
@@ -40,14 +40,14 @@ extension AppModel {
         )
     }
 
-    /// The repository page's Protection line, from the same rows the
+    /// The repository page's Status section, from the same rows the
     /// repository's sidebar row reads its warning from — one derivation.
     /// Read from a view body, the lookups still register that view's
     /// observation of the state they touch.
-    func protectionSummary(repositoryID: UUID, now: Date) -> ProtectionSummary? {
+    func upToDateSummary(repositoryID: UUID, now: Date) -> UpToDateSummary? {
         let plans = plans(in: repositoryID)
         let existingRepositoryIDs = Set(configuration.repositories.map(\.id))
-        return OverviewMetrics.protectionSummary(
+        return OverviewMetrics.upToDateSummary(
             rows: protectionRows(for: plans, now: now),
             listingLoaded: snapshotListingOutcome(for: repositoryID) == .loaded,
             otherBackupsCount: shelves(for: repositoryID).otherBackupsCount,

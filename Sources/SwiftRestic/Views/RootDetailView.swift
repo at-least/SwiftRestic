@@ -35,7 +35,7 @@ struct RootDetailView: View {
             // state, so there is nothing to dismiss.
             if model.isResticDamaged, router.selection != nil {
                 BannerView(
-                    banner: Banner(title: MenuBarStatus.damagedLine, message: "", isError: true),
+                    banner: Banner(title: ResticError.damagedInstall.localizedDescription, message: "", isError: true),
                     isDismissible: false
                 )
             }
@@ -151,7 +151,7 @@ struct WelcomeView: View {
             }
         } description: {
             Text(model.isResticDamaged
-                ? MenuBarStatus.damagedLine
+                ? ResticError.damagedInstall.localizedDescription
                 : "Keep a copy of your folders on another disk or in the cloud.")
         } actions: {
             if !model.isResticDamaged {

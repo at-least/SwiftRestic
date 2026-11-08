@@ -23,7 +23,7 @@ struct MenuBarStatusTests {
         return value
     }
 
-    @Test("each repository's group carries its Protection line in the card's words, only once its listing has loaded")
+    @Test("each repository's group carries its Status line in the card's words, only once its listing has loaded")
     func protectionLines() {
         let nas = repository(named: "Home NAS")
         let ssd = repository(named: "Travel SSD")
@@ -31,15 +31,15 @@ struct MenuBarStatusTests {
         onNAS.repositoryID = nas.id
         var onSSD = plan(name: "Photos")
         onSSD.repositoryID = ssd.id
-        let summary = ProtectionSummary(text: "2 of 2 plans up to date · Last backup 1 hour ago", showsResume: false)
+        let summary = UpToDateSummary(text: "2 of 2 plans up to date · Last backup 1 hour ago", showsResume: false)
         let groups = MenuBarStatus.planGroups(
             plans: [onNAS, onSSD], repositories: [nas, ssd], activity: [:], isResticDamaged: false,
             protection: { id in id == nas.id ? summary : nil }
         )
         // In a submenu the title already names the repository.
         #expect(groups.map(\.protection) == ["2 of 2 plans up to date · Last backup 1 hour ago", nil])
-        #expect(groups[0].labeledProtection == "Home NAS — 2 of 2 plans up to date · Last backup 1 hour ago")
-        #expect(groups[1].labeledProtection == nil)
+        #expect(groups[0].labeledStatus == "Home NAS — 2 of 2 plans up to date · Last backup 1 hour ago")
+        #expect(groups[1].labeledStatus == nil)
     }
 
     @Test("idle with nothing configured says there is no schedule")
@@ -711,7 +711,7 @@ struct MenuBarStatusTests {
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 
-    @Test("the tray's leading lines keep their order: verdict, hold, Protection when flat, and the running lines only where no headline stands")
+    @Test("the tray's leading lines keep their order: verdict, hold, Status line when flat, and the running lines only where no headline stands")
     func trayLineOrder() {
         let runID = UUID()
         let running = [MenuBarStatus.RunningLine(id: "documents", text: "Documents — 40%")]
@@ -720,7 +720,7 @@ struct MenuBarStatusTests {
             MenuBarStatus.trayLines(
                 verdict: .problem(text: "Documents failed 2 hours ago", runID: runID),
                 holdSummary: "Backups paused until 3:40 PM",
-                labeledProtection: nil,
+                labeledStatus: nil,
                 headline: nil,
                 running: running
             ) == [
@@ -734,7 +734,7 @@ struct MenuBarStatusTests {
             MenuBarStatus.trayLines(
                 verdict: nil,
                 holdSummary: nil,
-                labeledProtection: nil,
+                labeledStatus: nil,
                 headline: "Next: Documents — in an hour",
                 running: running
             ) == [.status("Next: Documents — in an hour")]
@@ -744,7 +744,7 @@ struct MenuBarStatusTests {
             MenuBarStatus.trayLines(
                 verdict: .status(MenuBarStatus.allUpToDateLine),
                 holdSummary: nil,
-                labeledProtection: "Home NAS — 2 of 2 plans up to date",
+                labeledStatus: "Home NAS — 2 of 2 plans up to date",
                 headline: "No backups scheduled",
                 running: running
             ) == [
@@ -756,14 +756,14 @@ struct MenuBarStatusTests {
     }
 
     private func protectionRow(
-        _ name: String, isKnown: Bool = true, isProtected: Bool, didFail: Bool = false, isRunning: Bool = false,
+        _ name: String, isKnown: Bool = true, isUpToDate: Bool, didFail: Bool = false, isRunning: Bool = false,
         stateText: String = "state"
-    ) -> ProtectionRow {
+    ) -> UpToDateRow {
         var plan = BackupPlan()
         plan.path = "/\(name)"
-        return ProtectionRow(
+        return UpToDateRow(
             plan: plan, among: [plan], stateText: stateText, isKnown: isKnown,
-            isProtected: isProtected, didFail: didFail, isRunning: isRunning
+            isUpToDate: isUpToDate, didFail: didFail, isRunning: isRunning
         )
     }
 
@@ -771,49 +771,49 @@ struct MenuBarStatusTests {
     func verdict() {
         let runID = UUID()
         func verdict(
-            _ rows: [ProtectionRow], isResticDamaged: Bool = false, noRepositories: Bool = false, problem: String? = nil
+            _ rows: [UpToDateRow], isResticDamaged: Bool = false, noRepositories: Bool = false, problem: String? = nil
         ) -> MenuBarStatus.TrayLine? {
             MenuBarStatus.verdict(
                 rows: rows, isResticDamaged: isResticDamaged, hasNoRepositories: noRepositories,
                 problemLine: problem, problemID: problem == nil ? nil : runID
             )
         }
-        let fine = protectionRow("Fine", isProtected: true)
-        let overdue = protectionRow("Old", isProtected: false, stateText: "Not backed up for 9 days")
+        let fine = protectionRow("Fine", isUpToDate: true)
+        let overdue = protectionRow("Old", isUpToDate: false, stateText: "Not backed up for 9 days")
 
         #expect(verdict([fine]) == .status("All plans up to date"))
         #expect(verdict([overdue, fine]) == .status("Old: Not backed up for 9 days"))
         #expect(verdict([overdue], problem: "Check on NAS failed") == .problem(text: "Check on NAS failed", runID: runID))
         #expect(verdict([fine], isResticDamaged: true) == .status("SwiftRestic is damaged. Install it again."))
         // A listing still being read, or a first backup running: nobody can vouch yet.
-        #expect(verdict([fine, protectionRow("Reading", isKnown: false, isProtected: false)]) == nil)
-        #expect(verdict([protectionRow("First", isProtected: false, isRunning: true)]) == nil)
+        #expect(verdict([fine, protectionRow("Reading", isKnown: false, isUpToDate: false)]) == nil)
+        #expect(verdict([protectionRow("First", isUpToDate: false, isRunning: true)]) == nil)
         #expect(verdict([]) == nil)
         #expect(verdict([], noRepositories: true) == nil)
     }
 
     @Test("the icon warns for what the verdict warns about, a hold included, with work running or not")
     func iconFollowsTheVerdict() {
-        func state(rows: [ProtectionRow], isResticDamaged: Bool = false, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
+        func state(rows: [UpToDateRow], isResticDamaged: Bool = false, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
                 activity: activity, maintenance: [:], isRestoring: false, isConsoleRunning: false,
                 hasNoRepositories: false, runs: [], rows: rows, isResticDamaged: isResticDamaged
             )
         }
-        let fine = protectionRow("Fine", isProtected: true)
+        let fine = protectionRow("Fine", isUpToDate: true)
         #expect(state(rows: [fine]) == .idle)
         #expect(state(rows: [fine], isResticDamaged: true) == .problem)
-        #expect(state(rows: [protectionRow("Old", isProtected: false)]) == .problem)
-        #expect(state(rows: [protectionRow("Gone", isKnown: false, isProtected: false, didFail: true)]) == .problem)
-        #expect(state(rows: [protectionRow("Reading", isKnown: false, isProtected: false)]) == .idle)
-        #expect(state(rows: [protectionRow("Old", isProtected: false)], activity: [UUID(): activity()]) == .problem)
+        #expect(state(rows: [protectionRow("Old", isUpToDate: false)]) == .problem)
+        #expect(state(rows: [protectionRow("Gone", isKnown: false, isUpToDate: false, didFail: true)]) == .problem)
+        #expect(state(rows: [protectionRow("Reading", isKnown: false, isUpToDate: false)]) == .idle)
+        #expect(state(rows: [protectionRow("Old", isUpToDate: false)], activity: [UUID(): activity()]) == .problem)
         #expect(state(rows: [fine], activity: [UUID(): activity()]) == .running)
         #expect(state(rows: [fine], isResticDamaged: true, activity: [UUID(): activity()]) == .problem)
     }
 
     @Test("work in flight does not hide a standing failure, and a plan's own run does not read as its problem")
     func problemOutranksRunning() {
-        func state(rows: [ProtectionRow] = [], runs: [RunRecord] = [], isRestoring: Bool = false, hasNoRepositories: Bool = false) -> MenuBarStatus.IconState {
+        func state(rows: [UpToDateRow] = [], runs: [RunRecord] = [], isRestoring: Bool = false, hasNoRepositories: Bool = false) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
                 activity: [:], maintenance: [:], isRestoring: isRestoring, isConsoleRunning: false,
                 hasNoRepositories: hasNoRepositories, runs: runs, rows: rows
@@ -827,7 +827,7 @@ struct MenuBarStatusTests {
         #expect(state(isRestoring: true) == .running)
         // A plan's first backup, or an overdue plan's catching up: the run in
         // flight is the answer to the row's complaint.
-        let catchingUp = protectionRow("First", isProtected: false, isRunning: true)
+        let catchingUp = protectionRow("First", isUpToDate: false, isRunning: true)
         #expect(state(rows: [catchingUp], isRestoring: true) == .running)
         // Run history outlives removed locations.
         #expect(state(runs: [failed], isRestoring: true, hasNoRepositories: true) == .running)

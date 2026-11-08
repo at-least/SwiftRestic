@@ -1,21 +1,21 @@
 import Foundation
 
 /// One plan's protection state — the rows behind a repository's sidebar
-/// warning and its page's Protection line. Data only, so the counts and the
+/// warning and its page's Status line. Data only, so the counts and the
 /// words are pinned by tests.
-struct ProtectionRow: Identifiable, Sendable, Equatable {
+struct UpToDateRow: Identifiable, Sendable, Equatable {
     let planID: UUID
     let planName: String
     let repositoryID: UUID?
     let stateText: String
     let isKnown: Bool
-    let isProtected: Bool
+    let isUpToDate: Bool
     let didFail: Bool
     /// A run of the plan is in flight, and the line says its phase.
     let isRunning: Bool
     /// The moment the plan's "Last backup" counts from, from
     /// `PlanStatus.lastBackupAt` — the one derivation every surface reads.
-    /// Nil in every state that spells no moment; the Protection line reads
+    /// Nil in every state that spells no moment; the Status line reads
     /// the newest of these across a repository's plans.
     let lastBackupAt: Date?
     /// The standing problem's outcome when the line is that problem's
@@ -25,13 +25,13 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     var id: UUID { planID }
 
     /// Scanning order is severity, not sidebar order: unreadable first,
-    /// then exposed, then pending, then a run in flight, protected last.
+    /// then exposed, then pending, then a run in flight, up to date last.
     var severityRank: Int {
         if didFail { return 0 }
         // Ahead of the listing's verdict: a first backup in flight has no
         // snapshot yet, and is news being made, not an alarm.
         if isRunning { return 3 }
-        if isKnown, !isProtected { return 1 }
+        if isKnown, !isUpToDate { return 1 }
         if !isKnown { return 2 }
         return 4
     }
@@ -43,7 +43,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         among plans: [BackupPlan],
         stateText: String,
         isKnown: Bool,
-        isProtected: Bool,
+        isUpToDate: Bool,
         didFail: Bool,
         lastBackupAt: Date? = nil,
         isRunning: Bool = false,
@@ -54,7 +54,7 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
         repositoryID = plan.repositoryID
         self.stateText = stateText
         self.isKnown = isKnown
-        self.isProtected = isProtected
+        self.isUpToDate = isUpToDate
         self.didFail = didFail
         self.lastBackupAt = lastBackupAt
         self.isRunning = isRunning
@@ -62,18 +62,18 @@ struct ProtectionRow: Identifiable, Sendable, Equatable {
     }
 }
 
-/// A line under the Protection summary, naming one plan; clicking it opens
+/// A line under the Status summary, naming one plan; clicking it opens
 /// that plan.
-struct ProtectionLine: Equatable, Sendable {
+struct UpToDateLine: Equatable, Sendable {
     let planID: UUID
     let text: String
 }
 
-/// The repository page's Protection line: its text, and whether it ends
-/// with the hold's Resume. Data only — `OverviewMetrics.protectionSummary`
+/// The repository page's Status line: its text, and whether it ends
+/// with the hold's Resume. Data only — `OverviewMetrics.upToDateSummary`
 /// derives it, so the counts and the words are pinned beside the rows they
 /// come from.
-struct ProtectionSummary: Equatable, Sendable {
+struct UpToDateSummary: Equatable, Sendable {
     /// "2 of 2 plans up to date · Last backup 1 hour ago", with the hold's own
     /// words joined on while one is on.
     var text: String
@@ -83,25 +83,25 @@ struct ProtectionSummary: Equatable, Sendable {
     /// One line per plan whose last backup failed, in these
     /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
     /// octagon that the plan's own row wears. Empty when none failed.
-    var failureLines: [ProtectionLine] = []
-    /// One line per other plan that is not protected — no backup yet, no
+    var failureLines: [UpToDateLine] = []
+    /// One line per other plan that is not up to date — no backup yet, no
     /// repository — in these words ("Photos: No backups
     /// yet"), beside the warning triangle. With the failure lines, the
     /// count names its subject; both are empty when every plan is
-    /// protected.
-    var attentionLines: [ProtectionLine] = []
-    /// One line per protected plan whose newest backup left an away
+    /// up to date.
+    var attentionLines: [UpToDateLine] = []
+    /// One line per up-to-date plan whose newest backup left an away
     /// drive's folders out, in the record's own words ("Journal: “Archive
     /// SSD” is not connected; the other folders were backed up.") —
-    /// protected, since the rest is backed up, but not whole. Empty when
+    /// out of date, since the rest is backed up, but not whole. Empty when
     /// every plan's newest backup read every folder.
-    var skippedLines: [ProtectionLine] = []
-    /// One line per protected plan that will not run by itself now — its
+    var skippedLines: [UpToDateLine] = []
+    /// One line per up-to-date plan that will not run by itself now — its
     /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
-    /// — Sunday at 3:00 AM"), so "all protected" cannot hide a plan that has
+    /// — Sunday at 3:00 AM"), so "all up to date" cannot hide a plan that has
     /// stopped. A pause is a choice, not a problem: the row gives these
     /// the pause glyph, not the warning's.
-    var heldLines: [ProtectionLine] = []
+    var heldLines: [UpToDateLine] = []
 }
 
 /// Derives the protection rows and the recent problems from the
@@ -171,11 +171,11 @@ enum OverviewMetrics {
         return standing
     }
 
-    /// The rows whose plan is not protected and should be: an unreadable
+    /// The rows whose plan is not up to date and should be: an unreadable
     /// listing, a plan known to have no backup, one past the quiet window, or
     /// one whose last backup failed. A repository's sidebar row and the menu
     /// bar's face wear a warning for these.
-    static func needingAttention(_ rows: [ProtectionRow]) -> [ProtectionRow] {
+    static func needingAttention(_ rows: [UpToDateRow]) -> [UpToDateRow] {
         rows.filter { $0.severityRank <= 1 }
     }
 
@@ -193,10 +193,10 @@ enum OverviewMetrics {
         standingProblem: (_ planID: UUID) -> RunRecord?,
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
-    ) -> [ProtectionRow] {
+    ) -> [UpToDateRow] {
         // Swift's sort is stable: plan order breaks ties inside each rank.
         plans
-            .map { plan -> ProtectionRow in
+            .map { plan -> UpToDateRow in
                 let listed = listingRow(
                     plan: plan,
                     among: plans,
@@ -211,19 +211,19 @@ enum OverviewMetrics {
                 // (PlanStatus.sidebarCaption): a run in flight says its
                 // phase, then a standing problem; an unreadable listing
                 // still outranks the problem. The pause stays out of the
-                // rows — the caption says it. Protected is the listing's,
+                // rows — the caption says it. Up to date is the listing's,
                 // except that a standing failure takes it away below.
                 if let activity = activity(plan.id) {
-                    return ProtectionRow(
+                    return UpToDateRow(
                         plan: plan,
                         among: plans,
                         stateText: activity.phase.displayName,
-                        isKnown: listed.isKnown, isProtected: listed.isProtected,
+                        isKnown: listed.isKnown, isUpToDate: listed.isUpToDate,
                         didFail: false, lastBackupAt: listed.lastBackupAt, isRunning: true
                     )
                 }
                 if !listed.didFail, let problem = standingProblem(plan.id) {
-                    return ProtectionRow(
+                    return UpToDateRow(
                         plan: plan,
                         among: plans,
                         stateText: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
@@ -231,7 +231,7 @@ enum OverviewMetrics {
                         // A failed run wrote no snapshot, so the newest one
                         // is older than the trouble; a run that completed
                         // with errors (restic exit 3) wrote one.
-                        isProtected: listed.isProtected && problem.outcome != .failed,
+                        isUpToDate: listed.isUpToDate && problem.outcome != .failed,
                         didFail: false, lastBackupAt: listed.lastBackupAt,
                         problemOutcome: problem.outcome
                     )
@@ -250,13 +250,13 @@ enum OverviewMetrics {
         isChecking: (UUID) -> Bool,
         now: Date,
         relative: (Date) -> String
-    ) -> ProtectionRow {
+    ) -> UpToDateRow {
         guard let repositoryID = plan.repositoryID else {
-            return ProtectionRow(
+            return UpToDateRow(
                 plan: plan,
                 among: plans,
-                stateText: "No backup location set",
-                isKnown: true, isProtected: false, didFail: false
+                stateText: BackupPlan.noBackupLocationReason,
+                isKnown: true, isUpToDate: false, didFail: false
             )
         }
         let latest = latestSnapshot(repositoryID, plan.id)
@@ -285,24 +285,24 @@ enum OverviewMetrics {
                 // repository adopted with snapshots already in it.
                 line = PlanStatus.noneFromThisPlanFact
             }
-            return ProtectionRow(
+            return UpToDateRow(
                 plan: plan, among: plans, stateText: line, isKnown: true,
-                isProtected: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
+                isUpToDate: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
             )
         case let .failed(message, _):
-            return ProtectionRow(
+            return UpToDateRow(
                 plan: plan,
                 among: plans,
                 stateText: listingFailureText(message),
-                isKnown: false, isProtected: false, didFail: true
+                isKnown: false, isUpToDate: false, didFail: true
             )
         case .idle:
             let checking = isChecking(repositoryID)
-            return ProtectionRow(
+            return UpToDateRow(
                 plan: plan,
                 among: plans,
                 stateText: checking ? "Verifying…" : listingIdleText,
-                isKnown: false, isProtected: false, didFail: false
+                isKnown: false, isUpToDate: false, didFail: false
             )
         }
     }
@@ -317,16 +317,16 @@ enum OverviewMetrics {
     /// location page's tooltip say it the same way.
     static let listingIdleText = "List of backups not loaded yet"
 
-    /// The repository page's Protection line: how many of the repository's
-    /// plans are protected, when its newest backup landed, and, while one is
+    /// The repository page's Status line: how many of the repository's
+    /// plans are up to date, when its newest backup landed, and, while one is
     /// on, the app-wide hold's own words. Nil unless the listing has
     /// succeeded: no count is honest before it lands or after it fails.
     ///
     /// With no plans, the line names the repository's adoptable side — the
     /// same count the sidebar's Other backups node carries — what "no plans"
     /// means on a page whose repository may hold history.
-    static func protectionSummary(
-        rows: [ProtectionRow],
+    static func upToDateSummary(
+        rows: [UpToDateRow],
         listingLoaded: Bool,
         otherBackupsCount: Int,
         willNotRun: (UUID) -> String?,
@@ -334,7 +334,7 @@ enum OverviewMetrics {
         hold: ScheduleHold?,
         now: Date,
         relative: (Date) -> String = { Format.relative($0) }
-    ) -> ProtectionSummary? {
+    ) -> UpToDateSummary? {
         guard listingLoaded else { return nil }
         var segments: [String]
         if rows.isEmpty {
@@ -343,11 +343,11 @@ enum OverviewMetrics {
                 segments.append(Format.plural(otherBackupsCount, "backup"))
             }
         } else {
-            // The Protection line's own rule: a plan still being read is
+            // The Status line's own rule: a plan still being read is
             // in neither number.
             let known = rows.filter(\.isKnown)
             segments = [
-                "\(known.filter(\.isProtected).count) of \(Format.plural(known.count, "plan")) up to date"
+                "\(known.filter(\.isUpToDate).count) of \(Format.plural(known.count, "plan")) up to date"
             ]
             // A run in flight, in the sidebar caption's phase words: during a
             // first backup "0 of 1 plan up to date" alone would read as an
@@ -363,29 +363,29 @@ enum OverviewMetrics {
         var showsResume = false
         if case .paused = hold { showsResume = true }
         // A failed run's lines apart, under its glyph.
-        var failures: [ProtectionLine] = []
-        var attention: [ProtectionLine] = []
-        for row in rows where row.isKnown && !row.isProtected && !row.isRunning {
-            let line = ProtectionLine(planID: row.planID, text: "\(row.planName): \(row.stateText)")
+        var failures: [UpToDateLine] = []
+        var attention: [UpToDateLine] = []
+        for row in rows where row.isKnown && !row.isUpToDate && !row.isRunning {
+            let line = UpToDateLine(planID: row.planID, text: "\(row.planName): \(row.stateText)")
             if row.problemOutcome == .failed {
                 if !failures.contains(line) { failures.append(line) }
             } else if !attention.contains(line) {
                 attention.append(line)
             }
         }
-        // The protected plans that will not run by themselves
-        // (`PlanStatus.willNotRunCaption`); an unprotected one's line above
+        // The up-to-date plans that will not run by themselves
+        // (`PlanStatus.willNotRunCaption`); an out-of-date one's line above
         // already names it.
-        var held: [ProtectionLine] = []
-        // And the protected plans whose newest backup went around an away
-        // drive (`partialSkip`: the record's words), which "protected"
+        var held: [UpToDateLine] = []
+        // And the up-to-date plans whose newest backup went around an away
+        // drive (`partialSkip`: the record's words), which "up to date"
         // alone would hide.
-        var skipped: [ProtectionLine] = []
-        for row in rows where row.isKnown && row.isProtected && !row.isRunning {
-            if let caption = willNotRun(row.planID) { held.append(ProtectionLine(planID: row.planID, text: "\(row.planName): \(caption)")) }
-            if let skip = partialSkip(row.planID) { skipped.append(ProtectionLine(planID: row.planID, text: "\(row.planName): \(skip)")) }
+        var skipped: [UpToDateLine] = []
+        for row in rows where row.isKnown && row.isUpToDate && !row.isRunning {
+            if let caption = willNotRun(row.planID) { held.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(caption)")) }
+            if let skip = partialSkip(row.planID) { skipped.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(skip)")) }
         }
-        return ProtectionSummary(
+        return UpToDateSummary(
             text: segments.joined(separator: " · "),
             showsResume: showsResume,
             failureLines: failures,

@@ -212,7 +212,7 @@ struct PlanDetailView: View {
 
     private var noRepository: some View {
         ContentUnavailableView {
-            Label("No backup location set", systemImage: "questionmark.folder")
+            Label(BackupPlan.noBackupLocationReason, systemImage: "questionmark.folder")
         } description: {
             Text("Its backup location is no longer in SwiftRestic.")
         } actions: {
@@ -296,7 +296,7 @@ struct PlanDetailView: View {
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         // The one moment every surface's "Last backup" counts from
         // (PlanStatus.lastBackupAt) — the sidebar caption's and the
-        // Protection line's own derivation, so history the plan arrived
+        // Status line's own derivation, so history the plan arrived
         // with is not "Never" here.
         let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshot: snapshots.first), now: now)
         // The destination must be the run the value claims — the newest
@@ -364,7 +364,7 @@ struct PlanDetailView: View {
                 }
             }
         } else {
-            Text("No backup location set")
+            Text(BackupPlan.noBackupLocationReason)
                 .foregroundStyle(.secondary)
         }
     }

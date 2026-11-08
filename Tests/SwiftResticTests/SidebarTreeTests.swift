@@ -407,29 +407,29 @@ struct SidebarTreeTests {
         #expect(SnapshotLineage.displayName(of: a1, label: labels[.plan(first)]) == "Music · /Data/Music · 0021")
     }
 
-    @Test("a repository needs attention for an unreadable listing or a known-unprotected plan, never for pending or running ones")
+    @Test("a repository needs attention for an unreadable listing or a known out-of-date plan, never for pending or running ones")
     func attention() {
         let repository = UUID()
-        func row(_ name: String, isKnown: Bool, isProtected: Bool, didFail: Bool = false, isRunning: Bool = false) -> ProtectionRow {
-            ProtectionRow(
+        func row(_ name: String, isKnown: Bool, isUpToDate: Bool, didFail: Bool = false, isRunning: Bool = false) -> UpToDateRow {
+            UpToDateRow(
                 plan: plan(name, in: repository),
                 among: [],
                 stateText: name,
                 isKnown: isKnown,
-                isProtected: isProtected,
+                isUpToDate: isUpToDate,
                 didFail: didFail,
                 isRunning: isRunning
             )
         }
-        let unreadable = row("Unreadable", isKnown: false, isProtected: false, didFail: true)
-        let exposed = row("Exposed", isKnown: true, isProtected: false)
-        let pending = row("Pending", isKnown: false, isProtected: false)
-        let running = row("Running", isKnown: true, isProtected: false, isRunning: true)
-        let protected = row("Protected", isKnown: true, isProtected: true)
+        let unreadable = row("Unreadable", isKnown: false, isUpToDate: false, didFail: true)
+        let exposed = row("Exposed", isKnown: true, isUpToDate: false)
+        let pending = row("Pending", isKnown: false, isUpToDate: false)
+        let running = row("Running", isKnown: true, isUpToDate: false, isRunning: true)
+        let upToDate = row("Up to date", isKnown: true, isUpToDate: true)
 
-        #expect(OverviewMetrics.needingAttention([protected, unreadable, pending, exposed, running]).map(\.planName)
+        #expect(OverviewMetrics.needingAttention([upToDate, unreadable, pending, exposed, running]).map(\.planName)
             == ["Unreadable", "Exposed"])
-        #expect(OverviewMetrics.needingAttention([protected, pending, running]).isEmpty)
+        #expect(OverviewMetrics.needingAttention([upToDate, pending, running]).isEmpty)
     }
 
     @Test("a backup's page is its plan's, a plan-UUID group's or a lineage's; Show Versions lands on its plan's alone")

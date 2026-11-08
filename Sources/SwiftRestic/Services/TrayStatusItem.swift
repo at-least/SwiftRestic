@@ -160,7 +160,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             isResticDamaged: model.isResticDamaged,
             lockedRepositories: model.lockedRepositories,
             problem: { problems[$0] },
-            protection: { model.protectionSummary(repositoryID: $0, now: .now) }
+            protection: { model.upToDateSummary(repositoryID: $0, now: .now) }
         )
         let showsSubmenus = MenuBarStatus.showsGroupsAsSubmenus(groups)
         var lines = MenuBarStatus.runningLines(
@@ -185,9 +185,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 problemID: problemRunID
             ),
             holdSummary: hold?.summary(),
-            // With no submenu to carry it, the one Protection line joins the
+            // With no submenu to carry it, the one Status line joins the
             // status lines, named.
-            labeledProtection: showsSubmenus ? nil : groups.first?.labeledProtection,
+            labeledStatus: showsSubmenus ? nil : groups.first?.labeledStatus,
             headline: MenuBarStatus.headline(
                 activity: model.activity,
                 maintenance: model.maintenance,

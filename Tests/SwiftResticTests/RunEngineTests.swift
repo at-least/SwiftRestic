@@ -100,8 +100,8 @@ struct BackupRunEngineTests {
             Task { await refreshSnapshots(repositoryID: repositoryID) }
         }
 
-        func noteRepositoryAway(repositoryID: UUID, reason: String) {
-            log.append("away:\(reason)")
+        func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String) {
+            log.append("away:\(away):\(reason)")
         }
 
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
@@ -361,7 +361,7 @@ struct BackupRunEngineTests {
         // Stamped, as a drive away is, so an hourly plan does not retry
         // every minute; the listing learns why at once; no start ping.
         #expect(sink.log.contains("mark:nothing"))
-        #expect(sink.log.contains("away:“127.0.0.1” cannot be reached (connection refused)."))
+        #expect(sink.log.contains("away:server:“127.0.0.1” cannot be reached (connection refused)."))
         #expect(!sink.log.contains { $0.hasPrefix("ping:") })
     }
 

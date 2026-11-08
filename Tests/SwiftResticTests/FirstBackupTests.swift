@@ -471,11 +471,11 @@ struct RepositoryBackUpNowTests {
     func linesOpenTheirPlan() {
         var plan = BackupPlan()
         plan.path = "/Users/u/Music"
-        let row = ProtectionRow(plan: plan, among: [plan], stateText: "No backups yet", isKnown: true, isProtected: false, didFail: false)
-        let summary = OverviewMetrics.protectionSummary(
+        let row = UpToDateRow(plan: plan, among: [plan], stateText: "No backups yet", isKnown: true, isUpToDate: false, didFail: false)
+        let summary = OverviewMetrics.upToDateSummary(
             rows: [row], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil, now: .now
         )
-        #expect(summary?.attentionLines == [ProtectionLine(planID: plan.id, text: "Music: No backups yet")])
+        #expect(summary?.attentionLines == [UpToDateLine(planID: plan.id, text: "Music: No backups yet")])
     }
 }
 

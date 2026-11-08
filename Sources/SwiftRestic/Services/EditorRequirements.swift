@@ -49,22 +49,13 @@ enum EditorRequirements {
     ) -> String? {
         if source.isEmpty { return "Choose a folder to back up." }
         if folder.isEmpty { return "Choose where the backups go." }
-        if isInside(folder, source) { return "Keep the backups outside the folder you’re backing up." }
+        if ResticPath.holds(source, folder) { return "Keep the backups outside the folder you’re backing up." }
         var location = Repository()
         location.localPath = folder
         return repository(
             location, password: password, confirmPassword: confirmPassword,
             isNew: true, hasStoredPassword: nil, among: repositories
         )
-    }
-
-    /// Whether `path` is `folder` or lies under it, component by component:
-    /// /Users/u/Documents2 is not under /Users/u/Documents. Paths as typed,
-    /// no symlinks resolved.
-    static func isInside(_ path: String, _ folder: String) -> Bool {
-        let inner = URL(fileURLWithPath: path).standardizedFileURL.pathComponents
-        let outer = URL(fileURLWithPath: folder).standardizedFileURL.pathComponents
-        return inner.starts(with: outer)
     }
 
     /// An edit's check finding nothing at the location: its plans' backups

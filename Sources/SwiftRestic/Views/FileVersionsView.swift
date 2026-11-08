@@ -265,7 +265,7 @@ struct FileVersionsView: View {
     /// first, as the drag's gate, then its size (`VersionPreview`).
     private func previewBlock(for version: ContentVersion) -> String? {
         guard model.repository(id: node.repositoryID) != nil else { return "The backup location no longer exists" }
-        if model.isResticDamaged { return MenuBarStatus.damagedLine }
+        if model.isResticDamaged { return ResticError.damagedInstall.localizedDescription }
         return VersionPreview.unavailableReason(size: detail(of: version)?.size, isReading: isReadingDetails)
     }
 

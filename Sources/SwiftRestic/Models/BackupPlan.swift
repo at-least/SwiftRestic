@@ -446,6 +446,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     static let busyRepositoryReason = "This location is in use. Try again when the work finishes."
 
+    /// The same words on a plan's page, a repository's Status row and
+    /// the menu bar's summary: every surface's name for a plan with none.
+    static let noBackupLocationReason = "No backup location set"
+
     /// What every surface calls the plan — it has no name of its own: the
     /// last component of its path, the folder's or file's name. When
     /// another of `plans` backs up, to the same repository, a path ending

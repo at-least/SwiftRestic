@@ -13,7 +13,7 @@ struct StatusSection: View {
 
     var body: some View {
         let plans = model.plans(in: repositoryID)
-        let summary = model.protectionSummary(repositoryID: repositoryID, now: now)
+        let summary = model.upToDateSummary(repositoryID: repositoryID, now: now)
         let commands = model.planCommands(for: .repository(repositoryID))
         Section {
             if let summary {
@@ -97,7 +97,7 @@ struct StatusSection: View {
         .help("Keep backing up from this Mac, with these backups as the history")
     }
 
-    private func planRows(_ lines: [ProtectionLine], symbol: String, tint: some ShapeStyle) -> some View {
+    private func planRows(_ lines: [UpToDateLine], symbol: String, tint: some ShapeStyle) -> some View {
         ForEach(lines, id: \.text) { line in
             Button {
                 router.selection = .plan(line.planID)

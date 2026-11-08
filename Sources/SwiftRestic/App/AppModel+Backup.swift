@@ -195,12 +195,10 @@ extension AppModel: BackupRunEngine.Sink {
         }
     }
 
-    func noteRepositoryAway(repositoryID: UUID, reason: String) {
-        // A plain absence reads as the listing's own; a failed reconnect or a
-        // silent server keeps the run's words.
-        if let repository = repository(id: repositoryID), repository.kind == .local,
-           reason == RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
-        {
+    func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String) {
+        // A drive's absence reads as the listing's own; a silent server
+        // keeps the run's words.
+        if let repository = repository(id: repositoryID), away == .drive {
             snapshotListingOutcomes[repositoryID] = driveAwayOutcome(repository)
         } else {
             snapshotListingOutcomes[repositoryID] = .failed(reason)

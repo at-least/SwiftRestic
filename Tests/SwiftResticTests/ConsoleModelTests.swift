@@ -39,13 +39,11 @@ struct ConsoleModelTests {
 
     @Test("`self-update` is refused in any position, and restic is never run: it would overwrite the signed bundled binary")
     func selfUpdateIsRefused() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticSelfUpdate-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticSelfUpdate-\(UUID().uuidString)-ran")
+        let program = try writeExecutableScript("touch '\(marker.path)'", label: "SelfUpdate", named: "restic")
+        let root = program.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let marker = root.appendingPathComponent("ran")
-        let program = root.appendingPathComponent("restic")
-        try "#!/bin/sh\ntouch '\(marker.path)'\n".write(to: program, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
         var repository = Repository()
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path

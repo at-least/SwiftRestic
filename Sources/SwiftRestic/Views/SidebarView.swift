@@ -427,7 +427,7 @@ private struct PlanSidebarRow: View {
     var body: some View {
         // As of the window's minute clock, and counting from the one moment
         // every surface's "Last backup" reads (PlanStatus.lastBackupAt) —
-        // the repository page's Protection line and the plan page agree
+        // the repository page's Status line and the plan page agree
         // with this row by construction.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
