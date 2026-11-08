@@ -54,6 +54,10 @@ enum AccessibilityID {
         static let save = "repositoryEditor.save"
     }
 
+    enum Repository {
+        static let size = "repository.size"
+    }
+
     enum Activity {
         static let table = "activity.table"
     }

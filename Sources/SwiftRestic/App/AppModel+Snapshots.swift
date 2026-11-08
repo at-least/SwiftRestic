@@ -128,6 +128,14 @@ extension AppModel {
             // what is missing while the rows stay.
             let stats: RepositoryStats?
             do {
+                #if DEBUG
+                // UI tests hold the size back (SWIFTRESTIC_DELAY_STATS, in
+                // seconds) to watch the rows land first. The sleep's
+                // cancellation is a stop, not a stats failure.
+                if let seconds = Double(ProcessInfo.processInfo.environment["SWIFTRESTIC_DELAY_STATS"] ?? ""), seconds > 0 {
+                    do { try await Task.sleep(for: .seconds(seconds)) } catch { throw ResticError.cancelled }
+                }
+                #endif
                 stats = try await service.stats(context, timeout: Self.refreshTimeout)
                 statsFailureNoted.remove(repositoryID)
             } catch ResticError.cancelled {

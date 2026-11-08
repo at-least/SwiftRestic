@@ -51,7 +51,10 @@ struct RepositoryDetailView: View {
                 // Only once read: a row of dashes says nothing the Status
                 // section doesn't.
                 if case .loaded = model.snapshotListingOutcome(for: repositoryID) {
-                    LabeledContent("Size", value: Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
+                    LabeledContent("Size") {
+                        Text(Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
+                            .accessibilityIdentifier(AccessibilityID.Repository.size)
+                    }
                     LabeledContent("Backups") { snapshotsValue }
                 }
                 diskRow(repository)

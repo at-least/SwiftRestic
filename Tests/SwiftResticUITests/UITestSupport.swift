@@ -33,10 +33,11 @@ enum UITest {
         return app
     }
 
-    /// The first-run sheet from Back Up a Folder… to the plan page counting
-    /// the first backup, with the bundled restic. Back Up stays off, each
-    /// reason in turn, until every answer is in.
-    static func backUpFirstFolder(_ folders: UITestFolders, in app: XCUIApplication) {
+    /// The first-run sheet from Back Up a Folder… to the sheet closing on a
+    /// created repository and plan, with the bundled restic. Back Up stays
+    /// off, each reason in turn, until every answer is in. The backup itself
+    /// may still be running when this returns.
+    static func createFirstBackup(_ folders: UITestFolders, in app: XCUIApplication) {
         let start = app.buttons[AccessibilityID.Welcome.backUpAFolder]
         XCTAssertTrue(start.waitForExistence(timeout: 30))
         start.click()
@@ -72,10 +73,14 @@ enum UITest {
         XCTAssertTrue(backUp.isEnabled)
         backUp.click()
         XCTAssertTrue(backUp.waitForNonExistence(timeout: 120))
-
-        // The plan page the sheet lands on counts the backup restic just made.
-        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue("1 backup", timeout: 120))
         XCTAssertTrue(FileManager.default.fileExists(atPath: folders.repository.appendingPathComponent("config").path))
+    }
+
+    /// createFirstBackup, then the plan page the sheet lands on counting the
+    /// backup restic just made.
+    static func backUpFirstFolder(_ folders: UITestFolders, in app: XCUIApplication) {
+        createFirstBackup(folders, in: app)
+        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue("1 backup", timeout: 120))
     }
 
     /// A path as the app shows it, ~ for the user's home. Not
@@ -166,6 +171,11 @@ extension XCUIElement {
 
     func waitForValue(beginningWith prefix: String, timeout: TimeInterval = 10) -> Bool {
         let predicate = NSPredicate(format: "value BEGINSWITH %@", prefix)
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: self)], timeout: timeout) == .completed
+    }
+
+    func waitForValue(otherThan value: String, timeout: TimeInterval = 10) -> Bool {
+        let predicate = NSPredicate(format: "value != %@", value)
         return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: self)], timeout: timeout) == .completed
     }
 
