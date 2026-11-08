@@ -841,6 +841,8 @@ struct MenuBarStatusTests {
 
         #expect(MenuBarStatus.accessibilityDescription(for: .problem, isWorking: true) == "SwiftRestic, needs attention; work in progress")
         #expect(MenuBarStatus.accessibilityDescription(for: .problem) == "SwiftRestic, needs attention")
+        // The running face already says it: once, not twice.
+        #expect(MenuBarStatus.accessibilityDescription(for: .running, isWorking: true) == "SwiftRestic, work in progress")
     }
 
     @Test("plan rows back up when idle, stop while running, and stand disabled while stopping")

@@ -191,6 +191,20 @@ struct ResticIntegrationTests {
         #expect(FileManager.default.fileExists(atPath: rebuilt.path))
     }
 
+    @Test("a backup's snapshot carries the plan tag and the plan's own tags")
+    func planTagsReachTheSnapshot() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = try await fixture.service.initializeRepository(fixture.context)
+        var plan = fixture.plan
+        plan.tags = ["work"]
+
+        _ = try await fixture.service.backup(fixture.context, plan: plan)
+
+        let snapshot = try #require(try await fixture.service.snapshots(fixture.context).first)
+        #expect(snapshot.tags.sorted() == [ResticService.planTag(plan.id), "work"].sorted(), "the snapshot's tags: \(snapshot.tags)")
+    }
+
     @Test("retention deletes only the plan's own extra snapshots")
     func retention() async throws {
         let fixture = try makeFixture()
@@ -937,7 +951,7 @@ struct ResticIntegrationTests {
         #expect(try String(contentsOf: restored, encoding: .utf8) == "nested", "Replace left the edited file")
     }
 
-    @Test("keep-existing single-file restore keeps an existing file and reports it skipped")
+    @Test("keep-existing single-file restore keeps an existing file and reports it skipped, without running restic")
     func keepExistingFileRestore() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -948,12 +962,18 @@ struct ResticIntegrationTests {
         let existing = destination.appendingPathComponent("a.txt")
         try "mine".write(to: existing, atomically: false, encoding: .utf8)
 
-        let summary = try await fixture.service.restore(
-            fixture.context, snapshotID: snapshotID, node: file,
-            destinationDirectory: destination, overwrite: .keepExisting
-        )
+        let transcript = RunTranscript()
+        let summary = try await RunTranscript.$current.withValue(transcript) {
+            try await fixture.service.restore(
+                fixture.context, snapshotID: snapshotID, node: file,
+                destinationDirectory: destination, overwrite: .keepExisting
+            )
+        }
 
         #expect(try String(contentsOf: existing, encoding: .utf8) == "mine", "Keep replaced the user's file")
+        // The file in the way is seen before the download, which it spares.
+        let commands = transcript.contents.entries.filter { $0.kind == .command }.map(\.text)
+        #expect(commands.isEmpty, "restic ran for a file Keep leaves alone: \(commands)")
         #expect(summary?.filesSkipped == 1)
         #expect(summary?.filesRestored == 0)
         let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
