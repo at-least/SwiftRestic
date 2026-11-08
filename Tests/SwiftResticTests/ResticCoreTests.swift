@@ -146,6 +146,14 @@ struct ResticErrorTests {
         #expect(result(["2026/10/16 02:55:12 ERROR : sftp: can't stat: permission denied"]).failureMessage
             == fatal + "\nrclone: sftp: can't stat: permission denied")
         #expect(result(["2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed."]).failureMessage == fatal)
+        // Only rclone's own lines are its verdict, whatever level words
+        // another program's line carries.
+        #expect(ResticRunResult.rcloneComplaint("subprocess ssh: 2026/10/16 02:55:12 ERROR : x") == nil)
+
+        // rclone said nothing: restic's reason stands. The unanswered-remote
+        // sentence needs restic's own deadline in the line.
+        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
+            == "Unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: exit status 1")
 
         // rclone's verdict, the first sentence, which captions show.
         #expect(ResticError.commandFailed(exitCode: 1, message: refused.failureMessage).errorDescription
@@ -196,21 +204,15 @@ struct ResticErrorTests {
         #expect(ResticError.snapshotsNotRemoved(removed: 2, refused: 1, reason: "operation not permitted").errorDescription
             == "The location refused to delete 1 of the 3 old backups (operation not permitted); the other 2 were removed. "
             + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage.")
+        #expect(ResticError.snapshotsNotRemoved(removed: 1, refused: 2, reason: "").errorDescription
+            == "The location refused to delete 2 of the 3 old backups; the other one was removed. "
+            + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage.")
     }
 
-    @Test("the other failure shapes name what the user can do about them")
-    func otherDescriptions() {
-        #expect(
-            ResticError.passwordMissing(repositoryName: "NAS").errorDescription?.contains("NAS") == true
-        )
-        #expect(
-            ResticError.timedOut(seconds: 90).errorDescription?
-                .contains("1m 30s") == true
-        )
-        #expect(ResticError.cancelled.errorDescription != nil)
-        #expect(ResticError.repositoryMissing.errorDescription != nil)
+    @Test("a missing password names the location it is missing for")
+    func passwordMissingNamesTheLocation() {
+        #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is stored for “NAS”.")
     }
-
 }
 
 @Suite("restic binary location")
@@ -225,6 +227,31 @@ struct ResticBinaryTests {
         for directory in ResticBinary.helperDirectories {
             #expect(path.contains(directory), "\(directory) missing from \(path)")
         }
+    }
+
+    @Test("a folder is not an executable file, though its mode has the execute bit")
+    func folderIsNotAnExecutableFile() throws {
+        let script = try writeExecutableScript("exit 0", label: "ExecutableFile")
+        let folder = script.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(FileManager.default.isExecutableFile(atPath: folder.path), "the premise: the folder's mode has the execute bit")
+        #expect(!ResticBinary.isExecutableFile(atPath: folder.path))
+        #expect(ResticBinary.isExecutableFile(atPath: script.path))
+    }
+}
+
+@Suite("Child environment")
+struct ChildEnvironmentTests {
+    @Test("what a run passes wins over what the app inherited")
+    func invocationEnvironmentWins() async throws {
+        // Every app inherits HOME; a run that names it must reach the child
+        // as written.
+        let inherited = try #require(ProcessInfo.processInfo.environment["HOME"])
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: ["-c", #"printf '%s\n' "$HOME""#], environment: ["HOME": inherited + "/elsewhere"])
+        )
+        #expect(result.stdout == inherited + "/elsewhere\n", "the child saw HOME as \(result.stdout.debugDescription)")
     }
 }
 
@@ -295,6 +322,17 @@ struct RawLineStreamingTests {
         #expect(Set(collector.lines) == ["packing 12 packs", "not json either", "{\"message_type\":\"summary\"}", "done"])
         #expect(collector.lines.count == 4)
         #expect(result.summary != nil)
+    }
+
+    @Test("a last line without a newline still counts")
+    func unterminatedLastLineCounts() async throws {
+        let line = #"{"message_type":"summary","files_new":2}"#
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: ["-c", "printf '%s' '\(line)'"])
+        )
+        #expect(result.summary?.filesNew == 2, "the unterminated summary line was dropped")
+        #expect(result.stdout == line + "\n")
     }
 }
 

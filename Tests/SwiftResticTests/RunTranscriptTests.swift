@@ -107,6 +107,18 @@ struct RunTranscriptTests {
         #expect(stored.utf8.count > RunTranscript.lineByteLimit - 8)
     }
 
+    @Test("a line one byte past the limit is cut; one at the limit is kept whole")
+    func lineLimitBoundary() throws {
+        let transcript = RunTranscript()
+        let atLimit = String(repeating: "y", count: RunTranscript.lineByteLimit)
+        transcript.output(atLimit, message: nil, stream: .stdout)
+        transcript.output(atLimit + "y", message: nil, stream: .stdout)
+
+        let entries = transcript.contents.entries
+        #expect(entries.first?.text == atLimit)
+        #expect(entries.last?.text == atLimit + " …(truncated, \((RunTranscript.lineByteLimit + 1).formatted(.number)) bytes)")
+    }
+
     @Test("a backup's command line with every Skip switch on is kept whole; only a giant one is cut")
     func commandKeepsItsExcludes() throws {
         let transcript = RunTranscript()
