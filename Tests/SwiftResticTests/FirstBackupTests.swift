@@ -172,6 +172,8 @@ struct FirstBackupTests {
         #expect(plan.schedule.frequency == BackupPlan().schedule.frequency)
         #expect(plan.retention == BackupPlan().retention)
         #expect(plan.announcesFirstBackup)
+        // The first scheduled plan: a schedule needs the app open after a restart.
+        #expect(model.startsAtLogin, "the first scheduled plan did not ask to start at login")
     }
 
     @Test("the first success is announced once, whatever the setting; another plan's is not")

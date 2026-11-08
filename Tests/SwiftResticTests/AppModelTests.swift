@@ -2466,6 +2466,15 @@ struct RestoreBannerTests {
         #expect(replaced.message == "/Users/x/Restored/Project")
         #expect(replaced.revealPaths == ["/Users/x/Restored/Project"])
 
+        // A folder whose every file was already there is still restored:
+        // only a single file reads as kept instead.
+        let keptFolder = AppModel.restoreBanner(
+            itemName: "Project", isDirectory: true, landing: landing,
+            summary: summary(restored: 0, skipped: 2), policy: .keepExisting
+        )
+        #expect(keptFolder.title == "Restored “Project”")
+        #expect(keptFolder.message == "/Users/x/Restored/Project\nKept 2 existing files as they were.")
+
         let fileLanding = URL(fileURLWithPath: "/Users/x/Restored/a.txt")
         let keptFile = AppModel.restoreBanner(
             itemName: "a.txt", isDirectory: false, landing: fileLanding,
@@ -2617,6 +2626,10 @@ struct IndexCompletenessTests {
         await model.tasks.drain()
         #expect(try await model.indexIsComplete(repositoryID: repositoryID), "the rebuilt index never took the listing again")
         #expect(model.indexTakenGeneration[repositoryID] == 5)
+        // Rebuilt under the listing's own number: a refresh read before it,
+        // whose reconcile lands late, is still refused.
+        let staleTaken = await model.indexCoordinator.reconcile(repositoryID: repositoryID, snapshots: [], generation: 4)
+        #expect(!staleTaken, "the rebuilt index took a listing older than the one it was rebuilt from")
         await model.shutdown()
     }
 }

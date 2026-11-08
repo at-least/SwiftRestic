@@ -187,6 +187,75 @@ struct CommandStateTests {
         #expect(!model.isRunning(planID: documents.id))
     }
 
+    @Test("Verify or Clean Up Now on a location a backup is using says it is busy and starts nothing")
+    func maintenanceOnABusyLocationIsAnswered() {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents]
+        model.activity[documents.id] = PlanActivity(of: documents, phase: .backingUp)
+
+        model.runMaintenance(repositoryID: repository.id, task: .check)
+        #expect(model.banners.map(\.title) == ["“Home NAS” is busy"])
+        #expect(model.maintenance[repository.id] == nil, "a check started beside the running backup")
+    }
+
+    @Test("a Back Up Now that waited its turn starts when the run ahead ends, though Pause Backups came meanwhile")
+    func askedForQueuedBackupStartsUnderAPause() async {
+        let model = makeModel()
+        let repository = makeRepository("Home NAS")
+        let documents = makePlan("Documents", on: repository)
+        let photos = makePlan("Photos", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [documents, photos]
+        model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
+
+        model.runBackups(planIDs: [documents.id])
+        #expect(model.isQueued(documents.id))
+        model.pauseBackups(for: .untilResumed)
+        model.unwindPlanRun(photos.id)
+
+        #expect(model.isRunning(planID: documents.id), "the backup the user asked for was dropped by the pause")
+        await model.waitForRun(planID: documents.id)
+    }
+
+    @Test("a check whose server was out of reach is not started by the tick until the network changes")
+    func upkeepWaitsForAnAwayServer() async throws {
+        let model = makeModel()
+        var repository = Repository()
+        repository.kind = .rest
+        repository.restURL = "http://127.0.0.1:9/app"
+        // Added long ago and never checked: its check is due.
+        repository.createdAt = .now.addingTimeInterval(-90 * 86400)
+        model.configuration.repositories = [repository]
+        try #require(Scheduler.dueMaintenance(in: [repository], plans: []).first?.task == .check)
+        model.maintenanceAwaitingServer.insert(repository.id)
+
+        await model.runDuePlans()
+        #expect(model.maintenance[repository.id] == nil, "the tick started a check against a server known to be out of reach")
+        await model.tasks.drain()
+    }
+
+    @Test("a skipped check is answered in a banner when the user asked for it; a scheduled one stays quiet")
+    func skippedCheckBannerOnlyWhenAsked() async {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        model.configuration.repositories = [repository]
+        var record = RunRecord(kind: .check, planName: "NAS", repositoryID: repository.id)
+        record.outcome = .skipped
+        record.detailText = "“NAS” isn’t connected."
+
+        model.maintenance[repository.id] = MaintenanceActivity(task: .check, askedByUser: false)
+        await model.deliver(record: record, repository: repository, transcript: RunTranscript().contents)
+        #expect(model.banners.isEmpty, "the scheduler's skip posted \(model.banners.map(\.title))")
+
+        model.maintenance[repository.id] = MaintenanceActivity(task: .check, askedByUser: true)
+        await model.deliver(record: record, repository: repository, transcript: RunTranscript().contents)
+        #expect(model.banners.map(\.title) == ["\(RunRecord.Kind.check.displayName) of “NAS” skipped"])
+        #expect(model.banners.first?.message == "“NAS” isn’t connected.")
+    }
+
     @Test("Back Up Now on a plan without a repository posts the banner and starts nothing")
     func incompletePlanBackUpIsAnswered() {
         let model = makeModel()

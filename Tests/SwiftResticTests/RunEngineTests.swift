@@ -545,6 +545,18 @@ struct BackupRunEngineTests {
         #expect(Array(record.unreadableItems) == outcome.itemErrors)
     }
 
+    @Test("restic's exit 3 with no unreadable item named still reads completed-with-errors")
+    func exitThreeAloneIsNotClean() async throws {
+        let sink = RecordingSink()
+        var outcome = successOutcome()
+        outcome.exitCode = 3
+        let client = MockResticClient().onBackup(.success(outcome))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
+
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .completedWithErrors, "restic said it skipped files, yet the run read \(record.outcome)")
+    }
+
     @Test("the unreadable items' paths are stored beside their lines, for the fixes that act on them")
     func unreadablePathsAreStored() async throws {
         let sink = RecordingSink()
@@ -672,6 +684,18 @@ struct BackupRunEngineTests {
         #expect(notes.contains("Hook “true” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Hook “pwd” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Removed 0 backups"), "notes were \(notes)")
+    }
+
+    @Test("a backup restic reports stopped runs no after-backup hook")
+    func stoppedBackupRunsNoAfterHook() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onBackup(.failure(ResticError.cancelled))
+        var plan = makePlan()
+        plan.hooks = [hook(event: .afterBackup, command: "true")]
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
+
+        #expect(sink.deliveredRecords.first?.outcome == .cancelled)
+        #expect(!sink.deliveredNotes.contains("Hook “true” succeeded."), "a stopped run fired its after-backup hook: \(sink.deliveredNotes)")
     }
 
     @Test("a failed forget is noted in the log as a retention skip")
@@ -970,7 +994,8 @@ struct MaintenanceRunEngineTests {
     func checkWithErrors() async throws {
         let sink = RecordingSink()
         var summary = ResticSummary()
-        summary.numErrors = 2
+        // One error, the fewest that is still a warning.
+        summary.numErrors = 1
         summary.suggestPrune = true
         let client = MockResticClient().onCheck(.success(summary))
         await MaintenanceRunEngine.perform(
@@ -982,9 +1007,9 @@ struct MaintenanceRunEngineTests {
         // One sentence for the verdict, so the Detail column carries it
         // whole; restic's advice is the second.
         #expect(sink.deliveredRecords[0].detailText
-            == "2 errors — repair index, then repair snapshots, in the restic Console can recover some damage. A cleanup is suggested.")
+            == "1 error — repair index, then repair snapshots, in the restic Console can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
-            == "2 errors — repair index, then repair snapshots, in the restic Console can recover some damage")
+            == "1 error — repair index, then repair snapshots, in the restic Console can recover some damage")
     }
 
     @Test("a missing password records nothing and stamps nothing")
