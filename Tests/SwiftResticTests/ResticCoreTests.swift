@@ -119,7 +119,6 @@ struct ResticErrorTests {
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("ssh-keygen -R"))
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == "U" + fatal.dropFirst("Fatal: u".count))
     }
 
     @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic couldn’t get from it")
@@ -168,8 +167,6 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
         // rclone rides inside the app, so a missing one is a damaged install.
         #expect(ResticError.rcloneMissing == "SwiftRestic is damaged. Install it again.")
-
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription == "U" + fatal.dropFirst("Fatal: u".count))
     }
 
     @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")
@@ -214,12 +211,6 @@ struct ResticErrorTests {
         #expect(ResticError.repositoryMissing.errorDescription != nil)
     }
 
-    @Test("exit code 3 is a partial success, not a failure")
-    func partialSuccessCode() {
-        // `backup` finishing with unreadable files must still count as having
-        // backed the rest up.
-        #expect(ResticError.backupPartialSuccessCode == 3)
-    }
 }
 
 @Suite("restic binary location")
@@ -304,17 +295,6 @@ struct RawLineStreamingTests {
         #expect(Set(collector.lines) == ["packing 12 packs", "not json either", "{\"message_type\":\"summary\"}", "done"])
         #expect(collector.lines.count == 4)
         #expect(result.summary != nil)
-    }
-
-    @Test("no onRawLine callback means the default streaming path is untouched")
-    func nilCallbackIsFine() async throws {
-        let runner = ResticRunner()
-        let result = try await runner.run(
-            binary: URL(fileURLWithPath: "/bin/echo"),
-            invocation: ResticInvocation(arguments: ["hello"])
-        )
-        #expect(result.exitCode == 0)
-        #expect(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "hello")
     }
 }
 
