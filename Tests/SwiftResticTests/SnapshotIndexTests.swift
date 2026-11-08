@@ -534,6 +534,12 @@ struct SnapshotIndexTests {
         let dashed = try await index.searchPaths(matching: "Q1 - report", limit: 10)
         #expect(dashed.map(\.path) == ["/data/Q1 - report.txt"])
 
+        // A typed double quote is a character, never FTS syntax: a quoted
+        // word still finds its file, a quote inside a word finds nothing.
+        #expect(try await index.searchPaths(matching: #"Q1 - "report"#, limit: 10).map(\.path)
+            == ["/data/Q1 - report.txt"])
+        #expect(try await index.searchPaths(matching: #"re"port"#, limit: 10).isEmpty)
+
         for form in ["が".precomposedStringWithCanonicalMapping, "が".decomposedStringWithCanonicalMapping] {
             let hits = try await index.searchPaths(matching: form, limit: 10)
             #expect(Set(hits.map { Array($0.path.utf8) }) == [

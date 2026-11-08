@@ -422,6 +422,10 @@ struct IndexCoordinatorTombstoneTests {
             )
             Issue.record("expected repositoryRemoved, got a result")
         } catch IndexError.repositoryRemoved {}
+        do {
+            _ = try await coordinator.isComplete(repositoryID: repositoryID)
+            Issue.record("expected repositoryRemoved, got a result")
+        } catch IndexError.repositoryRemoved {}
         #expect(await coordinator.cachedListing(snapshotID: "s1", directory: "/", repositoryID: repositoryID) == nil)
         #expect(!FileManager.default.fileExists(atPath: coordinator.fileURL(for: repositoryID).path))
     }
@@ -580,8 +584,9 @@ struct IndexCoordinatorReadWrapperTests {
     private func makeScene() async throws -> (CoordinatorScene, IndexCoordinator, UUID) {
         let scene = try CoordinatorScene("SwiftResticReadWrappers")
         let client = MockResticClient().onListings([
-            "s1": ["/data": true, "/data/a.txt": false, "/data/dir": true, "/data/dir/x": false],
-            "s2": ["/data": true, "/data/b.txt": false, "/data/x.txt": false],
+            "s1": ["/data": true, "/data/a.txt": false, "/data/common.txt": false,
+                   "/data/dir": true, "/data/dir/x": false],
+            "s2": ["/data": true, "/data/b.txt": false, "/data/common.txt": false, "/data/x.txt": false],
         ])
         await scene.reconcile([
             try CoordinatorScene.snapshot("s1", 1_000), try CoordinatorScene.snapshot("s2", 2_000),
@@ -600,9 +605,9 @@ struct IndexCoordinatorReadWrapperTests {
         let hits = try await coordinator.search(
             matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 5
         )
-        #expect(hits.map(\.path) == ["/data/a.txt", "/data/b.txt", "/data/x.txt"])
+        #expect(hits.map(\.path) == ["/data/a.txt", "/data/b.txt", "/data/common.txt", "/data/x.txt"])
         // a.txt's newest is s1, while the chain's newest indexed is s2.
-        #expect(hits.map(\.isInNewest) == [false, true, true])
+        #expect(hits.map(\.isInNewest) == [false, true, true, true])
 
         #expect(
             try await coordinator.search(matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 1)
@@ -611,6 +616,57 @@ struct IndexCoordinatorReadWrapperTests {
         #expect(
             try await coordinator.search(
                 matching: "txt", inChain: "swiftrestic-plan-other", repositoryID: repositoryID, limit: 5
+            ).isEmpty
+        )
+    }
+
+    @Test("children lists the chain's ever-held rows bytewise by name, kind and isInNewest from the chain's newest indexed")
+    func childrenWithinChain() async throws {
+        let (scene, coordinator, repositoryID) = try await makeScene()
+        defer { scene.remove() }
+        let planA = IndexTestData.planA
+
+        let children = try await coordinator.children(ofPath: "/data", inChain: planA, repositoryID: repositoryID)
+        #expect(children.map(\.path)
+            == ["/data/a.txt", "/data/b.txt", "/data/common.txt", "/data/dir", "/data/x.txt"])
+        // a.txt and dir are gone from the newest backup; their kind and
+        // newest are s1's.
+        #expect(children.map(\.isInNewest) == [false, true, true, false, true])
+        #expect(children.map { $0.newest.id } == ["s1", "s2", "s2", "s1", "s2"])
+
+        #expect(
+            try await coordinator.children(ofPath: "/data/a.txt", inChain: planA, repositoryID: repositoryID).isEmpty
+        )
+        #expect(
+            try await coordinator.children(ofPath: "/data", inChain: "swiftrestic-plan-other", repositoryID: repositoryID)
+                .isEmpty
+        )
+    }
+
+    @Test("content versions list a path's backups newest first, and a path no diff marked is one version")
+    func contentVersionsWithinChain() async throws {
+        let (scene, coordinator, repositoryID) = try await makeScene()
+        defer { scene.remove() }
+        let planA = IndexTestData.planA
+
+        // Held by both backups with no diff between them: one version.
+        let common = try await coordinator.contentVersions(
+            ofPath: "/data/common.txt", inChain: planA, repositoryID: repositoryID
+        )
+        #expect(common.map { $0.snapshots.map(\.id) } == [["s2", "s1"]])
+
+        let b = try await coordinator.contentVersions(
+            ofPath: "/data/b.txt", inChain: planA, repositoryID: repositoryID
+        )
+        #expect(b.map { $0.snapshots.map(\.id) } == [["s2"]])
+
+        #expect(
+            try await coordinator.contentVersions(ofPath: "/data/gone", inChain: planA, repositoryID: repositoryID)
+                .isEmpty
+        )
+        #expect(
+            try await coordinator.contentVersions(
+                ofPath: "/data/common.txt", inChain: "swiftrestic-plan-other", repositoryID: repositoryID
             ).isEmpty
         )
     }
