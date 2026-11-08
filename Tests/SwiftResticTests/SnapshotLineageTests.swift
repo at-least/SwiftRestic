@@ -96,6 +96,32 @@ struct SnapshotLineageTests {
         #expect(labels[photos.lineageKey]?.detail == "/Data/Pictures, /Volumes/Card/DCIM — from mac")
     }
 
+    @Test("backups made in the same second list in one order, whatever order the listing gave")
+    func sameSecondOrderIsFixed() throws {
+        let a = try snapshot("a", time: "2026-09-25T02:00:00Z", paths: ["/Data/Docs"])
+        let b = try snapshot("b", time: "2026-09-25T02:00:00Z", paths: ["/Data/Docs"])
+        #expect(SnapshotLineage.grouping([a, b])[0].snapshots.map(\.id) == ["a", "b"])
+        #expect(SnapshotLineage.grouping([b, a])[0].snapshots.map(\.id) == ["a", "b"])
+    }
+
+    @Test("a lineage a plan shares with other writers names every writer in its tooltip: the plan, a removed plan, outside SwiftRestic")
+    func sharedLineageNamesEveryWriter() throws {
+        var documentsPlan = BackupPlan()
+        documentsPlan.path = "/Data/Documents"
+        let planned = try snapshot("p1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"],
+                                   tags: [ResticService.planTag(documentsPlan.id)])
+        let manual = try snapshot("m1", time: "2026-09-25T02:00:00Z", paths: ["/Data/Documents"])
+        let removed = try snapshot("r1", time: "2026-09-24T02:00:00Z", paths: ["/Data/Documents"],
+                                   tags: [ResticService.planTag(UUID())])
+
+        let withManual = SnapshotLineage.labels(for: SnapshotLineage.grouping([planned, manual]), plans: [documentsPlan])
+        #expect(withManual[planned.lineageKey]?.detail
+            == "/Data/Documents — from mac\nBacked up by Documents and outside SwiftRestic")
+        let withRemoved = SnapshotLineage.labels(for: SnapshotLineage.grouping([planned, removed]), plans: [documentsPlan])
+        #expect(withRemoved[planned.lineageKey]?.detail
+            == "/Data/Documents — from mac\nBacked up by Documents and a removed plan")
+    }
+
     @Test("two plans' interleaved backups of the same folders stay two groups, never one plan's name")
     func sharedLineageTitleIsStable() throws {
         let hourly = BackupPlan()
@@ -327,6 +353,16 @@ struct SnapshotLineageTests {
         let inside = ChangeComparison.changesInside(held)
         #expect(inside["/src"]?.summary == "1 added, 1 modified")
         #expect(inside["/src/sub"] == nil)
+    }
+
+    @Test("an item inside a folder its backup could not read gives the folder's reason; one beside it gives none")
+    func unreadFolderReasonReachesItsItems() {
+        let line = "/src/locked: open /src/locked: permission denied"
+        let unread = UnreadItems(lines: [PathKey("/src/locked"): line])
+        #expect(unread.item(holding: "/src/locked/deep/file.txt")?.path == "/src/locked")
+        #expect(unread.reason(for: "/src/locked/deep/file.txt") == "permission denied")
+        #expect(unread.reason(for: "/src/locked") == "permission denied")
+        #expect(unread.reason(for: "/src/open.txt") == nil)
     }
 
     @Test("the Change column's title says what it compares with")

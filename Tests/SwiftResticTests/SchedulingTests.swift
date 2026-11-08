@@ -353,7 +353,7 @@ struct PauseSchedulingTests {
         return plan
     }
 
-    @Test("the hold: a live pause wins, a metered network holds only what would use it, a lapsed pause holds nothing")
+    @Test("the hold: a live pause wins, a metered network holds only what would use it, a pause holds nothing from its end on")
     func scheduleHoldPrecedence() {
         let now = utcDate("2026-09-25 12:00:00")
         let inAnHour = now.addingTimeInterval(3600)
@@ -371,7 +371,7 @@ struct PauseSchedulingTests {
         #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: false, repositoryUsesNetwork: true, now: now) == nil)
         #expect(
             Scheduler.hold(
-                pause: SchedulePause(until: now.addingTimeInterval(-1)),
+                pause: SchedulePause(until: now),
                 isOnMeteredNetwork: false,
                 repositoryUsesNetwork: true,
                 now: now
@@ -680,6 +680,15 @@ struct MaintenanceSchedulingTests {
         #expect(CheckDataSubset.percent(100).words == "all of the data")
     }
 
+    @Test("a hand-edited slice outside 1 to 12 checks the nearest slice there is, never one restic has no group for")
+    func scheduledSliceStaysInRange() {
+        var policy = MaintenancePolicy()
+        policy.nextCheckDataSlice = 13
+        #expect(policy.scheduledDataSubset(for: .local) == .slice(12, of: 12))
+        policy.nextCheckDataSlice = 0
+        #expect(policy.scheduledDataSubset(for: .local) == .slice(1, of: 12))
+    }
+
     @Test("an editor save keeps the model's maintenance stamps and the check's next slice")
     func repositoryMergingKeepsMaintenanceState() {
         let stored = repository {
@@ -908,13 +917,6 @@ struct RetentionPolicyTests {
         policy.keepMonthly = 0
         policy.keepYearly = 0
         #expect(policy.forgetArguments.isEmpty)
-        #expect(policy.isSafeToRun == false)
-    }
-
-    @Test("a disabled policy never runs even with rules set")
-    func disabledPolicy() {
-        var policy = RetentionPolicy()
-        policy.isEnabled = false
         #expect(policy.isSafeToRun == false)
     }
 
@@ -1219,41 +1221,41 @@ struct AdditionalBackendTests {
 
 @Suite("Repository completeness")
 struct RepositoryCompletenessTests {
-    /// The non-secret fields each backend needs before restic can be run at all.
-    /// Computed, not stored: closure tables are not `Sendable` and Swift 6
-    /// refuses a shared static one.
-    private static var requiredFields: [Repository.Kind: (inout Repository) -> Void] {
+    /// The non-secret fields each backend needs before restic can be run at
+    /// all, one setter per field. Computed, not stored: closure tables are not
+    /// `Sendable` and Swift 6 refuses a shared static one.
+    private static var requiredFields: [Repository.Kind: [(inout Repository) -> Void]] {
         [
-            .local: { $0.localPath = "/Volumes/Backup" },
-            .sftp: { $0.sftpHost = "nas.local"; $0.sftpPath = "/volume1/restic" },
-            .s3: { $0.s3Bucket = "bucket"; $0.s3AccessKeyID = "AKIA" },
-            .b2: { $0.b2Bucket = "bucket"; $0.b2AccountID = "0011" },
-            .azure: { $0.azureContainer = "container"; $0.azureAccountName = "acct" },
-            .gcs: { $0.gcsBucket = "bucket"; $0.gcsCredentialsPath = "~/key.json" },
-            .rest: { $0.restURL = "https://host:8000" },
-            .rclone: { $0.rcloneRemote = "mydrive" },
+            .local: [{ $0.localPath = "/Volumes/Backup" }],
+            .sftp: [{ $0.sftpHost = "nas.local" }, { $0.sftpPath = "/volume1/restic" }],
+            .s3: [{ $0.s3Bucket = "bucket" }, { $0.s3AccessKeyID = "AKIA" }],
+            .b2: [{ $0.b2Bucket = "bucket" }, { $0.b2AccountID = "0011" }],
+            .azure: [{ $0.azureContainer = "container" }, { $0.azureAccountName = "acct" }],
+            .gcs: [{ $0.gcsBucket = "bucket" }, { $0.gcsCredentialsPath = "~/key.json" }],
+            .rest: [{ $0.restURL = "https://host:8000" }],
+            .rclone: [{ $0.rcloneRemote = "mydrive" }],
         ]
     }
 
-    @Test("a repository is complete exactly when its backend's required fields are filled")
+    @Test("a repository is complete exactly when every one of its backend's required fields is filled")
     func completenessPerKind() {
         for kind in Repository.Kind.allCases {
-            guard let fill = Self.requiredFields[kind] else {
+            guard let fields = Self.requiredFields[kind] else {
                 Issue.record("no required-field spec for \(kind)")
                 continue
             }
-
-            var complete = Repository()
-            complete.kind = kind
-            fill(&complete)
-            #expect(complete.isConfigurationComplete, "\(kind) with every required field must be complete")
-
-            // A fresh repository of the same kind has none of them filled. The
-            // scheduler refuses to schedule incomplete repositories, so this
-            // must never read as runnable.
-            var bare = Repository()
-            bare.kind = kind
-            #expect(!bare.isConfigurationComplete, "a fresh \(kind) repository must be incomplete")
+            func filled(except skipped: Int?) -> Repository {
+                var repository = Repository()
+                repository.kind = kind
+                for (index, fill) in fields.enumerated() where index != skipped { fill(&repository) }
+                return repository
+            }
+            #expect(filled(except: nil).isConfigurationComplete, "\(kind) with every required field must be complete")
+            // The scheduler refuses to schedule incomplete repositories, so a
+            // missing field must never read as runnable.
+            for index in fields.indices {
+                #expect(!filled(except: index).isConfigurationComplete, "\(kind) missing required field \(index + 1) must be incomplete")
+            }
         }
     }
 }

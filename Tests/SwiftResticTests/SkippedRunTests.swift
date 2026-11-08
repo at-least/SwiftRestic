@@ -13,6 +13,32 @@ struct SkippedRunTests {
             == "“Archive SSD” and “Travel” are not connected.")
     }
 
+    @Test("a folder on this Mac's own disk is never one that is not connected, even beside a drive that is away")
+    func notConnectedNeedsEveryFolderOnADrive() {
+        #expect(RunRecord.notConnected(["/Volumes/Archive SSD/Documents"]) == "“Archive SSD” is not connected")
+        #expect(RunRecord.notConnected(["/Volumes/Archive SSD/Documents", "/Users/me/Documents"]) == nil)
+        #expect(RunRecord.notConnected(["/Users/me/Documents"]) == nil)
+    }
+
+    @Test("a rewrite of a rewrite listed ahead of the one it names still joins the backup's run, in one listing")
+    func rewriteChainJoinsTheRunInOneListing() throws {
+        func snapshot(_ id: String, original: String?) throws -> Snapshot {
+            let originalField = original.map { #","original":"\#($0)""# } ?? ""
+            let json = #"{"id":"\#(id)","time":"2026-09-25T02:00:00Z","paths":["/src"]\#(originalField)}"#
+            return try ResticMessageDecoder.jsonDecoder.decode(Snapshot.self, from: Data(json.utf8))
+        }
+        var run = RunRecord(kind: .backup, planID: UUID(), planName: "src", startedAt: now)
+        run.snapshotID = "first"
+        // Newest first, as restic lists them: the second rewrite comes before
+        // the first rewrite it names.
+        let listing = [try snapshot("second", original: "first-rewrite"), try snapshot("first-rewrite", original: "first")]
+
+        let adopted = try #require(RunRecord.adoptingRewrites([run], listing: listing))
+        #expect(adopted[0].rewrittenSnapshotIDs == ["first-rewrite", "second"])
+        #expect(RunRecord.backupRunsBySnapshot(adopted)["second"]?.id == run.id)
+        #expect(RunRecord.adoptingRewrites(adopted, listing: listing) == nil, "a listing already adopted changes nothing")
+    }
+
     @Test("a backup whose folder is gone from this Mac names it and says what to do")
     func folderGoneMessage() {
         #expect(RunRecord.folderGoneMessage(path: "/Users/me/Projects")

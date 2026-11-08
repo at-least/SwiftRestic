@@ -318,7 +318,7 @@ struct TolerantDecodingTests {
     }
 
     @Test("the switches read back from recorded rules: a group by most of its rules")
-    func switchesReadFromRecordedRules() {
+    func switchesReadFromRecordedRules() throws {
         func rules(_ group: ExcludeCategory) -> [String] {
             ExcludeRule.developer.filter { $0.category == group }.map(\.pattern)
         }
@@ -330,6 +330,10 @@ struct TolerantDecodingTests {
         #expect(plan.skipsDeveloperFiles && !plan.skipsMachines)
         plan.readSwitches(fromRecorded: rules(.machines))
         #expect(!plan.skipsDeveloperFiles && plan.skipsMachines)
+        // Exactly half is not most: those may be rows the user typed.
+        let even = try #require(ExcludeCategory.rebuildableGroups.first { rules($0).count.isMultiple(of: 2) })
+        plan.readSwitches(fromRecorded: Array(rules(even).prefix(rules(even).count / 2)))
+        #expect(!plan.skipsDeveloperFiles, "half of the \(even) rules turned the developer switch on")
     }
 
     @Test("a run leaves out the rules that name its source or a folder above it, and only those")
