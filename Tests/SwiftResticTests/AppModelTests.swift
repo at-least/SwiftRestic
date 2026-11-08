@@ -1252,11 +1252,6 @@ struct SnapshotRunLookupTests {
         #expect(!model.configuration.runs.contains { $0.id == wrote.id })
         #expect(model.backupRun(forSnapshot: "s1") == nil)
 
-        model.append(record: backup("s2"))
-        #expect(model.backupRun(forSnapshot: "s2") != nil)
-        model.clearRunHistory()
-        #expect(model.backupRun(forSnapshot: "s2") == nil)
-
         // Any write to the history counts, not only the model's own helpers.
         let assigned = backup("s3")
         model.configuration.runs = [assigned]
@@ -1839,33 +1834,6 @@ struct RunReporterTokenTests {
         reporter(staleHop)
         await drainReporterHops()
         #expect(model.planProgress[plan.id]?.filesDone == 1)
-    }
-
-    @Test("a late maintenance line never lands in the next job's activity")
-    func lateMaintenanceLineDrops() async throws {
-        let model = makeModel("SwiftResticRunTokens").model
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = "/tmp/somewhere"
-        await model.upsert(repository: repository, password: nil, providerSecret: nil)
-
-        model.installMaintenanceActivity(repositoryID: repository.id, task: .prune)
-        let reporter = model.lineReporter(repositoryID: repository.id)
-
-        // Job 1 unwinds: token and activity are retired; a line still in
-        // flight must not resurrect either.
-        model.retireRunToken(for: .maintenance(repository.id))
-        model.maintenance[repository.id] = nil
-        reporter("run 1: pruning…")
-        await drainReporterHops()
-        #expect(model.maintenance[repository.id] == nil)
-
-        // Job 2 starts; job 1's line lands late and must not overwrite it.
-        model.installMaintenanceActivity(repositoryID: repository.id, task: .prune)
-        model.maintenance[repository.id]?.lastOutput = "run 2: pruning…"
-        reporter("run 1: pruning…")
-        await drainReporterHops()
-        #expect(model.maintenance[repository.id]?.lastOutput == "run 2: pruning…")
     }
 }
 

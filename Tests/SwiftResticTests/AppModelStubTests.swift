@@ -4,7 +4,7 @@ import Testing
 
 /// Drives `AppModel` against the stub restic binary, so the model-level glue
 /// the integration suite cannot reach — restore bookkeeping, refresh error
-/// paths, the run-history cap, the console, unlock, deletion, notification
+/// paths, the run-history cap, the console, a lock in the way, deletion, notification
 /// wiring — is exercised on every machine, not only where restic is installed.
 @MainActor
 @Suite("AppModel with stub restic", .serialized)
@@ -1109,7 +1109,7 @@ struct AppModelStubTests {
 
         // A check the stub answers at once, then a failed backup: each
         // releases on its own way out.
-        model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        model.runMaintenance(repositoryID: harness.repository.id, task: .check)
         #expect(model.holdsOffSleep)
         await model.waitForMaintenance(repositoryID: harness.repository.id)
         #expect(!model.holdsOffSleep, "a finished check let go of the assertion")
@@ -1383,29 +1383,57 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("unlocking a repository confirms with a banner")
-    func unlockSuccess() async throws {
-        let harness = try await makeHarness(mode: "default")
+    @Test("a run a stale lock stopped unlocks the location and runs again once, unasked: backup and check alike")
+    func staleLockIsUnlockedAndTheRunRetried() async throws {
+        let harness = try await makeHarness(mode: "stalelock")
         defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
 
-        harness.model.unlockRepository(id: harness.repository.id)
-        let banner = await bannerTitled("Unlocked", in: harness.model)
-        #expect(banner?.title.contains("Unlocked") == true, "banner was: \(banner?.title ?? "none")")
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        #expect(model.configuration.runs.first?.outcome == .succeeded, "failure: \(model.configuration.runs.first?.failureMessage ?? "none")")
+        let backupSteps = try invocations(harness).compactMap { line in
+            [" backup ", " unlock "].first { line.contains($0) }
+        }
+        #expect(backupSteps == [" backup ", " unlock ", " backup "])
 
-        await harness.model.shutdown()
+        // The flag the unlock left stands; a new stale lock stops the check.
+        try FileManager.default.removeItem(at: harness.root.appendingPathComponent("unlocked.flag"))
+        let beforeCheck = try invocations(harness).count
+        model.runMaintenance(repositoryID: harness.repository.id, task: .check)
+        await model.waitForMaintenance(repositoryID: harness.repository.id)
+        #expect(model.configuration.runs.first?.kind == .check)
+        #expect(model.configuration.runs.first?.outcome == .succeeded, "failure: \(model.configuration.runs.first?.failureMessage ?? "none")")
+        let checkSteps = try invocations(harness).dropFirst(beforeCheck).compactMap { line in
+            [" check ", " unlock "].first { line.contains($0) }
+        }
+        #expect(checkSteps == [" check ", " unlock ", " check "])
+
+        await model.shutdown()
     }
 
-    @Test("a failed unlock says so instead of staying silent")
-    func unlockFailure() async throws {
-        let harness = try await makeHarness(mode: "plainfail")
+    @Test("a lock unlocking cannot remove fails the run once, saying who holds it and when it runs again")
+    func liveLockFailsAfterOneRetry() async throws {
+        let harness = try await makeHarness(mode: "livelock")
         defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
 
-        harness.model.unlockRepository(id: harness.repository.id)
-        let banner = await bannerTitled("Couldn’t unlock", in: harness.model)
-        #expect(banner?.title.contains("Couldn’t unlock") == true, "banner was: \(banner?.title ?? "none")")
-        #expect(banner?.isError == true)
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let backup = try #require(model.configuration.runs.first)
+        #expect(backup.outcome == .failed)
+        #expect(backup.failureMessage == "“Stub Repo” is in use by another Mac or app. SwiftRestic tries again at the next backup.")
+        #expect(try invocations(harness).filter { $0.contains(" backup ") }.count == 2)
+        #expect(try invocations(harness).filter { $0.contains(" unlock ") }.count == 1)
 
-        await harness.model.shutdown()
+        model.runMaintenance(repositoryID: harness.repository.id, task: .prune)
+        await model.waitForMaintenance(repositoryID: harness.repository.id)
+        let prune = try #require(model.configuration.runs.first)
+        #expect(prune.kind == .prune)
+        #expect(prune.outcome == .failed)
+        #expect(prune.failureMessage == "“Stub Repo” is in use by another Mac or app. SwiftRestic tries again at the next cleanup.")
+
+        await model.shutdown()
     }
 
     @Test("a check against a repository with no password records nothing at all")
@@ -1413,7 +1441,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "default", password: nil)
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check)
         await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
 
         // Not finished being set up: no run record and no "last checked" stamp.
@@ -1542,7 +1570,7 @@ struct AppModelStubTests {
         let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
         model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
 
-        model.runMaintenance(repositoryID: id, task: .check, readDataPercent: 0)
+        model.runMaintenance(repositoryID: id, task: .check)
         await model.waitForMaintenance(repositoryID: id)
 
         #expect(model.configuration.runs.first?.outcome == .skipped)
@@ -1710,7 +1738,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "hang-check")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check)
         await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         harness.model.cancelMaintenance(repositoryID: harness.repository.id)
@@ -1753,7 +1781,7 @@ struct AppModelStubTests {
         }
         let answersBeforeCancel = answerCount()
 
-        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check)
         await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.cancelMaintenance(repositoryID: harness.repository.id)
         await harness.model.waitForMaintenance(repositoryID: harness.repository.id)
@@ -1784,7 +1812,7 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "hang-check")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check, readDataPercent: 0)
+        harness.model.runMaintenance(repositoryID: harness.repository.id, task: .check)
         await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
 
         // Counted after the hung check's own start line: the baseline for
@@ -2629,22 +2657,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
 
         #expect(logNames(in: logsDirectory(harness)) == Set(kept.map { "\($0.id.uuidString).log" }))
-    }
-
-    @Test("clearing the history deletes its logs")
-    func clearedHistoryLosesItsLogs() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        for _ in 0 ..< 2 {
-            harness.model.runBackup(planID: harness.plan.id)
-            await harness.model.waitForRun(planID: harness.plan.id)
-        }
-        #expect(logNames(in: logsDirectory(harness)).count == 2)
-        harness.model.clearRunHistory()
-        await harness.model.shutdown()
-
-        #expect(logNames(in: logsDirectory(harness)).isEmpty)
     }
 
     /// A configuration directory for the launch-sweep tests, bootstrapped

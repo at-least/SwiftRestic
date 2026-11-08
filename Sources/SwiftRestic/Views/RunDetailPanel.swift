@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Activity's drawer: what the selected run did and where to go from it —
-/// the snapshot it wrote or read (Browse), its
+/// the snapshot it wrote or read (Show in Backups), its
 /// numbers, restic's exit code, the messages it left, and the log. Shown
 /// for every selected run, clean ones included: the plan page's Last backup
 /// value lands on exactly such a run, and an empty pane under the selection
@@ -126,7 +126,7 @@ struct RunDetailPanel: View {
                 DetailRow("Result") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(result).textSelection(.enabled)
-                        // The verdict advises `restic repair`: the console
+                        // The verdict advises restic's repair commands: the console
                         // is where it runs with the password supplied.
                         if let id = RunRecordPresentation.repairRoute(for: run, repositoryExists: repositoryName != nil) {
                             ConsoleRouteButton(repositoryID: id)
@@ -269,8 +269,8 @@ struct RunDetailPanel: View {
     }
 }
 
-/// A failure's one known fix, through the Location menu's own path: the
-/// editor sheet, or the confirmed Unlock.
+/// A failure's one known fix, through the menus' own path: an editor
+/// sheet, or a confirmed command.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppModel.self) private var model
@@ -281,7 +281,6 @@ struct RunFixButton: View {
             switch fix {
             case let .editRepository(id), let .editRepositoryShare(id):
                 router.request(.editRepository(id))
-            case let .removeStaleLocks(id): router.request(.confirm(.unlock(id)))
             case let .newPlan(id): router.request(.newPlanIn(id))
             case .addRepository: router.request(.newRepository)
             case let .locate(id): locate(id)
@@ -322,14 +321,15 @@ struct ConsoleRouteButton: View {
         }
         // The Location menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("Type restic repair there. The password is supplied")
+        .help("Type repair index, then repair snapshots. The password is supplied")
     }
 }
 
 /// The drawer's Backup row, in its own view so the listing lookup behind
 /// it reruns only when the run or the repository's listing changes — not on
-/// every write the drawer's other rows observe. Browse opens the backup
-/// on its page's Backups tab.
+/// every write the drawer's other rows observe. Show in Backups opens the
+/// backup on its page's Backups tab; restic's short ID stays in Copy
+/// Details, the backup's time names it for a restore.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -337,42 +337,38 @@ private struct RunSnapshotRow: View {
     let snapshotID: String
 
     var body: some View {
-        let short = String(snapshotID.prefix(8))
         let link = model.snapshotLink(for: run)
         HStack(spacing: 8) {
             switch link {
             case let .available(snapshot)?:
-                identifier(short, made: run.kind == .restore ? (run.snapshotTime ?? snapshot.time) : nil)
+                madeTime(run.snapshotTime ?? snapshot.time)
                 completenessMark(for: snapshot.id)
-                browseButton(snapshot.id)
+                showInBackupsButton(snapshot.id)
             case .removed?:
-                Text("\(short) — no longer in the location")
-                    .monospaced()
-                    .textSelection(.enabled)
-                    .help("Removed after this run, by this plan’s rules or another app")
+                Text("Removed since — by this plan’s rules or another app")
+                    .foregroundStyle(.secondary)
             case .unavailable?:
-                let help = "This location’s list of backups isn’t loaded right now"
-                identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
+                madeTime(run.snapshotTime)
                 completenessMark(for: snapshotID)
-                Button("Browse") {}
+                Button("Show in Backups") {}
                     .disabled(true)
-                    .help(help)
+                    .help("This location’s list of backups isn’t loaded right now")
             case .repositoryGone?, nil:
-                identifier(short, made: run.kind == .restore ? run.snapshotTime : nil)
+                madeTime(run.snapshotTime)
+                Button("Show in Backups") {}
+                    .disabled(true)
                     .help("This backup location is no longer set up in SwiftRestic")
             }
         }
         .controlSize(.small)
     }
 
-    private func identifier(_ short: String, made: Date?) -> some View {
-        HStack(spacing: 4) {
-            Text(short)
-                .monospaced()
-                .textSelection(.enabled)
-            if let made {
-                Text("· \(Format.timestamp(made))")
-            }
+    /// A restore's backup, by when it was made; a backup run's own row
+    /// needs no time — the drawer's header has it.
+    @ViewBuilder
+    private func madeTime(_ made: Date?) -> some View {
+        if run.kind == .restore, let made {
+            Text(Format.timestamp(made))
         }
     }
 
@@ -384,8 +380,8 @@ private struct RunSnapshotRow: View {
             .frame(width: 14)
     }
 
-    private func browseButton(_ snapshotID: String) -> some View {
-        Button("Browse") {
+    private func showInBackupsButton(_ snapshotID: String) -> some View {
+        Button("Show in Backups") {
             if let repositoryID = run.repositoryID,
                let page = model.page(ofBackup: snapshotID, in: repositoryID) {
                 router.showBackup(snapshotID, on: page, repositoryID: repositoryID)

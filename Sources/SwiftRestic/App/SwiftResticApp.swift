@@ -261,10 +261,6 @@ struct SwiftResticApp: App {
             CommandGroup(replacing: .help) {
                 Button("SwiftRestic Help") { openWindow(id: Self.helpWindowID) }
                     .keyboardShortcut("?", modifiers: .command)
-                Divider()
-                Button("restic Documentation") {
-                    NSWorkspace.shared.open(AppLinks.documentation)
-                }
             }
             // A plan's page searches its own files, and every other page all
             // backups; both are the toolbar field's (`AppRouter.Intent.showFind`).
@@ -431,8 +427,7 @@ struct SwiftResticApp: App {
 
     /// Acts on `commandRepositoryID(for:)`. Check and Clean Up also start
     /// from the repository page's Maintenance header and the sidebar row's
-    /// menu, through the shared confirmations; the repairs are here. Nothing
-    /// destructive has a key.
+    /// menu, through the shared confirmations. Nothing destructive has a key.
     private var locationMenu: some Commands {
         CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)
@@ -449,17 +444,6 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.confirm(.prune(id))) }
             }
             .disabled(!r.canMaintain)
-            // The repairs, rarely needed, apart from the routine upkeep. A
-            // disabled Menu keeps its own row enabled (see `lengthsMenu`).
-            if r.canMaintain, let id = r.repositoryID {
-                Menu("Repair") {
-                    Button("Unlock") { ask(.confirm(.unlock(id))) }
-                    Button("Rebuild Search Index") { ask(.confirm(.rebuildIndex(id))) }
-                }
-            } else {
-                Button("Repair") {}
-                    .disabled(true)
-            }
 
             Divider()
 

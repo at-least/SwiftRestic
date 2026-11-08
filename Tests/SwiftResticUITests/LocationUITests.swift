@@ -7,7 +7,7 @@ final class LocationUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A structure-only verification of a fresh repository: Activity records
+    /// The scheduled check, asked for by hand, of a fresh repository: Activity records
     /// it with restic's verdict.
     @MainActor
     func testVerifyFindsNoErrors() throws {

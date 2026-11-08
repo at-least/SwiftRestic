@@ -149,7 +149,7 @@ struct RunRecordPresentationTests {
         )
     }
 
-    @Test("Settings' Next backup line says the plan with its repository, then when")
+    @Test("the menu bar's Next line says the plan with its repository, then when")
     func nextRunLine() {
         let home = repository(name: "Home Disk")
         let documents = plan(name: "Documents", repositoryID: home.id)
@@ -166,7 +166,7 @@ struct RunRecordPresentationTests {
         )
     }
 
-    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path, or Unlock while nobody here holds the lock")
+    @Test("a failure whose cause the app knows offers its fix: the repository's editor for its password or path; a lock offers none, the run having unlocked already")
     func failureFixes() {
         let repository = UUID()
         var wrongPassword = backup {
@@ -174,8 +174,8 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.exitCode = 12
         }
-        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == .editRepository(repository))
-        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: false, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true) == .editRepository(repository))
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: false) == nil)
 
         // restic's "does not exist": the repository is not at its
         // location — its folder moved or renamed on a drive that is here.
@@ -186,20 +186,14 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.exitCode = 10
         }
-        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true, repositoryBusy: false) == .addRepository)
+        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true) == .addRepository)
 
-        var locked = backup {
+        let locked = backup {
             $0.repositoryID = repository
             $0.outcome = .failed
             $0.exitCode = 11
         }
-        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: false) == .removeStaleLocks(repository))
-        // Our own run holds a lock right now: it is not stale.
-        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: true) == nil)
-        // The message says it when the code was not kept.
-        locked.exitCode = 1
-        locked.failureMessage = "unable to create lock in backend: repository is already locked by PID 7"
-        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true, repositoryBusy: false) == .removeStaleLocks(repository))
+        #expect(RunRecordPresentation.fix(for: locked, repositoryExists: true) == nil)
 
         // No known cause, or no failure: nothing to offer.
         var other = backup {
@@ -207,21 +201,17 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.exitCode = 1
         }
-        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true) == nil)
         other.outcome = .completedWithErrors
         other.exitCode = 12
-        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: other, repositoryExists: true) == nil)
         wrongPassword.repositoryID = nil
-        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true) == nil)
         #expect(RunFix.editRepository(repository).title == "Edit Backup Location…")
         #expect(RunFix.addRepository.title == "Add Backup Location…")
-        #expect(RunFix.removeStaleLocks(repository).title == "Unlock")
         // The failure message beside the button already says the cause.
         #expect(RunFix.editRepository(repository).help == nil)
         #expect(RunFix.addRepository.help == nil)
-        // Unlock's is kept: the stored message never says who does not hold
-        // the lock.
-        #expect(RunFix.removeStaleLocks(repository).help == "A lock no run here holds is in the way")
     }
 
     @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")
@@ -234,15 +224,15 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.refusedShares = ["NAS"]
         }
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: nil)
             == .editPlanShare(plan))
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, planExists: false, repositoryVolume: "Backups") == nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, planExists: false, repositoryVolume: "Backups") == nil)
         // A check or prune refused its repository's share.
         refused.kind = .check
         refused.planID = nil
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, repositoryVolume: "NAS")
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
         #expect(RunFix.editRepositoryShare(repository).title == "Edit Backup Location…")
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
@@ -260,18 +250,18 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.retentionRefused = 1
         }
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false, planExists: false) == nil)
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .editPlanRetention(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, planExists: false) == nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false) == nil)
         // Apply Retention Now's own run, failed for it.
         refused.kind = .forget
         refused.outcome = .failed
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == .editPlanRetention(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .editPlanRetention(plan))
         // Any other warning still offers nothing.
         refused.retentionRefused = nil
         refused.kind = .backup
         refused.outcome = .completedWithErrors
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == nil)
         #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
         #expect(RunFix.editPlanRetention(plan).help == nil)
     }
@@ -314,8 +304,8 @@ struct RunRecordPresentationTests {
             $0.exitCode = 1
             $0.repositoryFull = true
         }
-        #expect(RunRecordPresentation.fix(for: full, repositoryExists: true, repositoryBusy: false) == .pruneNow(repository))
-        #expect(RunRecordPresentation.fix(for: full, repositoryExists: false, repositoryBusy: false) == nil)
+        #expect(RunRecordPresentation.fix(for: full, repositoryExists: true) == .pruneNow(repository))
+        #expect(RunRecordPresentation.fix(for: full, repositoryExists: false) == nil)
         #expect(RunFix.pruneNow(repository).title == "Clean Up Now…")
     }
 

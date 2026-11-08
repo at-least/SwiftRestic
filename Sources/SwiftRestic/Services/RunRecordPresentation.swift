@@ -13,8 +13,6 @@ enum RunFix: Equatable {
     /// restic exit 10 on a disk, or a drive that never comes back under its
     /// name: pick the folder it moved to (`AppModel.locateRepository`).
     case locate(UUID)
-    /// restic exit 11: a lock this app does not hold is in the way.
-    case removeStaleLocks(UUID)
     /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
     /// a plan's path is fixed, so where the folder is now takes a new plan
     /// in the same repository.
@@ -39,7 +37,6 @@ enum RunFix: Equatable {
         case .editRepository, .editRepositoryShare: "Edit Backup Location…"
         case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
-        case .removeStaleLocks: "Unlock"
         case .newPlan: "New Backup Plan…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
         case .pruneNow: "Clean Up Now…"
@@ -51,7 +48,6 @@ enum RunFix: Equatable {
     var help: String? {
         switch self {
         case .editRepository, .addRepository, .locate, .newPlan, .pruneNow, .editPlanRetention: nil
-        case .removeStaleLocks: "A lock no run here holds is in the way"
         case .editRepositoryShare: "The share’s saved password is in Edit Backup Location"
         case .editPlanShare: "The share’s saved password is on the plan editor’s Excluded Items tab"
         }
@@ -103,19 +99,17 @@ enum RunRecordPresentation {
     }
 
     /// The repository a check that found damage sends to the restic console:
-    /// its verdict advises `restic repair`, and the console is where the
+    /// its verdict advises restic's repair commands, and the console is where the
     /// repository's password is supplied.
     static func repairRoute(for run: RunRecord, repositoryExists: Bool) -> UUID? {
         guard repositoryExists, run.kind == .check, run.outcome == .completedWithErrors else { return nil }
         return run.repositoryID
     }
 
-    /// Only while the repository is still set up; Unlock only while no run
-    /// here holds a lock on it, so "stale" means nobody here is using it.
+    /// Only while the repository is still set up.
     static func fix(
         for run: RunRecord,
         repositoryExists: Bool,
-        repositoryBusy: Bool,
         planExists: Bool = true,
         repositoryVolume: String? = nil,
         repositoryIsLocal: Bool = false
@@ -139,8 +133,7 @@ enum RunRecordPresentation {
         if run.exitCode == ResticError.repositoryMissingCode {
             return repositoryIsLocal ? .locate(repositoryID) : .addRepository
         }
-        let locked = run.exitCode == ResticError.repositoryLockedCode || run.failureMessage?.contains("already locked") == true
-        return locked && !repositoryBusy ? .removeStaleLocks(repositoryID) : nil
+        return nil
     }
 
     /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Check of
@@ -253,8 +246,9 @@ enum RunRecordPresentation {
             // The record's own count ("Removed 2 backups."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
-            // The verdict the run recorded — "2 errors — restic repair can
-            // recover some damage." or "No errors found." — its first
+            // The verdict the run recorded — "2 errors — repair index, then
+            // repair snapshots, in the restic Console can recover some
+            // damage." or "No errors found." — its first
             // sentence; a record from before the verdict falls to the
             // outcome. The glyph already says the outcome; the count and the
             // fix are what the column adds. No final period: the column's
@@ -268,8 +262,9 @@ enum RunRecordPresentation {
     }
 
     /// The Detail column's words for a row that continues a line — the
-    /// Maintenance section's "22 hours ago · 2 errors — restic repair can
-    /// recover some damage" — the outcome lowercased when the detail is
+    /// Maintenance section's "22 hours ago · 2 errors — repair index, then
+    /// repair snapshots, in the restic Console can recover some damage" —
+    /// the outcome lowercased when the detail is
     /// only the outcome.
     static func verdictClause(for run: RunRecord) -> String {
         let detail = detail(for: run)

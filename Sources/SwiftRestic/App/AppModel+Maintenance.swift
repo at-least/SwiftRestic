@@ -39,7 +39,6 @@ extension AppModel {
         return RunRecordPresentation.fix(
             for: run,
             repositoryExists: repository != nil,
-            repositoryBusy: run.repositoryID.map { busyRepositoryIDs.contains($0) } ?? false,
             planExists: plan(id: run.planID) != nil,
             repositoryVolume: repository?.driveVolumeName,
             repositoryIsLocal: repository?.kind == .local
@@ -50,12 +49,9 @@ extension AppModel {
         plan.repositoryID.flatMap { lockedRepositories[$0] }
     }
 
-    /// `readDataPercent` lets the UI run a deeper check than the
-    /// repository's own policy asks for.
     func runMaintenance(
         repositoryID: UUID,
         task: MaintenanceTask,
-        readDataPercent: Int? = nil,
         askedByUser: Bool = true
     ) {
         guard !isShuttingDown else { return }
@@ -72,7 +68,6 @@ extension AppModel {
                 await MaintenanceRunEngine.perform(
                     repository: repository,
                     task: task,
-                    readDataPercentOverride: readDataPercent,
                     sink: self
                 )
             }
@@ -115,41 +110,9 @@ extension AppModel {
             }
         }
     }
-
-    func unlockRepository(id repositoryID: UUID) {
-        // Registered with the census rather than left as a bare task: an
-        // in-flight unlock is one of the sends quitting should drain, and an
-        // unregistered one dies silently under `terminateAll` with neither
-        // banner nor record.
-        tasks.addBackground(Task { [weak self] in
-            guard let self, let repository = self.repository(id: repositoryID) else { return }
-            do {
-                let service = try self.service()
-                try await service.unlock(self.context(for: repository))
-                self.post(Banner(title: "Unlocked “\(label(of: repository))”", message: "", isError: false))
-            } catch {
-                self.noteAuthFailure(error, repositoryID: repositoryID)
-                // The queue is global: name the repository whose locks
-                // stayed, as the success banner names the one it cleaned.
-                self.post(
-                    Banner(
-                        title: "Couldn’t unlock “\(label(of: repository))”",
-                        message: error.localizedDescription,
-                        isError: true
-                    )
-                )
-            }
-        })
-    }
 }
 
 extension AppModel: MaintenanceRunEngine.Sink {
-    func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
-        hopWriter(for: .maintenance(repositoryID)) { model, line in
-            model.maintenance[repositoryID]?.lastOutput = line
-        }
-    }
-
     func markPasswordMissing(repositoryID: UUID) {
         repositoriesMissingPassword.insert(repositoryID)
     }

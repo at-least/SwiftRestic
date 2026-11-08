@@ -558,6 +558,38 @@ struct StubRestic: Sendable {
                 echo "[]"
                 exit 0
                 ;;
+            stalelock | livelock)
+                # A lock in the way of every command that takes one, failing
+                # as restic 0.19.1 does (exit 11). `unlock` removes stalelock's,
+                # as restic's removes a stale lock; livelock's survives it, as
+                # a running backup's lock on another Mac survives restic's.
+                trace "$SWIFTRESTIC_STUB-arm"
+                flag="$(dirname "$SWIFTRESTIC_TRACE")/unlocked.flag"
+                case " $* " in
+                    *" unlock "*)
+                        [ "$SWIFTRESTIC_STUB" = "stalelock" ] && touch "$flag"
+                        exit 0
+                        ;;
+                    *" backup "* | *" check "* | *" prune "* | *" forget "*)
+                        if [ ! -f "$flag" ]; then
+                            echo '{"message_type":"exit_error","code":11,"message":"unable to create lock in backend: repository is already locked by PID 4242 on other-mac"}' >&2
+                            exit 11
+                        fi
+                        ;;
+                esac
+                case " $* " in
+                    *" backup "*)
+                        echo '{"message_type":"summary","files_new":1,"total_files_processed":1,"total_bytes_processed":10,"snapshot_id":"feedface00000000"}'
+                        exit 0
+                        ;;
+                    *" check "*)
+                        echo '{"message_type":"summary","num_errors":0,"broken_packs":null,"suggest_repair_index":false,"suggest_prune":false}'
+                        exit 0
+                        ;;
+                esac
+                echo "[]"
+                exit 0
+                ;;
             holdbackup)
                 # A repository two plans back up to. Each backup in flight
                 # leaves a mark, as restic's shared lock does, and a forget

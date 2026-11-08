@@ -30,8 +30,8 @@ struct RepositoryCommandState: Equatable {
     /// restic Console, the menu's and the sidebar row's: the console
     /// picks its own repository, so it needs only one to exist.
     var canOpenConsole = false
-    /// Check, Clean Up, Unlock, Rebuild Search Index: restic work
-    /// that must not collide with a backup or another job on it.
+    /// Check, Clean Up: restic work that must not collide with a backup
+    /// or another job on it.
     var canMaintain = false
     var canEdit = false
     /// Never busy-gated: the removal dialog names the work it will cancel.
@@ -159,7 +159,7 @@ extension AppModel {
         case let .check(id):
             guard let repository = repository(id: id) else { return nil }
             // Reading data costs time in proportion to the size, so the
-            // sheet names the size the user holds.
+            // dialog names the size the user holds.
             var message = "Backups to it wait until verification finishes."
             if let size = repositoryStats[id]?.totalSize {
                 message += " It holds \(Format.bytes(size))."
@@ -170,18 +170,6 @@ extension AppModel {
             return ConfirmationCopy(
                 title: "Clean up “\(label(of: repository))” now?",
                 message: "The data of removed backups is deleted for good. Backups to it wait until the cleanup finishes."
-            )
-        case let .unlock(id):
-            guard let repository = repository(id: id) else { return nil }
-            return ConfirmationCopy(
-                title: "Unlock “\(label(of: repository))”?",
-                message: "Do this only when no other Mac or app is using it. Unlocking a location in use can damage it."
-            )
-        case let .rebuildIndex(id):
-            guard let repository = repository(id: id) else { return nil }
-            return ConfirmationCopy(
-                title: "Rebuild the search index for “\(label(of: repository))”?",
-                message: "The index is read again from the location. Searches are slower until it finishes."
             )
         }
     }

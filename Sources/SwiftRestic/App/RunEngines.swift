@@ -32,6 +32,34 @@ private func runAfterHooks(
     record.finishedAt = .now
 }
 
+/// Runs restic work under the run's transcript; a lock in its way is
+/// unlocked and the work run once more, unasked. `restic unlock` removes
+/// only stale locks — with restic 0.19.1 a running backup's lock survived
+/// it — so a lock in use stays and the second try fails as the first did.
+@MainActor
+private func unlockingStaleLocks<T>(
+    service: any ResticClient,
+    context: RepositoryContext,
+    transcript: RunTranscript,
+    _ work: () async throws -> T
+) async throws -> T {
+    do {
+        return try await RunTranscript.$current.withValue(transcript) { try await work() }
+    } catch where ResticError.isRepositoryLocked(error) {
+        transcript.note("The location was locked: removing stale locks and trying again")
+        return try await RunTranscript.$current.withValue(transcript) {
+            try await service.unlock(context)
+            return try await work()
+        }
+    }
+}
+
+/// A run a lock still stopped after `unlockingStaleLocks`: someone is using
+/// the location, and the scheduler's next run of the same kind tries again.
+private func inUseMessage(location: String, nextRun: String) -> String {
+    "“\(location)” is in use by another Mac or app. SwiftRestic tries again at the next \(nextRun)."
+}
+
 @MainActor
 private func reconnectAwayShares(
     of paths: [String],
@@ -310,7 +338,7 @@ enum BackupRunEngine {
             sink.addStartPing(startEvent)
 
             sink.setActivityPhase(.backingUp, for: plan.id)
-            let outcome = try await RunTranscript.$current.withValue(transcript) {
+            let outcome = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                 try await service.backup(
                     context,
                     plan: plan,
@@ -354,7 +382,7 @@ enum BackupRunEngine {
             if plan.retention.isSafeToRun, record.snapshotID != nil {
                 sink.setActivityPhase(.applyingRetention, for: plan.id)
                 do {
-                    let removed = try await RunTranscript.$current.withValue(transcript) {
+                    let removed = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                         try await service.forget(context, plan: plan)
                     }
                     transcript.note("Removed \(Format.plural(removed, "backup"))")
@@ -369,14 +397,11 @@ enum BackupRunEngine {
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
                     // takes a shared one, so a second plan backing up to the
-                    // same repository fails this with exit code 11. The data
-                    // is safe; warn instead of failing the whole backup.
+                    // same repository fails this with exit code 11, its lock
+                    // live. The data is safe; warn instead of failing the
+                    // whole backup — the next backup's retention runs again.
                     record.outcome = .completedWithErrors
-                    // Not exit 11's own words, whose stale-lock advice fits a
-                    // run that failed: here the lock is most often that other
-                    // backup's, live, and the next backup's retention runs
-                    // again by itself.
-                    let reason = if case ResticError.commandFailed(exitCode: 11, _) = error {
+                    let reason = if ResticError.isRepositoryLocked(error) {
                         "another backup or job was using the location. Old backups are removed after the next backup."
                     } else {
                         error.localizedDescription
@@ -417,6 +442,9 @@ enum BackupRunEngine {
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+            if ResticError.isRepositoryLocked(error) {
+                record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: "backup")
+            }
             // The repository's disk full: said plainly, with what the run left
             // behind — restic's line, naming a pack file by its hash, stays in
             // the log — and Clean Up Now as its fix (`repositoryFull`): on a
@@ -479,10 +507,6 @@ enum MaintenanceRunEngine {
     @MainActor
     protocol Sink: RunEngineSink {
         var cancellationMessage: String { get }
-        /// Prune's live narration, hopped home by the sink itself (only it
-        /// knows its concrete isolation); dropped if the run has already
-        /// unwound, like the activity entry itself.
-        func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void
         func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date)
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)
@@ -501,7 +525,6 @@ enum MaintenanceRunEngine {
     static func perform(
         repository: Repository,
         task: MaintenanceTask,
-        readDataPercentOverride: Int?,
         sink: Sink
     ) async {
         let startedAt = Date.now
@@ -560,52 +583,38 @@ enum MaintenanceRunEngine {
 
             switch task {
             case .check:
-                // Asked for by hand, what was asked; scheduled, the
-                // repository's depth — a rotation's next slice, moved on
-                // once the check has read it.
-                let subset: CheckDataSubset? = if let readDataPercentOverride {
-                    readDataPercentOverride > 0 ? .percent(readDataPercentOverride) : nil
-                } else {
-                    repository.maintenance.scheduledDataSubset(for: repository.kind)
-                }
-                let summary = try await RunTranscript.$current.withValue(transcript) {
+                // By hand or scheduled, the repository's depth — a
+                // rotation's next slice, moved on once the check has read it.
+                let subset = repository.maintenance.scheduledDataSubset(for: repository.kind)
+                let summary = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                     try await service.check(context, readDataSubset: subset)
                 }
                 record.checkRead = subset?.words ?? "structure only"
-                if readDataPercentOverride == nil, case .slice = subset {
+                if case .slice = subset {
                     sink.advanceCheckDataSlice(repositoryID: repository.id)
                 }
-                if readDataPercentOverride == nil {
-                    // Housekeeping on this Mac: it must never fail the check.
-                    do {
-                        try await RunTranscript.$current.withValue(transcript) { try await service.cleanupCache() }
-                    } catch {
-                        transcript.note("restic’s old caches weren’t removed: \(error.localizedDescription)")
-                    }
+                // Housekeeping on this Mac: it must never fail the check.
+                do {
+                    try await RunTranscript.$current.withValue(transcript) { try await service.cleanupCache() }
+                } catch {
+                    transcript.note("restic’s old caches weren’t removed: \(error.localizedDescription)")
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                // One sentence — a dash, not a period, before the command —
+                // One sentence — a dash, not a period, before the commands —
                 // so Format.firstSentence carries the whole verdict to the
-                // Detail column and the Maintenance
-                // row; restic's prune advice stays a second sentence.
+                // Detail column and the Maintenance row; restic's prune
+                // advice stays a second sentence. The commands as the
+                // console takes them: it supplies `restic` itself.
                 record.detailText = errors == 0
                     ? "No errors found."
-                    : "\(Format.plural(errors, "error")) — restic repair can recover some damage."
+                    : "\(Format.plural(errors, "error")) — repair index, then repair snapshots, in the restic Console can recover some damage."
                 if summary?.suggestPrune == true {
                     record.detailText? += " A cleanup is suggested."
                 }
             case .prune:
-                // Prune narrates its progress line by line; surfacing the
-                // newest line is the difference between "working" and "hung"
-                // across a prune that can run for hours. (Restic's lines are
-                // \n-terminated when stdout is a pipe, arriving as they
-                // print — no \r in-place updates to split around.)
-                record.detailText = try await RunTranscript.$current.withValue(transcript) {
-                    try await service.prune(
-                        context,
-                        onRawLine: sink.lineReporter(repositoryID: repository.id)
-                    )
+                record.detailText = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
+                    try await service.prune(context, onRawLine: nil)
                 }
                 record.outcome = .succeeded
             }
@@ -617,6 +626,9 @@ enum MaintenanceRunEngine {
             return
         } catch {
             record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+            if ResticError.isRepositoryLocked(error) {
+                record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: task.displayName.lowercased())
+            }
             sink.noteAuthFailure(error, repositoryID: repository.id)
         }
 

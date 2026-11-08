@@ -133,33 +133,22 @@ struct RepositoryDetailView: View {
     private func maintenanceSection(_ repository: Repository) -> some View {
         Section {
             if let activity = model.maintenance[repositoryID] {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        // A live elapsed time: a verification can run for
-                        // hours, and "14 min" is what separates working from
-                        // hung.
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(
-                                "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
-                            )
-                            .monospacedDigit()
-                        }
-                        Spacer()
-                        Button("Stop") {
-                            model.cancelMaintenance(repositoryID: repositoryID)
-                        }
-                        .controlSize(.small)
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    // A live elapsed time: a verification can run for
+                    // hours, and "14 min" is what separates working from
+                    // hung.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(
+                            "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
+                        )
+                        .monospacedDigit()
                     }
-                    if let last = activity.lastOutput {
-                        Text(last)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                            .help(last)
+                    Spacer()
+                    Button("Stop") {
+                        model.cancelMaintenance(repositoryID: repositoryID)
                     }
+                    .controlSize(.small)
                 }
             }
 

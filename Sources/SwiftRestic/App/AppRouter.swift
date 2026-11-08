@@ -306,8 +306,6 @@ enum CommandConfirmation: Hashable, Identifiable {
     case deleteRepository(UUID)
     case check(UUID)
     case prune(UUID)
-    case unlock(UUID)
-    case rebuildIndex(UUID)
 
     var id: Self { self }
 }

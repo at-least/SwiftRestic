@@ -152,7 +152,6 @@ struct SidebarView: View {
         Button("New Backup Plan…") { onNewPlan(repository.id) }
         Divider()
         Button("Edit Backup Location…") { onEditRepository(repository) }
-        Button("Refresh") { Task { await model.refreshSnapshots(repositoryID: repository.id) } }
         // The two of the Location menu's a row most often wants; the
         // shared confirmations ask first. Left out, not dimmed, while they
         // can't run, as the plan row's commands.

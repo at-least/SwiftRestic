@@ -157,6 +157,23 @@ struct FirstBackupTests {
         await model.shutdown()
     }
 
+    @Test("a location the editor added for the first-run sheet gets its plan on the defaults, announced")
+    func firstPlanAfterTheEditor() throws {
+        let (model, root) = try makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.resticState = .damaged
+        let repositoryID = UUID()
+
+        let planID = model.createFirstPlan(source: "/Users/u/Documents", repositoryID: repositoryID)
+
+        let plan = try #require(model.plan(id: planID))
+        #expect(plan.path == "/Users/u/Documents")
+        #expect(plan.repositoryID == repositoryID)
+        #expect(plan.schedule.frequency == BackupPlan().schedule.frequency)
+        #expect(plan.retention == BackupPlan().retention)
+        #expect(plan.announcesFirstBackup)
+    }
+
     @Test("the first success is announced once, whatever the setting; another plan's is not")
     func firstSuccessAnnouncedOnce() async {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
@@ -415,9 +432,9 @@ struct LocateRepositoryTests {
         var run = RunRecord(kind: .backup, planID: UUID(), planName: "p", repositoryID: UUID())
         run.outcome = .failed
         run.exitCode = ResticError.repositoryMissingCode
-        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryBusy: false, repositoryIsLocal: true)
+        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryIsLocal: true)
             == .locate(run.repositoryID!))
-        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryBusy: false, repositoryIsLocal: false)
+        #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryIsLocal: false)
             == .addRepository)
         #expect(RunFix.locate(UUID()).title == "Locate…")
     }

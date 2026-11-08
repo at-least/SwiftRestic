@@ -65,12 +65,12 @@ enum ResticError: Error, LocalizedError, Equatable {
             case Self.repositoryMissingCode, Self.repositoryLockedCode:
                 // Exit 10's are the Add Backup Location button's own words, so
                 // the banner and the notification say what the drawer's button
-                // does. Exit 11's leave out the Unlock tooltip's "no run here
-                // holds it", checked when the button is offered: the stored
-                // message outlives that moment.
+                // does. Exit 11's reach the user only where nothing unlocked
+                // first: a run unlocks and retries (`unlockingStaleLocks`)
+                // and names the location itself.
                 base = code == Self.repositoryMissingCode
                     ? Self.noRepositoryAtLocation + "."
-                    : "The backup location is locked. If no other Mac is using it, unlock it."
+                    : "The backup location is in use by another Mac or app."
             default:
                 base = nil
             }
@@ -194,6 +194,11 @@ enum ResticError: Error, LocalizedError, Equatable {
     static let repositoryMissingCode: Int32 = 10
     static let repositoryLockedCode: Int32 = 11
     static let wrongPasswordCode: Int32 = 12
+
+    static func isRepositoryLocked(_ error: Error) -> Bool {
+        guard case let .commandFailed(code, _) = error as? ResticError else { return false }
+        return code == repositoryLockedCode
+    }
 
     /// Whether an error is a stop — Swift's task cancellation or restic's
     /// own `cancelled` — rather than a failure. The reading the run records

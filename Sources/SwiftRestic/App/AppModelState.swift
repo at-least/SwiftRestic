@@ -58,11 +58,6 @@ struct MaintenanceActivity: Sendable, Equatable {
     /// False for the scheduler's runs: a skip nobody asked for posts nothing.
     var askedByUser = true
     var startedAt: Date = .now
-    /// The last line the command printed. `prune` narrates in plain text, so
-    /// this distinguishes "working" from "hung"; `check --json` stays silent
-    /// until it finishes, so there this stays `nil` and elapsed time is the
-    /// only live signal.
-    var lastOutput: String?
 }
 
 struct Banner: Identifiable, Equatable {

@@ -50,7 +50,7 @@ struct ResticErrorTests {
         #expect(ResticError.commandFailed(
             exitCode: 11,
             message: "Fatal: repository is locked"
-        ).errorDescription == "The backup location is locked. If no other Mac is using it, unlock it.")
+        ).errorDescription == "The backup location is in use by another Mac or app.")
 
         let known = ResticError.commandFailed(
             exitCode: 3,

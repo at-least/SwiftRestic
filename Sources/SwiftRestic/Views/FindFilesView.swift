@@ -142,11 +142,11 @@ struct FindFilesView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(search.failures, id: \.repositoryID) { failure in
                 HStack(spacing: 8) {
-                    Label("Couldn’t search “\(name(of: failure.repositoryID))”.", systemImage: "exclamationmark.triangle.fill")
+                    WarningLine(text: "Couldn’t search “\(name(of: failure.repositoryID))”.")
                         .help(failure.message)
                     Spacer(minLength: 8)
-                    Button("Rebuild Search Index…") {
-                        router.request(.confirm(.rebuildIndex(failure.repositoryID)))
+                    Button("Rebuild Search Index") {
+                        model.rebuildIndex(repositoryID: failure.repositoryID)
                     }
                     .controlSize(.small)
                 }
@@ -301,9 +301,8 @@ struct FindFilesView: View {
             // Beside the results, never in place of them: the search did not
             // fail, and its rows are what the user is choosing from.
             if let failure = previewer.failure {
-                Label(failure.title, systemImage: "exclamationmark.triangle")
+                WarningLine(text: failure.title)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
                     .help(failure.message)
             }
             Spacer()

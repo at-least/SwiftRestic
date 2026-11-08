@@ -233,39 +233,34 @@ struct OperationProgressView: View {
                     .accessibilityLabel(Text(title))
             }
 
-            // The numbers once restic has reported any: before that — a
-            // plan's before-backup hooks, restic starting up — they read
-            // "0 / 0 files, 0 bytes / 0 bytes, 0%", and the title already
+            // Once restic has reported any numbers: before that — a plan's
+            // before-backup hooks, restic starting up — the title already
             // says what is happening.
-            if progress != OperationProgress() {
-                HStack(spacing: 14) {
-                    Text("\(Format.count(progress.filesDone)) / \(Format.count(progress.totalFiles)) files")
-                    Text("\(Format.bytes(progress.bytesDone)) / \(Format.bytes(progress.totalBytes))")
-                    if let startedAt {
-                        Text(Format.rate(
-                            bytes: progress.bytesDone,
-                            over: Date.now.timeIntervalSince(startedAt)
-                        ))
-                    }
-                    if let remaining = progress.secondsRemaining, remaining > 0 {
-                        Text("\(Format.duration(TimeInterval(remaining))) left")
-                    }
-                    Spacer()
-                    Text(Format.percent(progress.fraction))
-                        .monospacedDigit()
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            if let current = progress.currentFile {
-                Text(current)
+            if let caption = Self.caption(progress) {
+                Text(caption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .monospacedDigit()
             }
         }
+    }
+
+    /// "1.2 GB of 3.4 GB — about 4 minutes left", each part only when
+    /// restic has said it.
+    static func caption(_ progress: OperationProgress) -> String? {
+        guard progress != OperationProgress() else { return nil }
+        var parts: [String] = []
+        if progress.totalBytes > 0 {
+            parts.append("\(Format.bytes(progress.bytesDone)) of \(Format.bytes(progress.totalBytes))")
+        } else if progress.bytesDone > 0 {
+            parts.append(Format.bytes(progress.bytesDone))
+        }
+        if let remaining = progress.secondsRemaining, remaining > 0 {
+            let time = Duration.seconds(remaining)
+                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 1))
+            parts.append("about \(time) left")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " — ")
     }
 }
 
@@ -899,7 +894,7 @@ struct SearchScopePicker: View {
 /// A broken search index's failure, with its way out. Nothing the index
 /// answered can be trusted as "nothing matches" while this stands.
 struct IndexFailureView: View {
-    @Environment(AppRouter.self) private var router
+    @Environment(AppModel.self) private var model
     let title: String
     let message: String
     let repositoryID: UUID
@@ -910,8 +905,8 @@ struct IndexFailureView: View {
         } description: {
             Text(message)
         } actions: {
-            Button("Rebuild Search Index…") {
-                router.request(.confirm(.rebuildIndex(repositoryID)))
+            Button("Rebuild Search Index") {
+                model.rebuildIndex(repositoryID: repositoryID)
             }
         }
     }

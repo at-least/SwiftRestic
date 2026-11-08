@@ -521,9 +521,6 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Verify “NAS”?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
-        #expect(model.confirmationCopy(for: .unlock(repository.id))?.title == "Unlock “NAS”?")
-        #expect(model.confirmationCopy(for: .rebuildIndex(repository.id))?.title
-            == "Rebuild the search index for “NAS”?")
 
         let stopping = "will be stopped"
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)

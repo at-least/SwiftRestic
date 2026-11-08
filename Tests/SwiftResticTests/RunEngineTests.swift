@@ -758,10 +758,6 @@ struct MaintenanceRunEngineTests {
         var deliveredTranscripts: [RunTranscript.Contents] = []
         var cancellationMessage = "cancelled in test"
 
-        func lineReporter(repositoryID: UUID) -> @Sendable (String) -> Void {
-            { [weak self] _ in Task { @MainActor in self?.log.append("prune-line") } }
-        }
-
         func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date) {
             log.append("stamp:\(task.rawValue)")
         }
@@ -810,7 +806,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .check,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
@@ -818,61 +813,45 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log.contains("stamp:check"))
     }
 
-    @Test("a scheduled check removes restic's old caches, one asked for by hand doesn't, and a cleanup failure leaves the check standing and in the log")
-    func scheduledCheckCleansTheCache() async throws {
-        let repository = Repository()
-        func check(override: Int?, client: MockResticClient) async -> RecordingSink {
-            let sink = RecordingSink()
-            await MaintenanceRunEngine.perform(
-                repository: repository, task: .check, readDataPercentOverride: override,
-                sink: sink.serving(client)
-            )
-            return sink
-        }
-        let scheduled = MockResticClient().onCheck(.success(ResticSummary()))
-        _ = await check(override: nil, client: scheduled)
-        #expect(scheduled.callLog.contains("cleanupCache"))
-
-        let byHand = MockResticClient().onCheck(.success(ResticSummary()))
-        _ = await check(override: 5, client: byHand)
-        #expect(!byHand.callLog.contains("cleanupCache"))
+    @Test("a check removes restic's old caches, and a cleanup failure leaves the check standing")
+    func checkCleansTheCache() async throws {
+        let cleaned = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(repository: Repository(), task: .check, sink: RecordingSink().serving(cleaned))
+        #expect(cleaned.callLog.contains("cleanupCache"))
 
         let refused = MockResticClient()
             .onCheck(.success(ResticSummary()))
             .onCleanupCache(.failure(ResticError.commandFailed(exitCode: 1, message: "Fatal: boom")))
-        let sink = await check(override: nil, client: refused)
+        let sink = RecordingSink()
+        await MaintenanceRunEngine.perform(repository: Repository(), task: .check, sink: sink.serving(refused))
         #expect(sink.deliveredRecords.first?.outcome == .succeeded)
     }
 
-    @Test("a scheduled check reads the rotation's next slice, says so and moves it on; one asked for by hand reads what it was asked")
+    @Test("a check reads the rotation's next slice, says so and moves it on; where storage bills reads, the structure only")
     func checkReadsTheRotation() async throws {
         var repository = Repository()
         repository.maintenance.nextCheckDataSlice = 3
-        func check(override: Int?, answer: Result<ResticSummary?, Error> = .success(ResticSummary())) async -> (RecordingSink, MockResticClient) {
+        func check(_ repository: Repository, answer: Result<ResticSummary?, Error> = .success(ResticSummary())) async -> (RecordingSink, MockResticClient) {
             let sink = RecordingSink()
             let client = MockResticClient().onCheck(answer)
-            await MaintenanceRunEngine.perform(
-                repository: repository, task: .check, readDataPercentOverride: override,
-                sink: sink.serving(client)
-            )
+            await MaintenanceRunEngine.perform(repository: repository, task: .check, sink: sink.serving(client))
             return (sink, client)
         }
 
-        let (scheduled, scheduledClient) = await check(override: nil)
-        #expect(scheduledClient.checkSubsets == [.slice(3, of: 12)])
-        #expect(scheduled.deliveredRecords.first?.checkRead == "part 3 of 12")
-        #expect(scheduled.log.contains("advance-slice"))
+        let (sliced, slicedClient) = await check(repository)
+        #expect(slicedClient.checkSubsets == [.slice(3, of: 12)])
+        #expect(sliced.deliveredRecords.first?.checkRead == "part 3 of 12")
+        #expect(sliced.log.contains("advance-slice"))
 
-        let (byHand, byHandClient) = await check(override: 5)
-        #expect(byHandClient.checkSubsets == [.percent(5)])
-        #expect(byHand.deliveredRecords.first?.checkRead == "5% of the data")
-        #expect(!byHand.log.contains("advance-slice"))
-        let (structure, structureClient) = await check(override: 0)
+        var billed = repository
+        billed.kind = .s3
+        let (structure, structureClient) = await check(billed)
         #expect(structureClient.checkSubsets == [nil])
         #expect(structure.deliveredRecords.first?.checkRead == "structure only")
+        #expect(!structure.log.contains("advance-slice"))
 
         // A check restic could not finish read nothing: the slice waits.
-        let (failed, _) = await check(override: nil, answer: .failure(ResticError.commandFailed(exitCode: 1, message: "Fatal: boom")))
+        let (failed, _) = await check(repository, answer: .failure(ResticError.commandFailed(exitCode: 1, message: "Fatal: boom")))
         #expect(failed.deliveredRecords.first?.outcome == .failed)
         #expect(!failed.log.contains("advance-slice"))
     }
@@ -888,7 +867,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: repository,
             task: .check,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         let record = try #require(sink.deliveredRecords.first)
@@ -910,7 +888,7 @@ struct MaintenanceRunEngineTests {
         let sink = RecordingSink()
         let untouched = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
-            repository: repository, task: .check, readDataPercentOverride: nil,
+            repository: repository, task: .check,
             sink: sink.serving(untouched)
         )
         #expect(untouched.callLog.isEmpty)
@@ -934,7 +912,7 @@ struct MaintenanceRunEngineTests {
         outOfReach.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .unreachable(unreachable))]
         let waiting = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
-            repository: repository, task: .check, readDataPercentOverride: nil,
+            repository: repository, task: .check,
             sink: outOfReach.serving(waiting)
         )
         #expect(outOfReach.log.filter { $0.hasPrefix("reconnect") } == ["reconnect:\(volume)"], "log was \(outOfReach.log)")
@@ -950,7 +928,7 @@ struct MaintenanceRunEngineTests {
         refusing.reconnectAnswer = [ShareReconnect(volumeName: volume, url: "smb://me@nas.local/\(volume)", outcome: .refused(refused))]
         let untouched = MockResticClient().onCheck(.success(ResticSummary()))
         await MaintenanceRunEngine.perform(
-            repository: repository, task: .check, readDataPercentOverride: nil,
+            repository: repository, task: .check,
             sink: refusing.serving(untouched)
         )
         #expect(untouched.callLog.isEmpty)
@@ -970,7 +948,6 @@ struct MaintenanceRunEngineTests {
             await MaintenanceRunEngine.perform(
                 repository: Repository(),
                 task: .check,
-                readDataPercentOverride: nil,
                 sink: sink.serving(client)
             )
         }
@@ -999,16 +976,15 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .check,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
         // One sentence for the verdict, so the Detail column carries it
         // whole; restic's advice is the second.
         #expect(sink.deliveredRecords[0].detailText
-            == "2 errors — restic repair can recover some damage. A cleanup is suggested.")
+            == "2 errors — repair index, then repair snapshots, in the restic Console can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
-            == "2 errors — restic repair can recover some damage")
+            == "2 errors — repair index, then repair snapshots, in the restic Console can recover some damage")
     }
 
     @Test("a missing password records nothing and stamps nothing")
@@ -1018,7 +994,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .check,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         #expect(sink.log == ["context", "password-missing"])
@@ -1032,7 +1007,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .check,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         #expect(client.transcriptBound["check"] == true)
@@ -1051,7 +1025,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .prune,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         let record = try #require(sink.deliveredRecords.first)
@@ -1069,12 +1042,6 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log.contains("stamp:prune"))
         #expect(sink.deliveredTranscripts.count == 1)
         #expect(sink.log.contains("refresh-scheduled"))
-        // Narration hops home through the sink's line reporter, one entry
-        // per restic line, landing asynchronously.
-        #expect(
-            await eventually(within: 5) { sink.log.filter { $0 == "prune-line" }.count == 2 },
-            "log was \(sink.log)"
-        )
     }
 
     @Test("a failed prune is stamped and recorded failed, never unstamped")
@@ -1084,7 +1051,6 @@ struct MaintenanceRunEngineTests {
         await MaintenanceRunEngine.perform(
             repository: Repository(),
             task: .prune,
-            readDataPercentOverride: nil,
             sink: sink.serving(client)
         )
         let record = try #require(sink.deliveredRecords.first)
