@@ -60,6 +60,7 @@ struct ServerProbeTests {
         #expect(ServerProbe.verdict(for: .failed(.posix(.EHOSTUNREACH))) == .unreachable("no route to the server"))
         #expect(ServerProbe.verdict(for: .waiting(.posix(.ENETUNREACH))) == .unreachable("no route to the server"))
         #expect(ServerProbe.verdict(for: .waiting(.posix(.ENETDOWN))) == .unreachable("this Mac has no network connection"))
+        #expect(ServerProbe.verdict(for: .waiting(.posix(.ETIMEDOUT))) == .unreachable("it did not answer"))
         #expect(ServerProbe.verdict(for: .waiting(.dns(-65554))) == .unreachable("its name couldn’t be found"))
         #expect(ServerProbe.timeoutWords(seconds: 10) == "it did not answer within 10 seconds")
     }

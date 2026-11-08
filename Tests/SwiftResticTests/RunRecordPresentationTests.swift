@@ -697,4 +697,32 @@ struct RunRecordPresentationTests {
         #expect(RunRecord.Kind.check.payloadOperation == "Check")
         #expect(RunRecord.Kind.prune.channelSummaryName == "Cleanup")
     }
+
+    @Test("Copy Details for a failed multi-item restore names the items, the destination, the error and the count past the sample")
+    func copyDetailsForAFailedMultiItemRestore() {
+        let record = restore {
+            $0.outcome = .failed
+            $0.failureMessage =
+                "A file or alias is already at /tmp/there/Report.pdf, where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
+            $0.sourcePaths = ["/src/Documents/a.pdf", "/src/Documents/b.pdf"]
+            $0.destinationPath = "/tmp/there"
+            // The sample keeps one line; the count says how many there were.
+            $0.itemErrorCount = 3
+            $0.itemErrors = ["/src/Documents/a.pdf: open /src/Documents/a.pdf: permission denied"]
+        }
+        let text = RunRecordPresentation.detailsText(
+            for: record,
+            repositoryName: nil,
+            versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
+        )
+        let lines = text.components(separatedBy: "\n")
+        #expect(lines.first == "Restore of “Budget.numbers” — Failed")
+        #expect(lines.contains(
+            "Error: A file or alias is already at /tmp/there/Report.pdf, where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
+        ))
+        #expect(lines.contains("Items: /src/Documents/a.pdf, /src/Documents/b.pdf"))
+        #expect(lines.contains("Destination: /tmp/there"))
+        #expect(lines.contains("Unreadable items (3):"))
+        #expect(lines.contains("  … and 2 more"))
+    }
 }

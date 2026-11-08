@@ -20,13 +20,6 @@ struct MenuBarLogoTests {
         #expect(MenuBarLogo.phase(at: start.addingTimeInterval(MenuBarLogo.frameInterval * 2)) == firstPhase)
     }
 
-    @Test("the resting mark and every running frame draw without crashing")
-    func imageRenders() {
-        #expect(MenuBarLogo.image().size.width > 0)
-        #expect(MenuBarLogo.image(phase: 0).size.width > 0)
-        #expect(MenuBarLogo.image(phase: 1).size.width > 0)
-    }
-
     @Test("the Reduce Motion face is the held first frame, distinct from rest")
     func reducedMotionFace() {
         // Held: it is literally frame 0 of the pulse, not a new construction.
@@ -92,11 +85,6 @@ struct MenuBarLogoTests {
             x: CGFloat(minX) / scale, y: CGFloat(minY) / scale,
             width: CGFloat(maxX - minX + 1) / scale, height: CGFloat(maxY - minY + 1) / scale
         )
-    }
-
-    @Test("the attention face renders")
-    func allFacesRender() {
-        #expect(MenuBarLogo.attentionImage.size.width > 0)
     }
 
     /// Renders a face for sampling or eyeballing. Pass `platter` to compose

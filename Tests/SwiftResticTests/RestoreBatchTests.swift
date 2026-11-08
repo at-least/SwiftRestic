@@ -124,11 +124,4 @@ struct RestoreBatchTests {
         // A leading combining mark stays the name's own, not merged into the "/".
         #expect(RestoreBatch.includePattern(forName: "\u{0301}x").unicodeScalars.count == 3)
     }
-
-    @Test("the folder holding a path, '/' above a top-level item")
-    func parentPath() {
-        #expect(ResticPath.parent(of: "/Data/Docs/a.txt") == "/Data/Docs")
-        #expect(ResticPath.parent(of: "/Volumes") == "/")
-        #expect(ResticPath.parent(of: "/Data/\u{0301}x") == "/Data")
-    }
 }

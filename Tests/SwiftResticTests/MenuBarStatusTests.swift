@@ -620,6 +620,12 @@ struct MenuBarStatusTests {
             MenuBarStatus.problemLine(runs: [failedRun(kind: .backup, name: "Nightly")], hasNoRepositories: false, relative: Self.ago)
                 == "Nightly failed 2 hours ago"
         )
+        // A subject nobody can name — a repository gone from the configuration
+        // — says the kind instead of an empty name.
+        #expect(
+            MenuBarStatus.problemLine(runs: [failedRun(kind: .check, name: "")], hasNoRepositories: false, relative: Self.ago)
+                == "Verification failed 2 hours ago"
+        )
     }
 
     @Test("the subject names the repository the problem belongs to, derived from IDs")

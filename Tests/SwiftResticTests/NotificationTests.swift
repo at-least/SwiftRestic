@@ -451,6 +451,33 @@ struct NotificationPosterTests {
         send.cancel()
         #expect(await send.value == "The request was cancelled")
     }
+
+    @Test("a channel that answers with an error status names the status")
+    func httpStatusFailure() async throws {
+        let listening = try LocalPort.listening()
+        _ = fcntl(listening.socket, F_SETFL, fcntl(listening.socket, F_GETFL) | O_NONBLOCK)
+        defer { close(listening.socket) }
+
+        let payload = NotificationPayload.Request(
+            url: URL(string: "http://127.0.0.1:\(listening.port)/ping")!,
+            body: Data("test".utf8),
+            contentType: "text/plain"
+        )
+        let request = Task { await NotificationPoster.send(payload) }
+        var connection: Int32 = -1
+        for _ in 0 ..< 500 where connection < 0 {
+            connection = accept(listening.socket, nil, nil)
+            if connection < 0 { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try #require(connection >= 0, "the request never connected")
+        defer { close(connection) }
+        // Enough of an HTTP answer for URLSession to hand up the status.
+        let answer = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+        _ = answer.withCString { pointer in
+            Darwin.send(connection, pointer, strlen(pointer), 0)
+        }
+        #expect(await request.value == "HTTP 500")
+    }
 }
 
 /// The chat-facing summary must count every warning restic reported, not the

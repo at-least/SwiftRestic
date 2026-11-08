@@ -164,7 +164,6 @@ struct RunLogTests {
         #expect(lines.contains("Started 2026-09-26 07:58:17 +0000"))
         #expect(lines.contains("Finished 2026-09-26 07:58:20 +0000 after 3s — Succeeded"))
         #expect(lines.contains("Result: No errors found."), "log was \(checkText)")
-
         // A prune has no result line of its own: nothing after the footer
         // speaks for it, though its record carries restic's tail as the
         // detail, as a successful prune's run writes it (`RunEngines`).
@@ -243,5 +242,44 @@ struct RunLogTests {
         absent.remove([UUID()])
         #expect(absent.sweep(keeping: [], olderThan: .now) == 0)
         #expect(!FileManager.default.fileExists(atPath: absent.directory.path))
+    }
+
+    @Test("a skipped run's reason, a failed restore's destination and the failure line each reach the log")
+    func skippedAndFailedRestoreLines() {
+        func record(_ kind: RunRecord.Kind) -> RunRecord {
+            var record = RunRecord(kind: kind, planName: "Documents")
+            record.startedAt = at(0)
+            record.finishedAt = at(2)
+            return record
+        }
+        func render(_ record: RunRecord) -> [String] {
+            RunLog.render(
+                record: record,
+                repositoryName: "Home NAS",
+                repositoryKind: "Local folder or disk",
+                versions: versions,
+                transcript: RunTranscript.Contents(),
+                timeZone: TimeZone(identifier: "UTC")!
+            ).components(separatedBy: "\n")
+        }
+
+        var skipped = record(.backup)
+        skipped.outcome = .skipped
+        skipped.detailText = "“Photos” is not connected."
+        let skippedLines = render(skipped)
+        #expect(skippedLines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Skipped"))
+        #expect(skippedLines.contains("“Photos” is not connected."))
+
+        var failed = record(.restore)
+        failed.outcome = .failed
+        failed.failureMessage =
+            "A folder is already at /tmp/there, where a restored file would go, so nothing was restored."
+        failed.destinationPath = "/tmp/there"
+        let failedLines = render(failed)
+        #expect(failedLines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Failed"))
+        #expect(failedLines.contains(
+            "A folder is already at /tmp/there, where a restored file would go, so nothing was restored."
+        ))
+        #expect(failedLines.contains("Destination /tmp/there"))
     }
 }
