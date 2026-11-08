@@ -105,6 +105,57 @@ struct ConsoleModelTests {
         #expect(console.output == "done")
     }
 
+    @Test("Stop cancels the run, whose answer reaches the pane; the repository it runs against was captured at submit")
+    func stopAndRunningRepository() async throws {
+        let console = ConsoleModel()
+        let repository = UUID()
+        let (started, startedSignal) = AsyncStream<Void>.makeStream()
+        console.runCommand = { _, _ in
+            startedSignal.yield()
+            while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+            return "The operation was stopped."
+        }
+        console.repositoryID = repository
+        console.commandText = "snapshots"
+        console.run()
+        for await _ in started { break }
+        // Captured before any await: the picker moving mid-run cannot
+        // follow the run, and deletion needs the run's own repository.
+        #expect(console.runningRepositoryID == repository)
+
+        console.cancelRunningCommand()
+        await console.waitForCommand()
+        #expect(console.output == "The operation was stopped.")
+        #expect(!console.isRunning)
+        #expect(console.runningRepositoryID == nil)
+    }
+
+    @Test("history keeps the newest twenty and records what was confirmed, not what was typed afterwards")
+    func historyCapAndConfirmedText() async throws {
+        let console = ConsoleModel()
+        console.runCommand = { _, _ in "" }
+        console.repositoryID = UUID()
+
+        console.commandText = "prune --keep-last 1"
+        console.run()
+        #expect(console.pendingDestructive?.text == "prune --keep-last 1")
+        // The field moves on while the dialog is up; the history must
+        // record the armed words.
+        console.commandText = "forget everything-typed-after"
+        console.confirmPending()
+        await console.waitForCommand()
+        #expect(console.history == ["prune --keep-last 1"])
+
+        for index in 0 ..< 25 {
+            console.commandText = "snapshots \(index)"
+            console.run()
+            await console.waitForCommand()
+        }
+        #expect(console.history.count == 20)
+        #expect(console.history.first == "snapshots 24")
+        #expect(console.history.last == "snapshots 5")
+    }
+
     @Test("a line ending inside an open quote is refused, not run mangled")
     func unterminatedQuoteIsRefused() throws {
         let (app, console, root) = try makeHarness()

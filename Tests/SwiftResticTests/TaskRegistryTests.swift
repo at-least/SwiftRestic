@@ -77,4 +77,39 @@ struct TaskRegistryTests {
         #expect(flags.isMarked("a"))
         #expect(flags.isMarked("b"))
     }
+
+    @Test("cancel stops a slot's task; cancelSlots stops every slotted task and never the background lane")
+    func cancelsReachTheRightLanes() {
+        let registry = TaskRegistry()
+
+        let single = Task { _ = try? await Task.sleep(for: .seconds(30)) }
+        registry.install(single, in: .restore)
+        #expect(registry.isOccupied(.restore))
+        registry.cancel(.restore)
+        #expect(single.isCancelled)
+
+        let slotted = Task { _ = try? await Task.sleep(for: .seconds(30)) }
+        let background = Task { _ = try? await Task.sleep(for: .seconds(30)) }
+        registry.install(slotted, in: .maintenance(UUID()))
+        registry.addBackground(background)
+        registry.cancelSlots()
+        #expect(slotted.isCancelled)
+        // A start ping already in flight is awaited, never aborted: its
+        // monitor must hear that the run started, even one quit stopped.
+        #expect(!background.isCancelled)
+    }
+
+    @Test("drain awaits the background lane too, whose entries reap themselves on completion")
+    func drainAwaitsBackgroundTasks() async {
+        let registry = TaskRegistry()
+        let flags = Flags()
+        registry.addBackground(Task {
+            try? await Task.sleep(for: .milliseconds(20))
+            flags.mark("ping")
+        })
+
+        await registry.drain()
+
+        #expect(flags.isMarked("ping"))
+    }
 }

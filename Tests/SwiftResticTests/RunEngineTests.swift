@@ -264,6 +264,21 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
     }
 
+    @Test("a retention policy with no rules never reaches restic, though the run succeeds")
+    func unsafeRetentionIsNeverRun() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onBackup(.success(successOutcome()))
+        var plan = makePlan()
+        plan.retention = RetentionPolicy(
+            isEnabled: true, keepLast: 0, keepHourly: 0, keepDaily: 0,
+            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
+        )
+        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
+
+        #expect(!client.callLog.contains("forget"))
+        #expect(sink.deliveredRecords[0].outcome == .succeeded)
+    }
+
     @Test("a failed backup is marked failed, noted for auth when exit 12, delivered")
     func failedRun() async throws {
         let sink = RecordingSink()

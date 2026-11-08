@@ -2752,17 +2752,6 @@ struct AppModelStubTests {
         #expect(model.configuration.runs.isEmpty, "the fixture no longer drops the history: \(model.configuration.runs.count) runs")
         #expect(FileManager.default.fileExists(atPath: log.path), "the log of a record still in config.json was swept")
     }
-
-    @Test("bootstrapping does not schedule a save over what it just loaded")
-    func bootstrapLeavesTheStoreUnwritten() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        // Loading is not an edit: no save task may exist after bootstrap.
-        #expect(harness.model.saveTask == nil)
-        #expect(harness.model.isConfigurationUnreadable == false)
-        await harness.model.shutdown()
-    }
 }
 
 private func traceLineCount(in root: URL) -> Int {

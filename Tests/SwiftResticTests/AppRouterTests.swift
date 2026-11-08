@@ -88,7 +88,27 @@ struct AppRouterTests {
         // Backups tab, searched in another backup, would stand over the
         // record and the folder the route asked for. Another page's stays.
         let other = SidebarItem.plan(UUID())
+        router.backupSelection[other] = "kept"
         router.showBackup("s3", on: page, repositoryID: repository, focusPath: "/D/Taxes")
+        #expect(router.backupSelection[page] == "s3")
+        #expect(router.backupSelection[other] == "kept")
+        #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s3") == "/D/Taxes")
+    }
+
+    @Test("the targeted asks wait in the one slot, are consumed once, and a later ask replaces an earlier one")
+    func targetedIntentsWaitAndAreConsumedOnce() {
+        let router = AppRouter()
+        let repository = UUID()
+        router.request(.newPlanIn(repository))
+        #expect(router.pendingIntent == .newPlanIn(repository))
+        #expect(router.takePendingIntent() == .newPlanIn(repository))
+        #expect(router.pendingIntent == nil)
+        #expect(router.takePendingIntent() == nil)
+
+        // One slot, not a queue: the newest ask wins.
+        router.request(.runSelectedPlan)
+        router.request(.newPlan)
+        #expect(router.takePendingIntent() == .newPlan)
     }
 
     @Test("every page opens on its overview, and the view chosen on one page is every page's; a route to a group's backups leaves that choice alone")
