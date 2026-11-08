@@ -1,8 +1,8 @@
 import Foundation
 
 /// What a restore does with a file that is already where the backed-up one
-/// would land. Chosen in the destination sheet for every restore, never
-/// remembered, and required at every API on the way down: a defaulted
+/// would land. Asked in the destination sheet only when something is in the
+/// way, never remembered, and required at every API on the way down: a defaulted
 /// destructive mode would be a silent overwrite.
 ///
 /// Two modes, not restic's four. `if-changed` trusts size and modification
@@ -24,12 +24,10 @@ enum RestoreOverwritePolicy: String, Sendable, CaseIterable {
     var resticArguments: [String] { ["--overwrite", resticValue] }
 }
 
-/// Where the destination sheet restores to. Desktop and Other folder are
-/// remembered between restores; Original location never is, so a reflexive
-/// Return, Return can never restore in place because of an earlier session.
+/// Where the destination sheet restores to: a chosen folder, the Desktop
+/// until another is chosen, or each item's original location.
 enum RestoreDestinationKind: String, Sendable, CaseIterable {
-    case desktop
-    case otherFolder
+    case folder
     case originalLocation
 }
 
@@ -146,16 +144,14 @@ enum RestoreDestinationRules {
         }
     }
 
-    /// The landings a Replace would overwrite, which the sheet confirms
-    /// first. Keep never asks; Replace asks only when something is actually
-    /// there — a prompt over nothing teaches the user to click through it.
+    /// The landings already taken, which the sheet asks about before it
+    /// restores. Nothing taken, no question — a prompt over nothing teaches
+    /// the user to click through it.
     static func replaceConfirmationTargets(
-        policy: RestoreOverwritePolicy,
         landings: [URL],
         exists: (URL) -> Bool
     ) -> [URL] {
-        guard policy == .replaceExisting else { return [] }
-        return landings.filter(exists)
+        landings.filter(exists)
     }
 
     static func directoryExists(_ path: String) -> Bool {

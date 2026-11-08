@@ -111,15 +111,11 @@ struct RestoreDestinationTests {
         ).map(\.path) == ["/dest/a.txt", "/q/Trip"])
 
         let landings = [URL(fileURLWithPath: "/dest/p/A"), URL(fileURLWithPath: "/dest/p/B")]
-        // Keep never asks: nothing is replaced, whatever is there.
         #expect(RestoreDestinationRules.replaceConfirmationTargets(
-            policy: .keepExisting, landings: landings, exists: { _ in true }
-        ).isEmpty)
-        #expect(RestoreDestinationRules.replaceConfirmationTargets(
-            policy: .replaceExisting, landings: landings, exists: { $0.path == "/dest/p/B" }
+            landings: landings, exists: { $0.path == "/dest/p/B" }
         ).map(\.path) == ["/dest/p/B"])
         #expect(RestoreDestinationRules.replaceConfirmationTargets(
-            policy: .replaceExisting, landings: landings, exists: { _ in false }
+            landings: landings, exists: { _ in false }
         ).isEmpty)
     }
 

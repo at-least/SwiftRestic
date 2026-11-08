@@ -8,7 +8,7 @@ final class RestoreUITests: XCTestCase {
     }
 
     @MainActor
-    func testRestoreFolderToOtherFolder() throws {
+    func testRestoreFolderToChosenFolder() throws {
         let folders = try UITestFolders.make("Restore")
         let restored = folders.root.appendingPathComponent("restored")
         try FileManager.default.createDirectory(at: restored, withIntermediateDirectories: true)
