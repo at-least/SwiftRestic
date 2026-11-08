@@ -8,10 +8,11 @@ struct FirstBackupSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let onCreated: (UUID) -> Void
-    /// A server or cloud storage: the repository editor's kinds.
-    let onOtherLocation: () -> Void
+    /// A server or cloud storage: the repository editor's kinds, carrying
+    /// what the sheet already holds.
+    let onOtherLocation: (FirstBackupHandoff) -> Void
 
-    @State private var source = ""
+    @State private var source: String
     @State private var folder = ""
     @State private var disks: [ExternalDisk] = []
     @State private var password = ""
@@ -21,41 +22,68 @@ struct FirstBackupSheet: View {
 
     private static let otherTag = "\u{0}other"
 
+    /// `source` is the folder the open panel already answered: the sheet
+    /// opens after it (`RootView.startNewPlan`).
+    init(source: String, onCreated: @escaping (UUID) -> Void, onOtherLocation: @escaping (FirstBackupHandoff) -> Void) {
+        _source = State(initialValue: source)
+        self.onCreated = onCreated
+        self.onOtherLocation = onOtherLocation
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Form {
                 Section("What do you want to back up?") {
                     LabeledContent("Folder") {
                         HStack {
-                            Text(source.isEmpty ? "None" : (source as NSString).abbreviatingWithTildeInPath)
-                                .foregroundStyle(source.isEmpty ? .secondary : .primary)
+                            Text((source as NSString).abbreviatingWithTildeInPath)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .accessibilityIdentifier(AccessibilityID.FirstBackup.source)
-                            Button("Choose…") {
+                            Button("Change…") {
                                 if let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") {
                                     source = url.path
                                 }
                             }
-                            .accessibilityIdentifier(AccessibilityID.FirstBackup.chooseSource)
+                            .accessibilityIdentifier(AccessibilityID.FirstBackup.changeSource)
                         }
                     }
                 }
                 Section("Where should the backups go?") {
-                    Picker("Disk", selection: folderChoice) {
-                        if folder.isEmpty { Text("Choose").tag("") }
-                        ForEach(disks, id: \.path) { disk in
-                            Text(disk.name).tag(disk.repositoryFolder)
+                    if disks.isEmpty {
+                        // A menu of only Choose and Other… is one button.
+                        LabeledContent("Disk") {
+                            HStack {
+                                if !folder.isEmpty {
+                                    Text((folder as NSString).abbreviatingWithTildeInPath)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                Button(folder.isEmpty ? "Choose…" : "Change…") {
+                                    if let url = FilePicker.chooseDirectory(message: Self.folderPanelMessage) {
+                                        folder = url.path
+                                    }
+                                }
+                            }
                         }
-                        if !folder.isEmpty, !disks.contains(where: { $0.repositoryFolder == folder }) {
-                            Text((folder as NSString).abbreviatingWithTildeInPath).tag(folder)
+                    } else {
+                        Picker("Disk", selection: folderChoice) {
+                            if folder.isEmpty { Text("Choose").tag("") }
+                            ForEach(disks, id: \.path) { disk in
+                                Text(disk.name).tag(disk.repositoryFolder)
+                            }
+                            if !folder.isEmpty, !disks.contains(where: { $0.repositoryFolder == folder }) {
+                                Text((folder as NSString).abbreviatingWithTildeInPath).tag(folder)
+                            }
+                            Divider()
+                            Text("Other…").tag(Self.otherTag)
                         }
-                        Divider()
-                        Text("Other…").tag(Self.otherTag)
+                        .accessibilityIdentifier(AccessibilityID.FirstBackup.disk)
                     }
-                    .accessibilityIdentifier(AccessibilityID.FirstBackup.disk)
                     Button("Use a Server or Cloud Storage…") {
-                        onOtherLocation()
+                        onOtherLocation(FirstBackupHandoff(
+                            source: source, password: password, confirmPassword: confirmPassword
+                        ))
                         dismiss()
                     }
                     .buttonStyle(.link)
@@ -84,11 +112,15 @@ struct FirstBackupSheet: View {
             Divider()
 
             if let failure {
-                Label(failure, systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(Theme.danger)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "xmark.octagon.fill")
+                        .foregroundStyle(Theme.danger)
+                        .accessibilityHidden(true)
+                    Text(failure)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], 12)
             }
             HStack {
@@ -132,13 +164,15 @@ struct FirstBackupSheet: View {
             let folder = $folder
             RunLoop.main.perform(inModes: [.default]) {
                 MainActor.assumeIsolated {
-                    if let url = FilePicker.chooseDirectory(message: "Choose where to keep the backups") {
+                    if let url = FilePicker.chooseDirectory(message: Self.folderPanelMessage) {
                         folder.wrappedValue = url.path
                     }
                 }
             }
         }
     }
+
+    private static let folderPanelMessage = "Choose where to keep the backups"
 
     private var missingRequirement: String? {
         EditorRequirements.firstBackup(
@@ -169,4 +203,13 @@ struct FirstBackupSheet: View {
             failure = error.localizedDescription
         }
     }
+}
+
+/// What the first-run sheet hands the repository editor when the backups go
+/// to a server or cloud storage: the plan follows the editor's Add on
+/// today's defaults (`AppModel.createFirstPlan`).
+struct FirstBackupHandoff {
+    let source: String
+    let password: String
+    let confirmPassword: String
 }

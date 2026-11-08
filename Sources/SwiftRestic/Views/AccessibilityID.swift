@@ -7,7 +7,7 @@ enum AccessibilityID {
 
     enum FirstBackup {
         static let source = "firstBackup.source"
-        static let chooseSource = "firstBackup.chooseSource"
+        static let changeSource = "firstBackup.changeSource"
         static let disk = "firstBackup.disk"
         static let password = "firstBackup.password"
         static let confirmPassword = "firstBackup.confirmPassword"

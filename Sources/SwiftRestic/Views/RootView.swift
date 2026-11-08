@@ -15,13 +15,13 @@ struct RootView: View {
     /// retention's fix. Back to Files when the sheet goes.
     @State private var editingPlanTab: PlanEditorTab = .files
     @State private var editingRepository: Repository?
-    /// The repository editor is up for a first plan, and once it has saved
-    /// one the plan editor follows, in it (`continuePlanAfterRepository`).
-    @State private var planAfterRepository: PlanAfterRepository?
-    /// "New Backup Plan" asked with no repository yet.
+    /// "New Backup Plan" asked with no repository yet, its folder chosen.
     @State private var isShowingFirstBackup = false
-    /// The first-run sheet was left for the repository editor's other kinds.
-    @State private var wantsOtherLocation = false
+    @State private var firstBackupSource = ""
+    /// The first-run sheet was left for the repository editor's other kinds:
+    /// set from the sheet's handoff until the editor closes, its Add then
+    /// creating the plan as the sheet's Back Up would.
+    @State private var firstBackupHandoff: FirstBackupHandoff?
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
@@ -94,19 +94,28 @@ struct RootView: View {
         }
         .sheet(isPresented: $isShowingFirstBackup, onDismiss: continueWithOtherLocation) {
             FirstBackupSheet(
+                source: firstBackupSource,
                 onCreated: { router.selection = .plan($0) },
-                onOtherLocation: { wantsOtherLocation = true }
+                onOtherLocation: { firstBackupHandoff = $0 }
             )
             .environment(model)
         }
-        .sheet(item: $editingRepository, onDismiss: continuePlanAfterRepository) { repository in
+        .sheet(item: $editingRepository, onDismiss: { firstBackupHandoff = nil }) { repository in
             // A new repository lands on its own page, where "New Backup
-            // Plan" is the first thing it offers — the next step after
-            // adding one, taken for the user when that was what they asked.
-            RepositoryEditorSheet(repository: repository, onCreated: { id in
-                router.selection = .repository(id)
-                if planAfterRepository == .awaiting { planAfterRepository = .created(id) }
-            })
+            // Plan" is the first thing it offers; one added for the
+            // first-run sheet lands on the plan made in it.
+            RepositoryEditorSheet(
+                repository: repository,
+                password: firstBackupHandoff?.password ?? "",
+                confirmPassword: firstBackupHandoff?.confirmPassword ?? "",
+                onCreated: { id in
+                    if let handoff = firstBackupHandoff {
+                        router.selection = .plan(model.createFirstPlan(source: handoff.source, repositoryID: id))
+                    } else {
+                        router.selection = .repository(id)
+                    }
+                }
+            )
             .environment(model)
         }
         // Adopt's landing is the new plan's own page on its Backups tab —
@@ -219,13 +228,9 @@ struct RootView: View {
         return plan
     }
 
-    private enum PlanAfterRepository: Equatable {
-        case awaiting
-        case created(UUID)
-    }
-
     /// "New Backup Plan", from whichever control: the plan editor — or, with
-    /// no repository to back up to yet, the first-run sheet, which makes both.
+    /// no repository to back up to yet, the folder panel and then the
+    /// first-run sheet, which makes both. A cancelled panel opens nothing.
     private func startNewPlan(in repositoryID: UUID?) {
         guard model.configuration.repositories.isEmpty else {
             editingPlan = newPlan(in: repositoryID)
@@ -236,13 +241,22 @@ struct RootView: View {
             NSSound.beep()
             return
         }
-        isShowingFirstBackup = true
+        // Out of any menu's tracking first: the asks come from menus too,
+        // and a panel run inside one gets no keys (`FirstBackupSheet`'s
+        // Other…).
+        let source = $firstBackupSource
+        let isShowing = $isShowingFirstBackup
+        RunLoop.main.perform(inModes: [.default]) {
+            MainActor.assumeIsolated {
+                guard let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") else { return }
+                source.wrappedValue = url.path
+                isShowing.wrappedValue = true
+            }
+        }
     }
 
     private func continueWithOtherLocation() {
-        guard wantsOtherLocation else { return }
-        wantsOtherLocation = false
-        planAfterRepository = .awaiting
+        guard firstBackupHandoff != nil else { return }
         editingRepository = Repository()
     }
 
@@ -252,15 +266,6 @@ struct RootView: View {
             return
         }
         editingRepository = Repository()
-    }
-
-    /// The repository editor closed: opened for a plan and saved, the plan
-    /// editor follows in the new repository — from its dismissal, so one
-    /// sheet is gone before the next is asked for.
-    private func continuePlanAfterRepository() {
-        defer { planAfterRepository = nil }
-        guard case let .created(id) = planAfterRepository else { return }
-        editingPlan = newPlan(in: id)
     }
 
     /// Opens the adopt sheet for a group — the one presentation both the
@@ -289,6 +294,7 @@ struct RootView: View {
         // An empty configuration's sheet, so ahead of the guard below.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] == "firstBackup", !model.isBootstrapping {
             didApplyCaptureOverride = true
+            firstBackupSource = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] ?? NSHomeDirectory()
             isShowingFirstBackup = true
             return
         }

@@ -22,11 +22,12 @@ final class FirstBackupUITests: XCTestCase {
     func testOtherFolderInsideTheSourceIsRefused() throws {
         let folders = try UITestFolders.make("OtherFolder")
         let app = UITest.launch(folders)
-        app.buttons[AccessibilityID.Welcome.backUpAFolder].click()
+        let start = app.buttons[AccessibilityID.Welcome.backUpAFolder]
+        XCTAssertTrue(start.waitForExistence(timeout: 30))
+        start.click()
+        UITest.choose(folders.source, in: app)
         let backUp = app.buttons[AccessibilityID.FirstBackup.backUp]
         XCTAssertTrue(backUp.waitForExistence(timeout: 10))
-        app.buttons[AccessibilityID.FirstBackup.chooseSource].click()
-        UITest.choose(folders.source, in: app)
 
         let disk = app.popUpButtons[AccessibilityID.FirstBackup.disk]
         disk.click()
@@ -37,5 +38,27 @@ final class FirstBackupUITests: XCTestCase {
             .waitForValue("Keep the backups outside the folder you’re backing up."))
         XCTAssertFalse(backUp.isEnabled)
         attachScreenshot()
+    }
+
+    /// Back Up a Folder… asks for the folder before the sheet: a cancelled
+    /// panel leaves Welcome as it was.
+    @MainActor
+    func testCancelledFolderPanelOpensNothing() throws {
+        let folders = try UITestFolders.make("CancelledPanel")
+        let app = UITest.launch(folders)
+        let start = app.buttons[AccessibilityID.Welcome.backUpAFolder]
+        XCTAssertTrue(start.waitForExistence(timeout: 30))
+        start.click()
+        let panel = app.dialogs["open-panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 10))
+        // An Esc sent as the panel appears is lost, as `UITest.choose`'s ⌘⇧G
+        // is: send it until the panel goes.
+        let deadline = Date().addingTimeInterval(20)
+        repeat {
+            panel.typeKey(.escape, modifierFlags: [])
+        } while !panel.waitForNonExistence(timeout: 2) && Date() < deadline
+        XCTAssertFalse(panel.exists)
+        XCTAssertFalse(app.buttons[AccessibilityID.FirstBackup.backUp].waitForExistence(timeout: 3))
+        XCTAssertTrue(start.isHittable)
     }
 }

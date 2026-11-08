@@ -33,26 +33,24 @@ enum UITest {
         return app
     }
 
-    /// The first-run sheet from Back Up a Folder… to the sheet closing on a
-    /// created repository and plan, with the bundled restic. Back Up stays
-    /// off, each reason in turn, until every answer is in. The backup itself
-    /// may still be running when this returns.
+    /// Back Up a Folder…'s folder panel, then the first-run sheet to its
+    /// closing on a created repository and plan, with the bundled restic.
+    /// Back Up stays off, each reason in turn, until every answer is in. The
+    /// backup itself may still be running when this returns.
     static func createFirstBackup(_ folders: UITestFolders, in app: XCUIApplication) {
         let start = app.buttons[AccessibilityID.Welcome.backUpAFolder]
         XCTAssertTrue(start.waitForExistence(timeout: 30))
         start.click()
 
+        // The panel comes before the sheet. Each choice checked where the
+        // sheet shows it: a Go to Folder that missed leaves the panel on its
+        // last folder, and Choose takes that one.
+        choose(folders.source, in: app)
         let backUp = app.buttons[AccessibilityID.FirstBackup.backUp]
         let requirement = app.staticTexts[AccessibilityID.FirstBackup.requirement]
         XCTAssertTrue(backUp.waitForExistence(timeout: 10))
-        XCTAssertFalse(backUp.isEnabled)
-        XCTAssertEqual(requirement.value as? String, "Choose a folder to back up.")
-
-        // Each choice checked where the sheet shows it: a Go to Folder that
-        // missed leaves the panel on its last folder, and Choose takes that one.
-        app.buttons[AccessibilityID.FirstBackup.chooseSource].click()
-        choose(folders.source, in: app)
         XCTAssertTrue(app.staticTexts[AccessibilityID.FirstBackup.source].waitForValue(tilde(folders.source)))
+        XCTAssertFalse(backUp.isEnabled)
 
         // One disk on the Mac is the sheet's answer on its own, so the next
         // question is the password.
@@ -108,7 +106,7 @@ enum UITest {
     }
 
     /// The plan's folder as of its newest backup, restored from its Files tab
-    /// into `folder` ("Other folder" in the destination sheet). Returns once
+    /// into `folder` (the destination sheet's folder choice). Returns once
     /// the restore is over: Restore… is back on.
     static func restorePlanFolder(into folder: URL, in app: XCUIApplication) {
         app.radioButtons["Files"].click()
@@ -120,13 +118,13 @@ enum UITest {
         XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
     }
 
-    /// The destination sheet a Restore… opens: Other folder, `folder` chosen,
-    /// Restore. The restore itself runs on after the sheet closes.
+    /// The destination sheet a Restore… opens: Choose…, `folder` chosen,
+    /// Restore. Choose… selects the folder choice, whatever the sheet
+    /// defaulted to. The restore itself runs on after the sheet closes.
     static func restoreInSheet(into folder: URL, in app: XCUIApplication) {
-        let other = app.radioButtons["Other folder"]
-        XCTAssertTrue(other.waitForExistence(timeout: 10))
-        other.click()
-        app.buttons[AccessibilityID.RestoreSheet.chooseFolder].click()
+        let chooseFolder = app.buttons[AccessibilityID.RestoreSheet.chooseFolder]
+        XCTAssertTrue(chooseFolder.waitForExistence(timeout: 10))
+        chooseFolder.click()
         choose(folder, in: app)
         let restore = app.buttons[AccessibilityID.RestoreSheet.restore]
         XCTAssertTrue(restore.waitForEnabled())

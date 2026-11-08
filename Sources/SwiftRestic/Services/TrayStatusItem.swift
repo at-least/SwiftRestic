@@ -219,14 +219,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
 
         if hasNoRepositories {
             // The icon's `unconfigured` face sent the user here; the menu it
-            // opens must answer, not just say "nothing scheduled".
-            let add = NSMenuItem(
-                title: "Add Backup Location…",
-                action: #selector(addRepository),
+            // opens must answer, not just say "nothing scheduled": Welcome's
+            // own button.
+            let start = NSMenuItem(
+                title: "Back Up a Folder…",
+                action: #selector(backUpAFolder),
                 keyEquivalent: ""
             )
-            add.target = self
-            menu.addItem(add)
+            start.target = self
+            menu.addItem(start)
         } else if showsSubmenus {
             // One submenu per repository, in configuration order, so the
             // tray names each plan's repository. App-wide items stay
@@ -421,11 +422,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func addRepository() {
+    @objc private func backUpAFolder() {
         // The intent travels through the router *before* the window opens, so
         // nothing depends on how many run-loop turns the window takes to
         // appear — the same rule the File command follows.
-        router.request(.newRepository)
+        router.request(.newPlan)
         openMainWindow()
     }
 

@@ -69,11 +69,20 @@ struct RepositoryEditorSheet: View {
         Edit(draft: draft, password: password, providerSecret: providerSecret)
     }
 
-    init(repository: Repository, onCreated: @escaping (UUID) -> Void = { _ in }) {
+    /// `password` and `confirmPassword`: what the first-run sheet already
+    /// had typed when it handed off to this editor.
+    init(
+        repository: Repository,
+        password: String = "",
+        confirmPassword: String = "",
+        onCreated: @escaping (UUID) -> Void = { _ in }
+    ) {
         // A new repository opens as `Repository()`: a local folder not yet
         // chosen. A saved one always has its location (Save requires it).
         isNew = repository.kind == .local && repository.localPath.isEmpty
         _draft = State(initialValue: repository)
+        _password = State(initialValue: password)
+        _confirmPassword = State(initialValue: confirmPassword)
         self.onCreated = onCreated
     }
 
@@ -94,10 +103,17 @@ struct RepositoryEditorSheet: View {
             }
         }
 
-        var color: Color {
+        var symbolColor: Color {
             switch self {
             case .ok: .secondary
             case .failure: Theme.danger
+            }
+        }
+
+        var textStyle: HierarchicalShapeStyle {
+            switch self {
+            case .ok: .secondary
+            case .failure: .primary
             }
         }
     }
@@ -122,11 +138,16 @@ struct RepositoryEditorSheet: View {
             // Save's or Change Password's answer, beside the buttons: at the end
             // of the scrolled form it landed below the fold.
             if let status {
-                Label(status.text, systemImage: status.symbolName)
-                    .foregroundStyle(status.color)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: status.symbolName)
+                        .foregroundStyle(status.symbolColor)
+                        .accessibilityHidden(true)
+                    Text(status.text)
+                        .foregroundStyle(status.textStyle)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], 12)
             }
 

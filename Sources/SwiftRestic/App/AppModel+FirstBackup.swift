@@ -40,9 +40,16 @@ extension AppModel {
         await upsert(repository: repository, password: password, providerSecret: nil)
         await flushSave()
         scheduleSnapshotRefresh(repositoryID: repository.id)
+        return createFirstPlan(source: source, repositoryID: repository.id)
+    }
+
+    /// The first-run plan for `source` on today's defaults, into a
+    /// repository just created: the first-run sheet's own, or the
+    /// repository editor's when the sheet handed off to it.
+    func createFirstPlan(source: String, repositoryID: UUID) -> UUID {
         var plan = BackupPlan()
         plan.path = source
-        plan.repositoryID = repository.id
+        plan.repositoryID = repositoryID
         if registersLoginItemOnSave(plan) { requestStartsAtLogin(true) }
         createPlan(plan)
         return plan.id
