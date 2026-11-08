@@ -62,7 +62,8 @@ struct CoordinatorScene {
         ["/data": true, "/data/\(id).txt": false, "/data/common.txt": false]
     }
 
-    func reconcile(_ listing: [Snapshot], _ generation: UInt64) async {
+    @discardableResult
+    func reconcile(_ listing: [Snapshot], _ generation: UInt64) async -> Bool {
         await coordinator.reconcile(repositoryID: repositoryID, snapshots: listing, generation: generation)
     }
 

@@ -494,7 +494,7 @@ struct IndexCoordinatorTombstoneTests {
 /// took.
 @Suite("index coordinator listing generations")
 struct IndexCoordinatorGenerationTests {
-    @Test("N6: a listing older than the last one applied is dropped, and a newer one still lands")
+    @Test("N6: a listing not newer than the last one applied is dropped and answers false; a newer one lands and answers true")
     func staleListingDropped() async throws {
         let scene = try CoordinatorScene("SwiftResticGenerations")
         defer { scene.remove() }
@@ -512,14 +512,14 @@ struct IndexCoordinatorGenerationTests {
         // Read before the listing above, landing after it: it predates the
         // newer snapshot. Dropped, so the newer snapshot stays listed and
         // indexed, and the index stays complete.
-        await scene.reconcile([older], 4)
+        #expect(await scene.reconcile([older], 4) == false, "an older listing was reported taken")
         #expect(try await scene.versions(path) == ["newer", "older"])
         #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
 
-        await scene.reconcile([older], 5)
+        #expect(await scene.reconcile([older], 5) == false, "a listing as old as the last one taken was reported taken")
         #expect(try await scene.versions(path) == ["newer", "older"])
 
-        await scene.reconcile([older], 6)
+        #expect(await scene.reconcile([older], 6), "a newer listing was reported dropped")
         #expect(try await scene.versions(path) == ["older"])
     }
 
@@ -1127,6 +1127,28 @@ struct IndexCoordinatorBackfillTests {
         await scene.backfill(client)
         #expect(try await scene.versions("/data/s1.txt") == ["s1"])
         #expect(try await scene.violations.isEmpty)
+    }
+
+    @Test("a rebuild forgets the failed reads of the index it threw away: a snapshot that failed once before is not set aside at its first failure after")
+    func resetForgetsReadFailures() async throws {
+        let scene = try CoordinatorScene("SwiftResticResetFailures")
+        defer { scene.remove() }
+        let client = MockResticClient()
+            .onListings(["s1": CoordinatorScene.content("s1")])
+            .onUnreadable(["s1"])
+        let listing = [try CoordinatorScene.snapshot("s1", 1)]
+        await scene.reconcile(listing, 1)
+        await scene.backfill(client)
+        #expect(await scene.report?.markedUnreadable == 0)
+
+        await scene.coordinator.resetRepository(repositoryID: scene.repositoryID)
+        await scene.reconcile(listing, 1)
+        await scene.backfill(client)
+        #expect(client.walkCounts["s1"] == 2)
+        #expect(
+            await scene.report?.markedUnreadable == 0,
+            "the rebuilt index set s1 aside at its first failure, counting one from before the rebuild"
+        )
     }
 
     @Test("shutdown cancels a running walk, which stops the pass without counting against the snapshot, and refuses later backfills")
