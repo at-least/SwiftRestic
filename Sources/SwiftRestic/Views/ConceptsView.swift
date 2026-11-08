@@ -14,7 +14,7 @@ struct ConceptsView: View {
     private let tasks: [Topic] = [
         Topic(
             title: "Back up a folder",
-            text: "Choose File ▸ New Backup Plan, pick the folder and a backup location, and click Create Plan. Its first backup starts right away; after that it runs on its schedule while SwiftRestic is open."
+            text: "Click Back Up a Folder, choose the folder, a disk and a password, and click Back Up. Its first backup starts right away, then it runs on its schedule while SwiftRestic is open. For another folder, choose File ▸ New Backup Plan."
         ),
         Topic(
             title: "Get a file back",
@@ -26,7 +26,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Keep old backups tidy",
-            text: "The History tab in a plan’s editor chooses which old backups to remove after each backup. A cleanup frees the space they held: Location ▸ Clean Up Now, or the automatic one. Verify Backups, in the Location menu, makes sure nothing is damaged. SwiftRestic does this on its own every week."
+            text: "The Old Backups tab in a plan’s editor chooses which old backups to remove after each backup. A cleanup frees the space they held: Location ▸ Clean Up Now, or the automatic one. Verify Backups, in the Location menu, makes sure nothing is damaged. SwiftRestic verifies each location every week on its own."
         ),
         Topic(
             title: "Backups from elsewhere",
@@ -39,7 +39,7 @@ struct ConceptsView: View {
         Topic(title: "Backup Plan", text: "One folder, the backup location it backs up to, and when."),
         Topic(title: "Backup", text: "The folder as it was at one moment. restic calls it a snapshot."),
         Topic(title: "Cleanup", text: "Frees the space of removed backups. Slow; backups to the location wait for it."),
-        Topic(title: "Verify", text: "Makes sure a location’s backups are sound. Reading data back finds more damage, and takes longer."),
+        Topic(title: "Verification", text: "Makes sure a location’s backups are sound. Reading data back finds more damage, and takes longer."),
     ]
 
     var body: some View {

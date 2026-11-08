@@ -245,7 +245,7 @@ struct PlanDetailView: View {
                     .accessibilityIdentifier(AccessibilityID.Plan.total)
             }
             LabeledContent("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-            LabeledContent("History", value: plan.retention.summary)
+            LabeledContent("Old backups", value: plan.retention.summary)
         } header: {
             HStack {
                 Text("Backups")

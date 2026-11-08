@@ -160,15 +160,13 @@ struct FileVersionsView: View {
         VStack(spacing: 10) {
             HStack {
                 if let detailsError {
-                    Label("Sizes and dates couldn’t be read", systemImage: "exclamationmark.triangle")
+                    WarningLine(text: "Sizes and dates couldn’t be read")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
                         .help(detailsError)
                 }
                 if let failure = previewer.failure {
-                    Label(failure.title, systemImage: "exclamationmark.triangle")
+                    WarningLine(text: failure.title)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
                         .help(failure.message)
                 }
                 Button("Show in Backups") {

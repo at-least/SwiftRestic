@@ -89,15 +89,6 @@ extension AppModel {
         }
     }
 
-    /// The view-facing name for the destructive action, so the mutation
-    /// lives with its siblings instead of a view reaching straight into the
-    /// configuration.
-    func clearRunHistory() {
-        let cleared = configuration.runs.map(\.id)
-        configuration.runs.removeAll()
-        removeRunLogs(cleared)
-    }
-
     /// A log leaves with its record. On the background lane, so quitting
     /// drains the removal instead of stranding it.
     private func removeRunLogs(_ ids: [UUID]) {

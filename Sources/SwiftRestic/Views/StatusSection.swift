@@ -87,7 +87,7 @@ struct StatusSection: View {
     /// One group's sheet straight away; of several, the first one's page,
     /// which offers its own Continue Backups.
     private func continueButton(_ prompt: ContinueBackupsPrompt) -> some View {
-        Button(prompt.isOne ? "Continue Backups…" : "Show Backups") {
+        Button(prompt.isOne ? "Continue Backups…" : "Show Other Backups") {
             if prompt.isOne {
                 onAdoptGroup(repositoryID, prompt.firstPlanID)
             } else {

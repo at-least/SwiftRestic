@@ -64,7 +64,7 @@ struct RestoreSelectionTests {
         #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: nil)
             == "from \(Format.timestamp(backup))")
         #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: nil, snapshotShortID: "abcdef12", versionModified: nil)
-            == "from backup abcdef12")
+            == "from the chosen backup")
         #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: modified)
             == "the version modified \(Format.timestamp(modified)), from the backup of \(Format.timestamp(backup))")
     }

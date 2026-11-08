@@ -108,33 +108,18 @@ struct SettingsView: View {
                 .disabled(!model.loginItemInstallable && !model.startsAtLogin)
                 // Nothing while it starts at login: the switch says so.
                 if let caption = loginCaption {
-                    Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(model.loginItemNeedsApproval ? Theme.warning : .secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if model.loginItemNeedsApproval {
+                        WarningLine(text: caption)
+                            .font(.caption)
+                    } else {
+                        Text(caption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if model.loginItemNeedsApproval {
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
-                }
-
-                // Held, the next run is whenever the hold lifts — say why
-                // instead of a date the scheduler will not keep.
-                if let hold = model.overallScheduleHold {
-                    LabeledContent("Next backup", value: hold.summary())
-                } else if let next = model.nextScheduledRun {
-                    // The plan with its repository, the tray headline's
-                    // words — two repositories can hold same-named plans.
-                    LabeledContent(
-                        "Next backup",
-                        value: RunRecordPresentation.nextRunLine(
-                            plan: next.plan,
-                            date: next.date,
-                            plans: model.configuration.plans,
-                            repositories: model.configuration.repositories
-                        )
-                    )
-                } else {
-                    LabeledContent("Next backup", value: "No backups scheduled")
                 }
             }
 
@@ -239,14 +224,16 @@ struct NotificationsTab: View {
                 testOutcomes[current.id] = nil
                 if let kind = NotificationChannel.Kind(inferringFrom: url) { channel.wrappedValue.kind = kind }
             }
-        Picker("Service", selection: channel.kind) {
-            ForEach(NotificationChannel.Kind.allCases) { kind in
-                Text(kind.displayName).tag(kind)
+        // An address that names its service has already set it.
+        if NotificationChannel.Kind(inferringFrom: current.url) == nil {
+            Picker("Service", selection: channel.kind) {
+                ForEach(NotificationChannel.Kind.allCases) { kind in
+                    Text(kind.displayName).tag(kind)
+                }
             }
         }
         if !current.url.isEmpty, !current.hasUsableURL {
-            Label("This webhook can’t send until its URL starts with http:// or https://.", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(Theme.warning)
+            WarningLine(text: "This webhook can’t send until its URL starts with http:// or https://.")
                 .font(.callout)
         }
         if current.kind.usesStartPing {
@@ -272,12 +259,13 @@ struct NotificationsTab: View {
         case let .failed(failure):
             Label {
                 Text("Couldn’t send the test: " + failure)
+                    .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(Theme.danger)
             }
-            .foregroundStyle(Theme.danger)
             .font(.callout)
         case .delivered:
             Text("Test sent to “\(current.displayName)”.")

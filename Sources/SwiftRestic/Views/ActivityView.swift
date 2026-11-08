@@ -7,7 +7,6 @@ struct ActivityView: View {
     /// Taken by a click in the table (`focusOnClick`), so ↑ and ↓ walk the
     /// runs rather than the sidebar out of Activity.
     @FocusState private var tableIsFocused: Bool
-    @State private var isConfirmingClear = false
     @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
     // recency, and the stored history's order is neither.
@@ -146,10 +145,6 @@ struct ActivityView: View {
                 .alternatingRowBackgrounds(.disabled)
                 .accessibilityIdentifier(AccessibilityID.Activity.table)
                 .focusOnClick($tableIsFocused)
-                // Wiping the history is rare and final, so it is not chrome:
-                // a right-click on the list, behind the same confirmation.
-                // Beside it, the drawer's Browse reaches a clicked backup run
-                // directly.
                 .contextMenu(forSelectionType: RunRecord.ID.self) { ids in
                     if ids.count == 1, let id = ids.first,
                        let run = runs.first(where: { $0.id == id }),
@@ -157,13 +152,9 @@ struct ActivityView: View {
                        let repositoryID = run.repositoryID,
                        case let .available(snapshot)? = model.snapshotLink(for: run),
                        let page = model.page(ofBackup: snapshot.id, in: repositoryID) {
-                        Button("Browse") {
+                        Button("Show in Backups") {
                             router.showBackup(snapshot.id, on: page, repositoryID: repositoryID)
                         }
-                        Divider()
-                    }
-                    Button("Clear Activity…", role: .destructive) {
-                        isConfirmingClear = true
                     }
                 }
 
@@ -193,17 +184,6 @@ struct ActivityView: View {
                 .pickerStyle(.segmented)
                 .fixedSize()
             }
-        }
-        .confirmationDialog(
-            "Clear Activity?",
-            isPresented: $isConfirmingClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear Activity", role: .destructive) {
-                model.clearRunHistory()
-            }
-        } message: {
-            Text("This permanently removes the list and its logs. Your backups aren’t affected.")
         }
         .sheet(item: $loggedRun) { run in
             RunLogSheet(run: run)

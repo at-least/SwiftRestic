@@ -81,7 +81,7 @@ struct RestoreSelection: Sendable, Equatable {
     /// the backup of Sep 17, 2026 at 11:00 PM").
     static func backupLine(backupCount: Int, backupTime: Date?, snapshotShortID: String, versionModified: Date?) -> String {
         if backupCount > 1 { return "from \(Format.count(backupCount)) backups, each item from the one it was found in" }
-        guard let backupTime else { return "from backup \(snapshotShortID)" }
+        guard let backupTime else { return "from the chosen backup" }
         if let versionModified {
             return "the version modified \(Format.timestamp(versionModified)), from the backup of \(Format.timestamp(backupTime))"
         }

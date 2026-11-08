@@ -108,7 +108,7 @@ struct PlanEditorSheet: View {
                 switch tab {
                 case .files: "Excluded Items"
                 case .schedule: "Schedule"
-                case .retention: "History"
+                case .retention: "Old Backups"
                 }
             }) { tab in
                 switch tab {
@@ -673,13 +673,8 @@ struct PlanEditorSheet: View {
                         .font(.callout)
                 }
                 if draft.retention.isEnabled, !draft.retention.isSafeToRun {
-                    Label(
-                        "With every rule off, every backup would be removed, so nothing is removed until a rule is set.",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .foregroundStyle(Theme.warning)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
+                    WarningLine(text: "With every rule off, every backup would be removed, so nothing is removed until a rule is set.")
+                        .font(.callout)
                 }
             }
         }
