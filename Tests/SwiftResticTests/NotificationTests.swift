@@ -3,25 +3,31 @@ import Testing
 
 @Suite("Notification payloads")
 struct NotificationTests {
-    @Test("a stored plain webhook pointed at Slack, Discord or Healthchecks reads as that service; a self-hosted address stays a webhook")
-    func storedWebhookFindsItsService() throws {
-        func kind(_ url: String) throws -> NotificationChannel.Kind {
-            let json = #"{"kind":"webhook","url":"\#(url)"}"#
-            return try JSONDecoder().decode(NotificationChannel.self, from: Data(json.utf8)).kind
-        }
-        #expect(try kind("https://hooks.slack.com/services/T/B/N") == .slack)
-        #expect(try kind("https://discord.com/api/webhooks/1/x") == .discord)
-        #expect(try kind("https://hc-ping.com/abc") == .healthchecks)
-        #expect(try kind("https://hc.example.org/ping/abc") == .webhook)
-        // A service chosen by hand is not second-guessed.
-        let chosen = #"{"kind":"healthchecks","url":"https://hc.example.org/ping/abc"}"#
-        #expect(try JSONDecoder().decode(NotificationChannel.self, from: Data(chosen.utf8)).kind == .healthchecks)
+    @Test("the service is read from the address: Slack, Discord, Healthchecks hosted or self-hosted, else plain JSON")
+    func serviceFromAddress() throws {
+        typealias Kind = NotificationChannel.Kind
+        #expect(Kind(address: "https://hooks.slack.com/services/T/B/x") == .slack)
+        #expect(Kind(address: "  https://discord.com/api/webhooks/1/x ") == .discord)
+        #expect(Kind(address: "https://discordapp.com/api/webhooks/1/x") == .discord)
+        #expect(Kind(address: "https://hc-ping.com/6f1c2a3b-0000-4000-8000-000000000001") == .healthchecks)
+        #expect(Kind(address: "https://hc-ping.com/ping-key/backups") == .healthchecks)
+        // Self-hosted: PING_ENDPOINT defaults to the site root's /ping/,
+        // followed by a UUID or <ping-key>/<slug>.
+        #expect(Kind(address: "https://hc.example.org/ping/6f1c2a3b-0000-4000-8000-000000000001") == .healthchecks)
+        #expect(Kind(address: "https://hc.example.org/ping/ping-key/backups") == .healthchecks)
+        #expect(Kind(address: "https://example.com/ping/not-a-uuid") == .webhook)
+        #expect(Kind(address: "https://example.com/hooks/backup") == .webhook)
+        #expect(Kind(address: "not a url") == .webhook)
+        #expect(Kind(address: "") == .webhook)
+        // A stored service from an older build is read from the address too.
+        let stored = #"{"kind":"slack","url":"https://example.com/hook","notifyOnSuccess":true}"#
+        #expect(try JSONDecoder().decode(NotificationChannel.self, from: Data(stored.utf8)).kind == .webhook)
     }
 
     private func channel(_ kind: NotificationChannel.Kind, url: String) -> NotificationChannel {
         var channel = NotificationChannel()
-        channel.kind = kind
         channel.url = url
+        precondition(channel.kind == kind, "\(url) reads as \(channel.kind), not \(kind)")
         return channel
     }
 
@@ -124,7 +130,7 @@ struct NotificationTests {
     @Test("a channel with no usable URL produces no request")
     func rejectsUnusableChannels() {
         #expect(NotificationPayload.request(
-            for: channel(.slack, url: ""),
+            for: channel(.webhook, url: ""),
             event: event(.succeeded)
         ) == nil)
         // Not http(s): nothing should be posted to a file or custom scheme.
@@ -134,40 +140,29 @@ struct NotificationTests {
         ) == nil)
     }
 
-    @Test("failures and warnings always go, a success only when asked, and a monitor hears everything")
+    @Test("failures and warnings always go, a success only with the app's one switch, and a monitor hears everything")
     func stageFiltering() {
-        var quiet = channel(.slack, url: "https://hooks.slack.com/x")
-        #expect(!quiet.wants(.succeeded))
-        #expect(quiet.wants(.failed))
-        #expect(quiet.wants(.warned))
-        quiet.notifyOnSuccess = true
-        #expect(quiet.wants(.succeeded))
-        quiet.notifyOnSuccess = false
+        let chat = channel(.slack, url: "https://hooks.slack.com/x")
+        #expect(!chat.wants(.succeeded, notifyOnSuccess: false))
+        #expect(chat.wants(.succeeded, notifyOnSuccess: true))
+        #expect(chat.wants(.failed, notifyOnSuccess: false))
+        #expect(chat.wants(.warned, notifyOnSuccess: false))
         let monitor = channel(.healthchecks, url: "https://hc-ping.com/x")
-        #expect(monitor.wants(.succeeded) && monitor.wants(.failed) && monitor.wants(.skipped))
+        #expect(monitor.wants(.succeeded, notifyOnSuccess: false))
+        #expect(monitor.wants(.failed, notifyOnSuccess: false) && monitor.wants(.skipped, notifyOnSuccess: false))
         // A "backup started" chat message is noise; a Healthchecks start ping is
         // load-bearing.
-        #expect(!quiet.wants(.started))
-        #expect(channel(.healthchecks, url: "https://hc-ping.com/x").wants(.started))
+        #expect(!chat.wants(.started, notifyOnSuccess: true))
+        #expect(monitor.wants(.started, notifyOnSuccess: false))
     }
 
-    @Test("a pasted address sets the service it names; anything else leaves the picker alone")
-    func serviceFromAddress() {
-        typealias Kind = NotificationChannel.Kind
-        #expect(Kind(inferringFrom: "https://hooks.slack.com/services/T/B/x") == .slack)
-        #expect(Kind(inferringFrom: "  https://discord.com/api/webhooks/1/x ") == .discord)
-        #expect(Kind(inferringFrom: "https://hc-ping.com/uuid") == .healthchecks)
-        #expect(Kind(inferringFrom: "https://hc.example.com/ping/uuid") == nil)
-        #expect(Kind(inferringFrom: "not a url") == nil)
-    }
-
-    @Test("a channel reads as its address's host; one with no address yet as its service")
+    @Test("a channel reads as its address's host; one with no address yet as a webhook")
     func channelName() {
         #expect(channel(.slack, url: "https://hooks.slack.com/services/x").displayName == "hooks.slack.com")
-        #expect(channel(.slack, url: "").displayName == "Slack")
+        #expect(channel(.webhook, url: "").displayName == "Webhook")
     }
 
-    @Test("an older build's channels: a switched-off one doesn't start sending, the others keep what they sent")
+    @Test("an older build's channels: a switched-off one doesn't start sending")
     func storedChannels() throws {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data("""
         {"notificationChannels": [
@@ -177,9 +172,6 @@ struct NotificationTests {
         ]}
         """.utf8))
         #expect(settings.notificationChannels.map(\.url) == ["https://hooks.slack.com/a", "https://example.com/old"])
-        #expect(settings.notificationChannels[0].wants(.failed))
-        #expect(!settings.notificationChannels[0].wants(.succeeded))
-        #expect(settings.notificationChannels[1].wants(.succeeded))
     }
 
     @Test("the summary line names the plan and what happened")
@@ -235,7 +227,7 @@ struct NotificationTests {
         var backup = RunRecord(kind: .backup, planName: "Docs")
         backup.outcome = .succeeded
         backup.dataAdded = 0
-        #expect(AppModel.notificationEvent(for: backup, repositoryName: "NAS").summary.contains("— \(Format.bytes(0)) added"))
+        #expect(AppModel.notificationEvent(for: backup, repositoryName: "NAS").summary.contains("— \(Format.bytes(0)) of new data"))
     }
 
     @MainActor
@@ -359,14 +351,12 @@ struct NotificationSafetyTests {
         // about it or a Mac shut down mid-backup looks like a healthy one; a
         // Slack channel does not, because the person who cancelled already knows.
         var healthchecks = NotificationChannel()
-        healthchecks.kind = .healthchecks
         healthchecks.url = "https://hc-ping.com/abc-123"
         var slack = NotificationChannel()
-        slack.kind = .slack
         slack.url = "https://hooks.slack.com/services/x"
 
-        #expect(healthchecks.wants(.cancelled))
-        #expect(!slack.wants(.cancelled))
+        #expect(healthchecks.wants(.cancelled, notifyOnSuccess: false))
+        #expect(!slack.wants(.cancelled, notifyOnSuccess: true))
 
         let event = NotificationEvent(stage: .cancelled, planName: "Docs", repositoryName: "NAS", kind: .backup)
         let request = try #require(NotificationPayload.request(for: healthchecks, event: event))
@@ -391,7 +381,6 @@ struct NotificationSafetyTests {
             warnings: Array(record.itemErrors.prefix(5))
         )
         var webhook = NotificationChannel()
-        webhook.kind = .webhook
         webhook.url = "https://example.com/hook"
 
         let request = try #require(NotificationPayload.request(for: webhook, event: event))

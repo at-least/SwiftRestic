@@ -10,22 +10,6 @@ struct SettingsView: View {
     /// `configuration.settings`: it is window state, not a preference.
     @AppStorage(Self.paneKey) private var lastSettingsPane = 0
     @Environment(AppModel.self) private var model
-    @State private var removingShare: NetworkShare?
-
-    /// The login switch's caption: what it means while off, in the plan
-    /// editor's words. The model's copies of the daemon's answer: a read
-    /// here would be an XPC round trip on every render. The needsApproval
-    /// state keeps its short form — the button below opens the pane, and
-    /// the banner's full form has no button to point with.
-    private var loginCaption: String? {
-        guard model.loginItemInstallable else { return LoginItem.notInstalledMessage }
-        switch model.loginItemState {
-        case .enabled: return nil
-        case .off: return LoginItemAdvice.caption(for: .startAtLogin)
-        case .needsApproval: return LoginItem.needsApprovalShort
-        case .notFound: return LoginItem.description(of: .notFound)
-        }
-    }
 
     var body: some View {
         // Each pane at its own height, the window following it (the
@@ -45,28 +29,6 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .tag(1)
                 .tabItem { Label("Notifications", systemImage: "bell") }
-        }
-        .confirmationDialog(
-            "Remove “\(removingShare?.url ?? "")” from SwiftRestic?",
-            isPresented: Binding(get: { removingShare != nil }, set: { if !$0 { removingShare = nil } }),
-            titleVisibility: .visible,
-            presenting: removingShare
-        ) { share in
-            Button("Remove") {
-                Task {
-                    do {
-                        try await model.removeNetworkShare(share)
-                    } catch {
-                        model.post(Banner(
-                            title: "Couldn’t remove the password for “\(share.url)”",
-                            message: error.localizedDescription,
-                            isError: true
-                        ))
-                    }
-                }
-            }
-        } message: { share in
-            Text("Its saved password is deleted too. A backup that needs \(share.url) is skipped while it is not mounted, until its password is entered again in the location’s or plan’s editor.")
         }
         .task {
             await model.refreshFullDiskAccess()
@@ -97,51 +59,16 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Scheduling") {
-                Toggle("Start SwiftRestic at login", isOn: Binding(
-                    get: { model.startsAtLogin },
-                    // Optimistic flip, as the plan editor's Start at Login:
-                    // the model var moves now, and the daemon's answer
-                    // confirms or corrects it.
-                    set: { value in model.requestStartsAtLogin(value) }
-                ))
-                .disabled(!model.loginItemInstallable && !model.startsAtLogin)
-                // Nothing while it starts at login: the switch says so.
-                if let caption = loginCaption {
-                    if model.loginItemNeedsApproval {
-                        WarningLine(text: caption)
-                            .font(.caption)
-                    } else {
-                        Text(caption)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if model.loginItemNeedsApproval {
+            // No switch: the app starts at login while a plan has a
+            // schedule (`LoginItem.change`). Only the step macOS leaves to
+            // the user shows here.
+            if model.loginItemNeedsApproval {
+                Section("Scheduling") {
+                    WarningLine(text: LoginItem.approvalNeeded)
+                        .font(.caption)
                     Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
                 }
             }
-
-            if !model.configuration.settings.networkShares.isEmpty {
-                Section("Network shares") {
-                    ForEach(model.configuration.settings.networkShares) { share in
-                        LabeledContent {
-                            Button("Remove") { removingShare = share }
-                        } label: {
-                            Text(share.url)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .help(share.url)
-                        }
-                    }
-                    Text("Reconnected with their saved passwords before a backup needs them.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
         }
         .formStyle(.grouped)
     }
@@ -183,7 +110,7 @@ private struct NotificationsTab: View {
         Form {
             Section {
                 Toggle("Notify when a backup succeeds", isOn: $model.configuration.settings.notifyOnSuccess)
-                Text("SwiftRestic always tells you when a backup fails, or when a scheduled plan has not backed up for \(StaleAlert.thresholdDays) days. A failure that repeats with the same cause notifies once.")
+                Text("Successes go to macOS notifications and to every webhook below. SwiftRestic always tells you when a backup fails, or when a scheduled plan has not backed up for \(StaleAlert.thresholdDays) days. A failure that repeats with the same cause notifies once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -219,19 +146,9 @@ private struct NotificationsTab: View {
     @ViewBuilder
     private func channelRows(_ channel: Binding<NotificationChannel>) -> some View {
         let current = channel.wrappedValue
-        TextField("URL", text: channel.url, prompt: Text(current.kind.urlPrompt))
-            .onChange(of: current.url) { _, url in
-                testOutcomes[current.id] = nil
-                if let kind = NotificationChannel.Kind(inferringFrom: url) { channel.wrappedValue.kind = kind }
-            }
-        // An address that names its service has already set it.
-        if NotificationChannel.Kind(inferringFrom: current.url) == nil {
-            Picker("Service", selection: channel.kind) {
-                ForEach(NotificationChannel.Kind.allCases) { kind in
-                    Text(kind.displayName).tag(kind)
-                }
-            }
-        }
+        // The address names its service (`NotificationChannel.Kind`).
+        TextField("URL", text: channel.url, prompt: Text("https://…"))
+            .onChange(of: current.url) { _, _ in testOutcomes[current.id] = nil }
         if !current.url.isEmpty, !current.hasUsableURL {
             WarningLine(text: "This webhook can’t send until its URL starts with http:// or https://.")
                 .font(.callout)
@@ -241,8 +158,6 @@ private struct NotificationsTab: View {
                 summary: "Healthchecks hears every backup: when it starts and how it ends.",
                 detail: "The start is what arms the timer it measures against, so a Mac that never wakes up still raises the alarm."
             )
-        } else {
-            Toggle("Also send successes", isOn: channel.notifyOnSuccess)
         }
         HStack {
             Button("Send Test") { sendTest(current) }

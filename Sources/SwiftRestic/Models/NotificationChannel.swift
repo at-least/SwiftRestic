@@ -1,71 +1,63 @@
 import Foundation
 
 struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
-    enum Kind: String, Codable, Sendable, CaseIterable, Identifiable {
+    /// The service an address belongs to, read from the address alone: a
+    /// person pastes a link and picks nothing.
+    enum Kind: Equatable, Sendable {
         case webhook
         case slack
         case discord
         /// A dead-man's switch: silence is the alarm.
         case healthchecks
 
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .webhook: "Webhook (JSON)"
-            case .slack: "Slack"
-            case .discord: "Discord"
-            case .healthchecks: "Healthchecks.io"
-            }
-        }
-
-        var urlPrompt: String {
-            switch self {
-            case .webhook: "https://example.com/hooks/backup"
-            case .slack: "https://hooks.slack.com/services/…"
-            case .discord: "https://discord.com/api/webhooks/…"
-            case .healthchecks: "https://hc-ping.com/<uuid>"
-            }
-        }
-
         /// Healthchecks needs a ping when a run *starts* — that is what arms the
         /// timer it measures the run against. For the others a "started" message
         /// is just noise.
         var usesStartPing: Bool { self == .healthchecks }
 
-        /// The service a pasted address names; nil for anything else, a
-        /// self-hosted one included, which the picker still reaches: a
-        /// self-hosted Healthchecks posted as a plain webhook would ping
-        /// "alive" on a failure.
-        init?(inferringFrom url: String) {
-            guard let parsed = URL(string: url.trimmingCharacters(in: .whitespaces)), let host = parsed.host()?.lowercased() else { return nil }
+        /// A self-hosted Healthchecks pings at `PING_ENDPOINT`, by default the
+        /// site root's /ping/, followed by a UUID or `<ping-key>/<slug>`
+        /// (healthchecks.io/docs/self_hosted_configuration). Read as a plain
+        /// webhook, its JSON POST would ping "alive" on a failure.
+        init(address: String) {
+            guard let parsed = URL(string: address.trimmingCharacters(in: .whitespaces)),
+                  let host = parsed.host()?.lowercased()
+            else {
+                self = .webhook
+                return
+            }
+            let path = parsed.pathComponents.filter { $0 != "/" }
+            let isSelfHostedPing = path.first == "ping"
+                && (path.count == 3 || (path.count == 2 && UUID(uuidString: path[1]) != nil))
             switch host {
             case "hooks.slack.com": self = .slack
             case "discord.com", "discordapp.com": self = .discord
             case "hc-ping.com": self = .healthchecks
-            default: return nil
+            default: self = isSelfHostedPing ? .healthchecks : .webhook
             }
         }
     }
 
     var id: UUID = UUID()
-    var kind: Kind = .webhook
     var url: String = ""
-    /// Failures and warnings always go; a monitor hears everything.
-    var notifyOnSuccess: Bool = false
+
+    var kind: Kind { Kind(address: url) }
 
     /// The address's host: a person pastes a link, and names nothing.
     var displayName: String {
-        URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? kind.displayName
+        URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? "Webhook"
     }
 
     var hasUsableURL: Bool {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
     }
 
-    func wants(_ stage: NotificationEvent.Stage) -> Bool {
+    /// `notifyOnSuccess` is the app's one success switch, shared with the
+    /// macOS notifications. Failures and warnings always go.
+    func wants(_ stage: NotificationEvent.Stage, notifyOnSuccess: Bool) -> Bool {
         switch stage {
         case .started: kind.usesStartPing
+        // A monitor needs every success: a missing ping is its alarm.
         case .succeeded: kind.usesStartPing || notifyOnSuccess
         case .warned, .failed: true
         // A cancelled backup did not happen: only a dead-man's switch needs
@@ -79,13 +71,7 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, default: UUID())
-        kind = c.value(.kind, default: .webhook)
         url = c.value(.url, default: "")
-        // Webhook was the picker's default. Exact hosts only, so a self-hosted
-        // address is never misread, and plain JSON pings a real Healthchecks
-        // "alive" on a failure.
-        if kind == .webhook, let service = Kind(inferringFrom: url) { kind = service }
-        notifyOnSuccess = c.value(.notifyOnSuccess, default: true)
     }
 }
 
@@ -151,7 +137,7 @@ struct NotificationEvent: Sendable, Equatable {
             return "\(operation) started: \(subject)"
         case .succeeded:
             // Only a backup adds data; a check's or a cleanup's 0 is not news.
-            let added = kind == .backup ? " — \(Format.bytes(dataAdded)) added" : ""
+            let added = kind == .backup ? " — \(Format.bytes(dataAdded)) of new data" : ""
             return "\(operation) succeeded: \(subject)\(added) in \(Format.duration(duration))"
         case .warned:
             // A retention line is appended to `itemErrors` after

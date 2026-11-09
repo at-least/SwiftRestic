@@ -7,12 +7,11 @@ written by agents for agents, and the code itself is the documentation.
 
 SwiftRestic is a native macOS backup app in the spirit of Arq, with
 [restic](https://restic.net) doing the work underneath. It backs up folders
-on a schedule to local disks, SFTP, S3-compatible storage, Backblaze B2,
+on a schedule to local disks, SFTP, S3-compatible storage such as Backblaze B2,
 rclone remotes and restic REST servers; browses and restores any backup; keeps
 a searchable index of every file in every backup; removes old backups, frees
 their space and verifies each backup location; and reports through macOS
-notifications, webhooks, Slack, Discord and Healthchecks.io. Azure and Google
-Cloud locations set up earlier keep working; new ones go through rclone.
+notifications, webhooks, Slack, Discord and Healthchecks.io.
 
 ## Requirements
 
@@ -67,14 +66,19 @@ and for the restic inside it.
 
 ## Good to know
 
-- Scheduled backups need the app running. There is no daemon: saving the
-  first scheduled plan turns on *Start at login*, once the app is in
-  `/Applications`, since a login item registered from a build folder goes
-  stale. Settings can turn it off again.
+- Scheduled backups need the app running. There is no daemon: while any plan
+  has a schedule, the app starts at login, once it is in `/Applications`,
+  since a login item registered from a build folder goes stale. It stops
+  when no plan has one. To turn it off, use System Settings ▸ General ▸
+  Login Items.
+- One switch, *Notify when a backup succeeds*, sends successes to macOS
+  notifications and every webhook; failures always go. A webhook's service
+  (Slack, Discord, Healthchecks.io, or plain JSON) is read from its address.
+  Healthchecks hears every run.
 - The app is not sandboxed. restic has to read any folder and reach the
   network, and a sandboxed app confines its children.
-- A new scheduled plan starts its first backup as soon as it is saved. Pick
-  *Manually* if that is not wanted.
+- *Back Up a Folder…* starts the plan's first backup as soon as it is
+  created; the plan then backs up every day until its schedule is changed.
 - SFTP from a GUI app has no `SSH_AUTH_SOCK` and no terminal: use a key
   without a passphrase, or an `~/.ssh/config` entry with an `IdentityFile`,
   and connect once with `ssh` first so the host key is known.

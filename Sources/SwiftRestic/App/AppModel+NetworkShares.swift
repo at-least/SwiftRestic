@@ -39,6 +39,27 @@ extension AppModel {
         configuration.settings.networkShares.removeAll { $0.id == share.id }
     }
 
+    /// Forgets each saved share on a volume `before` used and nothing uses
+    /// now: the last plan or location on it was removed, or moved off it
+    /// (`followPlans`). The editors save a share's password after the plan or
+    /// location that needs it, so a new share is already in use.
+    func forgetNetworkShares(unusedSince before: Set<String>) async {
+        let inUse = configuration.volumesInUse
+        for share in configuration.settings.networkShares
+            where before.contains(share.volumeName) && !inUse.contains(share.volumeName)
+        {
+            do {
+                try await removeNetworkShare(share)
+            } catch {
+                post(Banner(
+                    title: "Couldn’t remove the password for “\(share.url)”",
+                    message: error.localizedDescription,
+                    isError: true
+                ))
+            }
+        }
+    }
+
     /// A read that needs a local repository on a network share — the
     /// retention preview — reconnects its saved share first when it is
     /// away, as a run does; still away, it throws in the run's words
@@ -114,6 +135,15 @@ extension AppModel {
         let reconnect = await task.value
         shareReconnects[share.volumeName] = nil
         return reconnect
+    }
+}
+
+extension AppConfiguration {
+    /// The volumes under /Volumes the plans' folders and the local
+    /// repositories sit on: the ones a saved share can be needed for.
+    var volumesInUse: Set<String> {
+        Set(plans.compactMap { VolumePresence.volumeName(of: $0.resolvedPath) }
+            + repositories.compactMap(\.driveVolumeName))
     }
 }
 

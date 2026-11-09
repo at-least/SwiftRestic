@@ -23,6 +23,9 @@ final class AppModel {
             if oldValue.plans != configuration.plans {
                 for id in snapshots.keys { reshelve(id) }
             }
+            if oldValue.plans != configuration.plans || oldValue.repositories != configuration.repositories {
+                followPlans(from: oldValue)
+            }
             scheduleSave()
         }
     }
@@ -127,18 +130,11 @@ final class AppModel {
     /// on a slow disk the default (empty) configuration otherwise reads as a
     /// fresh install — or as breakage — for the first seconds.
     var isBootstrapping = false
-    /// Mirrors `LoginItem.state`, which is not observable on its own —
-    /// optimistically, while a click waits for the daemon.
-    var startsAtLogin = false
-    /// The login item as the daemon last answered — written beside
-    /// `startsAtLogin` from the same read and never optimistically.
+    /// The login item as the daemon last answered: `LoginItem.state` is not
+    /// observable on its own.
     var loginItemState: LoginItemState = .off
+    var startsAtLogin: Bool { loginItemState == .enabled }
     var loginItemNeedsApproval: Bool { loginItemState == .needsApproval }
-    /// Whether this copy could be registered as a login item, read once at
-    /// launch so the plan editor's start-at-login offer does not resolve
-    /// symlinks on every render. It feeds only what the surfaces offer:
-    /// registering keeps its own live check.
-    @ObservationIgnored let loginItemInstallable: Bool
     /// An init parameter and never configuration, so nothing on disk can
     /// point the app at another restic. Only tests pass one.
     @ObservationIgnored let resticExecutable: URL
@@ -150,16 +146,16 @@ final class AppModel {
     /// xcodebuild that is Xcode, not the terminal — so a test asserting on
     /// it would pass or fail by machine.
     @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
-    /// The login-item daemon read behind `bootstrap`, `performSetStartsAtLogin`
-    /// and `refreshLoginItemStatus`. Injectable for the same reason the probe
-    /// is: `SMAppService` answers for whatever process macOS holds
-    /// responsible, and a test must not register anything with it.
     /// Injectable: a test host has no notification center, and permission
     /// cannot be turned off from a test.
     @ObservationIgnored var notificationPoster: @MainActor (UNNotificationRequest) async throws -> Void = AppModel.addToNotificationCenter
+    /// The login-item daemon read behind `reconcileLoginItem` and
+    /// `refreshLoginItemStatus`. Injectable for the same reason the probe
+    /// is: `SMAppService` answers for whatever process macOS holds
+    /// responsible, and a test must not register anything with it.
     @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
     @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
-    /// The location gate in `performSetStartsAtLogin`. Injectable because
+    /// The location gate in `reconcileLoginItem`. Injectable because
     /// Bundle.main in a test is the xctest runner inside Xcode, which the live
     /// check counts as installed when Xcode sits in /Applications.
     @ObservationIgnored var installableLocationProbe: @Sendable () -> Bool = { LoginItem.isInInstallableLocation }
@@ -252,14 +248,9 @@ final class AppModel {
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
-    /// Serializes the login-item changes: two quick toggles must apply in
-    /// click order, or the daemon ends on whichever XPC finished last
-    /// instead of the user's last click.
+    /// Serializes every login-item read and change, so `loginItemState`
+    /// always lands in the order the daemon answered.
     @ObservationIgnored let loginItemChanges = TaskChain()
-    /// Bumped by every toggle; a daemon read may only write `startsAtLogin`
-    /// while its own generation is still the newest, or it would snap the
-    /// switch back past a newer click's optimistic value.
-    @ObservationIgnored var loginItemGeneration = 0
     /// Repositories whose last refresh already announced a stats failure.
     /// The banner is a transition signal, not a nag: a repository whose stats
     /// keep failing says it once, and says it again only after a success in
@@ -316,23 +307,6 @@ final class AppModel {
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
         self.activitySeenAt = ActivitySeenStore.loadActivitySeenAt(from: defaults)
-        #if DEBUG
-        // Live checks run from a build folder, where only the move-to-
-        // Applications advice can show. This makes the advice treat the copy
-        // as installed so the Start at Login button renders; a click still
-        // meets the live location check and registers nothing. Gated on the
-        // throwaway-config override, like the password and power seams.
-        let environment = ProcessInfo.processInfo.environment
-        if environment["SWIFTRESTIC_CONFIG_DIR"] != nil,
-           environment["SWIFTRESTIC_LOGIN_ITEM_INSTALLABLE"] == "1"
-        {
-            self.loginItemInstallable = true
-        } else {
-            self.loginItemInstallable = LoginItem.isInInstallableLocation
-        }
-        #else
-        self.loginItemInstallable = LoginItem.isInInstallableLocation
-        #endif
         // A gone owner is the quit unwinding: the pane says so in
         // the words the rest of the app uses for a cancel.
         console.runCommand = { [weak self] repositoryID, arguments in

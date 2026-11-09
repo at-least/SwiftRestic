@@ -104,11 +104,12 @@ enum NotificationPoster {
 
     static func broadcast(
         _ event: NotificationEvent,
-        to channels: [NotificationChannel]
+        to channels: [NotificationChannel],
+        notifyOnSuccess: Bool
     ) async -> [String] {
         var failures: [String] = []
         await withTaskGroup(of: (String, String?).self) { group in
-            for channel in channels where channel.hasUsableURL && channel.wants(event.stage) {
+            for channel in channels where channel.hasUsableURL && channel.wants(event.stage, notifyOnSuccess: notifyOnSuccess) {
                 guard let payload = NotificationPayload.request(for: channel, event: event) else {
                     continue
                 }

@@ -25,28 +25,20 @@ enum LoginItem {
         }
     }
 
-    /// The stem both needs-approval strings share: the Settings pane's short
-    /// form sits above its own "Open Login Items" button, the banner's full
-    /// form has no button and spells the pane out.
-    private static let awaitingApproval = "Waiting for approval"
-    static let needsApprovalShort = awaitingApproval + "."
-
-    static func description(of state: LoginItemState) -> String {
-        switch state {
-        case .enabled: "SwiftRestic will start at login."
-        case .off: "SwiftRestic will not start at login, so scheduled backups only run while it is open."
-        case .needsApproval: awaitingApproval + " in System Settings ▸ General ▸ Login Items."
-        case .notFound: "macOS couldn’t find this copy of SwiftRestic. Move it to your Applications folder and try again."
-        }
-    }
+    /// Said while macOS waits for the user to allow the login item: the
+    /// scheduler lives in this process, so a schedule does not survive a
+    /// restart or logout by itself.
+    static let approvalNeeded = "SwiftRestic starts at login once you allow it in Login Items. Until then, scheduled backups stop after a restart or logout."
 
     /// Whether this copy of the app is somewhere a login item can point at.
     ///
     /// A build folder's bundle changes every compile, so a login item
     /// registered from there ends up pointing at a binary that no longer
     /// exists — and the stale entry outlives the build.
+    /// Only an app bundle: a test runner's xctest sits in Xcode, inside
+    /// /Applications, and must never be registered.
     static func isInstallableLocation(_ path: String) -> Bool {
-        guard !path.contains("/DerivedData/"), !path.contains("/Build/Products/") else {
+        guard path.hasSuffix(".app"), !path.contains("/DerivedData/"), !path.contains("/Build/Products/") else {
             return false
         }
         let roots = ["/Applications", "\(NSHomeDirectory())/Applications"]
@@ -57,8 +49,18 @@ enum LoginItem {
         isInstallableLocation(Bundle.main.bundleURL.resolvingSymlinksInPath().path)
     }
 
-    static let notInstalledMessage =
-        "SwiftRestic can start at login once it is in your Applications folder."
+    /// What to set the login item to, or nil to leave it: registered while
+    /// any plan has a schedule, unregistered once none has (user decision —
+    /// there is no switch; turning it off is System Settings ▸ General ▸
+    /// Login Items). An item waiting for approval counts as registered: the
+    /// answer is the user's to give there. Never registered from outside
+    /// the Applications folder.
+    static func change(hasScheduledPlan: Bool, state: LoginItemState, isInstallable: @autoclosure () -> Bool) -> Bool? {
+        let isRegistered = state == .enabled || state == .needsApproval
+        guard hasScheduledPlan != isRegistered else { return nil }
+        if hasScheduledPlan, !isInstallable() { return nil }
+        return hasScheduledPlan
+    }
 
     static func setEnabled(_ enabled: Bool) throws {
         if enabled {

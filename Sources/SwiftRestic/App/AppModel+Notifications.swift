@@ -34,10 +34,15 @@ extension AppModel {
         Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil
     }
 
-    func requestNotificationPermission() async {
+    /// Asked once there is a plan to notify about: at launch with plans,
+    /// and when the first plan arrives (`followPlans`). macOS shows the prompt
+    /// only while the answer is undetermined. Not awaited:
+    /// `requestAuthorization` suspends until the user answers.
+    func requestNotificationPermission() {
         guard Self.supportsNotifications else { return }
-        let center = UNUserNotificationCenter.current()
-        _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        Task {
+            _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        }
     }
 
     /// The quiet-plan alert's tick (`StaleAlert`): names each plan that
@@ -123,6 +128,7 @@ extension AppModel {
     /// but never written into the run record, which describes the backup itself.
     func broadcast(record: RunRecord, plan: BackupPlan?) async {
         let channels = configuration.settings.notificationChannels
+        let notifyOnSuccess = configuration.settings.notifyOnSuccess
         guard channels.contains(where: \.hasUsableURL) else { return }
 
         if let planID = plan?.id { setActivityPhase(.notifying, for: planID) }
@@ -134,7 +140,7 @@ extension AppModel {
         // heard /start would never hear /fail. Awaiting a detached task
         // does not pass the cancel on; quit still waits for it.
         let failures = await Task.detached {
-            await NotificationPoster.broadcast(event, to: channels)
+            await NotificationPoster.broadcast(event, to: channels, notifyOnSuccess: notifyOnSuccess)
         }.value
         if !failures.isEmpty {
             // The queue is global: the title names the run the
@@ -188,8 +194,9 @@ extension AppModel {
 
     func addStartPing(_ event: NotificationEvent) {
         let channels = configuration.settings.notificationChannels
+        let notifyOnSuccess = configuration.settings.notifyOnSuccess
         tasks.addBackground(Task.detached {
-            _ = await NotificationPoster.broadcast(event, to: channels)
+            _ = await NotificationPoster.broadcast(event, to: channels, notifyOnSuccess: notifyOnSuccess)
         })
     }
 

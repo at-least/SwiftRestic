@@ -1,4 +1,18 @@
 import Foundation
+import Observation
+
+/// What `followPlans` compares across a configuration write.
+private struct PlanFootprint {
+    let hasPlan: Bool
+    let hasScheduledPlan: Bool
+    let volumes: Set<String>
+
+    init(of configuration: AppConfiguration) {
+        hasPlan = !configuration.plans.isEmpty
+        hasScheduledPlan = configuration.plans.contains(where: \.isScheduled)
+        volumes = configuration.volumesInUse
+    }
+}
 
 struct QuitConfirmation: Equatable {
     var message: String
@@ -191,10 +205,7 @@ extension AppModel {
             // them; the configuration's own save writes the deletion back.
             deletePlansWithoutRepository()
         }
-        let readLoginItemState = loginItemStateReader
-        let loginItem = await Task.detached { readLoginItemState() }.value
-        startsAtLogin = loginItem == .enabled
-        loginItemState = loginItem
+        await refreshLoginItemStatus()
         await checkRestic()
         // The loading state covers configuration plus the binary probe: both
         // decide what the first real screen looks like (panes, or the
@@ -202,10 +213,12 @@ extension AppModel {
         // minutes against a slow remote — that must never hold the UI
         // hostage behind a spinner.
         isBootstrapping = false
-        // Not awaited: `requestAuthorization` suspends until the user answers the
-        // system prompt, and nothing below may wait on that — the scheduler has to
-        // start whether or not notifications are ever allowed.
-        Task { await self.requestNotificationPermission() }
+        if !configuration.plans.isEmpty { requestNotificationPermission() }
+        // Not from an unreadable configuration, whose empty plan list would
+        // unregister an app that still has schedules on disk.
+        if !isConfigurationUnreadable {
+            Task { await self.reconcileLoginItem() }
+        }
         // Not awaited either: the first TCC-checked open is a round trip to
         // tccd, and nothing on the first screen waits for the answer.
         Task { await self.refreshFullDiskAccess() }
@@ -300,83 +313,68 @@ extension AppModel {
         return false
     }
 
-    /// Optimistic: the mirror moves now, and the daemon's answer in
-    /// `setStartsAtLogin` confirms or corrects it.
-    func requestStartsAtLogin(_ enabled: Bool) {
-        startsAtLogin = enabled
-        Task { await setStartsAtLogin(enabled) }
-    }
-
-    /// The `SMAppService` calls are synchronous XPC round-trips to the
-    /// background-task-management daemon, so each runs detached — a wedged
-    /// daemon stalls a background task, not the main actor. Changes
-    /// serialize through a chain, so the daemon's final state is the last
-    /// click's, not whichever XPC happened to finish last; the generation
-    /// moves at the click, so a change still ahead in the chain already
-    /// knows a newer one owns the switch.
-    func setStartsAtLogin(_ enabled: Bool) async {
-        loginItemGeneration += 1
-        let generation = loginItemGeneration
-        await loginItemChanges.run { [weak self] in
-            await self?.performSetStartsAtLogin(enabled, generation: generation)
+    /// What follows from the plans, kept in step as the configuration
+    /// changes (the `configuration` didSet): the notification permission
+    /// once the first plan arrives, the login item while any plan has a
+    /// schedule, and a network share forgotten once nothing is on it. Not
+    /// while bootstrap loads what is already on disk, nor while quitting.
+    func followPlans(from old: AppConfiguration) {
+        guard isLoaded, !isBootstrapping, !isShuttingDown else { return }
+        let before = PlanFootprint(of: old)
+        let now = PlanFootprint(of: configuration)
+        if now.hasPlan, !before.hasPlan { requestNotificationPermission() }
+        if now.hasScheduledPlan != before.hasScheduledPlan {
+            Task { await reconcileLoginItem() }
+        }
+        if !before.volumes.isSubset(of: now.volumes) {
+            Task { await forgetNetworkShares(unusedSince: before.volumes) }
         }
     }
 
-    private func performSetStartsAtLogin(_ enabled: Bool, generation: Int) async {
+    /// `LoginItem.change`, applied to what the daemon answers now. The
+    /// `SMAppService` calls are synchronous XPC round-trips to the
+    /// background-task-management daemon, so each runs detached — a wedged
+    /// daemon stalls a background task, not the main actor.
+    func reconcileLoginItem() async {
+        await loginItemChanges.run { [weak self] in
+            await self?.performReconcileLoginItem()
+        }
+    }
+
+    private func performReconcileLoginItem() async {
         let readLoginItemState = loginItemStateReader
         let applyLoginItem = loginItemApplier
-        let isInInstallableLocation = installableLocationProbe
-        // The daemon's answer, written only while this change is still the
-        // newest: a newer click's optimistic value already says what the
-        // switch must show, and its own turn will read the daemon after.
-        @discardableResult
-        func syncFromDaemon() async -> LoginItemState {
-            let state = await Task.detached { readLoginItemState() }.value
-            if generation == loginItemGeneration {
-                startsAtLogin = state == .enabled
-                loginItemState = state
-            }
-            return state
-        }
-        if enabled, !isInInstallableLocation() {
-            post(Banner(
-                title: "Couldn’t start SwiftRestic at login",
-                message: LoginItem.notInstalledMessage,
-                isError: true
-            ))
-            await syncFromDaemon()
-            return
-        }
+        loginItemState = await Task.detached { readLoginItemState() }.value
+        guard let enabled = LoginItem.change(
+            hasScheduledPlan: configuration.plans.contains(where: \.isScheduled),
+            state: loginItemState,
+            isInstallable: installableLocationProbe()
+        ) else { return }
         do {
             try await Task.detached { try applyLoginItem(enabled) }.value
-            let state = await syncFromDaemon()
-            if enabled, state == .needsApproval {
-                post(Banner(
-                    title: "Approval needed",
-                    message: LoginItem.description(of: state),
-                    isError: false,
-                    symbolName: "info.circle"
-                ))
-            }
         } catch {
-            await syncFromDaemon()
             post(Banner(
                 title: "Couldn’t change the login item",
                 message: error.localizedDescription,
                 isError: true
             ))
         }
+        loginItemState = await Task.detached { readLoginItemState() }.value
+        if enabled, loginItemState == .needsApproval {
+            post(Banner(
+                title: "Approval needed",
+                message: LoginItem.approvalNeeded,
+                isError: false,
+                symbolName: "info.circle"
+            ))
+        }
     }
 
     func refreshLoginItemStatus() async {
-        let readLoginItemState = loginItemStateReader
-        let state = await Task.detached { readLoginItemState() }.value
-        // A queued or running change owns the switch until it settles — its
-        // optimistic value is what the user last asked for, and a status
-        // read landing beside it must not stomp that back to daemon-stale.
-        if loginItemChanges.isIdle {
-            startsAtLogin = state == .enabled
-            loginItemState = state
+        await loginItemChanges.run { [weak self] in
+            guard let self else { return }
+            let readLoginItemState = loginItemStateReader
+            loginItemState = await Task.detached { readLoginItemState() }.value
         }
     }
 }

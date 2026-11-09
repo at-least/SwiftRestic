@@ -168,6 +168,37 @@ struct NetworkShareTests {
         #expect(refusing.configuration.settings.networkShares == [share])
     }
 
+    @Test("a share is forgotten once the last plan or location on it goes; one still in use, or never in use, stays")
+    func forgottenWhenUnused() async throws {
+        let secrets = SecretStore.inMemory()
+        let model = makeEditorModel(secrets: secrets)
+        model.isLoaded = true
+        var repository = Repository()
+        repository.localPath = "/Volumes/Backups/restic"
+        var plan = BackupPlan()
+        plan.path = "/Volumes/NAS/Documents"
+        var other = plan
+        other.id = UUID()
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan, other]
+        try await model.saveNetworkShare(MountedShare(volumeName: "NAS", url: "smb://me@nas.local/NAS"), password: "pw")
+        try await model.saveNetworkShare(MountedShare(volumeName: "Backups", url: "smb://me@nas.local/Backups"), password: "pw")
+        try await model.saveNetworkShare(MountedShare(volumeName: "Spare", url: "smb://me@nas.local/Spare"), password: "pw")
+        let nas = try #require(model.configuration.settings.networkShares.first { $0.volumeName == "NAS" })
+        #expect(model.configuration.volumesInUse == ["NAS", "Backups"])
+
+        model.configuration.plans = [other]
+        #expect(model.configuration.settings.networkShares.map(\.volumeName) == ["NAS", "Backups", "Spare"])
+
+        model.configuration.plans = []
+        model.configuration.repositories = []
+        try #require(
+            await eventually(within: 10) { model.configuration.settings.networkShares.map(\.volumeName) == ["Spare"] },
+            "the unused shares were never forgotten"
+        )
+        #expect(try await secrets.loadSharePassword(nas.id) == nil)
+    }
+
     @Test("the retention preview reconnects the repository's share first, and says why when it stays away")
     func previewReconnects() async throws {
         let (model, mounts, volume) = try await makeModel(answer: .failed(EAUTH))
