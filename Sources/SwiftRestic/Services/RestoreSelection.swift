@@ -79,7 +79,7 @@ struct RestoreSelection: Sendable, Equatable {
     /// backup's, that time leads, so the confirmation repeats the words the
     /// user picked by ("the version modified Sep 17, 2026 at 9:00 PM, from
     /// the backup of Sep 17, 2026 at 11:00 PM").
-    static func backupLine(backupCount: Int, backupTime: Date?, snapshotShortID: String, versionModified: Date?) -> String {
+    static func backupLine(backupCount: Int, backupTime: Date?, versionModified: Date?) -> String {
         if backupCount > 1 { return "from \(Format.count(backupCount)) backups, each item from the one it was found in" }
         guard let backupTime else { return "from the chosen backup" }
         if let versionModified {

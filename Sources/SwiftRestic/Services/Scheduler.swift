@@ -148,18 +148,9 @@ enum Scheduler {
     /// of the repository, how long ago it started and — when it did not
     /// succeed — how it ended ("3 days ago · failed"), since the stamp the
     /// scheduler keeps is written for every attempt. The stamp's moment
-    /// alone when the history holds no run as new as it.
-    static func lastMaintenanceText(
-        _ task: MaintenanceTask,
-        of repository: Repository,
-        runs: [RunRecord],
-        now: Date = .now
-    ) -> String {
-        lastMaintenanceText(task, of: repository, newest: newestMaintenanceRun(task, of: repository, runs: runs), now: now)
-    }
-
-    /// The same, given the newest run already found (`newestMaintenanceRun`)
-    /// — a page that also shows the run finds it once.
+    /// alone when the history holds no run as new as it. `newest` is
+    /// `newestMaintenanceRun`'s answer: the page also shows that run, so it
+    /// finds it once.
     static func lastMaintenanceText(
         _ task: MaintenanceTask,
         of repository: Repository,
@@ -230,7 +221,7 @@ enum Scheduler {
         return Format.timestamp(date)
     }
 
-    static func nextMaintenanceDate(_ task: MaintenanceTask, of repository: Repository, hold: ScheduleHold?) -> Date {
+    private static func nextMaintenanceDate(_ task: MaintenanceTask, of repository: Repository, hold: ScheduleHold?) -> Date {
         max(repository.maintenance.nextDate(for: task, addedAt: repository.createdAt), hold?.resumesAt ?? .distantPast)
     }
 

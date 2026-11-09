@@ -256,7 +256,7 @@ actor ConfigStore {
 
     /// One short line about why a generation could not be decoded — enough to
     /// name the field, never the whole dumped context.
-    static func briefDecodingFailure(_ error: Error) -> String {
+    private static func briefDecodingFailure(_ error: Error) -> String {
         guard let decoding = error as? DecodingError else {
             return String(describing: type(of: error))
         }

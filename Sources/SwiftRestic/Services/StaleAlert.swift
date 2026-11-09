@@ -37,7 +37,7 @@ enum StaleAlert {
         plan.isScheduled && now.timeIntervalSince(lastBackupAt) > window(schedule: plan.schedule)
     }
 
-    static func wholeDays(since moment: Date, now: Date) -> Int {
+    private static func wholeDays(since moment: Date, now: Date) -> Int {
         Int(now.timeIntervalSince(moment) / day)
     }
 

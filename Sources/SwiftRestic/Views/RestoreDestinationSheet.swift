@@ -14,7 +14,6 @@ struct RestoreDestinationRequest: Identifiable {
     /// (`RestoreBatch.coveredNote`).
     var selectionNote: String?
     let backupTime: Date?
-    let snapshotShortID: String
     /// How many backups the items come from: Search All Backups restores each row
     /// from the backup it was found in.
     var backupCount = 1
@@ -44,7 +43,6 @@ struct RestoreDestinationRequest: Identifiable {
             subject: selection.subject,
             selectionNote: selection.note,
             backupTime: selection.backupTime,
-            snapshotShortID: selection.snapshotShortID,
             backupCount: selection.backupCount
         ) { directories, overwrite in
             Task { await model.restore(selection, repositoryID: repositoryID, into: directories, overwrite: overwrite) }
@@ -161,7 +159,6 @@ struct RestoreDestinationSheet: View {
         RestoreSelection.backupLine(
             backupCount: request.backupCount,
             backupTime: request.backupTime,
-            snapshotShortID: request.snapshotShortID,
             versionModified: request.versionModified
         )
     }

@@ -86,7 +86,7 @@ struct ResticService: ResticClient {
     /// child is hung — a black-holed network path — while a legitimate run of
     /// any length keeps reporting. Not applied to legitimately silent
     /// commands (`prune`, `forget`, console `runRaw`).
-    static let streamingIdleTimeout: TimeInterval = 15 * 60
+    private static let streamingIdleTimeout: TimeInterval = 15 * 60
     let runner: ResticRunner
     let binary: URL
     /// The home folder the run expands `~` against — the plan's path and
@@ -806,7 +806,7 @@ struct ResticService: ResticClient {
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
 
-        let target = Self.restoredItemURL(for: node, in: destinationDirectory)
+        let target = Self.restoredItemURL(named: node.name, in: destinationDirectory)
         if node.isDirectory {
             try Self.refuseFileInTheWay(of: target)
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
@@ -848,7 +848,7 @@ struct ResticService: ResticClient {
             onProgress: onProgress
         )
         switch try Self.commitStagedFile(
-            Self.restoredItemURL(for: node, in: staging),
+            Self.restoredItemURL(named: node.name, in: staging),
             to: target,
             replacingExisting: overwrite == .replaceExisting
         ) {
@@ -887,7 +887,7 @@ struct ResticService: ResticClient {
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> ResticSummary? {
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
-        let landings = nodes.map { Self.restoredItemURL(for: $0, in: destinationDirectory) }
+        let landings = nodes.map { Self.restoredItemURL(named: $0.name, in: destinationDirectory) }
         // Two passes: every refusal comes before any landing is created, so
         // a refused restore leaves the destination as it stood.
         for (node, landing) in zip(nodes, landings) {
@@ -980,10 +980,6 @@ struct ResticService: ResticClient {
     /// selects exactly what the restore wrote.
     static func restoredItemURL(named name: String, in directory: URL) -> URL {
         directory.appendingPathComponent(sanitizedRestoreName(name))
-    }
-
-    static func restoredItemURL(for node: SnapshotNode, in directory: URL) -> URL {
-        restoredItemURL(named: node.name, in: directory)
     }
 
     /// A snapshot node's name as a local file name to create. The names

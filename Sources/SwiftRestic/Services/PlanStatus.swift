@@ -73,7 +73,7 @@ enum RepositoryCaption: Equatable, Sendable {
 /// moment (`lastBackupAt`) every surface's "Last backup" counts from.
 enum PlanStatus {
     private static let retentionSkippedFact = "Old backups not removed"
-    static let unnamedUnreadFact = "Some source data couldn’t be read"
+    private static let unnamedUnreadFact = "Some source data couldn’t be read"
     /// The plan page's empty fact when the repository holds other backups —
     /// the Overview's count line and the Backups tab's empty state in
     /// the same words.
@@ -81,7 +81,7 @@ enum PlanStatus {
     /// How many unreadable items the plan page's problem row lists; the drawer
     /// holds the rest. Five: the usual run names one or two, and a home
     /// folder macOS blocked in bulk is a diagnosis, not a list.
-    static let listedItemLimit = 5
+    private static let listedItemLimit = 5
 
     /// The plan page's problem row's when-line: how many backups in a row
     /// ended this way for this cause (`RunRecord.problemStretch`), then the
@@ -180,12 +180,6 @@ enum PlanStatus {
     /// repository page's Status line and the plan page's Last backup
     /// row all read this one moment, so the same backup cannot read three
     /// ways side by side.
-    static func lastBackupAt(plan: BackupPlan, latestSnapshot: Snapshot?) -> Date? {
-        lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time)
-    }
-
-    /// The same moment from the latest snapshot's time alone — the quiet-plan
-    /// alert's form, which holds times, not snapshots.
     static func lastBackupAt(plan: BackupPlan, latestSnapshotTime: Date?) -> Date? {
         plan.lastSuccessAt ?? latestSnapshotTime
     }
@@ -332,7 +326,7 @@ enum PlanStatus {
                 shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
             )
         }
-        if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshot: latestSnapshot) {
+        if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time) {
             if StaleAlert.isOverdue(plan, lastBackupAt: lastBackupAt, now: now) {
                 return PlanCaption(text: StaleAlert.overdueLine(since: lastBackupAt, now: now), outcome: .completedWithErrors)
             }

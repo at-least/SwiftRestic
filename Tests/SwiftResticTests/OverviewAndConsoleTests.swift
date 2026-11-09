@@ -199,7 +199,7 @@ struct OverviewMetricsTests {
             )
             // The plan page's value is this moment through the same
             // formatter (PlanDetailView.lastBackupValue).
-            let page = ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshot: newest))
+            let page = ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: newest?.time))
             return (caption.text, rows[0].stateText, summary?.text, page)
         }
 
@@ -234,7 +234,7 @@ struct OverviewMetricsTests {
         #expect(ranSurfaces.page == ranWords)
         #expect(ranSurfaces.line == "1 of 1 plan up to date · Last backup \(ranWords)")
 
-        #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshot: nil) == nil)
+        #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshotTime: nil) == nil)
     }
 
     @Test("an idle repository that is not refreshing says so, not Checking…")

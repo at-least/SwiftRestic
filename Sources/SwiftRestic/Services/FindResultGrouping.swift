@@ -4,7 +4,7 @@ import Foundation
 enum FindResultGrouping {
     /// Rows newest first by `time`, ties keeping arrival order, so equal times never shuffle
     /// between searches.
-    static func newestFirst<T>(_ rows: [T], time: (T) -> Date?) -> [T] {
+    fileprivate static func newestFirst<T>(_ rows: [T], time: (T) -> Date?) -> [T] {
         rows.enumerated()
             .sorted { a, b in
                 let timeA = time(a.element) ?? .distantPast

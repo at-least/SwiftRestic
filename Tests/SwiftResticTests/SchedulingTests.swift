@@ -1359,3 +1359,16 @@ struct LoginItemTests {
         #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true, startsAtLogin: true) == nil)
     }
 }
+
+extension Scheduler {
+    /// `lastMaintenanceText` over a run history, finding the newest run the
+    /// way the repository page does.
+    static func lastMaintenanceText(
+        _ task: MaintenanceTask,
+        of repository: Repository,
+        runs: [RunRecord],
+        now: Date = .now
+    ) -> String {
+        lastMaintenanceText(task, of: repository, newest: newestMaintenanceRun(task, of: repository, runs: runs), now: now)
+    }
+}

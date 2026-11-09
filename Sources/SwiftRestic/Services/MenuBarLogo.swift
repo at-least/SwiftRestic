@@ -61,11 +61,11 @@ enum MenuBarLogo {
     /// stroke's width standing from a touch above the top plate's place to
     /// just below the centre, and its dot beneath, one stroke's gap between.
     /// It sits where the plates sit, so the ring, the head and the ink
-    /// footprint are the idle face's. Read by the tests.
+    /// footprint are the idle face's. The tests read the bar's ends and the dot's centre.
     static let exclamationBarTop: CGFloat = 0.170
     static let exclamationBarBottom: CGFloat = -0.030
     static let exclamationDotCenter: CGFloat = -0.135
-    static let exclamationDotRadius: CGFloat = 0.040
+    private static let exclamationDotRadius: CGFloat = 0.040
 
     /// Which running frame is showing at a given moment. Pure so the cadence
     /// can be tested without a live timer or view.
@@ -77,7 +77,7 @@ enum MenuBarLogo {
     /// Built once, not per call: while a run is in flight the tray's pulse
     /// timer sets a running frame every `frameInterval`, so every face is
     /// cached and its accessor allocation-free.
-    private static let restingImage: NSImage = makeImage { rect, context in
+    static let restingImage: NSImage = makeImage { rect, context in
         draw(in: rect, into: context, content: .resting)
     }
     private static let runningImages: [NSImage] = runningAlphaFrames.indices.map { phase in
@@ -85,16 +85,12 @@ enum MenuBarLogo {
             draw(in: rect, into: context, content: .running(phase))
         }
     }
-    private static let attentionImageCache: NSImage = makeImage { rect, context in
-        draw(in: rect, into: context, content: .attention)
-    }
-
-    static func image() -> NSImage { restingImage }
-
     /// The attention face: the resting ring with an exclamation mark in the
     /// stack's place — a template like every face, on the same canvas, so
     /// the item neither changes width nor guesses the bar's ink.
-    static var attentionImage: NSImage { attentionImageCache }
+    static let attentionImage: NSImage = makeImage { rect, context in
+        draw(in: rect, into: context, content: .attention)
+    }
 
     static func image(phase: Int) -> NSImage {
         runningImages[((phase % runningImages.count) + runningImages.count) % runningImages.count]

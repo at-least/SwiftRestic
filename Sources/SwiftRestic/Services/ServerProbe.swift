@@ -43,7 +43,7 @@ struct ServerProbe: Sendable {
 
     /// The proxy variables restic (Go's net/http) honours: with one set, a
     /// direct connection proves nothing.
-    static let proxyVariables = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
+    private static let proxyVariables = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
 
     /// Where an HTTP-reached repository's server is — REST, S3, B2, Azure,
     /// GCS — or nil when there is nothing to ask first: a local folder, an

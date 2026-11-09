@@ -28,7 +28,7 @@ struct MenuBarLogoTests {
         // from idle on the only always-visible surface. TIFF bytes are the
         // cheapest honest comparison of two template bitmaps — the alphas
         // differ in both plates.
-        #expect(MenuBarLogo.stillRunningImage.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
+        #expect(MenuBarLogo.stillRunningImage.tiffRepresentation != MenuBarLogo.restingImage.tiffRepresentation)
     }
 
     @Test("the attention face keeps the ring and stands an exclamation mark where the stack sits, as a template")
@@ -38,12 +38,12 @@ struct MenuBarLogoTests {
         // and the item keeps its width between faces.
         #expect(attention.isTemplate, "the bar's ink, not a guess baked into a bitmap")
         #expect(attention.size.width == 18)
-        #expect(attention.tiffRepresentation != MenuBarLogo.image().tiffRepresentation)
+        #expect(attention.tiffRepresentation != MenuBarLogo.restingImage.tiffRepresentation)
 
         // Pixel facts at 4x, coordinates in the 18pt canvas (y-up), the mark
         // centred at (9, 9).
         let rep = try render(attention, canvas: 18, scale: 4)
-        let resting = try render(MenuBarLogo.image(), canvas: 18, scale: 4)
+        let resting = try render(MenuBarLogo.restingImage, canvas: 18, scale: 4)
         func alpha(_ rep: NSBitmapImageRep, x: CGFloat, y: CGFloat) throws -> CGFloat {
             let color = try #require(rep.colorAt(x: Int((x * 4).rounded()), y: Int(((18 - y) * 4).rounded())))
                 .usingColorSpace(.deviceRGB)
@@ -138,7 +138,7 @@ struct MenuBarLogoTests {
         let directory = try #require(ProcessInfo.processInfo.environment["SWIFTRESTIC_TRAY_FACE_DIR"])
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let faces: [(String, NSImage, CGFloat)] = [
-            ("idle", MenuBarLogo.image(), 18),
+            ("idle", MenuBarLogo.restingImage, 18),
             ("attention", MenuBarLogo.attentionImage, 18),
             ("running-0", MenuBarLogo.image(phase: 0), 18),
             ("running-1", MenuBarLogo.image(phase: 1), 18),

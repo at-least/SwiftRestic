@@ -123,7 +123,7 @@ enum CommandLineTokenizer {
     /// is untouched: it overwrites whatever sits at the destination. `tag` also
     /// mutates, but only snapshot metadata, reversibly with another `tag` —
     /// confirming it would be noise.
-    static let destructiveSubcommands: Set<String> = [
+    private static let destructiveSubcommands: Set<String> = [
         "forget", "prune", "rewrite", "repair", "unlock", "init", "migrate", "key",
         "restore",
     ]

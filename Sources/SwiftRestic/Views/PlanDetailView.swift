@@ -298,7 +298,7 @@ struct PlanDetailView: View {
         // (PlanStatus.lastBackupAt) — the sidebar caption's and the
         // Status line's own derivation, so history the plan arrived
         // with is not "Never" here.
-        let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshot: snapshots.first), now: now)
+        let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: snapshots.first?.time), now: now)
         // The destination must be the run the value claims — the newest
         // backup that stamped `lastSuccessAt` (PlanStatus.lastBackupRun).
         let lastSuccessfulRun = PlanStatus.lastBackupRun(planID: plan.id, in: model.configuration.runs)

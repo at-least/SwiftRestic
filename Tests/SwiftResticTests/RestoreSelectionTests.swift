@@ -59,13 +59,13 @@ struct RestoreSelectionTests {
     func backupLine() {
         let backup = Date(timeIntervalSince1970: 1_790_000_000)
         let modified = backup.addingTimeInterval(-7_200)
-        #expect(RestoreSelection.backupLine(backupCount: 3, backupTime: nil, snapshotShortID: "abcdef12", versionModified: nil)
+        #expect(RestoreSelection.backupLine(backupCount: 3, backupTime: nil, versionModified: nil)
             == "from 3 backups, each item from the one it was found in")
-        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: nil)
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, versionModified: nil)
             == "from \(Format.timestamp(backup))")
-        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: nil, snapshotShortID: "abcdef12", versionModified: nil)
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: nil, versionModified: nil)
             == "from the chosen backup")
-        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, snapshotShortID: "abcdef12", versionModified: modified)
+        #expect(RestoreSelection.backupLine(backupCount: 1, backupTime: backup, versionModified: modified)
             == "the version modified \(Format.timestamp(modified)), from the backup of \(Format.timestamp(backup))")
     }
 

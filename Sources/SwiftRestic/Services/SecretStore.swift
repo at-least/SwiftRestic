@@ -74,7 +74,7 @@ struct SecretStore: Sendable {
     /// share's password is `SWIFTRESTIC_SHARE_PASSWORD`, none when unset.
     /// Saves and removals go nowhere: a scratch run never touches the login
     /// Keychain.
-    static var injectedForCapture: SecretStore? {
+    private static var injectedForCapture: SecretStore? {
         let environment = ProcessInfo.processInfo.environment
         guard let password = environment["SWIFTRESTIC_REPO_PASSWORD"], !password.isEmpty,
               environment["SWIFTRESTIC_CONFIG_DIR"]?.isEmpty == false

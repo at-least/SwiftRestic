@@ -78,7 +78,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         let button = statusItem.button
         switch MenuBarStatus.glyph(for: state) {
         case .logo:
-            button?.image = MenuBarLogo.image()
+            button?.image = MenuBarLogo.restingImage
         case .attentionLogo:
             button?.image = MenuBarLogo.attentionImage
         case .animatedLogo:

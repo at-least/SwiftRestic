@@ -26,7 +26,7 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
 
     /// Scanning order is severity, not sidebar order: unreadable first,
     /// then exposed, then pending, then a run in flight, up to date last.
-    var severityRank: Int {
+    fileprivate var severityRank: Int {
         if didFail { return 0 }
         // Ahead of the listing's verdict: a first backup in flight has no
         // snapshot yet, and is news being made, not an alarm.
@@ -265,7 +265,7 @@ enum OverviewMetrics {
             let line: String
             var moment: Date?
             var isOverdue = false
-            if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshot: latest) {
+            if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latest.time) {
                 // The sidebar's words and formatter, and the one moment
                 // every surface's "Last backup" counts from
                 // (`PlanStatus.lastBackupAt`). Date.RelativeFormatStyle

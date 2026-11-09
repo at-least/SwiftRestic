@@ -26,7 +26,7 @@ extension AppModel {
         overwrite: RestoreOverwritePolicy
     ) {
         let reporter = restoreProgressReporter()
-        let landing = ResticService.restoredItemURL(for: node, in: destination)
+        let landing = ResticService.restoredItemURL(named: node.name, in: destination)
         let step = RestoreStep(
             label: node.name,
             description: "Restoring “\(node.name)”",
@@ -136,7 +136,7 @@ extension AppModel {
                     )
                 }
         }
-        let landings = items.map { ResticService.restoredItemURL(for: $0.node, in: $0.directory) }
+        let landings = items.map { ResticService.restoredItemURL(named: $0.node.name, in: $0.directory) }
         let directories = Set(items.map(\.directory))
         beginRestore(repositoryID: repositoryID, steps: steps) { [weak self] summaries in
             self?.post(Self.itemsRestoreBanner(
@@ -479,7 +479,7 @@ extension AppModel {
         // The one landing rule the service's restore branches and the run
         // record use: the snapshot names the item, the destination
         // directory decides where it lands.
-        return ResticService.restoredItemURL(for: node, in: destination)
+        return ResticService.restoredItemURL(named: node.name, in: destination)
     }
 
     /// One definition of the password rules, shared by the drag path above
@@ -541,7 +541,7 @@ extension AppModel {
             // edits saved there would be deleted with it.
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o444],
-                ofItemAtPath: ResticService.restoredItemURL(for: node, in: folder).path
+                ofItemAtPath: ResticService.restoredItemURL(named: node.name, in: folder).path
             )
         } catch {
             // The restore's own error is the one to report; a folder this
@@ -549,7 +549,7 @@ extension AppModel {
             try? FileManager.default.removeItem(at: folder)
             throw error
         }
-        return ResticService.restoredItemURL(for: node, in: folder)
+        return ResticService.restoredItemURL(named: node.name, in: folder)
     }
 
     nonisolated static func removePreviewCopy(_ url: URL) throws {
