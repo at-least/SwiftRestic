@@ -21,18 +21,14 @@ extension View {
     }
 }
 
+/// No "Restore a File…" beside it: Edit ▸ Find… (⌘F) is the way in to a
+/// file not on screen (the user's call).
 struct RestoreCommands: Commands {
     @FocusedValue(\.restoreCommand) private var command
-    /// The way in from anywhere, for someone who has lost a file and is on
-    /// no pane yet: Search. Off only with nothing to search.
-    let canSearch: Bool
-    let search: () -> Void
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Divider()
-            Button("Restore a File…", action: search)
-                .disabled(!canSearch)
             Button("Restore…") { command?.run() }
                 .disabled(command?.isEnabled != true)
         }

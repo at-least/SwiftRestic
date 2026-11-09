@@ -37,14 +37,10 @@ struct PlanCaption: Equatable, Sendable {
     var shortText: String? = nil
 }
 
-/// What a repository's sidebar row says under its name, by its case — nil
-/// renders nothing. A failed read's `full` message is the tooltip the
-/// renderer hangs under its truncated text; the other lines show whole.
+/// What a repository's sidebar row says under its name after a failed read
+/// — nil renders nothing. `full` is the tooltip the renderer hangs under its
+/// truncated text.
 enum RepositoryCaption: Equatable, Sendable {
-    /// Every backup the repository holds, every plan's and the other ones
-    /// together; 0 once a listing settled and found none.
-    case count(Int)
-    case reading
     /// The read failed and its first sentence is the missing drive's own
     /// (`RunRecord.notConnected`); `full` is the whole message.
     case notConnected(full: String)
@@ -52,17 +48,14 @@ enum RepositoryCaption: Equatable, Sendable {
 
     var text: String {
         switch self {
-        case .count(let count): Format.plural(count, "backup")
-        case .reading: "Reading backups…"
         case .notConnected: "Not connected"
         case .failed(let line, full: _): line
         }
     }
 
-    var help: String? {
+    var help: String {
         switch self {
         case .notConnected(let full), .failed(_, let full): full
-        case .count, .reading: nil
         }
     }
 }
@@ -340,39 +333,24 @@ enum PlanStatus {
         return PlanCaption(text: plan.schedule.summary())
     }
 
-    /// The repository row's second line: how many backups it holds, every
-    /// plan's and the other ones together — but only once that is known. A
-    /// repository still being read, or whose read failed (a wrong password,
-    /// an unreachable server), never says "0 backups", which reads as "your
-    /// data is gone"; it says what an open plan says — a repository missing
-    /// from its location (restic exit 10, an unplugged disk) included. A
-    /// count from an earlier listing stands under a failed re-read, as the
-    /// records do.
-    static func repositoryCaption(
-        repository: Repository,
-        listing: [Snapshot],
-        isLoading: Bool,
-        outcome: SnapshotListingOutcome
-    ) -> RepositoryCaption? {
-        if !listing.isEmpty { return .count(listing.count) }
-        if isLoading { return .reading }
-        if case let .failed(message, _) = outcome {
-            let line = Format.firstSentence(message)
-            // Under the repository's own name, its drive's absence needs no
-            // name again: the sentence the listing wrote for it
-            // (`RunRecord.notConnected`, the volume's name), matched as that
-            // same derivation builds it — not the row's label, which names
-            // a twin by its path.
-            let away = repository.kind == .local
-                ? RunRecord.notConnected([repository.resolvedLocalPath])
-                : nil
-            if Format.withoutFinalPeriod(line) == away {
-                return .notConnected(full: message)
-            }
-            return .failed(line, full: message)
+    /// The repository row's second line when its read failed (a wrong
+    /// password, an unreachable server, a repository missing from its
+    /// location: restic exit 10, an unplugged disk); nil otherwise.
+    static func repositoryCaption(repository: Repository, outcome: SnapshotListingOutcome) -> RepositoryCaption? {
+        guard case let .failed(message, _) = outcome else { return nil }
+        let line = Format.firstSentence(message)
+        // Under the repository's own name, its drive's absence needs no name
+        // again: the sentence the listing wrote for it
+        // (`RunRecord.notConnected`, the volume's name), matched as that same
+        // derivation builds it — not the row's label, which names a twin by
+        // its path.
+        let away = repository.kind == .local
+            ? RunRecord.notConnected([repository.resolvedLocalPath])
+            : nil
+        if Format.withoutFinalPeriod(line) == away {
+            return .notConnected(full: message)
         }
-        if outcome == .loaded { return .count(0) }
-        return nil
+        return .failed(line, full: message)
     }
 
     /// Searched among the trailing lines only, so an unreadable item's own

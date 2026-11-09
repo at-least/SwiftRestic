@@ -5,8 +5,8 @@ import SwiftUI
 /// ("When a data hierarchy is deeper than two levels, consider using a
 /// split view interface that includes a content list between the sidebar
 /// items and detail view"). The repository's row opens its page, which is
-/// its overview, and never collapses; beneath it sit its plans, "New Backup
-/// Plan" while it has none, and — under an Other backups caption while the
+/// its overview, and never collapses; beneath it sit its plans, "Back Up a
+/// Folder" while it has none, and — under an Other backups caption while the
 /// repository holds backups none of its plans made (`BackupShelves`) — their
 /// groups, by the plan that made them when a plan tag says which, by folders
 /// and Mac otherwise. A plan's or a group's row is a page whose Backups tab
@@ -17,7 +17,7 @@ import SwiftUI
 /// Every row is a top-level List row, and a repository's children are
 /// leading indentation (`Indent`). Only places carry a tag — a repository,
 /// a plan, a group under Other backups — so selection stays unique; the
-/// Other backups caption is text, and "New Backup Plan" is an action.
+/// Other backups caption is text, and "Back Up a Folder" is an action.
 ///
 /// The sidebar's list is its own view so it type-checks on its own: the
 /// root's modifier chain sits at the compiler's type-check budget. The
@@ -106,7 +106,7 @@ struct SidebarView: View {
                 // Into the repository on screen, as ⌘N does — with none
                 // yet, through adding one.
                 let commands = model.repositoryCommands(for: router.selection)
-                Button("New Backup Plan…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
+                Button("Back Up a Folder…") { onNewPlan(model.commandRepositoryID(for: router.selection)) }
                     .disabled(!commands.canNewPlan)
                 Button("Add Backup Location…") { onNewRepository() }
                     .disabled(!commands.canAddRepository)
@@ -117,7 +117,7 @@ struct SidebarView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Add a backup plan or a backup location")
+            .help("Back up a folder or add a backup location")
 
             Spacer()
         }
@@ -149,7 +149,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
         let commands = model.repositoryCommands(for: .repository(repository.id))
-        Button("New Backup Plan…") { onNewPlan(repository.id) }
+        Button("Back Up a Folder…") { onNewPlan(repository.id) }
         Divider()
         Button("Edit Backup Location…") { onEditRepository(repository) }
         // The two of the Location menu's a row most often wants; the
@@ -175,7 +175,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(model.label(of: repository))
                         .lineLimit(1)
-                    backupsCaption(repository, listing: model.snapshots(for: repository.id))
+                    readProblem(repository)
                 }
                 Spacer(minLength: 4)
             }
@@ -189,32 +189,29 @@ struct SidebarView: View {
         .contextMenu { repositoryContextMenu(repository) }
     }
 
-    /// The repository row's second line, `PlanStatus.repositoryCaption`'s
-    /// answer: a failed read's sentence truncates with its whole message in
-    /// the tooltip; the counts are short enough to show whole.
+    /// The repository row's second line, only when its last read failed:
+    /// "not connected", or the failure's first sentence, its whole message
+    /// in the tooltip.
     @ViewBuilder
-    private func backupsCaption(_ repository: Repository, listing: [Snapshot]) -> some View {
+    private func readProblem(_ repository: Repository) -> some View {
         let caption = PlanStatus.repositoryCaption(
             repository: repository,
-            listing: listing,
-            isLoading: model.loadingSnapshots.contains(repository.id),
             outcome: model.snapshotListingOutcome(for: repository.id)
         )
-        Group {
-            if let caption {
-                switch caption {
-                case .count, .reading:
-                    Text(caption.text)
-                case let .notConnected(full), let .failed(_, full):
-                    Text(caption.text)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(full)
-                }
+        if let caption {
+            HStack(spacing: 3) {
+                // The plan rows' glyph; the words stay secondary, as theirs.
+                StatusGlyph(outcome: .completedWithErrors)
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+                Text(caption.text)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(caption.help)
             }
+            .font(.caption)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 
     @ViewBuilder
@@ -246,7 +243,7 @@ struct SidebarView: View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
                 Label {
-                    Text("New Backup Plan…")
+                    Text("Back Up a Folder…")
                         .foregroundStyle(Theme.tint)
                 } icon: {
                     Image(systemName: "plus.circle")
@@ -259,9 +256,9 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, Indent.child)
-        .help("Create a backup plan that backs up to “\(model.label(of: repository))”")
+        .help("Back up a folder to “\(model.label(of: repository))”")
         // Every repository without a plan has one: the name tells them apart.
-        .accessibilityLabel("New Backup Plan for “\(model.label(of: repository))”")
+        .accessibilityLabel("Back Up a Folder to “\(model.label(of: repository))”")
     }
 
     /// A plan: the row opens its page, whose Backups tab lists what it
@@ -375,7 +372,7 @@ struct SidebarView: View {
 }
 
 /// A repository's children, as the leading indentation of top-level List
-/// rows: plans, "New Backup Plan", the Other backups caption and its
+/// rows: plans, "Back Up a Folder", the Other backups caption and its
 /// groups all start one step in, their icons under the repository's icon
 /// and their titles where its title starts.
 private enum Indent {

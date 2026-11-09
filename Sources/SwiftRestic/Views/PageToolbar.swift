@@ -38,8 +38,10 @@ extension View {
         modifier(PageSearch(page: page, roots: roots, prompt: prompt))
     }
 
-    /// The toolbar's field on a page with no Files tab: Return hands the query
-    /// to Search All Backups, which answers as it is typed from then on.
+    /// The toolbar's field on a page with no Files tab: its first keystroke
+    /// turns the page to Search All Backups, the query in that page's field
+    /// in the same place, answered as it is typed — as a plan's page turns
+    /// to its Files tab.
     func allBackupsSearch() -> some View {
         modifier(AllBackupsSearchField())
     }
@@ -52,8 +54,9 @@ private struct AllBackupsSearchField: ViewModifier {
     func body(content: Content) -> some View {
         content
             .searchable(text: $text, placement: .toolbar, prompt: Text("Search all backups"))
-            .onSubmit(of: .search) {
-                router.openFind(query: text)
+            .onChange(of: text) { _, typed in
+                guard !typed.isEmpty else { return }
+                router.openFind(query: typed)
                 text = ""
             }
     }

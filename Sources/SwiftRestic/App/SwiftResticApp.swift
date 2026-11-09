@@ -237,10 +237,10 @@ struct SwiftResticApp: App {
             // ⌘N is macOS's reflex for "new thing" — an emptied group would
             // make adding a repository a mouse trip to the sidebar footer.
             CommandGroup(replacing: .newItem) {
-                // With no repository yet, through adding one
-                // (`RootView.startNewPlan`).
+                // The folder panel, then the first-run sheet
+                // (`RootView.startBackUpAFolder`).
                 let commands = model.repositoryCommands(for: router.selection)
-                Button("New Backup Plan…") { ask(.newPlan) }
+                Button("Back Up a Folder…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!commands.canNewPlan)
 
@@ -269,10 +269,7 @@ struct SwiftResticApp: App {
                     .keyboardShortcut("f", modifiers: .command)
                     .disabled(!model.repositoryCommands(for: router.selection).canFind)
             }
-            RestoreCommands(
-                canSearch: model.repositoryCommands(for: router.selection).canFind,
-                search: { ask(.showFind) }
-            )
+            RestoreCommands()
             CommandGroup(replacing: .importExport) {}
             // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
             // toolbar button had been the one way back (the HIG's Split
@@ -431,11 +428,6 @@ struct SwiftResticApp: App {
     private var locationMenu: some Commands {
         CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("restic Console") { openWindow(id: Self.consoleWindowID) }
-                .disabled(!r.canOpenConsole)
-
-            Divider()
-
             Button("Verify Backups…") {
                 if let id = r.repositoryID { ask(.confirm(.check(id))) }
             }
@@ -455,6 +447,11 @@ struct SwiftResticApp: App {
                 if let id = r.repositoryID { ask(.confirm(.deleteRepository(id))) }
             }
             .disabled(!r.canRemove)
+
+            Divider()
+
+            Button("restic Console") { openWindow(id: Self.consoleWindowID) }
+                .disabled(!r.canOpenConsole)
         }
     }
 }

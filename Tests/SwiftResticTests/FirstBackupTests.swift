@@ -31,8 +31,9 @@ struct FirstBackupTests {
     func requirementsInOrder() {
         func reason(source: String = "/Users/u/Documents", folder: String = "/Volumes/Disk/SwiftRestic Backups",
                     password: String = "pw", confirm: String = "pw", among: [Repository] = []) -> String? {
-            EditorRequirements.firstBackup(
-                source: source, folder: folder, password: password, confirmPassword: confirm, among: among
+            FirstBackupDestination.requirement(
+                source: source, destination: folder.isEmpty ? nil : .folder(folder), password: password,
+                confirmPassword: confirm, holdsBackups: false, plans: [], repositories: among
             )
         }
         #expect(reason(source: "", folder: "") == "Choose a folder to back up.")
@@ -52,6 +53,64 @@ struct FirstBackupTests {
         var taken = Repository()
         taken.localPath = "/Volumes/Disk/SwiftRestic Backups"
         #expect(reason(among: [taken])?.contains("is already at this location") == true)
+    }
+
+    @Test("into a location set up here: no password asked, and its plans' rules")
+    func requirementsIntoALocation() {
+        var disk = Repository()
+        disk.localPath = "/Volumes/Disk/SwiftRestic Backups"
+        var existing = BackupPlan()
+        existing.path = "/Users/u/Pictures"
+        existing.repositoryID = disk.id
+        func reason(source: String = "/Users/u/Documents", destination: FirstBackupDestination? = nil) -> String? {
+            FirstBackupDestination.requirement(
+                source: source, destination: destination ?? .location(disk.id), password: "", confirmPassword: "",
+                holdsBackups: false, plans: [existing], repositories: [disk]
+            )
+        }
+        #expect(reason() == nil)
+        #expect(reason(source: "") == "Choose a folder to back up.")
+        #expect(reason(source: "/Users/u/Pictures") == "This location already has a plan for this folder or file.")
+        #expect(reason(source: "/Volumes/Disk") == "Keep the backups outside the folder you’re backing up.")
+        #expect(FirstBackupDestination.requirement(
+            source: "/Users/u/Documents", destination: nil, password: "", confirmPassword: "",
+            holdsBackups: false, plans: [], repositories: [disk]
+        ) == "Choose where the backups go.")
+    }
+
+    @Test("a folder that already holds backups asks for their password once, with no confirmation")
+    func requirementsIntoExistingBackups() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticHolds-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        #expect(!EditorRequirements.holdsBackups(atLocalPath: root.path))
+        try Data().write(to: root.appendingPathComponent("config"))
+        #expect(EditorRequirements.holdsBackups(atLocalPath: root.path))
+
+        func reason(password: String, confirm: String, source: String = "/Users/u/Documents") -> String? {
+            FirstBackupDestination.requirement(
+                source: source, destination: .folder(root.path), password: password, confirmPassword: confirm,
+                holdsBackups: true, plans: [], repositories: []
+            )
+        }
+        #expect(reason(password: "", confirm: "") == "Enter the password for these backups to save it.")
+        #expect(reason(password: "pw", confirm: "") == nil)
+        #expect(reason(password: "", confirm: "", source: root.path) == "Keep the backups outside the folder you’re backing up.")
+        // A new folder still asks twice.
+        #expect(FirstBackupDestination.requirement(
+            source: "/Users/u/Documents", destination: .folder(root.path), password: "pw", confirmPassword: "",
+            holdsBackups: false, plans: [], repositories: []
+        ) == "The passwords don’t match.")
+    }
+
+    @Test("the sheet opens on the location on screen, else the one added last, else asks")
+    func initialDestination() {
+        let first = Repository()
+        let last = Repository()
+        #expect(FirstBackupDestination.initial(onScreen: first.id, among: [first, last]) == .location(first.id))
+        #expect(FirstBackupDestination.initial(onScreen: nil, among: [first, last]) == .location(last.id))
+        #expect(FirstBackupDestination.initial(onScreen: UUID(), among: [first]) == .location(first.id))
+        #expect(FirstBackupDestination.initial(onScreen: nil, among: []) == nil)
     }
 
     @Test("only a writable external disk on this Mac is offered, in a folder of its own")
@@ -172,8 +231,6 @@ struct FirstBackupTests {
         #expect(plan.schedule.frequency == BackupPlan().schedule.frequency)
         #expect(plan.retention == BackupPlan().retention)
         #expect(plan.announcesFirstBackup)
-        // The first scheduled plan: a schedule needs the app open after a restart.
-        #expect(model.startsAtLogin, "the first scheduled plan did not ask to start at login")
     }
 
     @Test("the first success is announced once, whatever the setting; another plan's is not")

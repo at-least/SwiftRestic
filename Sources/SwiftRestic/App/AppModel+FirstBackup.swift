@@ -13,19 +13,6 @@ extension AppModel {
         }
     }
 
-    /// The first scheduled plan asks for what a schedule needs.
-    func registersLoginItemOnSave(_ plan: BackupPlan) -> Bool {
-        LoginItemAdvice.registersOnSave(
-            draft: plan,
-            among: configuration.plans,
-            offer: LoginItemAdvice.offer(
-                startsAtLogin: startsAtLogin,
-                needsApproval: loginItemNeedsApproval,
-                isInstallable: loginItemInstallable
-            )
-        )
-    }
-
     /// The first-run sheet's Back Up: a repository in `folder`, created
     /// before it is kept, as the repository editor's Save does, then a plan
     /// for `source` with today's defaults. Throws with nothing kept.
@@ -43,16 +30,68 @@ extension AppModel {
         return createFirstPlan(source: source, repositoryID: repository.id)
     }
 
-    /// The first-run plan for `source` on today's defaults, into a
-    /// repository just created: the first-run sheet's own, or the
-    /// repository editor's when the sheet handed off to it.
+    /// A plan for `source` on today's defaults, into `repositoryID`: one the
+    /// sheet just created, one the repository editor created for it, or one
+    /// already set up that the sheet's destination named.
     func createFirstPlan(source: String, repositoryID: UUID) -> UUID {
-        var plan = BackupPlan()
-        plan.path = source
-        plan.repositoryID = repositoryID
-        if registersLoginItemOnSave(plan) { requestStartsAtLogin(true) }
+        let plan = BackupPlan(firstBackupOf: source, into: repositoryID)
         createPlan(plan)
         return plan.id
+    }
+}
+
+private extension BackupPlan {
+    /// Today's defaults for `source`: what the first-run sheet creates and
+    /// checks.
+    init(firstBackupOf source: String, into repositoryID: UUID) {
+        self.init()
+        path = source
+        self.repositoryID = repositoryID
+    }
+}
+
+/// Where Back Up a Folder…'s sheet puts the backups.
+enum FirstBackupDestination: Hashable {
+    /// A location already set up.
+    case location(UUID)
+    /// A folder for a new location: a disk's, or one chosen with Other….
+    case folder(String)
+
+    /// What the sheet opens on with locations set up: the one whose page is
+    /// on screen, else the one added last (the only one, when there is one).
+    static func initial(onScreen: UUID?, among repositories: [Repository]) -> FirstBackupDestination? {
+        if let onScreen, repositories.contains(where: { $0.id == onScreen }) { return .location(onScreen) }
+        return repositories.last.map { .location($0.id) }
+    }
+
+    /// The sheet's greyed Back Up, in the order it asks: what, where, the
+    /// password. `holdsBackups` is `EditorRequirements.holdsBackups(atLocalPath:)`
+    /// for a folder.
+    static func requirement(
+        source: String,
+        destination: FirstBackupDestination?,
+        password: String,
+        confirmPassword: String,
+        holdsBackups: Bool,
+        plans: [BackupPlan],
+        repositories: [Repository]
+    ) -> String? {
+        if source.isEmpty { return "Choose a folder to back up." }
+        switch destination {
+        case nil:
+            return "Choose where the backups go."
+        case let .location(id):
+            if let repository = repositories.first(where: { $0.id == id }), repository.kind == .local,
+               let inside = EditorRequirements.backupsInside(source: source, folder: repository.resolvedLocalPath) {
+                return inside
+            }
+            return EditorRequirements.plan(BackupPlan(firstBackupOf: source, into: id), isNew: true, among: plans)
+        case let .folder(folder):
+            return EditorRequirements.firstBackup(
+                source: source, folder: folder, password: password,
+                confirmPassword: confirmPassword, holdsBackups: holdsBackups, among: repositories
+            )
+        }
     }
 }
 

@@ -545,10 +545,6 @@ struct FilesSearchAnswer: Equatable {
     /// since each list re-sorts what the index cut in its own order.
     static let searchTruncated = "Not every match is shown — narrow the search to see the rest."
 
-    /// How the index matches what is typed, said once for every surface that
-    /// states it. `SnapshotIndex.ftsQuery` makes each word a prefix term.
-    static let matchRule = "Matching is case-insensitive; each word you type matches the start of a word in the name — “note” also finds “notes.txt”."
-
     /// The index's hits as the column lists them — each on this Mac or
     /// deleted by `present`, the paths found on the disk: by name as Finder
     /// sorts names, one name's hits by path — the tree's rows, with no

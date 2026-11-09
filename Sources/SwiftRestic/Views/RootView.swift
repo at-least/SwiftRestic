@@ -15,7 +15,7 @@ struct RootView: View {
     /// retention's fix. Back to Files when the sheet goes.
     @State private var editingPlanTab: PlanEditorTab = .files
     @State private var editingRepository: Repository?
-    /// "New Backup Plan" asked with no repository yet, its folder chosen.
+    /// Back Up a Folder…'s folder, chosen: the first-run sheet's.
     @State private var firstBackupSource: FirstBackupSource?
     /// The first-run sheet was left for the repository editor's other kinds:
     /// set from the sheet's handoff until the editor closes, its Add then
@@ -61,7 +61,7 @@ struct RootView: View {
     private var sidebar: some View {
         SidebarView(
             onEditPlan: { editingPlan = $0 },
-            onNewPlan: startNewPlan(in:),
+            onNewPlan: startBackUpAFolder(in:),
             onEditRepository: { editingRepository = $0 },
             onNewRepository: addRepository,
             onDeletePlan: { pendingConfirmation = .deletePlan($0.id) },
@@ -73,7 +73,7 @@ struct RootView: View {
     private var detail: some View {
         RootDetailView(
             pendingCaptureRestore: $pendingCaptureRestore,
-            onAddPlan: startNewPlan(in:),
+            onAddPlan: startBackUpAFolder(in:),
             onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection
         )
@@ -88,7 +88,7 @@ struct RootView: View {
     private func presented<V: View>(over content: V) -> some View {
         content
         .sheet(item: $editingPlan, onDismiss: { editingPlanTab = .files }) { plan in
-            PlanEditorSheet(plan: plan, initialTab: editingPlanTab, onCreated: { router.selection = .plan($0) })
+            PlanEditorSheet(plan: plan, mode: .editing, initialTab: editingPlanTab)
                 .environment(model)
         }
         // Not sheet(isPresented:) beside a separate source: its content kept
@@ -97,19 +97,23 @@ struct RootView: View {
         .sheet(item: $firstBackupSource, onDismiss: continueWithOtherLocation) { firstBackup in
             FirstBackupSheet(
                 source: firstBackup.path,
+                destination: FirstBackupDestination.initial(
+                    onScreen: firstBackup.repositoryID, among: model.configuration.repositories
+                ),
                 onCreated: { router.selection = .plan($0) },
                 onOtherLocation: { firstBackupHandoff = $0 }
             )
             .environment(model)
         }
         .sheet(item: $editingRepository, onDismiss: { firstBackupHandoff = nil }) { repository in
-            // A new repository lands on its own page, where "New Backup
-            // Plan" is the first thing it offers; one added for the
+            // A new repository lands on its own page, where "Back Up a
+            // Folder" is the first thing it offers; one added for the
             // first-run sheet lands on the plan made in it.
             RepositoryEditorSheet(
                 repository: repository,
                 password: firstBackupHandoff?.password ?? "",
                 confirmPassword: firstBackupHandoff?.confirmPassword ?? "",
+                offThisMac: firstBackupHandoff != nil,
                 onCreated: { id in
                     if let handoff = firstBackupHandoff {
                         router.selection = .plan(model.createFirstPlan(source: handoff.source, repositoryID: id))
@@ -221,25 +225,13 @@ struct RootView: View {
         AccessibilityNotification.Announcement(text).post()
     }
 
-    /// A fresh plan for the editor, its repository preset when the ask came
-    /// from one: the editor fills in a repository only when none is set
-    /// (`PlanEditorSheet`'s appear), so the preset survives.
-    private func newPlan(in repositoryID: UUID?) -> BackupPlan {
-        var plan = BackupPlan()
-        plan.repositoryID = repositoryID
-        return plan
-    }
-
-    /// "New Backup Plan", from whichever control: the plan editor — or, with
-    /// no repository to back up to yet, the folder panel and then the
-    /// first-run sheet, which makes both. A cancelled panel opens nothing.
-    private func startNewPlan(in repositoryID: UUID?) {
-        guard model.configuration.repositories.isEmpty else {
-            editingPlan = newPlan(in: repositoryID)
-            return
-        }
-        // Its Back Up asks restic; the page behind says how to get it.
-        guard model.isResticAvailable else {
+    /// Back Up a Folder…, from whichever control: the folder panel, then the
+    /// first-run sheet, its destination `repositoryID` when the ask came
+    /// from a location. A cancelled panel opens nothing.
+    private func startBackUpAFolder(in repositoryID: UUID?) {
+        // With no location yet its Back Up asks restic; the page behind says
+        // how to get it.
+        guard model.isResticAvailable || !model.configuration.repositories.isEmpty else {
             NSSound.beep()
             return
         }
@@ -250,7 +242,7 @@ struct RootView: View {
         RunLoop.main.perform(inModes: [.default]) {
             MainActor.assumeIsolated {
                 guard let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") else { return }
-                source.wrappedValue = FirstBackupSource(path: url.path)
+                source.wrappedValue = FirstBackupSource(path: url.path, repositoryID: repositoryID)
             }
         }
     }
@@ -370,10 +362,6 @@ struct RootView: View {
         // Lets a capture run photograph the *new*-repository sheet, whose
         // destination-before-kind picker only exists before a repository exists.
         case "newRepository": editingRepository = Repository()
-        // Same for the *new*-plan sheet: its first-run footer caption and
-        // the path and repository header over the Excluding tab are what a
-        // fresh creator sees, not an existing plan.
-        case "newPlan": editingPlan = BackupPlan()
         case "planRetention": editingPlan = model.configuration.plans.first
         case "planEditor": editingPlan = model.configuration.plans.first
         default: break
@@ -462,11 +450,11 @@ struct RootView: View {
         }
         switch intent {
         case .newPlan:
-            // Into the repository on screen — the one the Location menu
-            // acts on — or the editor's own default when there is none.
-            startNewPlan(in: model.commandRepositoryID(for: router.selection))
+            // Into the location on screen — the one the Location menu
+            // acts on.
+            startBackUpAFolder(in: model.commandRepositoryID(for: router.selection))
         case let .newPlanIn(id):
-            startNewPlan(in: model.repository(id: id)?.id)
+            startBackUpAFolder(in: model.repository(id: id)?.id)
         case .newRepository:
             addRepository()
         case .showFind:
@@ -515,4 +503,6 @@ struct RootView: View {
 private struct FirstBackupSource: Identifiable {
     let id = UUID()
     let path: String
+    /// The location the ask came from: the sheet's destination.
+    var repositoryID: UUID?
 }

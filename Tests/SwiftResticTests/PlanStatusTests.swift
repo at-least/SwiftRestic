@@ -21,13 +21,9 @@ struct PlanStatusTests {
 
     @Test("the plan editor's Next backup is the page's tile for the plan as Save would store it")
     func editorNextBackup() throws {
-        // The stored plan ran an hour ago, covering today's slot two hours
-        // back; the draft carries no stamp (opened before that run), and
-        // must not read as due.
-        var stored = completeDailyPlan()
-        let slot = Calendar.current.dateComponents([.hour, .minute], from: now.addingTimeInterval(-7200))
-        stored.schedule.hour = try #require(slot.hour)
-        stored.schedule.minute = try #require(slot.minute)
+        // The stored plan ran an hour ago; the draft carries no stamp
+        // (opened before that run), and must not read as due.
+        let stored = completeDailyPlan()
         var draft = stored
         draft.lastRunAt = nil
         let face = PlanStatus.editorNextBackup(
@@ -306,7 +302,7 @@ struct PlanStatusTests {
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
     func skippedAndRunningCaptions() {
         // Enabled, never backed up, no repository: the scheduler skips it,
-        // and "Daily at 02:00" would promise a run that never comes.
+        // and "Every day" would promise a run that never comes.
         var orphaned = completeDailyPlan()
         orphaned.repositoryID = nil
         orphaned.lastSuccessAt = nil
@@ -486,34 +482,18 @@ struct PlanStatusTests {
         return repository
     }
 
-    @Test("a known count wins over a read in flight or a failed one; before any read the row says nothing")
-    func countThenReadingThenNothing() throws {
+    @Test("only a failed read gives the row a second line")
+    func nothingUnlessFailed() {
         let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
-        let snapshot = try snapshotFixture(id: "s1", time: "2026-09-30T02:00:00Z", paths: ["/Data"], includeShortID: true, hostname: "mac", tags: [])
-        #expect(
-            PlanStatus.repositoryCaption(repository: repository, listing: [snapshot], isLoading: true, outcome: .failed("Fatal: unable to open repository"))
-                == .count(1)
-        )
-        #expect(
-            PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: true, outcome: .idle)
-                == .reading
-        )
-        #expect(PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .idle) == nil)
-        #expect(
-            PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .loaded)
-                == .count(0)
-        )
-        #expect(RepositoryCaption.count(2).text == "2 backups")
-        #expect(RepositoryCaption.count(0).text == "0 backups")
-        #expect(RepositoryCaption.reading.text == "Reading backups…")
-        #expect(RepositoryCaption.reading.help == nil)
+        #expect(PlanStatus.repositoryCaption(repository: repository, outcome: .idle) == nil)
+        #expect(PlanStatus.repositoryCaption(repository: repository, outcome: .loaded) == nil)
     }
 
     @Test("a local repository whose drive is away says so, its whole failure in the tooltip")
     func notConnectedNamesTheDrive() {
         let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
         let message = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
-        let caption = PlanStatus.repositoryCaption(repository: repository, listing: [], isLoading: false, outcome: .failed(message))
+        let caption = PlanStatus.repositoryCaption(repository: repository, outcome: .failed(message))
         #expect(caption == .notConnected(full: message))
         #expect(caption?.text == "Not connected")
         #expect(caption?.help == message)
@@ -525,7 +505,7 @@ struct PlanStatusTests {
         // spells a missing volume.
         let remote = repository(kind: .sftp, at: "/Volumes/Archive SSD/Backups")
         let message = RunRecord.skippedReason(sources: ["/Volumes/Archive SSD/Backups"])
-        let caption = PlanStatus.repositoryCaption(repository: remote, listing: [], isLoading: false, outcome: .failed(message))
+        let caption = PlanStatus.repositoryCaption(repository: remote, outcome: .failed(message))
         #expect(caption == .failed(Format.firstSentence(message), full: message))
         #expect(caption?.text == "“Archive SSD” is not connected.")
         #expect(caption?.help == message)
@@ -534,7 +514,7 @@ struct PlanStatusTests {
         // stands, cut at the first boundary.
         let plain = repository(kind: .local, at: "/Users/someone/Backups")
         let refused = "Cannot reach nas.local: connection refused. Check the host and try again."
-        let local = PlanStatus.repositoryCaption(repository: plain, listing: [], isLoading: false, outcome: .failed(refused))
+        let local = PlanStatus.repositoryCaption(repository: plain, outcome: .failed(refused))
         #expect(local == .failed("Cannot reach nas.local: connection refused", full: refused))
         #expect(local?.help == refused)
     }
@@ -598,10 +578,10 @@ struct RepositoryLabelTests {
         rest.kind = .rest
         rest.restURL = "rest:https://backup.example.com:8000/me/"
         #expect(rest.label(among: []) == "backup.example.com")
-        var b2 = Repository()
-        b2.kind = .b2
-        b2.b2Bucket = "photos-archive"
-        #expect(b2.label(among: []) == "photos-archive")
+        var s3 = Repository()
+        s3.kind = .s3
+        s3.s3Bucket = "photos-archive"
+        #expect(s3.label(among: []) == "photos-archive")
         var rclone = Repository()
         rclone.kind = .rclone
         rclone.rcloneRemote = "gdrive:"
@@ -623,7 +603,7 @@ struct RepositoryLabelTests {
         var nasAgain = nas
         nasAgain.id = UUID()
         nasAgain.sftpPath = "/volume2/restic"
-        #expect(nas.label(among: [nas, nasAgain]) == "sftp:nas.local:/volume1/restic")
+        #expect(nas.label(among: [nas, nasAgain]) == "nas.local:/volume1/restic")
         let other = local("/Volumes/Samsung/restic")
         #expect(t7.label(among: [t7, other]) == "T7")
         // A REST server's twins read as their URLs — without the login a URL
@@ -636,9 +616,9 @@ struct RepositoryLabelTests {
         var work = me
         work.id = UUID()
         work.restURL = "https://backup.example.com:8000/work/"
-        #expect(me.label(among: [me, work]) == "rest:https://backup.example.com:8000/me/")
-        #expect(work.label(among: [me, work]) == "rest:https://backup.example.com:8000/work/")
-        #expect(me.displayLocation == "rest:https://backup.example.com:8000/me/")
+        #expect(me.label(among: [me, work]) == "https://backup.example.com:8000/me/")
+        #expect(work.label(among: [me, work]) == "https://backup.example.com:8000/work/")
+        #expect(me.displayLocation == "https://backup.example.com:8000/me/")
         // restic still gets the URL as saved, login and all.
         #expect(me.resticRepositoryString == "rest:https://alice:s3cret@backup.example.com:8000/me/")
     }

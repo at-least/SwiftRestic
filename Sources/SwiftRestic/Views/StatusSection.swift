@@ -43,10 +43,10 @@ struct StatusSection: View {
                 }
                 if plans.isEmpty {
                     if prompt == nil {
-                        Button("New Backup Plan…", action: onAddPlan)
+                        Button("Back Up a Folder…", action: onAddPlan)
                             .buttonStyle(.borderedProminent)
                     } else {
-                        Button("New Backup Plan…", action: onAddPlan)
+                        Button("Back Up a Folder…", action: onAddPlan)
                     }
                 }
             }

@@ -14,11 +14,11 @@ struct ConceptsView: View {
     private let tasks: [Topic] = [
         Topic(
             title: "Back up a folder",
-            text: "Click Back Up a Folder, choose the folder, a disk and a password, and click Back Up. Its first backup starts right away, then it runs on its schedule while SwiftRestic is open. For another folder, choose File ▸ New Backup Plan."
+            text: "Click Back Up a Folder, choose the folder, a disk and a password, and click Back Up. Its first backup starts right away, then it runs on its schedule while SwiftRestic is open. For another folder, choose File ▸ Back Up a Folder."
         ),
         Topic(
             title: "Get a file back",
-            text: "Choose File ▸ Restore a File and type its name. Or select it on the plan’s Files tab and click Restore. To bring back everything from one moment, open the backup on the Backups tab, select its top folders, and click Restore."
+            text: "Choose Edit ▸ Find (⌘F) and type its name. Or select it on the plan’s Files tab and click Restore. To bring back everything from one moment, open the backup on the Backups tab, select its top folders, and click Restore."
         ),
         Topic(
             title: "When a backup fails",

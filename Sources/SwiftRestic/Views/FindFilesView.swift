@@ -50,8 +50,10 @@ struct FindFilesView: View {
     var body: some View {
         @Bindable var router = router
         VStack(spacing: 0) {
-            controls
-            Divider()
+            if let origin = router.findOrigin, model.filesSearchRoots(for: origin.page) == origin.roots {
+                scopeBar
+                Divider()
+            }
             if let search, !search.failures.isEmpty || !search.stillReading.isEmpty {
                 standing(search)
                 Divider()
@@ -120,16 +122,10 @@ struct FindFilesView: View {
         }
     }
 
-    private var controls: some View {
+    /// Back to the plan the search came from, its query kept.
+    private var scopeBar: some View {
         HStack(spacing: 12) {
-            // Back to the plan the search came from, its query kept.
-            if let origin = router.findOrigin, model.filesSearchRoots(for: origin.page) == origin.roots {
-                SearchScopePicker(scope: .allBackups) { router.returnToPlanSearch() }
-            }
-            ExpandableCaption(
-                summary: "Searches every backup as you type.",
-                detail: FilesSearchAnswer.matchRule + " The search runs on this Mac, however deep the history."
-            )
+            SearchScopePicker(scope: .allBackups) { router.returnToPlanSearch() }
             Spacer(minLength: 0)
         }
         .padding(12)
@@ -152,7 +148,12 @@ struct FindFilesView: View {
                 }
             }
             ForEach(search.stillReading, id: \.self) { repositoryID in
-                Label(readingLine(repositoryID), systemImage: "clock.arrow.circlepath")
+                HStack(spacing: 6) {
+                    if isReachable(repositoryID) {
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(readingLine(repositoryID))
+                }
             }
         }
         .font(.caption)
@@ -168,8 +169,13 @@ struct FindFilesView: View {
 
     /// A repository out of reach is no longer being read: "still reading"
     /// would promise an end that needs the disk back.
+    private func isReachable(_ repositoryID: UUID) -> Bool {
+        if case .failed = model.snapshotListingOutcome(for: repositoryID) { return false }
+        return true
+    }
+
     private func readingLine(_ repositoryID: UUID) -> String {
-        if case .failed = model.snapshotListingOutcome(for: repositoryID) {
+        if !isReachable(repositoryID) {
             return "“\(name(of: repositoryID))” can’t be reached, so files in backups not read yet won’t appear."
         }
         return "Still reading “\(name(of: repositoryID))”. Files in backups not read yet won’t appear."
@@ -188,7 +194,7 @@ struct FindFilesView: View {
                     "No matches",
                     systemImage: "magnifyingglass",
                     description: Text(search.isWhole
-                        ? "Nothing in your backups matches."
+                        ? "Nothing in your backups matches. Each word you type matches the start of a word in a name."
                         : "Nothing matches so far. Some backups couldn’t be searched yet.")
                 )
             } else {
