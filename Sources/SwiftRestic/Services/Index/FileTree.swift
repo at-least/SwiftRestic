@@ -10,7 +10,7 @@ struct FileTreeRow: Identifiable, Equatable {
     /// the hex encoding allocates.
     let id: String
 
-    init(node: SnapshotNode, depth: Int, expanded: Bool, childrenLoaded: Bool) {
+    fileprivate init(node: SnapshotNode, depth: Int, expanded: Bool, childrenLoaded: Bool) {
         self.node = node
         self.depth = depth
         self.expanded = expanded
@@ -42,7 +42,9 @@ struct FileTree: Equatable {
     }
 
     init(roots: [SnapshotNode]) {
-        reset(to: roots)
+        rows = roots.map {
+            FileTreeRow(node: $0, depth: 0, expanded: false, childrenLoaded: !$0.isDirectory)
+        }
     }
 
     /// Flips expansion of a directory row. Collapsing removes its descendant
@@ -89,12 +91,6 @@ struct FileTree: Equatable {
         var end = index + 1
         while end < rows.count, rows[end].depth > depth { end += 1 }
         return end
-    }
-
-    mutating func reset(to roots: [SnapshotNode]) {
-        rows = roots.map {
-            FileTreeRow(node: $0, depth: 0, expanded: false, childrenLoaded: !$0.isDirectory)
-        }
     }
 
     /// Closes a directory row if it is open; a closed one stays closed. A

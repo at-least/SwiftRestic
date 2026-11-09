@@ -306,7 +306,7 @@ extension SnapshotIndex {
     /// one snapshot's at most — `beginFull` clears another snapshot's before
     /// its session can stage a row, and only that session stages — so the
     /// first row answers (`invariantViolations()` (j) checks the premise).
-    static func stageOwner(_ db: Database) throws -> Int64? {
+    private static func stageOwner(_ db: Database) throws -> Int64? {
         try Int64.fetchOne(db.cachedStatement(sql: SQL.stageOwner))
     }
 
@@ -315,7 +315,7 @@ extension SnapshotIndex {
     /// queued for collection before the stage is cleared, since after it
     /// nothing would know to, and collected once the clear has let go of
     /// them. The collection drops the session's walk itself.
-    func discardStage(_ db: Database) throws {
+    private func discardStage(_ db: Database) throws {
         try db.cachedStatement(sql: SQL.stageRunlessNodes).execute()
         // Read right after the fill: `changesCount` is the last statement's.
         let queued = db.changesCount > 0
@@ -349,7 +349,7 @@ extension SnapshotIndex {
     /// Node-dictionary writes for one transaction. The FTS rows of every node
     /// it creates are written by one statement at the end, keyed on the
     /// largest id before the first insert.
-    final class NodeWriter {
+    private final class NodeWriter {
         private let db: Database
         private let lookup: Statement
         private var insert: Statement?

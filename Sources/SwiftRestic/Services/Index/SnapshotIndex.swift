@@ -361,7 +361,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// had no `edit` or `blind`, and a file without them knows nothing of
     /// content changes, so it is rebuilt rather than read as if no file had
     /// ever changed. (1 is taken too: development builds wrote it.)
-    static let schemaVersion: Int32 = 4
+    private static let schemaVersion: Int32 = 4
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
     static let lookupChunk = 400
@@ -649,11 +649,6 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// `plannedStep`'s step alone — what the tests' planner loops drive.
-    func nextStep(skipping: Set<String> = []) throws -> IndexStep {
-        try plannedStep(skipping: skipping).step
-    }
-
     /// A step past one end of a window: a delta from the end's snapshot
     /// while it lives, else a full compare against the runs that describe
     /// the dead end.
@@ -764,8 +759,8 @@ final class SnapshotIndex: @unchecked Sendable {
                 }
                 let edited = crossed(edits, &nextEdit)
                 let blind = crossed(blinds, &nextBlind) > 0
-                // the rule: two or more edits may be a
-                // change undone across a backup forgotten since.
+                // Two or more edits may be a change undone across a backup
+                // forgotten since.
                 if upper.run != lower.run {
                     begins.append(.uncertain)
                 } else if edited == 1, !blind {
@@ -822,11 +817,9 @@ final class SnapshotIndex: @unchecked Sendable {
     /// Which of `paths` the snapshot holds, each with its kind in *that*
     /// snapshot (true for a directory). `[:]` when the snapshot is not listed
     /// or not indexed: nothing about it is known. Keyed by the bytes asked
-    /// for (`PathKey`), as the summaries are. The Restore pane reads the
-    /// membership inside its search (`searchWithMembership`); this
-    /// path-keyed form is what its incomplete strip asks of the backup
-    /// before, what a restore by path asks of the backup it restores from,
-    /// and what the tests hold that read to.
+    /// for (`PathKey`), as the summaries are. What the Restore pane's
+    /// incomplete strip asks of the backup before, and what a restore by
+    /// path asks of the backup it restores from.
     func kinds(of paths: [String], inSnapshot snapshotID: String) async throws -> [PathKey: Bool] {
         try await pool.read { db in
             guard let target = try Target.fetch(db, snapshotID), target.state == State.indexed else { return [:] }
@@ -859,8 +852,9 @@ final class SnapshotIndex: @unchecked Sendable {
     }
 
     /// `searchPaths`, plus which hits `snapshotID` holds and with what kind
-    /// there — the Restore pane's split of a search by the open backup, in
-    /// the same read, keyed by the node ids the search already has.
+    /// there, in the same read, keyed by the node ids the search already
+    /// has. No production caller: the tests' oracle that `kinds(of:inSnapshot:)`
+    /// and `searchPaths` must agree with.
     func searchWithMembership(
         matching query: String,
         limit: Int,
@@ -1172,7 +1166,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// Read-side path resolution: `descend` with `nodeLookup` as its step,
     /// never creating anything — the only statement this holds, so a read
     /// cannot prepare a write. Shared prefixes are looked up once per call.
-    struct NodeLookup {
+    private struct NodeLookup {
         let statement: Statement
         var memo: [[UInt8]: Int64] = [:]
 
@@ -1221,7 +1215,7 @@ final class SnapshotIndex: @unchecked Sendable {
 
     /// The spelling `restic ls` emits: absolute, no empty component, no
     /// trailing slash. Reads accept only this, which pins exact-text lookup.
-    static func isListedSpelling(_ path: String) -> Bool {
+    private static func isListedSpelling(_ path: String) -> Bool {
         let slash = UInt8(ascii: "/")
         var previous: UInt8?
         for byte in path.utf8 {
@@ -1351,7 +1345,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// written decomposed (restic keeps the name's bytes) is another token.
     /// Not normalized in the index: its rows are node's own names, which
     /// FTS5's delete and integrity-check compare against.
-    static func ftsQuery(from input: String) -> String {
+    private static func ftsQuery(from input: String) -> String {
         input.split(whereSeparator: \.isWhitespace)
             .map { token in
                 token
@@ -1391,13 +1385,12 @@ final class SnapshotIndex: @unchecked Sendable {
 
     /// Every statement the index prepares — the open-time schema probe and
     /// scripts, the connection pragmas and the test-support invariant checks
-    /// aside —
-    /// under its property name in `SnapshotIndexSchema.Statements`, IN lists
-    /// at `lookupChunk`. Read by
-    /// reflection, so declaring a statement is registering it:
-    /// `SnapshotIndexPlanTests` pins each one's plan and fails on a
-    /// statement without a rule, on a rule without a statement, and on a
-    /// stored property the reader cannot take for a statement.
+    /// aside — under its property name in `SnapshotIndexSchema.Statements`,
+    /// IN lists at `lookupChunk`. Read by reflection, so declaring a
+    /// statement is registering it: `SnapshotIndexPlanTests` pins each one's
+    /// plan and fails on a statement without a rule, on a rule without a
+    /// statement, and on a stored property the reader cannot take for a
+    /// statement.
     static var registeredStatements: [(name: String, sql: String)] {
         reflectStatements(SQL.statements, inList: SQL.placeholders(lookupChunk)).statements
     }

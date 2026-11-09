@@ -73,11 +73,8 @@ actor IndexCoordinator {
     private var reports: [UUID: BackfillReport] = [:]
     private var isShutDown = false
 
-    /// - Parameter directory: injectable so tests never touch the real
-    ///   Application Support tree.
-    init(directory: URL? = nil) {
-        let base = directory ?? ConfigStore.defaultDirectory()
-        self.directory = base
+    init(directory: URL) {
+        self.directory = directory
     }
 
     /// Feeds a fresh `restic snapshots` listing into the repository's index,
@@ -261,7 +258,7 @@ actor IndexCoordinator {
         case fallBack(DeltaFallback)
     }
 
-    enum DeltaFallback {
+    fileprivate enum DeltaFallback {
         case typeChange, diffFailed, kindChanged
     }
 
@@ -368,20 +365,6 @@ actor IndexCoordinator {
 
     nonisolated func contentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
-    }
-
-    /// No production caller — Search All Backups reads
-    /// `searchWithSummaries`; this is the property tests' oracle for the
-    /// membership split.
-    nonisolated func searchWithMembership(
-        matching query: String,
-        inSnapshot snapshotID: String,
-        repositoryID: UUID,
-        limit: Int
-    ) async throws -> SearchWithMembership {
-        try await read(repositoryID) {
-            try await $0.searchWithMembership(matching: query, limit: limit, inSnapshot: snapshotID)
-        }
     }
 
     nonisolated func searchWithSummaries(matching query: String, repositoryID: UUID, limit: Int) async throws -> SearchWithSummaries {
@@ -704,7 +687,7 @@ struct BackfillReport: Sendable, Equatable {
     var refused = 0
     var markedUnreadable = 0
 
-    mutating func count(_ reason: IndexCoordinator.DeltaFallback) {
+    fileprivate mutating func count(_ reason: IndexCoordinator.DeltaFallback) {
         switch reason {
         case .typeChange: typeChange += 1
         case .diffFailed: diffFailed += 1

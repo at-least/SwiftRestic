@@ -670,3 +670,25 @@ final class CheckedIndex {
 func entry(_ path: String, _ isDirectory: Bool = false) -> IndexedEntry {
     IndexedEntry(path: path, isDirectory: isDirectory)
 }
+
+extension SnapshotIndex {
+    /// `plannedStep`'s step alone — what the planner loops drive.
+    func nextStep(skipping: Set<String> = []) throws -> IndexStep {
+        try plannedStep(skipping: skipping).step
+    }
+}
+
+extension IndexCoordinator {
+    /// The store's `searchWithMembership` through the coordinator's read:
+    /// the property tests' oracle for the membership split.
+    nonisolated func searchWithMembership(
+        matching query: String,
+        inSnapshot snapshotID: String,
+        repositoryID: UUID,
+        limit: Int
+    ) async throws -> SearchWithMembership {
+        try await read(repositoryID) {
+            try await $0.searchWithMembership(matching: query, limit: limit, inSnapshot: snapshotID)
+        }
+    }
+}

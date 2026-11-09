@@ -724,7 +724,7 @@ struct RestorePaneView: View {
         }
         loadedSnapshotID = record.id
         let spine = currentPath.map { Format.pathChain(of: $0, roots: record.paths) } ?? []
-        tree.reset(to: record.paths.map(SnapshotNode.directory))
+        tree = FileTree(roots: record.paths.map(SnapshotNode.directory))
 
         isLoadingTree = true
         loadError = nil

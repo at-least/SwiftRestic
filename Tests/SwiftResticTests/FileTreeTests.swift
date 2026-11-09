@@ -71,7 +71,7 @@ struct FileTreeTests {
         _ = tree.toggleExpanded(path: "/old")
         tree.replaceChildren(of: "/old", nodes: [file("/old/a")])
 
-        tree.reset(to: [dir("/new")])
+        tree = FileTree(roots: [dir("/new")])
         #expect(tree.rows.map(\.node.path) == ["/new"])
     }
 
