@@ -148,10 +148,6 @@ struct RepositoryStats: Sendable, Equatable, Decodable {
     }
 }
 
-/// The result of `restic diff <older> <newer>`.
-///
-/// `+` means "present only in `newer`", so the order the two IDs were passed in
-/// is part of the result, not an implementation detail.
 extension Snapshot {
     /// The snapshot this one is most naturally compared against: the newest
     /// earlier one that backed up the same paths from the same host.

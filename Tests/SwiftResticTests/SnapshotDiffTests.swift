@@ -64,7 +64,7 @@ struct DiffCandidateGroupingTests {
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let buckets = DiffCandidateGrouping.months(in: [feb2, feb1, jan], calendar: calendar)
+        let buckets = DiffCandidateGrouping.months(in: [feb2, feb1, jan], time: \.time, calendar: calendar)
 
         #expect(buckets.count == 2)
         // Input is newest first, so first sight of a month names the group.
@@ -119,7 +119,7 @@ struct DiffCandidateGroupingTests {
 
     @Test("empty input groups to nothing")
     func emptyInput() throws {
-        #expect(DiffCandidateGrouping.months(in: []).isEmpty)
+        #expect(DiffCandidateGrouping.months(in: [Snapshot](), time: \.time).isEmpty)
     }
 }
 

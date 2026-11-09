@@ -343,7 +343,7 @@ enum PlanStatus {
         {
             return PlanCaption(text: "Not scheduled")
         }
-        return PlanCaption(text: plan.schedule.summary)
+        return PlanCaption(text: plan.schedule.summary())
     }
 
     /// The repository row's second line: how many backups it holds, every

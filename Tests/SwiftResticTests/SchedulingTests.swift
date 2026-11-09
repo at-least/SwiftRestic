@@ -882,11 +882,11 @@ struct MaintenanceSchedulingTests {
     func scheduleSummary() {
         var manual = Schedule()
         manual.frequency = .manual
-        #expect(manual.summary == "Manually")
+        #expect(manual.summary() == "Manually")
 
         var hourly = Schedule()
         hourly.frequency = .hourly
-        #expect(hourly.summary == "Every hour")
+        #expect(hourly.summary() == "Every hour")
 
         // The time's words are the Mac's (`summaryFollowsTheClock` pins
         // them); the summary puts them in place.
@@ -894,12 +894,12 @@ struct MaintenanceSchedulingTests {
         daily.frequency = .daily
         daily.hour = 2
         daily.minute = 5
-        #expect(daily.summary == "Daily at \(daily.timeOfDay())")
+        #expect(daily.summary() == "Daily at \(daily.timeOfDay())")
 
         var weekly = Schedule()
         weekly.frequency = .weekly
         weekly.hour = 3
-        #expect(weekly.summary.hasSuffix(" at \(weekly.timeOfDay())"))
+        #expect(weekly.summary().hasSuffix(" at \(weekly.timeOfDay())"))
     }
 }
 

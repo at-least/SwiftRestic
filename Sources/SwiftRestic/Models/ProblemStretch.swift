@@ -9,11 +9,11 @@ import Foundation
 /// that heal the row — or another outcome or cause. A backup skipped whole
 /// or stopped ran nothing, and passes over it (`passesOverProblems`).
 extension RunRecord {
-    var isBackupProblem: Bool {
+    private var isBackupProblem: Bool {
         kind == .backup && outcome.isProblem
     }
 
-    var passesOverProblems: Bool {
+    private var passesOverProblems: Bool {
         kind == .backup && (outcome == .cancelled || (outcome == .skipped && !isPartialSkip))
     }
 

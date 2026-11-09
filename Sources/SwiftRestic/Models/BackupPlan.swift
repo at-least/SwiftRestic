@@ -32,8 +32,6 @@ struct Schedule: Codable, Sendable, Hashable {
         weekday = DecodeNotes.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
     }
 
-    var summary: String { summary() }
-
     /// "Daily at 2:00 AM", "Sunday at 03:00": the time in the Mac's own
     /// clock — 12- or 24-hour, as Language & Region sets it — the way the
     /// Next backup value beside it reads (`Format.tileTimestamp`), never a
@@ -343,7 +341,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// what is inside may be the only copy. Off for new plans (user decision).
     var skipsMachines: Bool = false
 
-    enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey {
         case id, repositoryID, path, excludePatterns, tags, schedule, retention
         case hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
         case skipsDeveloperFiles, skipsMachines, announcesFirstBackup
@@ -405,7 +403,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// The rules the app passes itself, whatever the path, since a rule naming
     /// nothing under it matches nothing. A plan stores the switches, not their
     /// rules, so a rule a later build adds reaches every plan with its switch on.
-    var switchExcludes: [String] {
+    private var switchExcludes: [String] {
         Self.defaultExcludes
             + (skipsDeveloperFiles ? Self.developerExcludes : [])
             + (skipsMachines ? Self.machineExcludes : [])

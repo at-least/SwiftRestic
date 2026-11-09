@@ -13,13 +13,9 @@ enum DiffCandidateGrouping {
         let items: [Item]
     }
 
-    /// Candidates bucketed by calendar month, newest bucket first. The input
-    /// is sorted newest first, so first sight of a month names the group and
-    /// the label formats once per month rather than once per snapshot.
-    static func months(in candidates: [Snapshot], calendar: Calendar = .current) -> [Month<Snapshot>] {
-        months(in: candidates, time: \.time, calendar: calendar)
-    }
-
+    /// Items bucketed by calendar month, newest bucket first. The input is
+    /// sorted newest first, so first sight of a month names the group and
+    /// the label formats once per month rather than once per item.
     static func months<Item>(in items: [Item], time: (Item) -> Date, calendar: Calendar = .current) -> [Month<Item>] {
         assert(zip(items, items.dropFirst()).allSatisfy { time($0) >= time($1) }, "months(in:) needs its items newest first")
         var order: [DateComponents] = []

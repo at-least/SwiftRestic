@@ -207,7 +207,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// A check an older build recorded stored "data slice 3 of 12",
     /// "5% of data" or "all data"; read in today's words, so Last check
     /// never mixes the two.
-    static func currentCheckWords(_ stored: String) -> String {
+    private static func currentCheckWords(_ stored: String) -> String {
         if stored == "all data" { return "all of the data" }
         if stored.hasSuffix("% of data") { return stored.dropLast("data".count) + "the data" }
         if stored.hasPrefix("data slice ") { return "part " + stored.dropFirst("data slice ".count) }

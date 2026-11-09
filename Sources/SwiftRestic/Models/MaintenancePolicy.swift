@@ -7,8 +7,8 @@ import Foundation
 /// a long time — so the scheduler treats a repository under maintenance as busy
 /// and defers backups to it rather than letting them collide.
 struct MaintenancePolicy: Codable, Sendable, Hashable {
-    static let checkIntervalDays = 7
-    static let pruneIntervalDays = 30
+    private static let checkIntervalDays = 7
+    private static let pruneIntervalDays = 30
     static let rotatingSlices = 12
 
     /// The slice the next scheduled check reads, 1 … `rotatingSlices`.

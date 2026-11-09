@@ -270,7 +270,7 @@ struct PlanDetailView: View {
         )
         return Section {
             LabeledContent("Runs") {
-                Text(plan.schedule.summary)
+                Text(plan.schedule.summary())
                     .accessibilityIdentifier(AccessibilityID.Plan.runs)
             }
             LabeledContent("Next backup") {

@@ -322,7 +322,7 @@ struct PlanStatusTests {
             PlanStatus.sidebarCaption(
                 for: fresh, activity: nil, problem: nil,
                 existingRepositoryIDs: [repositoryID], now: now, relative: relative
-            ).text == fresh.schedule.summary
+            ).text == fresh.schedule.summary()
         )
         var manual = fresh
         manual.schedule.frequency = .manual

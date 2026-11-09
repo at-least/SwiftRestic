@@ -193,7 +193,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
     }
 
-    var rcloneRemoteName: String {
+    private var rcloneRemoteName: String {
         rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
     }
 

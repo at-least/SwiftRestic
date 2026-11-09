@@ -32,7 +32,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
     /// any snapshot carries none — who wrote it, read once at grouping time
     /// so naming it never rescans the snapshots.
     let planTags: Set<String>
-    let hasSnapshotsWithoutPlan: Bool
+    private let hasSnapshotsWithoutPlan: Bool
 
     var id: Key { key }
 
@@ -180,14 +180,14 @@ extension SnapshotLineage {
         return folderTitle(lineage.key.paths)
     }
 
-    static func folderTitle(_ paths: [String]) -> String {
+    fileprivate static func folderTitle(_ paths: [String]) -> String {
         let names = paths.map(Self.component)
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
     }
 
     /// The one existing plan every snapshot in the lineage carries the tag
     /// of, or nil when the lineage mixes writers or its plan is gone.
-    static func soleWriter(of lineage: SnapshotLineage, plans: [BackupPlan]) -> BackupPlan? {
+    private static func soleWriter(of lineage: SnapshotLineage, plans: [BackupPlan]) -> BackupPlan? {
         guard lineage.planTags.count == 1, !lineage.hasSnapshotsWithoutPlan,
               let tag = lineage.planTags.first
         else { return nil }
@@ -372,7 +372,7 @@ extension SnapshotLineage.Key {
     /// as restic's own grouping compares them), tilde-abbreviated and
     /// joined. `SnapshotLineage.labels` qualifies with it, a group's page
     /// lists a set of them, and nowhere spells it a second way.
-    var folderList: String {
+    fileprivate var folderList: String {
         paths.map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: ", ")
     }
 }
