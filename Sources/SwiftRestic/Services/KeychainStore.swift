@@ -12,7 +12,7 @@ enum KeychainStore {
     enum Slot: String {
         /// The restic repository password (`RESTIC_PASSWORD`).
         case repositoryPassword = "repository-password"
-        /// The backend secret: AWS secret access key, B2 application key, …
+        /// The backend secret: AWS secret access key, …
         case providerSecret = "provider-secret"
         case sharePassword = "share-password"
     }

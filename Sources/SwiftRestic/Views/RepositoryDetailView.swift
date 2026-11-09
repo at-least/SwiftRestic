@@ -13,14 +13,6 @@ struct RepositoryDetailView: View {
     /// re-eval (progress ticks, banners) that would also stall the main
     /// thread each time.
     @State private var volumeCapacity: VolumeCapacity?
-    /// Read off the body for `volumeCapacity`'s reason, again each minute.
-    @State private var driveAway = false
-
-    private struct DriveReadKey: Equatable {
-        let repositoryID: UUID
-        let minute: Date
-    }
-
     private var repository: Repository? { model.repository(id: repositoryID) }
 
     var body: some View {
@@ -40,7 +32,6 @@ struct RepositoryDetailView: View {
             StatusSection(repositoryID: repositoryID, onAddPlan: onAddPlan, onAdoptGroup: onAdoptGroup)
 
             Section("Details") {
-                LabeledContent("Type", value: repository.kind.displayName)
                 LabeledContent("Location") {
                     Text(repository.displayLocation)
                         .textSelection(.enabled)
@@ -77,15 +68,6 @@ struct RepositoryDetailView: View {
             if !Task.isCancelled {
                 volumeCapacity = read
             }
-        }
-        .task(id: DriveReadKey(repositoryID: repository.id, minute: now)) {
-            guard repository.kind == .local else {
-                driveAway = false
-                return
-            }
-            let path = repository.resolvedLocalPath
-            let away = await Task.detached { VolumePresence.isMounted(volumeOf: path) == false }.value
-            if !Task.isCancelled { driveAway = away }
         }
     }
 
@@ -155,19 +137,12 @@ struct RepositoryDetailView: View {
             let runs = model.configuration.runs
             let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
             let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
-            let hold = model.scheduleHold
-            let awaitingServer = model.maintenanceAwaitingServer.contains(repositoryID)
             LabeledContent("Last verified") {
                 MaintenanceRunValue(
                     text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
                     run: check
                 )
             }
-            LabeledContent("Next verification", value: Scheduler.nextMaintenanceText(
-                .check, of: repository, among: model.configuration.repositories,
-                hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
-                isRunning: model.maintenance[repositoryID]?.task == .check, now: now
-            ))
             if Scheduler.cleansUp(repository, plans: model.configuration.plans) {
                 LabeledContent("Last cleanup") {
                     MaintenanceRunValue(
@@ -175,11 +150,6 @@ struct RepositoryDetailView: View {
                         run: prune
                     )
                 }
-                LabeledContent("Next cleanup", value: Scheduler.nextMaintenanceText(
-                    .prune, of: repository, among: model.configuration.repositories,
-                    hold: hold, driveAway: driveAway, awaitingServer: awaitingServer,
-                    isRunning: model.maintenance[repositoryID]?.task == .prune, now: now
-                ))
             }
 
             // A verification that found damage: the console, where `restic

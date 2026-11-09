@@ -45,8 +45,7 @@ struct ServerProbe: Sendable {
     /// direct connection proves nothing.
     private static let proxyVariables = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
 
-    /// Where an HTTP-reached repository's server is — REST, S3, B2, Azure,
-    /// GCS — or nil when there is nothing to ask first: a local folder, an
+    /// Where an HTTP-reached repository's server is — REST, S3 — or nil when there is nothing to ask first: a local folder, an
     /// SFTP host (`sshTarget`), an rclone remote (its server lives in
     /// rclone's config), a proxy in the environment restic runs with.
     static func httpTarget(of repository: Repository, environment: [String: String]) -> Target? {
@@ -59,14 +58,6 @@ struct ServerProbe: Sendable {
         case .s3:
             let endpoint = repository.s3Endpoint.isEmpty ? "s3.amazonaws.com" : repository.s3Endpoint
             return urlTarget(endpoint.contains("://") ? endpoint : "https://\(endpoint)")
-        case .b2:
-            return Target(host: "api.backblazeb2.com", port: 443)
-        case .azure:
-            guard !repository.azureAccountName.isEmpty else { return nil }
-            let suffix = environment["AZURE_ENDPOINT_SUFFIX"].flatMap { $0.isEmpty ? nil : $0 } ?? "core.windows.net"
-            return Target(host: "\(repository.azureAccountName).blob.\(suffix)", port: 443)
-        case .gcs:
-            return Target(host: "storage.googleapis.com", port: 443)
         }
     }
 
@@ -101,9 +92,9 @@ struct ServerProbe: Sendable {
     /// resolved without connecting.
     private static func sshConfig(of repository: Repository) async -> String? {
         var arguments = ["-G"]
-        if !repository.sftpPort.isEmpty { arguments += ["-p", repository.sftpPort] }
+        if !repository.sftpPortText.isEmpty { arguments += ["-p", repository.sftpPortText] }
         if !repository.sftpUser.isEmpty { arguments += ["-l", repository.sftpUser] }
-        arguments.append(repository.sftpHost)
+        arguments.append(repository.sftpHostName)
         let result = try? await ResticRunner().run(
             binary: URL(fileURLWithPath: "/usr/bin/ssh"),
             invocation: ResticInvocation(arguments: arguments, timeout: 5, retainFullOutput: true)

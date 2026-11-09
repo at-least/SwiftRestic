@@ -23,7 +23,7 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     func scheduledDataSubset(for kind: Repository.Kind) -> CheckDataSubset? {
         switch kind {
         case .local, .sftp: .slice(min(max(1, nextCheckDataSlice), Self.rotatingSlices), of: Self.rotatingSlices)
-        case .rest, .s3, .b2, .azure, .gcs, .rclone: nil
+        case .rest, .s3, .rclone: nil
         }
     }
 

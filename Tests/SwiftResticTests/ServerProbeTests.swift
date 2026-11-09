@@ -25,11 +25,6 @@ struct ServerProbeTests {
         #expect(target(repository(.s3) { $0.s3Endpoint = "https://minio.lan:9000" }) == Target(host: "minio.lan", port: 9000))
         #expect(target(repository(.s3) { $0.s3Endpoint = "http://minio.lan" }) == Target(host: "minio.lan", port: 80))
         #expect(target(repository(.s3) { $0.s3Endpoint = "s3.us-west-002.backblazeb2.com" }) == Target(host: "s3.us-west-002.backblazeb2.com", port: 443))
-        #expect(target(repository(.b2)) == Target(host: "api.backblazeb2.com", port: 443))
-        #expect(target(repository(.azure) { $0.azureAccountName = "acme" }) == Target(host: "acme.blob.core.windows.net", port: 443))
-        #expect(target(repository(.azure) { $0.azureAccountName = "acme" }, ["AZURE_ENDPOINT_SUFFIX": "core.chinacloudapi.cn"])
-            == Target(host: "acme.blob.core.chinacloudapi.cn", port: 443))
-        #expect(target(repository(.gcs)) == Target(host: "storage.googleapis.com", port: 443))
         // Nothing to ask first: the folder is the volume's to answer for, ssh
         // resolves an SFTP host itself, rclone's server is in rclone's config.
         #expect(target(repository(.local) { $0.localPath = "/Volumes/Archive" }) == nil)

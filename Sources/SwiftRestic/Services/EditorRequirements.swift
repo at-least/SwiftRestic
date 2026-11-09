@@ -39,23 +39,41 @@ enum EditorRequirements {
     /// grey all the while.
     static let probeTimeout: TimeInterval = 60
 
-    /// The first-run sheet's greyed Back Up, in the order it asks.
+    /// The repository inside what it backs up: every backup would carry
+    /// restic's own files.
+    static func backupsInside(source: String, folder: String) -> String? {
+        ResticPath.holds(source, folder) ? "Keep the backups outside the folder you’re backing up." : nil
+    }
+
+    /// The first-run sheet's greyed Back Up into a new folder, after it has
+    /// asked what and where (`FirstBackupDestination.requirement`).
     static func firstBackup(
         source: String,
         folder: String,
         password: String,
         confirmPassword: String,
+        holdsBackups: Bool,
         among repositories: [Repository]
     ) -> String? {
-        if source.isEmpty { return "Choose a folder to back up." }
-        if folder.isEmpty { return "Choose where the backups go." }
-        if ResticPath.holds(source, folder) { return "Keep the backups outside the folder you’re backing up." }
+        if let inside = backupsInside(source: source, folder: folder) { return inside }
         var location = Repository()
         location.localPath = folder
         return repository(
             location, password: password, confirmPassword: confirmPassword,
-            isNew: true, hasStoredPassword: nil, among: repositories
+            isNew: true, holdsBackups: holdsBackups, hasStoredPassword: nil, among: repositories
         )
+    }
+
+    /// Whether a local folder already holds backups — restic's `config`
+    /// file, which every repository has at its top. Its password is then
+    /// the one they were made with: asked once, with no confirmation and
+    /// no warning about forgetting it. File-system IO: a network share or
+    /// a sleeping disk can hold it for seconds, so callers read it off the
+    /// main actor.
+    static func holdsBackups(atLocalPath path: String) -> Bool {
+        guard !path.isEmpty else { return false }
+        let config = URL(fileURLWithPath: ResticService.expandTilde(path)).appending(path: "config")
+        return FileManager.default.fileExists(atPath: config.path)
     }
 
     /// An edit's check finding nothing at the location: its plans' backups
@@ -90,7 +108,7 @@ enum EditorRequirements {
         if password.isEmpty { return "Type the new password twice to change it." }
         if password != confirm { return "The new passwords don’t match." }
         if password != password.trimmingCharacters(in: .whitespacesAndNewlines) {
-            return "restic drops spaces at the ends of a new password — remove them."
+            return "Remove the spaces at the start or end of the password."
         }
         return nil
     }
@@ -114,11 +132,14 @@ enum EditorRequirements {
     /// is nil until the Keychain has answered, and stays nil when the read
     /// failed: an error must not be read as "nothing stored". `repositories`
     /// is every configured one, the draft's saved entry among them.
+    /// `holdsBackups` (`holdsBackups(atLocalPath:)`): a new one's password
+    /// is asked once, not set, so it has no confirmation.
     static func repository(
         _ draft: Repository,
         password: String,
         confirmPassword: String,
         isNew: Bool,
+        holdsBackups: Bool,
         hasStoredPassword: Bool?,
         among repositories: [Repository]
     ) -> String? {
@@ -126,21 +147,12 @@ enum EditorRequirements {
         case .local:
             if draft.localPath.isEmpty { return "Choose a folder to save it." }
         case .sftp:
-            if draft.sftpHost.isEmpty || draft.sftpPath.isEmpty { return "Enter the host and path to save it." }
-            // restic cuts the host at its first colon, so a port typed there
-            // would become the start of the path and ssh would dial 22.
-            if draft.sftpHost.contains(":") { return "Put the port in Port, not in Host." }
-            if !draft.sftpPort.isEmpty, !(1 ... 65535).contains(Int(draft.sftpPort) ?? 0) {
-                return "Port is a number from 1 to 65535."
+            if draft.sftpHostName.isEmpty || draft.sftpPath.isEmpty { return "Enter the host and path to save it." }
+            if !draft.sftpPortText.isEmpty, !(1 ... 65535).contains(Int(draft.sftpPortText) ?? 0) {
+                return "Write a port after the host as host:port, from 1 to 65535."
             }
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
-        case .b2:
-            if draft.b2Bucket.isEmpty || draft.b2AccountID.isEmpty { return "Enter the bucket and key ID to save it." }
-        case .azure:
-            if draft.azureContainer.isEmpty || draft.azureAccountName.isEmpty { return "Enter the container and account name to save it." }
-        case .gcs:
-            if draft.gcsBucket.isEmpty || draft.gcsCredentialsPath.isEmpty { return "Enter the bucket and service account JSON to save it." }
         case .rest:
             if draft.restURL.isEmpty { return "Enter the server URL to save it." }
         case .rclone:
@@ -156,7 +168,11 @@ enum EditorRequirements {
         if isNew, let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {
             return "“\(other.label(among: repositories))” is already at this location."
         }
-        if isNew {
+        if isNew, holdsBackups {
+            if password.isEmpty {
+                return "Enter the password for these backups to save it."
+            }
+        } else if isNew {
             if password.isEmpty {
                 return "Set a password to save it."
             }

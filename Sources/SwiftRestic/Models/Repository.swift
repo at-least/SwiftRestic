@@ -5,7 +5,7 @@ import Foundation
 /// the login Keychain and fetched at spawn time; see `KeychainStore`.
 struct Repository: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable, CaseIterable, Identifiable {
-        case local, sftp, s3, b2, azure, gcs, rest, rclone
+        case local, sftp, s3, rest, rclone
         var id: String { rawValue }
 
         var displayName: String {
@@ -13,9 +13,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .local: "Local folder or disk"
             case .sftp: "SFTP"
             case .s3: "S3-compatible"
-            case .b2: "Backblaze B2"
-            case .azure: "Azure Blob Storage"
-            case .gcs: "Google Cloud Storage"
             case .rest: "REST server"
             case .rclone: "rclone remote"
             }
@@ -26,11 +23,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .local: "externaldrive"
             case .sftp: "terminal"
             case .s3: "cloud"
-            case .b2: "flame"
-            case .azure: "cube"
-            // Not `cloud.fill`: two clouds one weight apart collide at
-            // caption size in the sidebar.
-            case .gcs: "hexagon"
             case .rest: "network"
             case .rclone: "shippingbox"
             }
@@ -45,7 +37,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var sftpUser: String = ""
     var sftpHost: String = ""
-    /// Blank for ssh's own port, 22; see `sftpCustomPort`.
+    /// The port an older build kept in a field of its own; a port is now
+    /// typed after the host (`sftpHostParts`).
     var sftpPort: String = ""
     var sftpPath: String = ""
 
@@ -53,21 +46,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var s3Bucket: String = ""
     var s3Prefix: String = ""
     var s3AccessKeyID: String = ""
-
-    var b2Bucket: String = ""
-    var b2Prefix: String = ""
-    var b2AccountID: String = ""
-
-    var azureContainer: String = ""
-    var azurePrefix: String = ""
-    var azureAccountName: String = ""
-
-    var gcsBucket: String = ""
-    var gcsPrefix: String = ""
-    var gcsProjectID: String = ""
-    /// Path to the service-account JSON file. A path, not a secret, so it is
-    /// stored here rather than in the Keychain.
-    var gcsCredentialsPath: String = ""
 
     var restURL: String = ""
     /// The REST server's user. Its password is the provider secret, in the
@@ -109,16 +87,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         s3Bucket = c.value(.s3Bucket, default: "")
         s3Prefix = c.value(.s3Prefix, default: "")
         s3AccessKeyID = c.value(.s3AccessKeyID, default: "")
-        b2Bucket = c.value(.b2Bucket, default: "")
-        b2Prefix = c.value(.b2Prefix, default: "")
-        b2AccountID = c.value(.b2AccountID, default: "")
-        azureContainer = c.value(.azureContainer, default: "")
-        azurePrefix = c.value(.azurePrefix, default: "")
-        azureAccountName = c.value(.azureAccountName, default: "")
-        gcsBucket = c.value(.gcsBucket, default: "")
-        gcsPrefix = c.value(.gcsPrefix, default: "")
-        gcsProjectID = c.value(.gcsProjectID, default: "")
-        gcsCredentialsPath = c.value(.gcsCredentialsPath, default: "")
         restURL = c.value(.restURL, default: "")
         restUser = c.value(.restUser, default: "")
         rcloneRemote = c.value(.rcloneRemote, default: "")
@@ -131,6 +99,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     init() {}
 
+    /// ssh's `user@host`, or the host alone without a user.
+    var sftpUserHost: String {
+        sftpUser.isEmpty ? sftpHostName : "\(sftpUser)@\(sftpHostName)"
+    }
+
     /// The value of `RESTIC_REPOSITORY` for this repository.
     var resticRepositoryString: String {
         switch kind {
@@ -141,28 +114,18 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return resolvedLocalPath
         case .sftp:
             guard let port = sftpCustomPort else {
-                let user = sftpUser.isEmpty ? "" : "\(sftpUser)@"
-                return "sftp:\(user)\(sftpHost):\(sftpPath)"
+                return "sftp:\(sftpUserHost):\(sftpPath)"
             }
             // Only restic's URL form carries a port. Its first slash ends the
             // connection settings, so an absolute path keeps its own slash
             // after it. restic 0.19.1 reads this form as a URL: the path is
             // percent-encoded, or a `#` in it would cut it short.
             let user = sftpUser.isEmpty ? "" : "\(Self.percentEncoded(sftpUser, .urlUserAllowed))@"
-            return "sftp://\(user)\(sftpHost):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
+            return "sftp://\(user)\(sftpHostName):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
             let suffix = s3Prefix.isEmpty ? "" : "/\(Self.trimSlashes(s3Prefix))"
             return "s3:\(endpoint)/\(s3Bucket)\(suffix)"
-        case .b2:
-            let suffix = b2Prefix.isEmpty ? "" : ":\(b2Prefix)"
-            return "b2:\(b2Bucket)\(suffix)"
-        case .azure:
-            let suffix = azurePrefix.isEmpty ? "" : ":/\(Self.trimSlashes(azurePrefix))"
-            return "azure:\(azureContainer)\(suffix)"
-        case .gcs:
-            let suffix = gcsPrefix.isEmpty ? "" : ":/\(Self.trimSlashes(gcsPrefix))"
-            return "gs:\(gcsBucket)\(suffix)"
         case .rest:
             return restURL.hasPrefix("rest:") ? restURL : "rest:\(restURL)"
         case .rclone:
@@ -180,12 +143,25 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         value.addingPercentEncoding(withAllowedCharacters: allowed)!
     }
 
-    /// The SFTP port when it is not ssh's own: nil for a blank field and
-    /// for 22, so every repository saved before the field existed keeps its
-    /// exact repository string. The editor refuses a field that is not a
-    /// port.
+    /// The Host field split at its first colon: `nas.local:2222`. restic's
+    /// `sftp:` form cuts the host there too, so a port left in the host
+    /// would start the path and ssh would dial 22.
+    private var sftpHostParts: (name: String, port: String?) {
+        let parts = sftpHost.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.count == 2 ? (String(parts[0]), String(parts[1])) : (sftpHost, nil)
+    }
+
+    var sftpHostName: String { sftpHostParts.name }
+
+    /// The port typed after the host, else the one an older build stored;
+    /// empty for none. The editor refuses one that is not a port.
+    var sftpPortText: String { sftpHostParts.port ?? sftpPort }
+
+    /// The SFTP port when it is not ssh's own: nil for none and for 22, so
+    /// a repository without one keeps the `sftp:` form, which reads
+    /// ~/.ssh/config's Port.
     var sftpCustomPort: Int? {
-        guard let port = Int(sftpPort), port != 22 else { return nil }
+        guard let port = Int(sftpPortText), port != 22 else { return nil }
         return port
     }
 
@@ -218,11 +194,8 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var isConfigurationComplete: Bool {
         switch kind {
         case .local: return !localPath.isEmpty
-        case .sftp: return !sftpHost.isEmpty && !sftpPath.isEmpty
+        case .sftp: return !sftpHostName.isEmpty && !sftpPath.isEmpty
         case .s3: return !s3Bucket.isEmpty && !s3AccessKeyID.isEmpty
-        case .b2: return !b2Bucket.isEmpty && !b2AccountID.isEmpty
-        case .azure: return !azureContainer.isEmpty && !azureAccountName.isEmpty
-        case .gcs: return !gcsBucket.isEmpty && !gcsCredentialsPath.isEmpty
         case .rest: return !restURL.isEmpty
         case .rclone: return !rcloneRemote.isEmpty
         }
@@ -243,16 +216,25 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return twin ? displayLocation : short
     }
 
-    /// The location as the repository page shows it: restic's repository
-    /// string, a local path tilde-abbreviated — a REST server's without the
-    /// login a URL saved before the login had fields of its own still
-    /// carries, which restic is still handed: this is also a
-    /// twin's label, which every notification, hook and webhook says.
+    /// The location in the reader's words, not restic's repository string:
+    /// the repository page's Location, and a twin's label, which every
+    /// notification, hook and webhook says. A REST server's URL leaves out
+    /// the login a URL saved before the login had fields of its own still
+    /// carries.
     var displayLocation: String {
         switch kind {
-        case .local: (resolvedLocalPath as NSString).abbreviatingWithTildeInPath
-        case .rest: Self.splittingRESTCredentials(resticRepositoryString)?.url ?? resticRepositoryString
-        case .sftp, .s3, .b2, .azure, .gcs, .rclone: resticRepositoryString
+        case .local:
+            return (resolvedLocalPath as NSString).abbreviatingWithTildeInPath
+        case .sftp:
+            return "\(sftpUserHost):\(sftpPath)"
+        case .s3:
+            let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
+            let prefix = s3Prefix.isEmpty ? "" : "/\(Self.trimSlashes(s3Prefix))"
+            return "\(s3Bucket)\(prefix) on \(endpoint)"
+        case .rest:
+            return Self.splittingRESTCredentials(restServerURL)?.url ?? restServerURL
+        case .rclone:
+            return "\(rcloneRemoteName):\(rclonePath)"
         }
     }
 
@@ -262,13 +244,10 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             let path = resolvedLocalPath
             guard !path.isEmpty else { return "" }
             return VolumePresence.volumeName(of: path) ?? (path as NSString).lastPathComponent
-        case .sftp: return sftpHost
+        case .sftp: return sftpHostName
         case .rest:
             return URL(string: restServerURL)?.host ?? restServerURL
         case .s3: return s3Bucket
-        case .b2: return b2Bucket
-        case .azure: return azureContainer
-        case .gcs: return gcsBucket
         case .rclone: return rcloneRemoteName
         }
     }
@@ -289,11 +268,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var secretFieldLabel: String? {
         switch kind {
-        case .local, .gcs, .rclone, .sftp: nil
+        case .local, .rclone, .sftp: nil
         case .rest: "Server password"
         case .s3: "Secret access key"
-        case .b2: "Application key"
-        case .azure: "Account key"
         }
     }
 
@@ -303,16 +280,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .s3:
             env["AWS_ACCESS_KEY_ID"] = s3AccessKeyID
             if let secret { env["AWS_SECRET_ACCESS_KEY"] = secret }
-        case .b2:
-            env["B2_ACCOUNT_ID"] = b2AccountID
-            if let secret { env["B2_ACCOUNT_KEY"] = secret }
-        case .azure:
-            env["AZURE_ACCOUNT_NAME"] = azureAccountName
-            if let secret { env["AZURE_ACCOUNT_KEY"] = secret }
-        case .gcs:
-            if !gcsProjectID.isEmpty { env["GOOGLE_PROJECT_ID"] = gcsProjectID }
-            // restic reads the service-account JSON from this path itself.
-            env["GOOGLE_APPLICATION_CREDENTIALS"] = ResticService.expandTilde(gcsCredentialsPath)
         case .rest:
             // restic 0.19.1 reads these only when the URL carries no
             // credentials of its own, so a repository saved with them in its

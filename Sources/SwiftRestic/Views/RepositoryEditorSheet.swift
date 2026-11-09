@@ -47,8 +47,14 @@ struct RepositoryEditorSheet: View {
     @State private var mountedShare: MountedShare?
     /// The share's password as typed: empty leaves a saved one as it is.
     @State private var sharePassword = ""
+    /// The chosen folder already holds backups
+    /// (`EditorRequirements.holdsBackups`), read off the main actor.
+    @State private var holdsBackups = false
 
     private let isNew: Bool
+    /// Opened for a server or cloud storage: the Type picker leaves out
+    /// this Mac.
+    private let offThisMac: Bool
     /// Told the new repository's id once it is created and saved — never on
     /// an edit, a cancel or a failed probe — so the window can open the
     /// page that offers its first plan.
@@ -70,16 +76,23 @@ struct RepositoryEditorSheet: View {
     }
 
     /// `password` and `confirmPassword`: what the first-run sheet already
-    /// had typed when it handed off to this editor.
+    /// had typed when it handed off to this editor. `offThisMac`: a new
+    /// location opens on the first kind that is not on this Mac, and the
+    /// Type picker leaves this Mac out.
     init(
         repository: Repository,
         password: String = "",
         confirmPassword: String = "",
+        offThisMac: Bool = false,
         onCreated: @escaping (UUID) -> Void = { _ in }
     ) {
         // A new repository opens as `Repository()`: a local folder not yet
         // chosen. A saved one always has its location (Save requires it).
         isNew = repository.kind == .local && repository.localPath.isEmpty
+        precondition(isNew || !offThisMac, "offThisMac opens a new location only")
+        self.offThisMac = offThisMac
+        var repository = repository
+        if offThisMac { repository.kind = .sftp }
         _draft = State(initialValue: repository)
         _password = State(initialValue: password)
         _confirmPassword = State(initialValue: confirmPassword)
@@ -205,12 +218,16 @@ struct RepositoryEditorSheet: View {
         .task(id: draft.kind == .local ? draft.resolvedLocalPath : "") {
             guard draft.kind == .local else {
                 mountedShare = nil
+                holdsBackups = false
                 return
             }
             let path = draft.resolvedLocalPath
-            let share = await Task.detached { VolumePresence.mountedShare(holding: path) }.value
+            let (share, holds) = await Task.detached {
+                (VolumePresence.mountedShare(holding: path), EditorRequirements.holdsBackups(atLocalPath: path))
+            }.value
             guard !Task.isCancelled else { return }
             mountedShare = share
+            holdsBackups = holds
         }
         .task(id: RcloneRead(kind: draft.kind, count: rcloneReadCount)) {
             // Requeried on every return to the rclone kind: remotes are edited
@@ -262,16 +279,15 @@ struct RepositoryEditorSheet: View {
     }
 
     private var firstContact: String {
-        guard !draft.sftpHost.isEmpty else { return "connect once in Terminal with ssh and accept it." }
-        let user = draft.sftpUser.isEmpty ? "" : "\(draft.sftpUser)@"
+        guard !draft.sftpHostName.isEmpty else { return "connect once in Terminal with ssh and accept it." }
         let port = draft.sftpCustomPort.map { "-p \($0) " } ?? ""
-        return "connect once in Terminal (ssh \(port)\(user)\(draft.sftpHost)) and accept it."
+        return "connect once in Terminal (ssh \(port)\(draft.sftpUserHost)) and accept it."
     }
 
     private var settingsForm: some View {
         Form {
             Section {
-                // The eight kinds grouped by where the backup lives: the
+                // The kinds grouped by where the backup lives: the
                 // destination answers "where is it" as the section header
                 // above each kind, so one control carries both questions.
                 // A saved repository's kind is part of where it is, fixed
@@ -300,10 +316,10 @@ struct RepositoryEditorSheet: View {
                 } else {
                     // A grouped form draws its fields without a border, so an
                     // empty one needs its prompt to be seen at all.
-                    SecureField("Password", text: $password, prompt: Text(passwordPrompt))
+                    SecureField(opensExistingBackups ? "Password for these backups" : "Password", text: $password, prompt: Text(passwordPrompt))
                         .accessibilityIdentifier(AccessibilityID.RepositoryEditor.password)
                 }
-                if isNew {
+                if isNew, !opensExistingBackups {
                     SecureField("Confirm password", text: $confirmPassword, prompt: Text("Required"))
                         .accessibilityIdentifier(AccessibilityID.RepositoryEditor.confirmPassword)
                 }
@@ -318,7 +334,7 @@ struct RepositoryEditorSheet: View {
                 }
             }
 
-            if draft.secretFieldLabel != nil || draft.kind == .sftp || draft.kind == .gcs {
+            if draft.secretFieldLabel != nil || draft.kind == .sftp {
                 Section("Credentials") {
                     if draft.kind == .sftp {
                         Text(
@@ -328,23 +344,6 @@ struct RepositoryEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    } else if draft.kind == .gcs {
-                        HStack {
-                            TextField(
-                                "Service account JSON",
-                                text: $draft.gcsCredentialsPath,
-                                prompt: Text("~/.config/gcloud/key.json")
-                            )
-                            Button("Choose…") {
-                                if let url = FilePicker.chooseFile(message: "Choose the service account JSON file") {
-                                    draft.gcsCredentialsPath = url.path
-                                }
-                            }
-                        }
-                        ExpandableCaption(
-                            summary: "The key file’s path is stored in your configuration, not the Keychain.",
-                            detail: "restic reads the key file from disk itself. Keep the file readable only by you."
-                        )
                     } else if let label = draft.secretFieldLabel {
                         if draft.kind == .rest {
                             // A server without logins leaves both blank.
@@ -353,19 +352,12 @@ struct RepositoryEditorSheet: View {
                         } else if draft.kind == .s3 {
                             TextField("Access key ID", text: $draft.s3AccessKeyID, prompt: Text("Required"))
                             SecureField(label, text: $providerSecret, prompt: Text("Required"))
-                        } else if draft.kind == .b2 {
-                            TextField("Key ID", text: $draft.b2AccountID, prompt: Text("Required"))
-                            SecureField(label, text: $providerSecret, prompt: Text("Required"))
-                        } else {
-                            SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         }
                     }
                 }
             }
 
-            // A limit an older build saved on a local disk stays visible, so it
-            // can be cleared: restic holds a local disk to it too.
-            if draft.usesNetwork(shares: model.configuration.settings.networkShares) || draft.uploadLimitKiBps > 0 {
+            if draft.usesNetwork(shares: model.configuration.settings.networkShares) {
                 Section("Bandwidth") {
                     uploadLimitField
                 }
@@ -442,8 +434,10 @@ struct RepositoryEditorSheet: View {
 
     private var kindPicker: some View {
         Picker("Type", selection: $draft.kind) {
-            Section("On this Mac") {
-                Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
+            if !offThisMac {
+                Section("On this Mac") {
+                    Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
+                }
             }
             Section("On another computer") {
                 Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
@@ -451,7 +445,6 @@ struct RepositoryEditorSheet: View {
             }
             Section("In the cloud") {
                 Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-                Text(Repository.Kind.b2.displayName).tag(Repository.Kind.b2)
             }
             Section("Through a gateway") {
                 Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
@@ -462,10 +455,9 @@ struct RepositoryEditorSheet: View {
     /// Where the repository is, chosen only while it is new. A saved one is
     /// that place, so its location reads as text, as a saved plan's path
     /// does: a typed path could repoint it at another repository. A folder
-    /// that moved has Locate, which checks restic's ID. Fixed are the parts restic's repository string is made of and
-    /// Azure's account, which holds the container; what reaches the place
-    /// without being it — a key's ID, a project, a share's password —
-    /// stays editable.
+    /// that moved has Locate, which checks restic's ID. Fixed are the parts
+    /// restic's repository string is made of; what reaches the place
+    /// without being it — a key's ID, a share's password — stays editable.
     @ViewBuilder
     private var locationFields: some View {
         if isNew {
@@ -476,12 +468,6 @@ struct RepositoryEditorSheet: View {
                 .textSelection(.enabled)
                 .lineLimit(2)
                 .truncationMode(.middle)
-            if draft.kind == .azure {
-                LabeledContent("Account name") { Text(draft.azureAccountName) }
-            }
-            if draft.kind == .gcs {
-                TextField("Project ID", text: $draft.gcsProjectID, prompt: Text("Optional"))
-            }
         }
         if draft.kind == .local, let folderShare {
             NetworkSharePasswordRows(url: folderShare.share.url, isSaved: folderShare.isSaved, password: $sharePassword)
@@ -492,35 +478,35 @@ struct RepositoryEditorSheet: View {
     private var whereFields: some View {
         switch draft.kind {
         case .local:
-            HStack {
-                TextField("Folder", text: $draft.localPath, prompt: Text("/Volumes/Backup/restic"))
-                Button("Choose…") {
-                    if let url = FilePicker.chooseDirectory(message: "Choose the folder for your backups") {
-                        draft.localPath = url.path
+            // Chosen, not typed: ⇧⌘G in the panel still takes a typed path.
+            LabeledContent("Folder") {
+                HStack {
+                    if !draft.localPath.isEmpty {
+                        Text(draft.displayLocation)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(draft.displayLocation)
                     }
+                    Button(draft.localPath.isEmpty ? "Choose…" : "Change…") {
+                        if let url = FilePicker.chooseDirectory(message: "Choose the folder for your backups") {
+                            draft.localPath = url.path
+                        }
+                    }
+                    .accessibilityIdentifier(AccessibilityID.RepositoryEditor.chooseFolder)
                 }
-                .accessibilityIdentifier(AccessibilityID.RepositoryEditor.chooseFolder)
             }
         case .sftp:
             TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
-            TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local"))
-            TextField("Port", text: $draft.sftpPort, prompt: Text("22"))
-            TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/restic"))
+            TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local or nas.local:2222"))
+            TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/SwiftRestic Backups"))
         case .s3:
             TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
             TextField("Bucket", text: $draft.s3Bucket, prompt: Text("Required"))
             TextField("Prefix", text: $draft.s3Prefix, prompt: Text("Optional"))
-        case .b2:
-            TextField("Bucket", text: $draft.b2Bucket, prompt: Text("Required"))
-            TextField("Prefix", text: $draft.b2Prefix, prompt: Text("Optional"))
-        case .azure:
-            TextField("Container", text: $draft.azureContainer, prompt: Text("Required"))
-            TextField("Prefix", text: $draft.azurePrefix, prompt: Text("Optional"))
-            TextField("Account name", text: $draft.azureAccountName, prompt: Text("Required"))
-        case .gcs:
-            TextField("Bucket", text: $draft.gcsBucket, prompt: Text("Required"))
-            TextField("Prefix", text: $draft.gcsPrefix, prompt: Text("Optional"))
-            TextField("Project ID", text: $draft.gcsProjectID, prompt: Text("Optional"))
+            Text("For Backblaze B2, use the bucket’s endpoint, such as s3.us-west-004.backblazeb2.com, and an application key.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         case .rest:
             TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
                 // A URL pasted with its login sheds it into User and the
@@ -584,6 +570,7 @@ struct RepositoryEditorSheet: View {
             password: password,
             confirmPassword: confirmPassword,
             isNew: isNew,
+            holdsBackups: opensExistingBackups,
             hasStoredPassword: hasStoredPassword,
             among: model.configuration.repositories
         )
@@ -597,6 +584,7 @@ struct RepositoryEditorSheet: View {
     /// listing already use (`ResticError.passwordMissing`), and the footer
     /// asks for the password before Save.
     private var encryptionHint: String? {
+        if opensExistingBackups { return nil }
         if isNew {
             return PasswordWords.recoveryWarning
         }
@@ -608,6 +596,12 @@ struct RepositoryEditorSheet: View {
                 + " Enter it here to read it and back up to it."
         }
         return nil
+    }
+
+    /// A new location at a folder that already holds backups: their
+    /// password is asked once, not set.
+    private var opensExistingBackups: Bool {
+        isNew && draft.kind == .local && holdsBackups
     }
 
     private var passwordPrompt: String {
@@ -791,10 +785,7 @@ extension Repository.Kind {
         case .local: "A folder or an external drive attached to this Mac."
         case .sftp: "A NAS or server you reach over SSH."
         case .rest: "A machine running the restic REST server."
-        case .s3: "Amazon S3, Wasabi, MinIO, Cloudflare R2 and other S3-compatible services."
-        case .b2: "Backblaze B2 cloud storage."
-        case .azure: "Microsoft Azure Blob Storage."
-        case .gcs: "Google Cloud Storage."
+        case .s3: "Amazon S3, Backblaze B2, Wasabi, MinIO, Cloudflare R2 and other S3-compatible services."
         case .rclone: "Any of rclone’s many backends, through a remote you configure once."
         }
     }

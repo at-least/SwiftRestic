@@ -243,7 +243,7 @@ extension AppModel {
     /// Drops a repository's cached context so the next call re-reads the
     /// Keychain. Exit 12 (wrong password / no matching key) is the failure a
     /// stale repository credential produces; exit 1 is what a stale provider
-    /// secret surfaces as (restic's fatal-error catch-all — a rejected B2 or
+    /// secret surfaces as (restic's fatal-error catch-all — a rejected
     /// S3 key exits 1, not 12). Without the drop, a credential fixed outside
     /// the app would leave every call failing until a restart. The cost is
     /// one extra Keychain read after any fatal error, which no run frequency
