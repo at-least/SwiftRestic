@@ -105,8 +105,9 @@ struct RestoreRecordHeading: Equatable, Sendable {
     /// long qualifier and never the day.
     var time: String
     var caption: String
-    /// The tooltip: folders, host, who wrote them, and both full IDs — the
-    /// open record called a backup, as every restore surface calls it.
+    /// The tooltip: the backup's folders (with host and writers when the
+    /// label has them), when it was made, and that the comparison failed.
+    /// No IDs: the run drawer's Copy Details carries those.
     var detail: String
     var isProblem: Bool
 
@@ -115,35 +116,26 @@ struct RestoreRecordHeading: Equatable, Sendable {
         time = Format.timestamp(record.time)
 
         let about: String?
-        let why: String
         switch comparison {
         case nil:
             about = nil
-            why = "Backup \(record.id)"
         case .firstBackup:
             about = "First backup of this folder — nothing to compare with"
-            why = "Backup \(record.id). The Change column compares a backup with the previous one "
-                + "of the same folders from the same Mac, and this is the first"
         case let .comparing(baseline):
             about = "Comparing with \(Format.timestamp(baseline.time))…"
-            why = Self.comparedWith(record, baseline)
         case let .compared(baseline, count):
             let since = Format.timestamp(baseline.time)
             about = count == 0
                 ? "No changes since \(since)"
                 : "\(Format.plural(count, "change")) since \(since)"
-            // restic diff without --metadata lists no metadata-only (U)
-            // changes, so a blank row can still hide a chmod or a touch.
-            why = Self.comparedWith(record, baseline)
-                + ". Changes to permissions or timestamps alone are not marked"
         case let .failed(baseline, reason):
             about = "Couldn’t compare with \(Format.timestamp(baseline.time)): \(Format.firstSentence(reason))"
-            why = Self.comparedWith(record, baseline) + ". restic diff failed: \(reason)"
         }
-        // The backup's ID stays in the tooltip (`why`); the line is only
-        // what the Change column is measured against.
         caption = about ?? ""
-        detail = [label?.detail, why].compactMap { $0 }.joined(separator: "\n")
+        let folders = label?.detail ?? record.lineageKey.folderList
+        var lines = [folders, "Backed up \(time)"]
+        if case .failed = comparison { lines.append("Couldn’t compare with the previous backup.") }
+        detail = lines.joined(separator: "\n")
         if case .failed = comparison { isProblem = true } else { isProblem = false }
     }
 
@@ -160,14 +152,12 @@ struct RestoreRecordHeading: Equatable, Sendable {
         case let .comparing(baseline):
             "Comparing with the backup of \(Format.timestamp(baseline.time))…"
         case let .compared(baseline, _):
-            "Added or modified since the backup of \(Format.timestamp(baseline.time))"
+            // restic diff without --metadata lists no metadata-only (U)
+            // changes, so a blank row can still hide a chmod or a touch.
+            "Added or modified since the backup of \(Format.timestamp(baseline.time)). "
+                + "Changes to permissions or timestamps alone are not marked"
         case .failed:
             nil
         }
-    }
-
-    private static func comparedWith(_ record: Snapshot, _ baseline: Snapshot) -> String {
-        "Backup \(record.id), compared with \(baseline.id) — the previous backup "
-            + "of these folders from the same Mac"
     }
 }

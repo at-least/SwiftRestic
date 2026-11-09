@@ -37,7 +37,7 @@ enum RunFix: Equatable {
         case .editRepository, .editRepositoryShare: "Edit Backup Location…"
         case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
-        case .newPlan: "New Backup Plan…"
+        case .newPlan: "Back Up a Folder…"
         case .editPlanShare, .editPlanRetention: "Edit Plan…"
         case .pruneNow: "Clean Up Now…"
         }
@@ -49,7 +49,7 @@ enum RunFix: Equatable {
         switch self {
         case .editRepository, .addRepository, .locate, .newPlan, .pruneNow, .editPlanRetention: nil
         case .editRepositoryShare: "The share’s saved password is in Edit Backup Location"
-        case .editPlanShare: "The share’s saved password is on the plan editor’s Excluded Items tab"
+        case .editPlanShare: "The share’s saved password is in the plan editor, next to the folder"
         }
     }
 }
@@ -94,7 +94,7 @@ enum RunRecordPresentation {
         switch run.kind {
         case .check: return .check(id)
         case .prune: return .prune(id)
-        case .backup, .forget, .rewrite, .restore: return nil
+        case .backup, .forget, .restore: return nil
         }
     }
 
@@ -136,11 +136,13 @@ enum RunRecordPresentation {
         return nil
     }
 
-    /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Check of
-    /// “Home NAS”" — the subject line the log and Copy Details open with.
+    /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Removing
+    /// old backups of “Documents”" — the subject line the log and Copy
+    /// Details open with.
     static func subject(of run: RunRecord) -> String {
-        let kind = run.kind.displayName
-        return run.planName.isEmpty ? kind : "\(kind) of “\(run.planName)”"
+        guard !run.planName.isEmpty else { return run.kind.displayName }
+        if run.kind == .forget { return "Removing old backups of “\(run.planName)”" }
+        return "\(run.kind.displayName) of “\(run.planName)”"
     }
 
     /// "Documents (Home Disk)" — the one way a plan and its repository are
@@ -178,7 +180,7 @@ enum RunRecordPresentation {
     ) -> String {
         let repositoryName = repositories.withID(run.repositoryID).map { $0.label(among: repositories) }
         switch run.kind {
-        case .backup, .forget, .rewrite, .restore:
+        case .backup, .forget, .restore:
             // The plan as it is called now. A restore carries no planID, so
             // its step label is the stored name — the label is its subject.
             return planWithRepository(currentPlanName(of: run, plans: plans), repositoryName: repositoryName)
@@ -242,7 +244,7 @@ enum RunRecordPresentation {
             return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
-        case .forget, .rewrite:
+        case .forget:
             // The record's own count ("Removed 2 backups."), one short line.
             return run.detailText ?? run.outcome.displayName
         case .check:
@@ -345,6 +347,18 @@ enum RunRecordPresentation {
             || run.bytesProcessed > 0 || run.dataAdded > 0
     }
 
+    /// A backup's file counts, the drawer's and Copy Details' one wording:
+    /// "1 new · 0 changed · 2 unchanged".
+    static func backupFiles(_ run: RunRecord) -> String {
+        "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed · \(Format.count(run.filesUnmodified)) unchanged"
+    }
+
+    /// A backup's bytes, in the notification's words: "Checked 3.4 GB ·
+    /// 120 MB of new data".
+    static func backupSize(_ run: RunRecord) -> String {
+        "Checked \(Format.bytes(run.bytesProcessed)) · \(Format.bytes(run.dataAdded)) of new data"
+    }
+
     /// A restore's counts: "1 restored · 2 kept as they were · 14 bytes".
     static func restoreFiles(_ run: RunRecord) -> String {
         var text = "\(Format.count(run.filesRestored)) restored"
@@ -380,11 +394,8 @@ enum RunRecordPresentation {
                 lines.append("\(label): \(Format.timestamp(since)) (\(Format.plural(count, "time")))")
             }
             if hasBackupNumbers(run) {
-                lines.append(
-                    "Files: \(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed, "
-                        + "\(Format.count(run.filesUnmodified)) unmodified · processed \(Format.bytes(run.bytesProcessed))"
-                        + " · added \(Format.bytes(run.dataAdded))"
-                )
+                lines.append("Files: \(backupFiles(run))")
+                lines.append("Size: \(backupSize(run))")
             }
         case .restore:
             // A record with no stored destination says nothing: "Entire
@@ -400,7 +411,7 @@ enum RunRecordPresentation {
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
                 lines.append("Files: \(restoreFiles(run))")
             }
-        case .check, .forget, .rewrite:
+        case .check, .forget:
             // A check's verdict, or what a retention run removed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         case .prune:

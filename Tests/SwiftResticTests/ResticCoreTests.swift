@@ -63,7 +63,7 @@ struct ResticErrorTests {
             exitCode: 130,
             message: ""
         ).errorDescription ?? ""
-        #expect(bare == "restic was interrupted")
+        #expect(bare == "It was interrupted. Show Log has the details.")
 
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "disk on fire")
@@ -425,7 +425,7 @@ struct RateLimitTests {
     @Test("a repository's own upload limit goes on every command against it; none add no flag")
     func repositoryLimits() {
         var repository = Repository()
-        repository.kind = .b2
+        repository.kind = .s3
         #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty)
 
         repository.uploadLimitKiBps = 512

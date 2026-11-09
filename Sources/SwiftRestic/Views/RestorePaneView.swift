@@ -296,6 +296,7 @@ struct RestorePaneView: View {
                 .listRowSeparator(.hidden)
             }
             .listStyle(.inset)
+            .help("Drag an item to Finder to restore it there")
             .focusOnClick($listIsFocused)
             // Double-click, the list's way: it expands a folder, as the
             // chevron does, and leaves a file alone. The list also sends
@@ -508,18 +509,11 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The pane's two ways out of a record, in one row: the primary Restore
-    /// for the selection on the right, and the drag named beside it, over the
-    /// tree whose rows drag. The keep/replace decision lives in the
-    /// destination sheet, not as a permanent caption under every browse.
+    /// The primary Restore for the selection. The drag out to Finder is the
+    /// tree's tooltip; the keep/replace decision lives in the destination
+    /// sheet, not as a permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
-            if dragListIsShowing {
-                Text("Drag an item to Finder to restore it there.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
             Spacer(minLength: 12)
             Button("Restore…") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
@@ -528,11 +522,6 @@ struct RestorePaneView: View {
                 .help("Restore the selected items from this backup")
         }
         .padding(12)
-    }
-
-    private var dragListIsShowing: Bool {
-        guard !isLoadingTree, loadError == nil, !isListingChanges(comparison) else { return false }
-        return !folderMissing && !tree.rows.isEmpty
     }
 
     private var hasSelection: Bool {

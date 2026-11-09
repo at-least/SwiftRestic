@@ -161,7 +161,7 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
             case .added: "Added"
             case .removed: "Deleted"
             case .modified: "Modified"
-            case .metadataOnly: "Metadata"
+            case .metadataOnly: "Info changed"
             }
         }
     }
@@ -201,8 +201,8 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
         if modifier.contains("-") { parts.append("deleted") }
         if modifier.contains("M") { parts.append("content changed") }
         if modifier.contains("T") { parts.append("type changed") }
-        if modifier.contains("U") { parts.append("metadata changed") }
-        if modifier.contains("?") { parts.append("bitrot detected") }
+        if modifier.contains("U") { parts.append("info changed") }
+        if modifier.contains("?") { parts.append("may be damaged") }
         guard !parts.isEmpty else { return modifier }
         let phrase = parts.joined(separator: ", ")
         return phrase.prefix(1).uppercased() + phrase.dropFirst()

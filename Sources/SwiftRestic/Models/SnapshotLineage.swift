@@ -372,7 +372,7 @@ extension SnapshotLineage.Key {
     /// as restic's own grouping compares them), tilde-abbreviated and
     /// joined. `SnapshotLineage.labels` qualifies with it, a group's page
     /// lists a set of them, and nowhere spells it a second way.
-    fileprivate var folderList: String {
+    var folderList: String {
         paths.map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: ", ")
     }
 }

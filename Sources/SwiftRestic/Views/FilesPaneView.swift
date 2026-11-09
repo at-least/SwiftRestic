@@ -2,8 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The pane for a folder or file picked in a Files tab's tree: what it is
-/// and where it lives — and when it was last backed up, once the newest
-/// backup has dropped it or this Mac no longer holds it — then a file by each
+/// and where it lives — and when it was last backed up: always for a folder,
+/// for a file once the newest backup has dropped it or this Mac no longer
+/// holds it — then a file by each
 /// content it had (`FileVersionsView`), a folder by its way back
 /// (`FolderPaneActions`), or, for an item on this Mac no backup holds, that it
 /// is not backed up. A folder at any other moment is the Backups tab's.
@@ -37,9 +38,13 @@ struct FilesPaneView: View {
                     isOnDisk: isOnDisk
                 )
                 if !indexComplete {
-                    Label(FilesSearchAnswer.indexStillReading, systemImage: "clock.arrow.circlepath")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(FilesSearchAnswer.indexStillReading)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 20)
@@ -159,8 +164,9 @@ struct FilesPaneView: View {
 }
 
 /// A folder's way back, by the newest backup holding it — this Mac's copy gone
-/// or not: when that was, the whole folder's restore, and the backup itself
-/// open at the folder, for any other moment or a part of it.
+/// or not: the whole folder's restore, and the backup itself open at the
+/// folder, for any other moment or a part of it. When that backup was is the
+/// header's line.
 private struct FolderPaneActions: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -171,19 +177,13 @@ private struct FolderPaneActions: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Group {
-                if let newest {
-                    ContentUnavailableView {
-                        Label("Last backed up \(Format.timestamp(newest.time))", systemImage: "folder")
-                    } description: {
-                        Text("Select a file to see its versions, or show this folder in its backup to pick from it.")
-                    }
-                } else {
-                    // Saying why is the pane's banner's job, while the index reads.
-                    NoBackupHoldsItYet()
-                }
+            if newest == nil {
+                // Saying why is the pane's banner's job, while the index reads.
+                NoBackupHoldsItYet()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             HStack {
                 Button("Show in Backups") { showInBackups() }
@@ -240,9 +240,8 @@ private struct FilesPaneLoadKey: Equatable {
 }
 
 /// The pane's identity block: the kind's icon, the name, its path and, for a
-/// folder no longer on
-/// this Mac or an item the chain's newest backup no longer holds, when it
-/// was last backed up: the one fact of its standing the rows below do not
+/// folder or an item the chain's newest backup no longer holds, when it was
+/// last backed up: the one fact of its standing the rows below do not
 /// already say. How many backups and versions hold it are the rows
 /// themselves; a file's own line says whether this Mac has it.
 private struct FilesPaneHeader: View {
@@ -299,12 +298,16 @@ private struct FilesPaneHeader: View {
     /// a deleted row's tooltip, in the same words; a file's line over its
     /// versions says "Not on this Mac" already. For an item the chain's
     /// newest backup lacks, when it was last backed up and, when that
-    /// backup could not read it, why.
+    /// backup could not read it, why. Any other folder: when it was last
+    /// backed up, a file's rows saying that already.
     private var standing: String? {
-        if node.isDirectory, isOnDisk == false, let newestHolder {
+        guard let newestHolder else { return nil }
+        if node.isDirectory, isOnDisk == false {
             return FilesTree.Entry.deleted(lastBackedUp: newestHolder.time)
         }
-        guard let newestHolder, let chainNewest, newestHolder.id != chainNewest.id else { return nil }
-        return FilesTree.Entry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
+        if let chainNewest, newestHolder.id != chainNewest.id {
+            return FilesTree.Entry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
+        }
+        return node.isDirectory ? "Last backed up \(Format.timestamp(newestHolder.time))" : nil
     }
 }

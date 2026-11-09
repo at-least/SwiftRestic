@@ -567,6 +567,8 @@ struct RunRecordPresentationTests {
             $0.filesNew = 2
             $0.filesChanged = 1
             $0.filesUnmodified = 13
+            $0.bytesProcessed = 3_400_000_000
+            $0.dataAdded = 120_000_000
             $0.exitCode = 3
             $0.itemErrors = ["open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"]
             $0.itemErrorCount = 1
@@ -582,6 +584,9 @@ struct RunRecordPresentationTests {
         #expect(lines.first == "Backup of “Documents” — Completed with warnings")
         #expect(lines.contains("Location: Home NAS"))
         #expect(lines.contains("Backup: \(snapshotID)"))
+        // The drawer's words for the numbers, the notification's "new data".
+        #expect(lines.contains("Files: 2 new · 1 changed · 13 unchanged"))
+        #expect(lines.contains("Size: Checked \(Format.bytes(3_400_000_000)) · \(Format.bytes(120_000_000)) of new data"))
         #expect(lines.contains("restic exit: 3"))
         #expect(lines.contains("Unreadable items (1):"))
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
@@ -604,7 +609,7 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
         )
         let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Old Backups of “Documents” — Succeeded")
+        #expect(lines.first == "Removing old backups of “Documents” — Succeeded")
         #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
@@ -679,7 +684,7 @@ struct RunRecordPresentationTests {
 
     @Test("a channel keeps the words it has always received; the app says the new ones")
     func channelWordsDoNotFollowTheScreen() {
-        #expect(RunRecord.Kind.forget.displayName == "Old Backups")
+        #expect(RunRecord.Kind.forget.displayName == "Old backup removal")
         #expect(RunRecord.Kind.forget.channelSummaryName == "Retention")
         #expect(RunRecord.Kind.forget.payloadOperation == "Retention")
         #expect(RunRecord.Kind.check.displayName == "Verification")

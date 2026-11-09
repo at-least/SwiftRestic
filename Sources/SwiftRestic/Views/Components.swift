@@ -312,7 +312,7 @@ struct SnapshotListingCaveat: View {
                 }
             }
         case .idle:
-            Label(OverviewMetrics.listingIdleText, systemImage: "clock.arrow.circlepath")
+            Text(OverviewMetrics.listingIdleText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .loaded:
@@ -635,17 +635,6 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.urls : nil
     }
 
-    @MainActor
-    static func chooseFolderOrFile(message: String) -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.message = message
-        panel.prompt = "Choose"
-        return panel.runModal() == .OK ? panel.urls.first : nil
-    }
-
     /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
     /// own memory of the last folder.
     @MainActor
@@ -658,17 +647,6 @@ enum FilePicker {
         panel.message = message
         panel.prompt = "Choose"
         if let directoryURL { panel.directoryURL = directoryURL }
-        return panel.runModal() == .OK ? panel.urls.first : nil
-    }
-
-    @MainActor
-    static func chooseFile(message: String) -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.message = message
-        panel.prompt = "Choose"
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 }
@@ -692,15 +670,12 @@ struct FullDiskAccessButton: View {
 /// current access state, so a fresh grant turns "grant it" into "back up
 /// again". The two the grant does not fix carry Exclude These Items when it
 /// covers every item they count (`ItemErrorDiagnosis.excludablePaths`),
-/// asked first as a line's Exclude is. No Back Up Now on "back up again":
+/// acting at once as a line's Exclude does. No Back Up Now on "back up again":
 /// the plan page's Backups section and the drawer's footer hold it wherever
 /// the plan can back up.
 struct ItemErrorHintsView: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
-    /// The paths the confirmation names, fixed at the click.
-    @State private var excluding: [String] = []
-    @State private var isConfirmingExclude = false
 
     var body: some View {
         let hints = ItemErrorDiagnosis.hints(for: run, accessNow: model.fullDiskAccess)
@@ -709,15 +684,9 @@ struct ItemErrorHintsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(hints.enumerated()), id: \.offset) { _, hint in
                     let paths = plan == nil ? [] : ItemErrorDiagnosis.excludablePaths(for: hint, in: run)
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        // Decoration beside a sentence that says it all.
-                        Image(systemName: Self.symbolName(for: hint))
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(ItemErrorDiagnosis.detail(hint, offersExclude: !paths.isEmpty))
-                            .textSelection(.enabled)
-                    }
-                    .font(.callout)
+                    Text(ItemErrorDiagnosis.detail(hint, offersExclude: !paths.isEmpty))
+                        .textSelection(.enabled)
+                        .font(.callout)
                     if case .grantFullDiskAccess = hint {
                         FullDiskAccessButton()
                             .controlSize(.small)
@@ -726,19 +695,6 @@ struct ItemErrorHintsView: View {
                         excludeButton(hint: hint, paths: paths, plan: plan)
                     }
                 }
-            }
-            .confirmationDialog(
-                "Exclude \(Format.plural(excluding.count, "item")) from “\(plan.map { model.label(of: $0) } ?? "")”?",
-                isPresented: $isConfirmingExclude,
-                titleVisibility: .visible
-            ) {
-                if let plan {
-                    Button("Exclude") { model.exclude(paths: excluding, fromPlan: plan.id) }
-                }
-            } message: {
-                Text(excluding.count == 1
-                    ? "The plan’s next backups exclude it — backups already made keep it. The plan editor lists it under Exclude, where − takes it out again."
-                    : "The plan’s next backups exclude them — backups already made keep them. The plan editor lists them under Exclude, where − takes each out again.")
             }
         }
     }
@@ -751,8 +707,7 @@ struct ItemErrorHintsView: View {
         let title = "Exclude These Items"
         let label = Self.excludeLabel(for: hint)
         return Button(title) {
-            excluding = pending
-            isConfirmingExclude = true
+            model.exclude(paths: pending, fromPlan: plan.id)
         }
         .controlSize(.small)
         .disabled(pending.isEmpty)
@@ -767,13 +722,6 @@ struct ItemErrorHintsView: View {
         case .filePermissions: "Exclude the items your account can’t read"
         }
     }
-
-    private static func symbolName(for hint: ItemErrorDiagnosis.Hint) -> String {
-        switch hint {
-        case .grantFullDiskAccess, .retryNowGranted, .protectedEvenWithAccess: "lock.shield"
-        case .filePermissions: "person.crop.circle.badge.exclamationmark"
-        }
-    }
 }
 
 /// One unreadable item's line — in Activity's drawer and on the plan
@@ -781,15 +729,14 @@ struct ItemErrorHintsView: View {
 /// Show in Finder and Exclude from the plan, in a menu at its end and in
 /// its context menu. Only where restic named the
 /// item's path and the run stored it (`RunRecord.unreadableItemPaths`); older
-/// records' lines stay plain text. Exclude asks first: it changes what the
-/// plan backs up from now on.
+/// records' lines stay plain text. Exclude acts at once; the plan editor's
+/// Exclude list takes it back.
 struct UnreadableItemLine: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
     let line: String
     /// Nil until the check lands; Show in Finder waits disabled until then.
     @State private var existence = PathExistence()
-    @State private var isConfirmingExclude = false
 
     var body: some View {
         let path = run.unreadableItemPaths?[PathKey(line)]
@@ -835,17 +782,6 @@ struct UnreadableItemLine: View {
         .contextMenu {
             if let path { actions(path: path, plan: plan) }
         }
-        .confirmationDialog(
-            "Exclude “\(path.map { ($0 as NSString).lastPathComponent } ?? "")” from “\(plan.map { model.label(of: $0) } ?? "")”?",
-            isPresented: $isConfirmingExclude,
-            titleVisibility: .visible
-        ) {
-            if let path, let plan {
-                Button("Exclude") { model.exclude(paths: [path], fromPlan: plan.id) }
-            }
-        } message: {
-            Text("The plan’s next backups exclude \(path ?? "") — backups already made keep it. The plan editor lists it under Exclude, where − takes it out again.")
-        }
         .task(id: path) {
             await existence.check(path)
         }
@@ -858,7 +794,7 @@ struct UnreadableItemLine: View {
         }
         .disabled(existence.exists != true)
         if let plan {
-            Button("Exclude from “\(model.label(of: plan))”") { isConfirmingExclude = true }
+            Button("Exclude from “\(model.label(of: plan))”") { model.exclude(paths: [path], fromPlan: plan.id) }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
         }
     }

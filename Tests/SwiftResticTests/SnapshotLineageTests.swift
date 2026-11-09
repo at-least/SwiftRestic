@@ -316,25 +316,22 @@ struct SnapshotLineageTests {
         #expect(heading(.compared(baseline: baseline, changeCount: 3)).caption == "3 changes since \(since)")
         // restic diff lists nothing when nothing changed: an honest zero.
         #expect(heading(.compared(baseline: baseline, changeCount: 0)).caption == "No changes since \(since)")
-        // restic's first sentence in the caption; the whole reason in the tooltip.
+        // restic's first sentence in the caption; the tooltip says only that
+        // the comparison failed.
         let failed = heading(.failed(baseline: baseline, reason: "restic stopped with an error — Fatal: injected. More."))
         #expect(failed.caption == "Couldn’t compare with \(since): restic stopped with an error — Fatal: injected")
-        #expect(failed.detail.hasSuffix(" restic diff failed: restic stopped with an error — Fatal: injected. More."))
+        #expect(failed.detail.hasSuffix("\nCouldn’t compare with the previous backup."))
 
         #expect(failed.isProblem)
         let calm: [ChangeComparison?] = [nil, .firstBackup, .comparing(baseline: baseline),
                                          .compared(baseline: baseline, changeCount: 2)]
         #expect(calm.allSatisfy { !heading($0).isProblem })
 
-        // The tooltip names both full IDs, or says why there is no baseline —
-        // in the restore surfaces' word: the open record is a backup.
-        #expect(heading(nil).detail == "Backup abf72899aaaaaaaa")
-        #expect(heading(.compared(baseline: baseline, changeCount: 1)).detail
-            == "Backup abf72899aaaaaaaa, compared with 73d9b51de71d34eb — the previous backup of these folders "
-            + "from the same Mac. Changes to permissions or timestamps alone are not marked")
-        #expect(heading(.firstBackup).detail
-            == "Backup abf72899aaaaaaaa. The Change column compares a backup with the previous one of the same "
-            + "folders from the same Mac, and this is the first")
+        // The tooltip is the backup's folders and time, never an ID.
+        let made = Format.timestamp(record.time)
+        #expect(heading(nil).detail == "/Data/Documents\nBacked up \(made)")
+        #expect(heading(.compared(baseline: baseline, changeCount: 1)).detail == "/Data/Documents\nBacked up \(made)")
+        #expect(!failed.detail.contains("abf72899") && !failed.detail.contains("restic"))
     }
 
     @Test("the Change column marks only what this backup holds, so a folder's tally counts only rows it has")
@@ -370,7 +367,7 @@ struct SnapshotLineageTests {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/src"])
         let since = Format.timestamp(baseline.time)
         #expect(RestoreRecordHeading.columnHelp(for: .compared(baseline: baseline, changeCount: 2))
-            == "Added or modified since the backup of \(since)")
+            == "Added or modified since the backup of \(since). Changes to permissions or timestamps alone are not marked")
         #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == "First backup of these folders — nothing to compare with")
         #expect(RestoreRecordHeading.columnHelp(for: .comparing(baseline: baseline)) == "Comparing with the backup of \(since)…")
         #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More.")) == nil)

@@ -3,15 +3,12 @@ import Foundation
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
         case backup, forget, check, prune, restore
-        /// Remove from Earlier Backups: `restic rewrite --forget`.
-        case rewrite
 
         var displayName: String {
             switch self {
-            case .forget: "Old Backups"
+            case .forget: "Old backup removal"
             case .prune: MaintenanceTask.prune.displayName
             case .check: MaintenanceTask.check.displayName
-            case .rewrite: "Removal"
             default: rawValue.capitalized
             }
         }
@@ -23,7 +20,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             switch self {
             case .forget: "Retention"
             case .prune: "Cleanup"
-            case .rewrite: "Removal"
             default: rawValue.capitalized
             }
         }

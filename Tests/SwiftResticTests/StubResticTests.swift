@@ -821,7 +821,7 @@ struct StubResticTests {
             #expect(cause == "connection refused")
         }
         #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
-            == "Timed out after 5m and was stopped — restic kept retrying: connection refused.")
+            == "Timed out after 5m and was stopped — it kept retrying: connection refused. Check the location’s connection and try again.")
         #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "Timed out after 5m and was stopped.")
     }
 

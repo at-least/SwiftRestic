@@ -429,6 +429,18 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [warned, failed], hasNoRepositories: false)?.hasPrefix("Photos ") == true)
     }
 
+    @Test("a failed retention run is named by what it did, then the plan")
+    func retentionProblemLine() {
+        var removal = RunRecord(kind: .forget, planName: "Documents")
+        removal.outcome = .failed
+        removal.startedAt = .now.addingTimeInterval(-600)
+        removal.finishedAt = removal.startedAt
+        #expect(
+            MenuBarStatus.problemLine(runs: [removal], hasNoRepositories: false, relative: Self.ago)
+                == "Old backup removal on Documents failed 2 hours ago"
+        )
+    }
+
     @Test("recency counts from when the run finished, not when it started")
     func finishedAtIsTheNewsClock() {
         // An overnight backup that failed at dawn against an afternoon failure:

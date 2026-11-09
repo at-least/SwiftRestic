@@ -89,10 +89,8 @@ enum RunLog {
         }
         switch record.kind {
         case .backup where RunRecordPresentation.hasBackupNumbers(record):
-            lines.append(
-                "Files: \(record.filesNew) new, \(record.filesChanged) changed, \(record.filesUnmodified) unmodified"
-                    + " · processed \(Format.bytes(record.bytesProcessed)) · added \(Format.bytes(record.dataAdded))"
-            )
+            lines.append("Files: \(RunRecordPresentation.backupFiles(record))")
+            lines.append("Size: \(RunRecordPresentation.backupSize(record))")
         case .check:
             if let result = record.detailText { lines.append("Result: \(result)") }
         case .restore:

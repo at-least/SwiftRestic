@@ -79,11 +79,8 @@ struct RunDetailPanel: View {
                 DetailRow(run.outcome == .failed ? "Failing since" : "Skipped since", "\(Format.timestamp(since)) · \(Format.plural(count, "time"))")
             }
             if RunRecordPresentation.hasBackupNumbers(run) {
-                DetailRow(
-                    "Files",
-                    "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed · \(Format.count(run.filesUnmodified)) unmodified"
-                )
-                DetailRow("Size", "Processed \(Format.bytes(run.bytesProcessed)) · added \(Format.bytes(run.dataAdded))")
+                DetailRow("Files", RunRecordPresentation.backupFiles(run))
+                DetailRow("Size", RunRecordPresentation.backupSize(run))
             }
             repositoryRow
         case .restore:
@@ -122,7 +119,7 @@ struct RunDetailPanel: View {
             repositoryRow
             // A check's verdict, or what a retention run removed:
             // Copy Details' Result line.
-            if run.kind == .check || run.kind == .forget || run.kind == .rewrite, let result = run.detailText {
+            if run.kind == .check || run.kind == .forget, let result = run.detailText {
                 DetailRow("Result") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(result).textSelection(.enabled)
@@ -210,7 +207,7 @@ struct RunDetailPanel: View {
                         .textSelection(.enabled)
                 }
                 ForEach(Array(run.hookMessages.enumerated()), id: \.offset) { _, message in
-                    Label(message, systemImage: "terminal")
+                    Text(message)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -350,14 +347,10 @@ private struct RunSnapshotRow: View {
             case .unavailable?:
                 madeTime(run.snapshotTime)
                 completenessMark(for: snapshotID)
-                Button("Show in Backups") {}
-                    .disabled(true)
-                    .help("This location’s list of backups isn’t loaded right now")
+            // No Show in Backups until the list loads; with the location
+            // gone the Location row says so.
             case .repositoryGone?, nil:
                 madeTime(run.snapshotTime)
-                Button("Show in Backups") {}
-                    .disabled(true)
-                    .help("This backup location is no longer set up in SwiftRestic")
             }
         }
         .controlSize(.small)

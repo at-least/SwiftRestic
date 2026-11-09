@@ -77,8 +77,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             if let base { return base }
             if let advice = Self.sshHostKeyAdvice(message) { return advice }
             if let words = Self.rcloneWords(message) { return words }
-            let known = ResticError.knownExitCodeDescription(code)
-            if message.isEmpty { return known ?? "It stopped unexpectedly. Show Log has the details." }
+            let known = Self.exitCodeWords(code)
+            if message.isEmpty { return "\(known ?? "It stopped unexpectedly"). Show Log has the details." }
             let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
             // Exit 1 is restic's every fatal error: the reason alone, as a
             // sentence. Copy Details keeps restic's line (`resticDetail`).
@@ -93,15 +93,15 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .passwordMissing(name):
             return "No password is stored for “\(name)”."
         case let .processLaunchFailed(reason):
-            return "Couldn’t start restic: \(reason)"
+            return "The backup engine couldn’t start: \(reason). Install SwiftRestic again if this keeps happening."
         case let .timedOut(seconds, cause):
             return cause.isEmpty
                 ? "Timed out after \(Format.duration(seconds)) and was stopped."
-                : "Timed out after \(Format.duration(seconds)) and was stopped — restic kept retrying: \(cause)."
+                : "Timed out after \(Format.duration(seconds)) and was stopped — it kept retrying: \(cause). Check the location’s connection and try again."
         case let .idleStalled(seconds):
             return "Nothing moved for \(Format.duration(seconds)), so it was stopped. Check the location’s connection and try again."
         case let .malformedOutput(detail):
-            return "restic finished, but its answer couldn’t be read (\(detail))."
+            return "It finished, but its result couldn’t be read (\(detail)). Show Log has the details."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file couldn’t be written at \(path): \(reason). Nothing at the destination was changed."
         case let .snapshotsNotRemoved(removed, refused, reason):
@@ -118,7 +118,7 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .fileInTheWay(path):
             return "A file or alias is already at \(path), where a restored folder would go, so nothing was restored. Move it aside, or restore somewhere else."
         case let .notRestored(paths):
-            return "\(Format.list(paths)) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: restic found nothing by that name in the backup. A name written on another kind of computer can do this."
+            return "\(Format.list(paths)) \(paths.count == 1 ? "wasn’t" : "weren’t") restored: nothing by that name is in the backup. A name written on another kind of computer can do this."
         }
     }
 
@@ -173,6 +173,18 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// gets Locate beside it (`RunFix.locate`).
     private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
+    /// A failure's words on screen, for the codes whose console line names
+    /// restic as the actor; the console keeps `knownExitCodeDescription`.
+    private static func exitCodeWords(_ code: Int32) -> String? {
+        switch code {
+        case 1: "It stopped with an error"
+        case 2: "It stopped unexpectedly"
+        case 130: "It was interrupted"
+        default: knownExitCodeDescription(code)
+        }
+    }
+
+    /// The restic Console's "[exit N: …]" line.
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
         case 1: "restic stopped with an error"
