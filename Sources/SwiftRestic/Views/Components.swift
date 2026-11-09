@@ -207,7 +207,6 @@ struct ExpandableCaption: View {
 struct OperationProgressView: View {
     let title: String
     let progress: OperationProgress
-    let startedAt: Date?
     var onCancel: (() -> Void)?
 
     var body: some View {
@@ -247,7 +246,7 @@ struct OperationProgressView: View {
 
     /// "1.2 GB of 3.4 GB — about 4 minutes left", each part only when
     /// restic has said it.
-    static func caption(_ progress: OperationProgress) -> String? {
+    private static func caption(_ progress: OperationProgress) -> String? {
         guard progress != OperationProgress() else { return nil }
         var parts: [String] = []
         if progress.totalBytes > 0 {
@@ -596,7 +595,7 @@ struct PathListEditor: View {
     }
 }
 
-struct ListBarButton: View {
+private struct ListBarButton: View {
     let symbol: String
     let title: String
     let action: () -> Void
@@ -626,7 +625,7 @@ extension View {
 /// replace here (we need multi-select across both files and folders).
 enum FilePicker {
     @MainActor
-    static func chooseFoldersAndFiles(message: String, prompt: String) -> [URL]? {
+    fileprivate static func chooseFoldersAndFiles(message: String, prompt: String) -> [URL]? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = true

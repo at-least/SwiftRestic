@@ -245,7 +245,7 @@ private struct FilesPaneLoadKey: Equatable {
 /// was last backed up: the one fact of its standing the rows below do not
 /// already say. How many backups and versions hold it are the rows
 /// themselves; a file's own line says whether this Mac has it.
-struct FilesPaneHeader: View {
+private struct FilesPaneHeader: View {
     let node: FileNode
     let newestHolder: IndexVersion?
     let chainNewest: Snapshot?

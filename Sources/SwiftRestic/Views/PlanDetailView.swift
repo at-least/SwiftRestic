@@ -63,8 +63,7 @@ struct PlanDetailView: View {
             if let activity = model.activity[planID] {
                 OperationProgressView(
                     title: activity.phase.displayName,
-                    progress: model.planProgress[planID] ?? OperationProgress(),
-                    startedAt: activity.startedAt
+                    progress: model.planProgress[planID] ?? OperationProgress()
                 )
             }
         }

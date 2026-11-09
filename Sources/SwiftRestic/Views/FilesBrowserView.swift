@@ -542,7 +542,7 @@ private struct FilesSearchKey: Equatable {
 /// folder that holds it. An item no longer on this Mac is dimmed, with the
 /// day it was last backed up — the tree row's facts, in the tree row's
 /// words.
-struct FilesSearchRow: View {
+private struct FilesSearchRow: View {
     let entry: FilesTree.Entry
     let folder: String
 
@@ -599,7 +599,7 @@ struct TreeEdge: View {
 }
 
 /// The row around it is the button.
-struct FoldChevron: View {
+private struct FoldChevron: View {
     let isExpanded: Bool
 
     var body: some View {
@@ -615,7 +615,7 @@ struct FoldChevron: View {
 /// name. An item no backup of the plan holds is dimmed and says it is not
 /// backed up; one only the backups hold, when shown, says when it was last
 /// backed up.
-struct FilesTreeRow: View {
+private struct FilesTreeRow: View {
     static let foldWidth: CGFloat = 14
 
     let entry: FilesTree.Entry
@@ -700,7 +700,7 @@ struct FilesTreeRow: View {
 /// What an open folder of a Files tree says while it lists nothing: still
 /// reading, why it could not — with the fix to press when SwiftRestic is
 /// refused, else Try Again — or that it holds nothing.
-struct FilesStatusRow: View {
+private struct FilesStatusRow: View {
     @Environment(AppModel.self) private var model
     @Environment(FilesTree.self) private var filesTree
     let node: FileNode
@@ -770,7 +770,7 @@ struct FilesStatusRow: View {
 /// The fix a folder that refuses SwiftRestic offers
 /// (`FolderAbsence.Remedy`): System Settings' Full Disk Access list, or the
 /// folder selected in Finder, where File › Get Info shows its permissions.
-struct FolderFixButton: View {
+private struct FolderFixButton: View {
     let fix: FolderAbsence.Remedy.Fix
     let path: String
 

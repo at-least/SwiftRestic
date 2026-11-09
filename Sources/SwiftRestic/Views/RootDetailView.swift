@@ -28,7 +28,7 @@ struct RootDetailView: View {
             // an app-level fact: this strip sits above every pane, and the
             // menu bar line covers the window-closed case. Switching panes
             // hands the progress over to this strip.
-            RestoreProgressStrip(fallbackTitle: "Restoring…")
+            RestoreProgressStrip()
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
             // is why. Built in place, not posted: the condition is the model's
@@ -135,7 +135,7 @@ private struct BannerQueue: View {
     }
 }
 
-struct WelcomeView: View {
+private struct WelcomeView: View {
     @Environment(AppModel.self) private var model
     let onAddPlan: () -> Void
 
@@ -170,17 +170,12 @@ struct WelcomeView: View {
 /// detail column, above every pane; the panes add no copy of their own.
 private struct RestoreProgressStrip: View {
     @Environment(AppModel.self) private var model
-    /// Replaces an empty description. The app-level strip over the panes has
-    /// no other context to name the work; the sheets sit beside the entry
-    /// point that started the restore, so they show the bare description.
-    var fallbackTitle: String? = nil
 
     var body: some View {
         if let progress = model.restoreActivity {
             OperationProgressView(
                 title: title,
                 progress: progress,
-                startedAt: nil,
                 onCancel: { model.cancelRestore() }
             )
             .padding(.horizontal, 16)
@@ -190,10 +185,9 @@ private struct RestoreProgressStrip: View {
         }
     }
 
+    /// "Restoring…" stands in for an empty description: the strip has no
+    /// other context to name the work.
     private var title: String {
-        if model.restoreDescription.isEmpty, let fallbackTitle {
-            return fallbackTitle
-        }
-        return model.restoreDescription
+        model.restoreDescription.isEmpty ? "Restoring…" : model.restoreDescription
     }
 }

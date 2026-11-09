@@ -5,7 +5,7 @@ struct SettingsView: View {
     /// Past this a pane scrolls: its webhooks can outgrow a small screen.
     private static let maxHeight: CGFloat = 620
     /// Not the old "lastSettingsPane": it can hold the restic pane, now gone.
-    static let paneKey = "lastSettingsTab"
+    private static let paneKey = "lastSettingsTab"
     /// The pane the window reopens on. UserDefaults, not
     /// `configuration.settings`: it is window state, not a preference.
     @AppStorage(Self.paneKey) private var lastSettingsPane = 0
@@ -172,7 +172,7 @@ private struct FullDiskAccessStatusLabel: View {
 }
 
 /// macOS notifications, and whatever else should hear: one list of addresses.
-struct NotificationsTab: View {
+private struct NotificationsTab: View {
     @Environment(AppModel.self) private var model
     @State private var testOutcomes: [NotificationChannel.ID: AppModel.TestNotificationOutcome] = [:]
     @State private var testing: Set<NotificationChannel.ID> = []

@@ -173,7 +173,7 @@ private struct BackupRow: View {
 /// it is still being read, and after a failure it says why. A plan's page offers its verb
 /// under the words — the pane would otherwise hold nothing to do; a
 /// group's page has no plan to run, so the words stand alone.
-struct BackupsStatusRow: View {
+private struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID
     let planID: UUID?
