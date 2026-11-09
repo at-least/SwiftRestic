@@ -16,8 +16,7 @@ struct RootView: View {
     @State private var editingPlanTab: PlanEditorTab = .files
     @State private var editingRepository: Repository?
     /// "New Backup Plan" asked with no repository yet, its folder chosen.
-    @State private var isShowingFirstBackup = false
-    @State private var firstBackupSource = ""
+    @State private var firstBackupSource: FirstBackupSource?
     /// The first-run sheet was left for the repository editor's other kinds:
     /// set from the sheet's handoff until the editor closes, its Add then
     /// creating the plan as the sheet's Back Up would.
@@ -92,9 +91,12 @@ struct RootView: View {
             PlanEditorSheet(plan: plan, initialTab: editingPlanTab, onCreated: { router.selection = .plan($0) })
                 .environment(model)
         }
-        .sheet(isPresented: $isShowingFirstBackup, onDismiss: continueWithOtherLocation) {
+        // Not sheet(isPresented:) beside a separate source: its content kept
+        // the source from before the panel, and the sheet opened on an empty
+        // folder (seen in the UI tests).
+        .sheet(item: $firstBackupSource, onDismiss: continueWithOtherLocation) { firstBackup in
             FirstBackupSheet(
-                source: firstBackupSource,
+                source: firstBackup.path,
                 onCreated: { router.selection = .plan($0) },
                 onOtherLocation: { firstBackupHandoff = $0 }
             )
@@ -245,12 +247,10 @@ struct RootView: View {
         // and a panel run inside one gets no keys (`FirstBackupSheet`'s
         // Other…).
         let source = $firstBackupSource
-        let isShowing = $isShowingFirstBackup
         RunLoop.main.perform(inModes: [.default]) {
             MainActor.assumeIsolated {
                 guard let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") else { return }
-                source.wrappedValue = url.path
-                isShowing.wrappedValue = true
+                source.wrappedValue = FirstBackupSource(path: url.path)
             }
         }
     }
@@ -294,8 +294,7 @@ struct RootView: View {
         // An empty configuration's sheet, so ahead of the guard below.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] == "firstBackup", !model.isBootstrapping {
             didApplyCaptureOverride = true
-            firstBackupSource = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] ?? NSHomeDirectory()
-            isShowingFirstBackup = true
+            firstBackupSource = FirstBackupSource(path: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] ?? NSHomeDirectory())
             return
         }
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
@@ -454,7 +453,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || isShowingFirstBackup
+        let sheetsUp = editingPlan != nil || editingRepository != nil || firstBackupSource != nil
             || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -510,4 +509,10 @@ struct RootView: View {
         )
         if corrected != router.selection { router.selection = corrected }
     }
+}
+
+/// The folder Back Up a Folder…'s panel chose, presenting the first-run sheet.
+private struct FirstBackupSource: Identifiable {
+    let id = UUID()
+    let path: String
 }
