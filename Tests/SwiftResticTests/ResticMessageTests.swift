@@ -399,6 +399,13 @@ struct FindDecodingTests {
         #expect(changes[3].explanation == "Type changed, info changed")
     }
 
+    @Test("a change reads in the reader's words: Info changed, not metadata; May be damaged, not bitrot")
+    func diffChangeWords() {
+        #expect(ResticDiffChange.Category.allCases.map(\.displayName) == ["Added", "Deleted", "Modified", "Info changed"])
+        #expect(ResticDiffChange(path: "/src/a.txt", modifier: "?").explanation == "May be damaged")
+        #expect(ResticDiffChange(path: "/src/a.txt", modifier: "U").explanation == "Info changed")
+    }
+
     @Test("diff statistics")
     func diffStatistics() throws {
         let line = #"{"message_type":"statistics","source_snapshot":"bfdafeae","target_snapshot":"d5fc2a53","changed_files":1,"added":{"files":1,"dirs":1,"others":0,"data_blobs":2,"tree_blobs":3,"bytes":1874},"removed":{"files":1,"dirs":0,"others":0,"data_blobs":2,"tree_blobs":3,"bytes":1500}}"#

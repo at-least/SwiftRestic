@@ -101,4 +101,13 @@ struct ResticPathTests {
         #expect(ResticPath.ancestors(of: "/d/new\u{0600}/f").map { Array($0.utf8) }
             == [Array("/d/new\u{0600}".utf8), Array("/d".utf8), Array("/".utf8)])
     }
+
+    @Test("a folder holds itself and what is below it, never a sibling that shares its prefix")
+    func holds() {
+        #expect(ResticPath.holds("/a", "/a"))
+        #expect(ResticPath.holds("/a", "/a/b"))
+        #expect(ResticPath.holds("/", "/a"))
+        #expect(!ResticPath.holds("/a", "/ab"))
+        #expect(!ResticPath.holds("/a/b", "/a"))
+    }
 }

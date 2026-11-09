@@ -806,14 +806,16 @@ struct StubResticTests {
 
     @Test("a timeout names what restic was retrying when it was stopped")
     func timeoutNamesTheRetriedCause() async throws {
-        // restic 0.19.1's own line against a stopped rest-server, then a
-        // hang the timeout ends.
+        // restic 0.19.1's own lines against a stopped rest-server, then a
+        // hang the timeout ends. The last retry's cause is the news.
+        let earlier = #"Stat(<config/>) returned error, retrying after 552.330144ms: Head "http://:***@127.0.0.1:18000/demo/config": "#
+            + "dial tcp: lookup nas.local: no such host"
         let retrying = #"Stat(<config/>) returned error, retrying after 38.601553609s: Head "http://:***@127.0.0.1:18000/demo/config": "#
             + "dial tcp 127.0.0.1:18000: connect: connection refused"
         do {
             _ = try await ResticRunner().run(
                 binary: URL(fileURLWithPath: "/bin/sh"),
-                invocation: ResticInvocation(arguments: ["-c", "echo '\(retrying)' >&2; sleep 30"], timeout: 1)
+                invocation: ResticInvocation(arguments: ["-c", "echo '\(earlier)' >&2; echo '\(retrying)' >&2; sleep 30"], timeout: 1)
             )
             Issue.record("a hung command must be stopped as timed out")
         } catch let ResticError.timedOut(seconds, cause) {

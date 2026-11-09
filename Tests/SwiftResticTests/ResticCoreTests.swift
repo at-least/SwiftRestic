@@ -64,6 +64,10 @@ struct ResticErrorTests {
             message: ""
         ).errorDescription ?? ""
         #expect(bare == "It was interrupted. Show Log has the details.")
+        #expect(ResticError.commandFailed(exitCode: 1, message: "").errorDescription
+            == "It stopped with an error. Show Log has the details.")
+        #expect(ResticError.commandFailed(exitCode: 2, message: "").errorDescription
+            == "It stopped unexpectedly. Show Log has the details.")
 
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "disk on fire")
@@ -213,20 +217,57 @@ struct ResticErrorTests {
     func passwordMissingNamesTheLocation() {
         #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is stored for “NAS”.")
     }
+
+    @Test("a launch failure, an unreadable answer and an unrestored item say what to do next, without naming restic")
+    func appFailuresInTheReadersWords() {
+        #expect(ResticError.processLaunchFailed("The file “restic” doesn’t exist").errorDescription
+            == "The backup engine couldn’t start: The file “restic” doesn’t exist. Install SwiftRestic again if this keeps happening.")
+        #expect(ResticError.malformedOutput(detail: "1 change line did not decode").errorDescription
+            == "It finished, but its result couldn’t be read (1 change line did not decode). Show Log has the details.")
+        #expect(ResticError.notRestored(paths: ["/Restored/a.txt"]).errorDescription
+            == "/Restored/a.txt wasn’t restored: nothing by that name is in the backup. A name written on another kind of computer can do this.")
+        #expect(ResticError.notRestored(paths: ["/Restored/a.txt", "/Restored/b.txt"]).errorDescription
+            == "/Restored/a.txt and /Restored/b.txt weren’t restored: nothing by that name is in the backup. "
+            + "A name written on another kind of computer can do this.")
+    }
+
+    @Test("only exit 11 reads as a locked location")
+    func lockedIsExitElevenOnly() {
+        #expect(ResticError.isRepositoryLocked(ResticError.commandFailed(exitCode: 11, message: "Fatal: repository is locked")))
+        #expect(!ResticError.isRepositoryLocked(ResticError.commandFailed(exitCode: 1, message: "Fatal: repository is locked")))
+        #expect(!ResticError.isRepositoryLocked(ResticError.timedOut(seconds: 11)))
+    }
+
+    @Test("a stop is Swift's cancellation or restic's own; a failure is neither")
+    func cancellationReading() {
+        #expect(ResticError.isCancellation(CancellationError()))
+        #expect(ResticError.isCancellation(ResticError.cancelled))
+        #expect(!ResticError.isCancellation(ResticError.commandFailed(exitCode: 130, message: "")))
+    }
 }
 
 @Suite("restic binary location")
 struct ResticBinaryTests {
-    @Test("every folder a helper is looked for in is on restic's PATH")
+    @Test("restic's PATH leads with the app's helpers, then reaches a Homebrew or MacPorts ssh")
     func helperFoldersAreOnResticsPath() throws {
         // The bundled helpers lead, so restic spawns the pinned rclone — a
         // brew rclone on the inherited PATH must not stand in.
         let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path
         let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
         #expect(path.first == helpers, "\(path.first ?? "none") leads instead of \(helpers)")
-        for directory in ResticRunner.toolDirectories {
+        // An sftp location needs ssh, which a GUI app's near-empty PATH
+        // would not find where Homebrew or MacPorts put it.
+        for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
             #expect(path.contains(directory), "\(directory) missing from \(path)")
         }
+    }
+
+    @Test("the app runs restic and rclone from where the build phase puts them")
+    func bundledHelpersMatchTheBuildPhase() {
+        // build.sh checks that the built app carries the pinned pair there.
+        let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
+        #expect(ResticBinary.bundled.url == helpers.appendingPathComponent("restic"))
+        #expect(RcloneBinary.bundled.url == helpers.appendingPathComponent("rclone"))
     }
 
     @Test("a folder is not an executable file, though its mode has the execute bit")
@@ -252,6 +293,25 @@ struct ChildEnvironmentTests {
             invocation: ResticInvocation(arguments: ["-c", #"printf '%s\n' "$HOME""#], environment: ["HOME": inherited + "/elsewhere"])
         )
         #expect(result.stdout == inherited + "/elsewhere\n", "the child saw HOME as \(result.stdout.debugDescription)")
+    }
+
+    @Test("a child reads end-of-file at once on stdin, so a backend that prompts fails instead of hanging")
+    func stdinIsNull() async throws {
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: ["-c", "stat -L -f %r /dev/stdin; stat -f %r /dev/null"], timeout: 10)
+        )
+        let devices = result.stdout.split(separator: "\n")
+        #expect(devices.count == 2 && devices[0] == devices[1], "stdin is not /dev/null: \(result.stdout.debugDescription)")
+    }
+
+    @Test("restic's own progress printer runs at one frame a second")
+    func progressPrinterIsQuiet() async throws {
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/bin/sh"),
+            invocation: ResticInvocation(arguments: ["-c", #"printf '%s\n' "$RESTIC_PROGRESS_FPS""#])
+        )
+        #expect(result.stdout == "1\n")
     }
 }
 
