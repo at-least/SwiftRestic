@@ -3,49 +3,6 @@ import Testing
 
 @Suite("Scheduling")
 struct SchedulingTests {
-    private var calendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }
-
-    @Test("a schedule's time reads in the Mac's own clock, 12- or 24-hour")
-    func summaryFollowsTheClock() {
-        // Locales pinned: en_US keeps a 12-hour clock, en_GB a 24-hour one.
-        let us = Locale(identifier: "en_US")
-        let gb = Locale(identifier: "en_GB")
-        var schedule = Schedule()
-        schedule.frequency = .daily
-        schedule.hour = 14
-        schedule.minute = 5
-        #expect(flatSpaces(schedule.summary(calendar: calendar, locale: us)) == "Daily at 2:05 PM")
-        #expect(schedule.summary(calendar: calendar, locale: gb) == "Daily at 14:05")
-        schedule.frequency = .weekly
-        schedule.weekday = 1
-        schedule.hour = 3
-        schedule.minute = 0
-        #expect(flatSpaces(schedule.summary(calendar: calendar, locale: us)) == "Sunday at 3:00 AM")
-        #expect(schedule.summary(calendar: calendar, locale: gb) == "Sunday at 03:00")
-    }
-
-    @Test("every time of day exists on the editor's anchor day, whatever the zone or calendar")
-    func anchorHoldsEveryTime() {
-        for (identifier, zone) in [
-            (Calendar.Identifier.gregorian, "UTC"), (.gregorian, "America/Santiago"), (.gregorian, "Australia/Lord_Howe"),
-            (.gregorian, "Asia/Kathmandu"), (.buddhist, "Asia/Bangkok"), (.japanese, "Asia/Tokyo"),
-        ] {
-            var calendar = Calendar(identifier: identifier)
-            calendar.timeZone = TimeZone(identifier: zone)!
-            for hour in 0 ..< 24 {
-                for minute in [0, 1, 30, 59] {
-                    let moment = Schedule.moment(hour: hour, minute: minute, calendar: calendar)
-                    let parts = calendar.dateComponents([.hour, .minute], from: moment)
-                    #expect(parts.hour == hour && parts.minute == minute, "\(identifier) \(zone) \(hour):\(minute)")
-                }
-            }
-        }
-    }
-
     @Test("a manual plan is never due")
     func manualNeverDue() {
         var schedule = Schedule()
@@ -53,25 +10,42 @@ struct SchedulingTests {
         #expect(schedule.nextRunDate(after: nil, now: utcDate("2026-09-05 12:00:00")) == nil)
     }
 
-    @Test("an hourly plan that has never run is due immediately")
-    func hourlyFirstRun() {
+    @Test("a scheduled plan that has never run is due immediately")
+    func firstRunIsDueNow() {
         var schedule = Schedule()
-        schedule.frequency = .hourly
         let now = utcDate("2026-09-05 12:00:00")
-        #expect(schedule.nextRunDate(after: nil, now: now) == now)
+        for frequency in [Schedule.Frequency.hourly, .daily, .weekly] {
+            schedule.frequency = frequency
+            #expect(schedule.nextRunDate(after: nil, now: now) == now, "\(frequency)")
+        }
     }
 
-    @Test("an hourly plan waits an hour after a run")
-    func hourlyInterval() {
+    @Test("a plan waits its interval after the last run: an hour, a day, a week")
+    func intervalAfterLastRun() {
         var schedule = Schedule()
-        schedule.frequency = .hourly
         let lastRun = utcDate("2026-09-05 08:00:00")
-        let next = schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 08:30:00"))
-        #expect(next == utcDate("2026-09-05 09:00:00"))
+        let now = utcDate("2026-09-05 08:30:00")
+        for (frequency, next) in [
+            (Schedule.Frequency.hourly, "2026-09-05 09:00:00"),
+            (.daily, "2026-09-06 08:00:00"),
+            (.weekly, "2026-09-12 08:00:00"),
+        ] {
+            schedule.frequency = frequency
+            #expect(schedule.nextRunDate(after: lastRun, now: now) == utcDate(next), "\(frequency)")
+        }
+    }
+
+    @Test("a daily plan that missed its day while the Mac slept is due as soon as it is awake")
+    func dailyCatchesUp() throws {
+        var schedule = Schedule()
+        schedule.frequency = .daily
+        let now = utcDate("2026-09-07 09:30:00")
+        let next = try #require(schedule.nextRunDate(after: utcDate("2026-09-04 22:00:00"), now: now))
+        #expect(next <= now)
     }
 
     /// A clock set ahead stamps the run in the future; corrected, the stamp
-    /// covered every slot until that future date, so the plan never ran.
+    /// would hold the plan back until that future date.
     @Test("a last run stamped after now, from a clock set ahead and corrected, counts as no run")
     func futureLastRunIsNoRun() {
         let now = utcDate("2026-09-05 12:00:00")
@@ -79,105 +53,23 @@ struct SchedulingTests {
         var schedule = Schedule()
         for frequency in [Schedule.Frequency.hourly, .daily, .weekly] {
             schedule.frequency = frequency
-            let due = schedule.nextRunDate(after: ahead, now: now, calendar: calendar)
-            let fresh = schedule.nextRunDate(after: nil, now: now, calendar: calendar)
+            let due = schedule.nextRunDate(after: ahead, now: now)
+            let fresh = schedule.nextRunDate(after: nil, now: now)
             #expect(due == fresh, "\(frequency)")
             // Past the window clock's lag a stamp is a clock's, not this minute's run.
             let justPast = now.addingTimeInterval(Schedule.windowClockLag + 1)
-            #expect(schedule.nextRunDate(after: justPast, now: now, calendar: calendar) == fresh, "\(frequency)")
+            #expect(schedule.nextRunDate(after: justPast, now: now) == fresh, "\(frequency)")
         }
     }
 
-    @Test("a daily plan that missed its window while asleep is due now")
-    func dailyCatchesUp() throws {
-        var schedule = Schedule()
-        schedule.frequency = .daily
-        schedule.hour = 2
-        schedule.minute = 0
-
-        // 02:00 has passed today and the last run was yesterday morning, so the
-        // plan must fire rather than silently skipping to tomorrow.
-        let next = try #require(schedule.nextRunDate(
-            after: utcDate("2026-09-04 02:00:00"),
-            now: utcDate("2026-09-05 09:30:00"),
-            calendar: calendar
-        ))
-        #expect(next == utcDate("2026-09-05 02:00:00"))
-        #expect(next <= utcDate("2026-09-05 09:30:00"))
-    }
-
-    @Test("a daily plan that already ran today waits for tomorrow")
-    func dailyAlreadyRan() {
-        var schedule = Schedule()
-        schedule.frequency = .daily
-        schedule.hour = 2
-        let next = schedule.nextRunDate(
-            after: utcDate("2026-09-05 02:00:05"),
-            now: utcDate("2026-09-05 09:30:00"),
-            calendar: calendar
+    @Test("a stored time of day or weekday is ignored: only how often is read")
+    func storedTimeOfDayIsIgnored() throws {
+        let schedule = try JSONDecoder().decode(
+            Schedule.self, from: Data(#"{"frequency":"weekly","hour":3,"minute":30,"weekday":1}"#.utf8)
         )
-        #expect(next == utcDate("2026-09-06 02:00:00"))
-    }
-
-    @Test("a tick exactly on the slot finds it due only a moment later")
-    func exactSlotTickIsBeforeTheSlot() {
-        var schedule = Schedule()
-        schedule.frequency = .daily
-        schedule.hour = 2
-        let lastRun = utcDate("2026-09-04 02:00:00")
-        // Calendar's backward search is strictly before `now`, so the slot
-        // that `now` sits on is not yet the most recent one.
-        #expect(schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 02:00:00"), calendar: calendar)
-            == utcDate("2026-09-06 02:00:00"))
-        #expect(schedule.nextRunDate(after: lastRun, now: utcDate("2026-09-05 02:00:01"), calendar: calendar)
-            == utcDate("2026-09-05 02:00:00"))
-    }
-
-    // 2026-08-31 and 2026-09-07 are both Mondays (weekday 2); 2026-09-05 is a
-    // Saturday, so the most recent firing before "now" below is 08-31 02:00.
-    @Test("a weekly plan that missed its window is due at the missed slot")
-    func weeklyCatchesUp() {
-        var schedule = Schedule()
-        schedule.frequency = .weekly
-        schedule.weekday = 2
-        schedule.hour = 2
-        let next = schedule.nextRunDate(
-            after: utcDate("2026-08-24 02:00:00"),
-            now: utcDate("2026-09-05 12:00:00"),
-            calendar: calendar
-        )
-        #expect(next == utcDate("2026-08-31 02:00:00"))
-    }
-
-    @Test("a weekly plan that never ran is due at the most recent slot, not the next one")
-    func weeklyNeverRan() {
-        var schedule = Schedule()
-        schedule.frequency = .weekly
-        schedule.weekday = 2
-        schedule.hour = 2
-        let next = schedule.nextRunDate(
-            after: nil,
-            now: utcDate("2026-09-05 12:00:00"),
-            calendar: calendar
-        )
-        #expect(next == utcDate("2026-08-31 02:00:00"))
-    }
-
-    @Test("a weekly plan that already ran at its slot waits for the next week")
-    func weeklyAlreadyRan() {
-        var schedule = Schedule()
-        schedule.frequency = .weekly
-        schedule.weekday = 2
-        schedule.hour = 2
-        // Exactly at the slot counts as having run it; a few seconds later too.
-        for lastRun in [utcDate("2026-08-31 02:00:00"), utcDate("2026-08-31 02:00:05")] {
-            let next = schedule.nextRunDate(
-                after: lastRun,
-                now: utcDate("2026-09-05 12:00:00"),
-                calendar: calendar
-            )
-            #expect(next == utcDate("2026-09-07 02:00:00"))
-        }
+        #expect(schedule.frequency == .weekly)
+        let lastRun = utcDate("2026-09-05 08:00:00")
+        #expect(schedule.nextRunDate(after: lastRun, now: lastRun) == utcDate("2026-09-12 08:00:00"))
     }
 
     @Test("only enabled, complete, non-busy plans are returned as due")
@@ -296,12 +188,10 @@ struct SchedulingTests {
             plan.repositoryID = repositoryID
             plan.path = "/tmp/" + name
             plan.schedule.frequency = .daily
-            plan.schedule.hour = 2
-            plan.schedule.minute = 0
             plan.lastRunAt = utcDate(lastRunAt)
             return plan
         }
-        // Two plans on one repository at the same 02:00 slot: started
+        // Two plans on one repository due at the same moment: started
         // together, each backup's retention `forget` takes the repository's
         // exclusive lock and locks the other out, which records
         // "Retention skipped" — so a tick starts only one of them.
@@ -312,28 +202,27 @@ struct SchedulingTests {
         let now = utcDate("2026-09-05 02:00:30")
 
         #expect(Scheduler.duePlans(
-            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing, calendar: calendar
+            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
         ).map { $0.label(among: []) } == ["downloads", "elsewhere"])
 
         // Held back, not dropped: while the first runs its repository is busy,
         // and once it has run, the other is due on the next tick.
         #expect(Scheduler.duePlans(
             in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing,
-            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other], calendar: calendar
+            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other]
         ).isEmpty)
         var ran = downloads
         ran.lastRunAt = utcDate("2026-09-05 02:00:40")
         #expect(Scheduler.duePlans(
-            in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing, calendar: calendar
+            in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing
         ).map { $0.label(among: []) } == ["dotfiles"])
 
         // The plan whose slot passed longer ago goes first, whatever the
-        // order: a daily plan's due date is its latest missed slot, so 01:00
+        // order: a daily plan is due a day after its last run, so 01:00
         // beats 02:00.
-        var early = makePlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
-        early.schedule.hour = 1
+        let early = makePlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
         #expect(Scheduler.duePlans(
-            in: [downloads, early], now: now, existingRepositoryIDs: existing, calendar: calendar
+            in: [downloads, early], now: now, existingRepositoryIDs: existing
         ).map { $0.label(among: []) } == ["early"])
     }
 }
@@ -347,8 +236,6 @@ struct PauseSchedulingTests {
         plan.repositoryID = repositoryID
         plan.path = "/tmp/" + name
         plan.schedule.frequency = .daily
-        plan.schedule.hour = 2
-        plan.schedule.minute = 0
         plan.lastRunAt = lastRunAt
         return plan
     }
@@ -439,115 +326,6 @@ struct PauseSchedulingTests {
     }
 }
 
-@Suite("Schedule across DST transitions")
-struct DSTScheduleTests {
-    /// Los Angeles observes DST, which the UTC-pinned suites never exercise.
-    private var losAngeles: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
-        return calendar
-    }
-
-    /// A wall-clock instant in Los Angeles. Inside the spring-forward gap
-    /// `DateFormatter` returns nil, while `Calendar.date(from:)` moves the
-    /// time forward by the gap: 02:30 on 2026-03-08 is 03:30 PDT, not the
-    /// 03:00 the scheduler's `nextDate(…, matchingPolicy: .nextTime)` gives.
-    private func la(_ hour: Int, _ minute: Int = 0, _ day: Int, _ month: Int, year: Int = 2026) -> Date {
-        losAngeles.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
-    }
-
-    private func dailySchedule(hour: Int, minute: Int) -> Schedule {
-        var schedule = Schedule()
-        schedule.frequency = .daily
-        schedule.hour = hour
-        schedule.minute = minute
-        return schedule
-    }
-
-    @Test("a daily slot inside the spring-forward gap still fires once, close to its wall-clock time")
-    func springForward() throws {
-        // 2026-03-08 02:00 PST becomes 03:00 PDT: a 02:30 slot does not exist
-        // that day. Whatever instant Calendar resolves the missing time to, the
-        // run must be due that morning (not skipped, not pushed to the next
-        // day) and the following day must be back at the ordinary slot.
-        let schedule = dailySchedule(hour: 2, minute: 30)
-        let now = la(9, 0, 8, 3) // after the gap
-        let next = try #require(schedule.nextRunDate(
-            after: la(2, 30, 7, 3),
-            now: now,
-            calendar: losAngeles
-        ))
-
-        #expect(next > la(2, 30, 7, 3), "the last run must not cover the gap day")
-        #expect(next <= now, "the missed gap-slot must be due immediately when the app wakes up — the catch-up rule, not a skip to tomorrow")
-        // Calendar resolves the nonexistent 02:30 to 03:00, half an hour late.
-        #expect(
-            abs(next.timeIntervalSince(la(2, 30, 8, 3))) < 3600,
-            "the resolution must stay within an hour of the intended wall-clock slot"
-        )
-
-        let followingDay = try #require(schedule.nextRunDate(after: next, now: now, calendar: losAngeles))
-        #expect(followingDay == la(2, 30, 9, 3), "the next day is back at the ordinary slot")
-    }
-
-    @Test("a daily slot inside the fall-back repeat fires once, not twice")
-    func fallBack() throws {
-        // 2026-11-01 01:00 PDT becomes 01:00 PST: 01:30 happens twice. The
-        // schedule must treat the day as having exactly one 01:30 slot.
-        let schedule = dailySchedule(hour: 1, minute: 30)
-        let now = la(12, 0, 1, 11)
-
-        // Never ran: due at that morning's slot (either 01:30 occurrence —
-        // which instant Calendar picks is its policy — but the same day).
-        let first = try #require(schedule.nextRunDate(after: nil, now: now, calendar: losAngeles))
-        let day = losAngeles.dateComponents([.year, .month, .day], from: first)
-        #expect(day == DateComponents(year: 2026, month: 11, day: 1))
-        let secondOccurrence = la(1, 30, 1, 11).addingTimeInterval(3600)
-        #expect(first >= la(1, 30, 1, 11) && first <= secondOccurrence, "the resolved instant is one of the two 01:30s")
-
-        // Having run at that slot, the next firing is tomorrow's — the repeated
-        // hour must not trigger a second run.
-        let next = try #require(schedule.nextRunDate(after: first, now: now, calendar: losAngeles))
-        #expect(next == la(1, 30, 2, 11))
-    }
-
-    @Test("a run at the first 01:30 of the fall-back day covers the second 01:30 too")
-    func fallBackRunAtTheFirstOccurrence() throws {
-        let schedule = dailySchedule(hour: 1, minute: 30)
-        let utc = ISO8601DateFormatter()
-        let firstOccurrence = try #require(utc.date(from: "2026-11-01T08:30:00Z"))  // 01:30 PDT
-        let tomorrow = try #require(utc.date(from: "2026-11-02T09:30:00Z"))         // 01:30 PST
-        let ranAtFirst = firstOccurrence.addingTimeInterval(30)
-
-        for now in ["2026-11-01T09:31:00Z", "2026-11-01T17:00:00Z"] {  // 01:31 PST, 09:00 PST
-            let due = try #require(schedule.nextRunDate(after: ranAtFirst, now: utc.date(from: now)!, calendar: losAngeles))
-            #expect(due == tomorrow, "at \(now)")
-        }
-
-        // Asleep through the first 01:30: due once, at the second.
-        let yesterday = try #require(utc.date(from: "2026-10-31T08:30:00Z"))
-        let awake = try #require(utc.date(from: "2026-11-01T09:31:00Z"))
-        let due = try #require(schedule.nextRunDate(after: yesterday, now: awake, calendar: losAngeles))
-        #expect(due <= awake)
-        #expect(try #require(schedule.nextRunDate(after: awake, now: awake.addingTimeInterval(60), calendar: losAngeles)) == tomorrow)
-    }
-
-    @Test("an ordinary afternoon slot is unaffected by either transition")
-    func ordinarySlotUnchanged() {
-        let schedule = dailySchedule(hour: 12, minute: 0)
-        #expect(schedule.nextRunDate(
-            after: la(12, 0, 7, 3),
-            now: la(13, 0, 8, 3),
-            calendar: losAngeles
-        ) == la(12, 0, 8, 3))
-        #expect(schedule.nextRunDate(
-            after: la(12, 0, 1, 11),
-            now: la(13, 0, 2, 11),
-            calendar: losAngeles
-        ) == la(12, 0, 2, 11))
-    }
-}
-
 @Suite("Upcoming run")
 struct UpcomingRunTests {
     private func plan(
@@ -561,7 +339,6 @@ struct UpcomingRunTests {
         plan.repositoryID = UUID()
         plan.path = path.isEmpty ? "" : path + "/" + name
         plan.schedule.frequency = enabled ? frequency : .manual
-        plan.schedule.hour = 2
         plan.lastRunAt = lastRun
         return plan
     }
@@ -661,7 +438,7 @@ struct MaintenanceSchedulingTests {
         for kind in [Repository.Kind.local, .sftp] {
             #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == .slice(1, of: 12), "\(kind)")
         }
-        for kind in [Repository.Kind.rest, .s3, .b2, .azure, .gcs, .rclone] {
+        for kind in [Repository.Kind.rest, .s3, .rclone] {
             #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == nil, "\(kind)")
         }
         var policy = MaintenancePolicy()
@@ -813,37 +590,10 @@ struct MaintenanceSchedulingTests {
         #expect(last([]) == ago)
     }
 
-    @Test("the repository page's Next check and Next cleanup wait under a hold, and move to a timed hold's end")
-    func nextMaintenanceUnderAHold() {
-        let repository = repository { _ in }
-        let now = utcDate("2026-09-10 00:00:00")
-        let prune = utcDate("2026-10-01 00:00:00")
-        // The check fell due on the 8th.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
-        // In flight: "Running now", ahead of hold, drive and server — the
-        // stamp lands when restic finishes.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: true, awaitingServer: false, isRunning: true, now: now) == "Running now")
-        // Not due yet, the date stands while a run is in flight.
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, isRunning: true, now: now) == Format.timestamp(prune))
-        // The hold holds checks and prunes too: due, but not now.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: nil), driveAway: false, awaitingServer: false, now: now) == "Waiting")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: false, awaitingServer: false, now: now) == "Waiting")
-        // A timed hold moves it to the end, where the scheduler picks it up.
-        let end = utcDate("2026-09-10 01:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
-            == Format.timestamp(end))
-        // A date beyond the hold keeps its own.
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .paused(until: end), driveAway: false, awaitingServer: false, now: now)
-            == Format.timestamp(prune))
-        #expect(Scheduler.nextMaintenanceText(.prune, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: false, awaitingServer: false, now: now)
-            == Format.timestamp(prune))
-    }
-
-    @Test("a check waiting for its repository's drive is no last check, and Next check says what it waits for")
+    @Test("a check waiting for its repository's drive is no last check")
     func upkeepWaitingForItsDrive() {
         let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
-        var repository = repository {
+        let repository = repository {
             $0.kind = .local
             $0.localPath = "/Volumes/\(volume)/restic"
             $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
@@ -858,24 +608,6 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.newestMaintenanceRun(.check, of: repository, runs: [waited, failed])?.id == failed.id)
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [waited, failed], now: now)
             == "\(Format.ago(utcDate("2026-09-02 12:00:00"), now: now)) · failed")
-        // Due: it waits for the drive, not "Due now" — under a hold too,
-        // which the drive would outlast.
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: .onMeteredNetwork, driveAway: true, awaitingServer: false, now: now) == "When “\(volume)” is connected")
-        // Not due yet: its date, as for any repository.
-        repository.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: repository, among: [repository], hold: nil, driveAway: false, awaitingServer: false, now: now) == Format.timestamp(utcDate("2026-09-16 12:00:00")))
-
-        // A server out of reach: its due check waits for it in the same way.
-        var server = self.repository {
-            $0.kind = .rest
-            $0.restURL = "http://nas.local:8000/backups"
-            $0.maintenance.lastCheckAt = utcDate("2026-09-02 12:00:00")
-        }
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == "When “nas.local” can be reached")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: false, now: now) == "Due now")
-        server.maintenance.lastCheckAt = utcDate("2026-09-09 12:00:00")
-        #expect(Scheduler.nextMaintenanceText(.check, of: server, among: [server], hold: nil, driveAway: false, awaitingServer: true, now: now) == Format.timestamp(utcDate("2026-09-16 12:00:00")))
     }
 
     @Test("the schedule summarises itself for the plan list")
@@ -888,18 +620,13 @@ struct MaintenanceSchedulingTests {
         hourly.frequency = .hourly
         #expect(hourly.summary() == "Every hour")
 
-        // The time's words are the Mac's (`summaryFollowsTheClock` pins
-        // them); the summary puts them in place.
         var daily = Schedule()
         daily.frequency = .daily
-        daily.hour = 2
-        daily.minute = 5
-        #expect(daily.summary() == "Daily at \(daily.timeOfDay())")
+        #expect(daily.summary() == "Every day")
 
         var weekly = Schedule()
         weekly.frequency = .weekly
-        weekly.hour = 3
-        #expect(weekly.summary().hasSuffix(" at \(weekly.timeOfDay())"))
+        #expect(weekly.summary() == "Every week")
     }
 }
 
@@ -1010,12 +737,6 @@ struct RepositoryTests {
         s3.s3Prefix = "/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
 
-        var b2 = Repository()
-        b2.kind = .b2
-        b2.b2Bucket = "my-bucket"
-        b2.b2Prefix = "laptop"
-        #expect(b2.resticRepositoryString == "b2:my-bucket:laptop")
-
         var rest = Repository()
         rest.kind = .rest
         rest.restURL = "https://host:8000/"
@@ -1043,6 +764,17 @@ struct RepositoryTests {
         sftp.sftpUser = ""
         #expect(sftp.resticRepositoryString == "sftp://nas.local:2222//volume1/Mac%20%231")
 
+        // A port typed after the host, the editor's only way to give one.
+        var typed = Repository()
+        typed.kind = .sftp
+        typed.sftpUser = "backup"
+        typed.sftpHost = "nas.local:2222"
+        typed.sftpPath = "/volume1/restic"
+        #expect(typed.sftpHostName == "nas.local")
+        #expect(typed.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/restic")
+        typed.sftpHost = "nas.local:22"
+        #expect(typed.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
+
         // A configuration saved before the field existed has none.
         let old = try JSONDecoder().decode(
             Repository.self,
@@ -1061,16 +793,42 @@ struct RepositoryTests {
         #expect(s3Env["AWS_ACCESS_KEY_ID"] == "AKIA")
         #expect(s3Env["AWS_SECRET_ACCESS_KEY"] == "shhh")
 
-        var b2 = Repository()
-        b2.kind = .b2
-        b2.b2AccountID = "0011"
-        let b2Env = b2.credentialEnvironment(secret: "key")
-        #expect(b2Env["B2_ACCOUNT_ID"] == "0011")
-        #expect(b2Env["B2_ACCOUNT_KEY"] == "key")
-
         var local = Repository()
         local.kind = .local
         #expect(local.credentialEnvironment(secret: nil).isEmpty)
+    }
+
+    @Test("a location reads in the reader's words, not restic's repository string")
+    func displayLocation() {
+        var local = Repository()
+        local.localPath = NSHomeDirectory() + "/Backups"
+        #expect(local.displayLocation == "~/Backups")
+
+        var s3 = Repository()
+        s3.kind = .s3
+        s3.s3Endpoint = "s3.us-west-004.backblazeb2.com"
+        s3.s3Bucket = "photos"
+        #expect(s3.displayLocation == "photos on s3.us-west-004.backblazeb2.com")
+        s3.s3Prefix = "/mac/"
+        #expect(s3.displayLocation == "photos/mac on s3.us-west-004.backblazeb2.com")
+
+        var sftp = Repository()
+        sftp.kind = .sftp
+        sftp.sftpUser = "backup"
+        sftp.sftpHost = "nas.local:2222"
+        sftp.sftpPath = "/volume1/SwiftRestic Backups"
+        #expect(sftp.displayLocation == "backup@nas.local:/volume1/SwiftRestic Backups")
+
+        var rclone = Repository()
+        rclone.kind = .rclone
+        rclone.rcloneRemote = "gdrive:"
+        rclone.rclonePath = "backups"
+        #expect(rclone.displayLocation == "gdrive:backups")
+
+        var rest = Repository()
+        rest.kind = .rest
+        rest.restURL = "rest:https://host:8000/"
+        #expect(rest.displayLocation == "https://host:8000/")
     }
 
     @Test("a REST server's login rides in restic's environment from the Keychain, never in the stored URL")
@@ -1144,23 +902,8 @@ struct RepositoryTests {
 
 @Suite("Additional backends")
 struct AdditionalBackendTests {
-    @Test("azure, gcs and rclone build the repository strings restic expects")
+    @Test("rclone builds the repository string restic expects")
     func repositoryStrings() {
-        var azure = Repository()
-        azure.kind = .azure
-        azure.azureContainer = "backups"
-        azure.azureAccountName = "acct"
-        #expect(azure.resticRepositoryString == "azure:backups")
-        azure.azurePrefix = "/mac/laptop/"
-        #expect(azure.resticRepositoryString == "azure:backups:/mac/laptop")
-
-        var gcs = Repository()
-        gcs.kind = .gcs
-        gcs.gcsBucket = "my-bucket"
-        #expect(gcs.resticRepositoryString == "gs:my-bucket")
-        gcs.gcsPrefix = "laptop"
-        #expect(gcs.resticRepositoryString == "gs:my-bucket:/laptop")
-
         var rclone = Repository()
         rclone.kind = .rclone
         rclone.rcloneRemote = "mydrive"
@@ -1176,25 +919,8 @@ struct AdditionalBackendTests {
         #expect(rclone.resticRepositoryString == "rclone:mydrive:/srv/backups")
     }
 
-    @Test("credentials map to each backend's environment variables")
+    @Test("rclone needs no credentials of its own, only its helper")
     func credentialEnvironment() {
-        var azure = Repository()
-        azure.kind = .azure
-        azure.azureAccountName = "acct"
-        let azureEnv = azure.credentialEnvironment(secret: "key")
-        #expect(azureEnv["AZURE_ACCOUNT_NAME"] == "acct")
-        #expect(azureEnv["AZURE_ACCOUNT_KEY"] == "key")
-
-        var gcs = Repository()
-        gcs.kind = .gcs
-        gcs.gcsProjectID = "proj"
-        gcs.gcsCredentialsPath = "~/key.json"
-        let gcsEnv = gcs.credentialEnvironment(secret: nil)
-        #expect(gcsEnv["GOOGLE_PROJECT_ID"] == "proj")
-        // The path is expanded here because restic opens the file itself and
-        // gets no shell to do it for us.
-        #expect(gcsEnv["GOOGLE_APPLICATION_CREDENTIALS"] == NSHomeDirectory() + "/key.json")
-
         var rclone = Repository()
         rclone.kind = .rclone
         #expect(rclone.credentialEnvironment(secret: nil).isEmpty)
@@ -1214,8 +940,17 @@ struct AdditionalBackendTests {
         #expect(repository.label(among: [repository]) == "repo")
         #expect(repository.localPath == "/tmp/repo")
         #expect(repository.s3Endpoint == "s3.amazonaws.com")
-        #expect(repository.azureContainer.isEmpty)
         #expect(repository.rcloneRemote.isEmpty)
+    }
+
+    @Test("a location of a kind no longer offered still loads, as a folder not yet chosen")
+    func decodesRemovedKind() throws {
+        for kind in ["b2", "azure", "gcs"] {
+            let json = #"{"kind":"\#(kind)","b2Bucket":"photos","azureContainer":"photos","gcsBucket":"photos"}"#
+            let repository = try JSONDecoder().decode(Repository.self, from: Data(json.utf8))
+            #expect(repository.kind == .local, "\(kind)")
+            #expect(!repository.isConfigurationComplete, "\(kind)")
+        }
     }
 }
 
@@ -1229,9 +964,6 @@ struct RepositoryCompletenessTests {
             .local: [{ $0.localPath = "/Volumes/Backup" }],
             .sftp: [{ $0.sftpHost = "nas.local" }, { $0.sftpPath = "/volume1/restic" }],
             .s3: [{ $0.s3Bucket = "bucket" }, { $0.s3AccessKeyID = "AKIA" }],
-            .b2: [{ $0.b2Bucket = "bucket" }, { $0.b2AccountID = "0011" }],
-            .azure: [{ $0.azureContainer = "container" }, { $0.azureAccountName = "acct" }],
-            .gcs: [{ $0.gcsBucket = "bucket" }, { $0.gcsCredentialsPath = "~/key.json" }],
             .rest: [{ $0.restURL = "https://host:8000" }],
             .rclone: [{ $0.rcloneRemote = "mydrive" }],
         ]
@@ -1272,17 +1004,27 @@ struct LoginItemTests {
         #expect(!LoginItem.isInstallableLocation("/Users/me/Downloads/SwiftRestic.app"))
         #expect(!LoginItem.isInstallableLocation("/Volumes/SwiftRestic/SwiftRestic.app"))
         #expect(!LoginItem.isInstallableLocation("/tmp/SwiftRestic.app"))
+        // A test runner's xctest lives in Xcode, inside /Applications.
+        #expect(!LoginItem.isInstallableLocation(
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/xctest"
+        ))
     }
 
-    @Test("Settings' caption says each state the daemon can answer, ")
-    func stateDescriptions() {
-        #expect(LoginItem.description(of: .enabled) == "SwiftRestic will start at login.")
-        #expect(LoginItem.description(of: .notFound).hasPrefix("macOS couldn’t find this copy"))
-        // The pane's short form sits above its own Open Login Items button;
-        // the banner's full form has no button and spells the pane out.
-        #expect(LoginItem.needsApprovalShort == "Waiting for approval.")
-        #expect(LoginItem.description(of: .needsApproval)
-            == "Waiting for approval in System Settings ▸ General ▸ Login Items.")
+    @Test("the login item follows the schedules: on while a plan has one, off once none has, never from outside Applications")
+    func followsSchedules() {
+        func change(_ scheduled: Bool, _ state: LoginItemState, installable: Bool = true) -> Bool? {
+            LoginItem.change(hasScheduledPlan: scheduled, state: state, isInstallable: installable)
+        }
+        #expect(change(true, .off) == true)
+        #expect(change(true, .notFound) == true)
+        #expect(change(true, .enabled) == nil)
+        // Waiting for approval is the user's step in Login Items, not ours.
+        #expect(change(true, .needsApproval) == nil)
+        #expect(change(true, .off, installable: false) == nil)
+        #expect(change(false, .enabled) == false)
+        #expect(change(false, .needsApproval) == false)
+        #expect(change(false, .enabled, installable: false) == false)
+        #expect(change(false, .off) == nil)
     }
 
     @Test("an installed copy is accepted")
@@ -1290,73 +1032,6 @@ struct LoginItemTests {
         #expect(LoginItem.isInstallableLocation("/Applications/SwiftRestic.app"))
         #expect(LoginItem.isInstallableLocation("/Applications/Utilities/SwiftRestic.app"))
         #expect(LoginItem.isInstallableLocation("\(NSHomeDirectory())/Applications/SwiftRestic.app"))
-    }
-
-    @Test("the offer names what would make scheduled backups survive a restart — approval first, then the install location")
-    func offerPrecedence() {
-        #expect(LoginItemAdvice.offer(startsAtLogin: true, needsApproval: false, isInstallable: true) == nil)
-        // A registration waiting for approval exists already: approving it is
-        // the one step left, wherever the copy lives.
-        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: true, isInstallable: false) == .awaitingApproval)
-        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: false) == .moveToApplications)
-        #expect(LoginItemAdvice.offer(startsAtLogin: false, needsApproval: false, isInstallable: true) == .startAtLogin)
-    }
-
-    @Test("the first schedule registers the login item as it saves, and a later one never undoes the user's switch")
-    func firstScheduleRegisters() {
-        func plan(_ frequency: Schedule.Frequency) -> BackupPlan {
-            var plan = BackupPlan()
-            plan.schedule.frequency = frequency
-            return plan
-        }
-        func registers(_ draft: BackupPlan, among plans: [BackupPlan], offer: LoginItemAdvice.Offer? = .startAtLogin) -> Bool {
-            LoginItemAdvice.registersOnSave(draft: draft, among: plans, offer: offer)
-        }
-        #expect(registers(plan(.daily), among: []))
-        #expect(registers(plan(.daily), among: [plan(.manual)]))
-        #expect(!registers(plan(.manual), among: []))
-        #expect(!registers(plan(.daily), among: [plan(.hourly)]))
-        // Already on, or something only the user can do.
-        #expect(!registers(plan(.daily), among: [], offer: nil))
-        #expect(!registers(plan(.daily), among: [], offer: .awaitingApproval))
-        #expect(!registers(plan(.daily), among: [], offer: .moveToApplications))
-    }
-
-    @Test("the plan editor offers start-at-login only when the save turns a schedule on")
-    func editorOfferOnlyWhenScheduleTurnsOn() {
-        func plan(_ frequency: Schedule.Frequency, enabled: Bool = true) -> BackupPlan {
-            var plan = BackupPlan()
-            plan.repositoryID = UUID()
-            plan.path = "/tmp"
-            plan.schedule.frequency = enabled ? frequency : .manual
-            return plan
-        }
-        func offer(
-            draft: BackupPlan,
-            initial: BackupPlan?,
-            isNew: Bool,
-            startsAtLogin: Bool = false
-        ) -> LoginItemAdvice.Offer? {
-            LoginItemAdvice.editorOffer(
-                draft: draft,
-                initial: initial,
-                isNew: isNew,
-                startsAtLogin: startsAtLogin,
-                needsApproval: false,
-                isInstallable: true
-            )
-        }
-
-        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true) == .startAtLogin)
-        #expect(offer(draft: plan(.manual), initial: plan(.manual), isNew: true) == nil)
-        #expect(offer(draft: plan(.daily, enabled: false), initial: plan(.daily), isNew: true) == nil)
-        // An already-scheduled plan: Settings' switch covers the steady
-        // state, so an ordinary edit says nothing.
-        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: false) == nil)
-        #expect(offer(draft: plan(.daily), initial: plan(.manual), isNew: false) == .startAtLogin)
-        #expect(offer(draft: plan(.daily), initial: plan(.daily, enabled: false), isNew: false) == .startAtLogin)
-        #expect(offer(draft: plan(.manual), initial: plan(.daily), isNew: false) == nil)
-        #expect(offer(draft: plan(.daily), initial: plan(.daily), isNew: true, startsAtLogin: true) == nil)
     }
 }
 

@@ -538,8 +538,7 @@ struct ResticService: ResticClient {
         for marker in plan.developerMarkers {
             args += ["--exclude-if-present", marker]
         }
-        args.append("--exclude-caches")
-        if plan.excludeCloudFiles { args.append("--exclude-cloud-files") }
+        args += ["--exclude-caches", "--exclude-cloud-files"]
         args += ["--tag", Self.planTag(plan.id)]
         for tag in plan.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {
             args += ["--tag", tag]

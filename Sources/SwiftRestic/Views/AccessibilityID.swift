@@ -18,8 +18,7 @@ enum AccessibilityID {
     enum Plan {
         static let total = "plan.total"
         static let backUpNow = "plan.backUpNow"
-        static let editSchedule = "plan.editSchedule"
-        static let editExcluded = "plan.editExcluded"
+        static let edit = "plan.edit"
         static let runs = "plan.runs"
         static let nextBackup = "plan.nextBackup"
     }

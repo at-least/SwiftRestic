@@ -306,7 +306,6 @@ struct BackupRunEngineTests {
         var gate = BackupHook()
         gate.event = .beforeBackup
         gate.command = "touch \(hookStarted.path); sleep 30"
-        gate.failureBehaviour = .abortBackup
         var aftermath = BackupHook()
         aftermath.event = .afterBackup
         aftermath.command = "touch \(failureRan.path)"
@@ -741,7 +740,6 @@ struct BackupRunEngineTests {
         let aborted = RecordingSink()
         var plan = makePlan()
         var gate = hook(event: .beforeBackup, command: "exit 1")
-        gate.failureBehaviour = .abortBackup
         plan.hooks = [gate]
         await BackupRunEngine.perform(
             plan: plan,

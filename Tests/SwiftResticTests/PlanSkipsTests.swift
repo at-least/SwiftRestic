@@ -3,23 +3,11 @@ import Testing
 
 @Suite("Plan skips")
 struct PlanSkipsTests {
-    @Test("the page lists what every plan leaves out first, then the switches that are on, in the editor's order")
-    func listing() {
-        var plan = BackupPlan()
-        plan.skipsMachines = true
-        #expect(PlanSkips.on(in: plan).map(\.title) == [
-            PlanSkips.always, PlanSkips.developerFiles, PlanSkips.machines, PlanSkips.cloudFiles,
-        ])
-        plan.skipsDeveloperFiles = false
-        plan.skipsMachines = false
-        plan.excludeCloudFiles = false
-        #expect(PlanSkips.on(in: plan).map(\.title) == [PlanSkips.always])
-    }
-
-    @Test("what every plan leaves out names its rules in the tooltip, one a line, and the cache tag")
+    @Test("what every plan leaves out names its rules in the tooltip, one a line, then the cache tag and online-only files")
     func alwaysHelp() {
         let lines = PlanSkips.alwaysHelp.components(separatedBy: "\n")
-        #expect(lines.count == ExcludeRule.defaults.count + 1)
+        #expect(lines.count == ExcludeRule.defaults.count + 2)
+        #expect(lines.last == "Files kept only in iCloud Drive or OneDrive")
         #expect(lines.first == "\(ExcludeRule.defaults[0].pattern) — \(ExcludeRule.defaults[0].what)")
     }
 }

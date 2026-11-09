@@ -177,7 +177,6 @@ struct PlanDetailView: View {
                 Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID)) }
             }
             scheduleSection(plan)
-            excludedItemsSection(plan)
         }
         .formStyle(.grouped)
     }
@@ -250,8 +249,6 @@ struct PlanDetailView: View {
                 Text("Backups")
                 Spacer()
                 backUpControl(plan)
-                Button("Edit…") { router.request(.editPlan(plan.id, tab: .retention)) }
-                    .help("Choose which old backups to remove")
             }
             .controlSize(.small)
         }
@@ -281,10 +278,9 @@ struct PlanDetailView: View {
             HStack {
                 Text("Schedule")
                 Spacer()
-                Button("Edit…") { router.request(.editPlan(plan.id, tab: .schedule)) }
-                    .accessibilityIdentifier(AccessibilityID.Plan.editSchedule)
+                Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
+                    .accessibilityIdentifier(AccessibilityID.Plan.edit)
                     .controlSize(.small)
-                    .help("Change when this plan runs")
             }
         }
     }
@@ -365,37 +361,6 @@ struct PlanDetailView: View {
         } else {
             Text(BackupPlan.noBackupLocationReason)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    /// As the editor's Excluded Items tab says it: the switches that are on and
-    /// the user's own patterns as typed, tilde and all.
-    private func excludedItemsSection(_ plan: BackupPlan) -> some View {
-        let skips = PlanSkips.on(in: plan)
-        return Section {
-            ForEach(skips, id: \.title) { skip in
-                Text(skip.title)
-                    .modifier(TileHelp(help: skip.help))
-            }
-            ForEach(plan.excludePatterns, id: \.self) { pattern in
-                Text(pattern)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(pattern)
-            }
-            if skips.isEmpty && plan.excludePatterns.isEmpty {
-                Text("Nothing is excluded")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            HStack {
-                Text("Excluded Items")
-                Spacer()
-                Button("Edit…") { router.request(.editPlan(plan.id, tab: .files)) }
-                    .accessibilityIdentifier(AccessibilityID.Plan.editExcluded)
-                    .controlSize(.small)
-                    .help("Change what this plan excludes")
-            }
         }
     }
 }

@@ -26,7 +26,6 @@ struct AppModelTests {
     /// Tests that are not about scheduling use `.manual` so only they decide when
     /// a backup happens.
     private func makeHarness(
-        retention: RetentionPolicy = RetentionPolicy(),
         frequency: Schedule.Frequency = .manual,
         stubMode: String? = nil
     ) async throws -> Harness {
@@ -58,7 +57,6 @@ struct AppModelTests {
         plan.path = sourceDirectory.path
         plan.skipNothing()
         plan.schedule.frequency = frequency
-        plan.retention = retention
 
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
@@ -798,26 +796,17 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("online-only cloud files are left out with restic's own flag when the plan asks for it")
+    @Test("online-only cloud files are always left out, with restic's own flag")
     func excludeCloudFilesFlag() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
-        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
 
-        model.configuration.plans[index].excludeCloudFiles = true
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
-        let with = try #require(model.configuration.runs.first)
-        #expect(with.outcome == .succeeded)
-        #expect(try model.runLogs.read(with.id)?.contains("--exclude-cloud-files") == true)
-
-        model.configuration.plans[index].excludeCloudFiles = false
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-        let without = try #require(model.configuration.runs.first)
-        #expect(without.id != with.id)
-        #expect(try model.runLogs.read(without.id)?.contains("--exclude-cloud-files") == false)
+        let run = try #require(model.configuration.runs.first)
+        #expect(run.outcome == .succeeded)
+        #expect(try model.runLogs.read(run.id)?.contains("--exclude-cloud-files") == true)
 
         await model.shutdown()
     }
@@ -912,14 +901,7 @@ struct AppModelTests {
 
     @Test("retention runs after the backup and trims the plan's own snapshots")
     func retentionAfterBackup() async throws {
-        var retention = RetentionPolicy()
-        retention.keepLast = 1
-        retention.keepHourly = 0
-        retention.keepDaily = 0
-        retention.keepWeekly = 0
-        retention.keepMonthly = 0
-        retention.keepYearly = 0
-        let harness = try await makeHarness(retention: retention)
+        let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
 
@@ -935,7 +917,9 @@ struct AppModelTests {
 
         #expect(model.configuration.runs.count == 3)
         #expect(model.configuration.runs.allSatisfy { $0.outcome == .succeeded })
-        #expect(model.snapshots(for: harness.repository.id, planID: harness.plan.id).count == 1)
+        // Recommended's rules are the only stored ones; restic 0.19.1 keeps two
+        // of three backups made seconds apart under them.
+        #expect(model.snapshots(for: harness.repository.id, planID: harness.plan.id).count < 3, "no old backup was removed")
 
         await model.shutdown()
     }
@@ -997,7 +981,6 @@ struct AppModelTests {
         var hook = BackupHook()
         hook.event = .beforeBackup
         hook.command = "echo 'not today' >&2; exit 1"
-        hook.failureBehaviour = .abortBackup
 
         var plan = harness.plan
         plan.hooks = [hook]
@@ -1324,12 +1307,12 @@ struct UpsertStampTests {
 
         // A draft taken before that run is saved with an unrelated edit.
         var staleDraft = plan
-        staleDraft.schedule.hour = 7
+        staleDraft.schedule.frequency = .weekly
         model.upsert(plan: staleDraft)
 
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
-        #expect(model.configuration.plans[0].schedule.hour == 7)
+        #expect(model.configuration.plans[0].schedule.frequency == .weekly)
     }
 
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
@@ -1476,27 +1459,17 @@ struct StartAtLoginSurfaceTests {
         // a quit the user did not choose here: an idle app never holds them.
         #expect(model.quitConfirmation(userChoseQuit: false) == nil)
 
-        model.startsAtLogin = true
+        model.loginItemState = .enabled
         #expect(model.quitConfirmation(userChoseQuit: true) == nil)
-        model.startsAtLogin = false
+        model.loginItemState = .off
         model.configuration.plans[0].schedule.frequency = .manual
         #expect(model.quitConfirmation(userChoseQuit: true) == nil)
-    }
-
-    /// `Format.relative` reads the real clock, so a notice's date is
-    /// anchored there: a fixed date would read "is next due 2 days ago" and
-    /// still pass a prefix check. The daily slot sits twelve hours off
-    /// that clock, so "due" and "next" cannot tie whenever this runs.
-    private func anchorToRealClock(_ model: AppModel) -> Date {
-        let now = Date.now
-        model.configuration.plans[0].schedule.hour = (Calendar.current.component(.hour, from: now) + 12) % 24
-        return now
     }
 
     @Test("a scheduled run already overdue is named as due now, not in the past")
     func overdueRunIsDueNow() throws {
         let (model, _) = makeModelWithPlan()
-        let now = anchorToRealClock(model)
+        let now = Date.now
         // Never run: the slot that passed is due, and the pick clamps to now.
         let overdue = try #require(model.quitScheduleNotice(now: now))
         #expect(overdue.hasPrefix("Documents (NAS) is due now."))
@@ -1521,7 +1494,7 @@ struct StartAtLoginSurfaceTests {
     @Test("under a hold the quit sentence names it first, as the tray's line does")
     func quitNoticeNamesTheHold() throws {
         let (model, _) = makeModelWithPlan()
-        let now = anchorToRealClock(model)
+        let now = Date.now
         // A timed hold moves a due run to its end, where the scheduler
         // picks it up, and says whose end that is.
         model.pauseBackups(for: .oneHour, now: now)
@@ -1554,7 +1527,7 @@ struct StartAtLoginSurfaceTests {
     @Test("a backup the quit stops has its slot counted as run, as the stop will stamp it")
     func runInFlightIsNotTheMissedRun() throws {
         let (model, plan) = makeModelWithPlan()
-        let now = anchorToRealClock(model)
+        let now = Date.now
         // Due, and running: the quit's cancel stamps the run's start, so
         // this slot is covered and the one missed is the next.
         let startedAt = now.addingTimeInterval(-60)
@@ -1565,25 +1538,20 @@ struct StartAtLoginSurfaceTests {
     }
 }
 
-/// The Start at Login switch's rule: the click is optimistic, the daemon's
-/// read confirms or corrects it, and a read that began before a newer click
-/// may not snap the switch back. The daemon is fake — `SMAppService` would
-/// answer for Xcode here.
-@Suite("login item switch")
+/// The login item follows the plans: registered while any plan has a
+/// schedule, unregistered once none has, never from outside the
+/// Applications folder. The daemon is fake — `SMAppService` would answer
+/// for Xcode here.
+@Suite("login item")
 @MainActor
 struct LoginItemSwitchTests {
-    /// The fake daemon: while holding, every apply blocks until its own
-    /// `release()` — XPC round trips the test parks mid-flight — and each
-    /// read answers the next scripted state, repeating the last past the
-    /// end.
+    /// The fake daemon: each read answers the next scripted state, repeating
+    /// the last past the end; each apply is recorded.
     final class Script: @unchecked Sendable {
         private let lock = NSLock()
         private var applied: [Bool] = []
-        private var states: [LoginItemState]
+        private let states: [LoginItemState]
         private var next = 0
-        private var holding = false
-        private var releases = 0
-        private var passed = 0
 
         init(states: [LoginItemState]) {
             self.states = states
@@ -1592,19 +1560,7 @@ struct LoginItemSwitchTests {
         func apply(_ enabled: Bool) throws {
             lock.lock()
             applied.append(enabled)
-            let hold = holding
             lock.unlock()
-            guard hold else { return }
-            while true {
-                lock.lock()
-                if releases > passed {
-                    passed += 1
-                    lock.unlock()
-                    return
-                }
-                lock.unlock()
-                usleep(5_000)
-            }
         }
 
         func read() -> LoginItemState {
@@ -1615,13 +1571,7 @@ struct LoginItemSwitchTests {
             return answer
         }
 
-        var applyCount: Int { lock.lock(); defer { lock.unlock() }; return applied.count }
-        var readCount: Int { lock.lock(); defer { lock.unlock() }; return next }
-        var askedFirstToEnable: Bool { lock.lock(); defer { lock.unlock() }; return applied.first == true }
-
-        func hold() { lock.lock(); holding = true; lock.unlock() }
-
-        func release() { lock.lock(); releases += 1; lock.unlock() }
+        var appliedChanges: [Bool] { lock.lock(); defer { lock.unlock() }; return applied }
 
         /// Wires the fake daemon into the model's seams. On the main actor:
         /// the seams are model state.
@@ -1630,123 +1580,100 @@ struct LoginItemSwitchTests {
             let script = self
             model.loginItemStateReader = { script.read() }
             model.loginItemApplier = { try script.apply($0) }
+            // xctest is no app bundle in /Applications; a test that wants the
+            // refusal sets the probe back to false.
+            model.installableLocationProbe = { true }
         }
     }
 
-    /// The model after the click's task has entered the chain (it bumps the
-    /// generation) and the chain has gone idle — every write the chain
-    /// performs has landed.
-    private func awaitSettled(_ model: AppModel, generation: Int) async throws {
-        try #require(await eventually(within: 10) { model.loginItemGeneration >= generation }, "the click never entered the chain")
-        try #require(await eventually(within: 10) { model.loginItemChanges.isIdle }, "the chain never settled")
+    private func scheduledPlan() -> BackupPlan {
+        var plan = BackupPlan()
+        plan.path = "/tmp/Documents"
+        plan.schedule.frequency = .daily
+        return plan
     }
 
-    @Test("a click moves the switch at once and the daemon's read confirms it")
-    func optimisticClickThenDaemonConfirm() async throws {
-        let model = makeModel("SwiftResticLoginSwitch").model
-        let script = Script(states: [.enabled])
+    @Test("a scheduled plan registers the login item")
+    func registersForScheduledPlan() async {
+        let model = makeModel("SwiftResticLoginRegisters").model
+        let script = Script(states: [.off, .enabled])
         script.install(in: model)
+        model.configuration.plans = [scheduledPlan()]
 
-        model.requestStartsAtLogin(true)
-        #expect(model.startsAtLogin, "the click is optimistic")
-        try await awaitSettled(model, generation: 1)
-        #expect(model.startsAtLogin)
+        await model.reconcileLoginItem()
+        #expect(script.appliedChanges == [true])
         #expect(model.loginItemState == .enabled)
-        #expect(script.applyCount == 1)
-        #expect(script.askedFirstToEnable)
+        #expect(model.startsAtLogin)
+        #expect(model.banners.isEmpty)
     }
 
-    @Test("a daemon read that began before a newer click never snaps the switch back")
-    func staleReadDoesNotStomp() async throws {
-        let model = makeModel("SwiftResticLoginSwitchStale").model
+    @Test("no scheduled plan unregisters the login item")
+    func unregistersWithoutScheduledPlan() async {
+        let model = makeModel("SwiftResticLoginUnregisters").model
         let script = Script(states: [.enabled, .off])
         script.install(in: model)
-        script.hold()
 
-        model.requestStartsAtLogin(true)
-        try #require(await eventually(within: 10) { script.applyCount == 1 }, "the first apply never started")
-        // The second click lands while the first's turn still runs.
-        model.requestStartsAtLogin(false)
-        #expect(!model.startsAtLogin, "the second click is the optimistic value now")
-
-        // The first turn's read answers what the daemon said before the
-        // second click — enabled. It must drop: a newer click already owns
-        // the switch. The second change's turn is parked at its own applier,
-        // so nothing corrects the value here but the guard.
-        script.release()
-        try #require(await eventually(within: 10) { script.applyCount == 2 }, "the second change never started")
-        #expect(script.readCount == 1, "the parked second change should not have read yet")
-        #expect(!model.startsAtLogin, "a stale daemon read snapped the switch back")
-
-        // Let go, and the second change's own read — the daemon's answer to
-        // it — settles the switch in its words.
-        script.release()
-        try await awaitSettled(model, generation: 2)
-        #expect(!model.startsAtLogin)
+        await model.reconcileLoginItem()
+        #expect(script.appliedChanges == [false])
         #expect(model.loginItemState == .off)
-    }
-
-    @Test("a status read landing beside a change in flight leaves the optimistic value alone")
-    func refreshLeavesAnInFlightClickAlone() async throws {
-        let model = makeModel("SwiftResticLoginRefresh").model
-        let script = Script(states: [.enabled])
-        script.install(in: model)
-        script.hold()
-
-        model.requestStartsAtLogin(false)
-        try #require(await eventually(within: 10) { script.applyCount == 1 }, "the apply never started")
         #expect(!model.startsAtLogin)
-
-        // The daemon's stale answer arrives while the chain is busy: it
-        // must not overwrite what the user just asked for.
-        await model.refreshLoginItemStatus()
-        #expect(!model.startsAtLogin, "a status read stomped the in-flight click's optimistic value")
-
-        script.release()
-        try await awaitSettled(model, generation: 1)
-        #expect(model.loginItemState == .enabled)
     }
 
-    @Test("a change the daemon refuses posts the banner and still applies the daemon's read")
-    func refusedChangeIsSaid() async throws {
-        let model = makeModel("SwiftResticLoginRefused").model
-        let script = Script(states: [.off])
+    @Test("a registration waiting for approval says so")
+    func approvalStillOwedIsSaid() async {
+        let model = makeModel("SwiftResticLoginApproval").model
+        let script = Script(states: [.off, .needsApproval])
         script.install(in: model)
-        model.loginItemApplier = { _ in throw ResticError.commandFailed(exitCode: 1, message: "daemon refused") }
+        model.configuration.plans = [scheduledPlan()]
 
-        await model.setStartsAtLogin(false)
-        #expect(model.banners.map(\.title) == ["Couldn’t change the login item"])
-        #expect(model.startsAtLogin == false)
-        #expect(model.loginItemState == .off)
+        await model.reconcileLoginItem()
+        #expect(script.appliedChanges == [true])
+        #expect(model.banners.map(\.title) == ["Approval needed"])
+        #expect(model.banners.map(\.message) == [LoginItem.approvalNeeded])
+        #expect(model.loginItemState == .needsApproval)
     }
 
-    @Test("turning it on from outside the Applications folder says so and registers nothing")
-    func enableOutsideApplicationsIsRefused() async throws {
+    @Test("outside the Applications folder nothing is registered")
+    func neverRegistersOutsideApplications() async {
         let model = makeModel("SwiftResticLoginNotInstalled").model
         let script = Script(states: [.off])
         script.install(in: model)
         model.installableLocationProbe = { false }
+        model.configuration.plans = [scheduledPlan()]
 
-        await model.setStartsAtLogin(true)
-        #expect(script.applyCount == 0)
-        #expect(model.banners.map(\.title) == ["Couldn’t start SwiftRestic at login"])
-        #expect(model.banners.map(\.message) == [LoginItem.notInstalledMessage])
-        #expect(model.startsAtLogin == false)
+        await model.reconcileLoginItem()
+        #expect(script.appliedChanges.isEmpty)
+        #expect(model.banners.isEmpty)
         #expect(model.loginItemState == .off)
     }
 
-    @Test("turning it on from the Applications folder registers, and an approval still owed is said")
-    func enableInsideApplicationsRegisters() async throws {
-        let model = makeModel("SwiftResticLoginInstalled").model
-        let script = Script(states: [.needsApproval])
+    @Test("a change the daemon refuses posts the banner and still applies the daemon's read")
+    func refusedChangeIsSaid() async {
+        let model = makeModel("SwiftResticLoginRefused").model
+        let script = Script(states: [.enabled])
         script.install(in: model)
-        model.installableLocationProbe = { true }
+        model.loginItemApplier = { _ in throw ResticError.commandFailed(exitCode: 1, message: "daemon refused") }
 
-        await model.setStartsAtLogin(true)
-        #expect(script.applyCount == 1)
-        #expect(script.askedFirstToEnable)
-        #expect(model.banners.map(\.title) == ["Approval needed"])
-        #expect(model.loginItemState == .needsApproval)
+        await model.reconcileLoginItem()
+        #expect(model.banners.map(\.title) == ["Couldn’t change the login item"])
+        #expect(model.loginItemState == .enabled)
+    }
+
+    @Test("a plan's schedule registers the login item, and the last schedule going unregisters it")
+    func followsThePlans() async throws {
+        let model = makeModel("SwiftResticLoginFollowsPlans").model
+        let script = Script(states: [.off, .enabled, .enabled, .off])
+        script.install(in: model)
+        // What bootstrap leaves behind: plan edits from here on are the user's.
+        model.isLoaded = true
+
+        model.configuration.plans = [scheduledPlan()]
+        try #require(await eventually(within: 10) { model.loginItemState == .enabled }, "the schedule never registered")
+        #expect(script.appliedChanges == [true])
+
+        model.configuration.plans = []
+        try #require(await eventually(within: 10) { model.loginItemState == .off }, "the last schedule never unregistered")
+        #expect(script.appliedChanges == [true, false])
     }
 }
 

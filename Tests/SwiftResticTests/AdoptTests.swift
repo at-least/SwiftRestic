@@ -264,7 +264,7 @@ struct AdoptTests {
         #expect(await model.adoptDraft(repositoryID: repository.id, planID: UUID()) == nil)
     }
 
-    @Test("a group from another Mac warns in order and asks before adopting")
+    @Test("a group from another Mac warns in order")
     func foreignGroupWarnsAndConfirms() async throws {
         let planID = UUID()
         let newest = try snapshot(
@@ -287,12 +287,6 @@ struct AdoptTests {
             "The folder comes from another Mac and may not exist here.",
             "These backups are recent — a plan on another Mac may still be writing them.",
         ])
-        #expect(briefing.needsConfirmation)
-        #expect(briefing.confirmation.title == "Continue “Movies” on this Mac?")
-        #expect(briefing.confirmation.message
-            == "Nothing is written to “Home Disk”."
-                + " If another Mac still runs this plan, both Macs share one history and the same rules for removing old backups"
-                + " — continue only backups no other Mac is still making.")
     }
 
     @Test("the folder warning says where the folder came from, or that it isn't on this Mac")
@@ -323,7 +317,7 @@ struct AdoptTests {
         #expect(model.adoptBriefing(for: localDraft, sourceExists: true, now: date("2026-10-03T12:00:00Z"))?.warnings == [])
     }
 
-    @Test("a clean old local group adopts in one click, once its folders are here")
+    @Test("a clean old local group warns of nothing, once its folders are here")
     func cleanLocalGroupNeedsNoDialog() async throws {
         let planID = UUID()
         let here = existingFolder()
@@ -338,28 +332,7 @@ struct AdoptTests {
 
         let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
         #expect(briefing.warnings.isEmpty)
-        #expect(!briefing.needsConfirmation)
         #expect(briefing.historyLine == "This backup becomes this plan’s history.")
-    }
-
-    @Test("a fresh backup this Mac itself made still asks once")
-    func recentLocalGroupStillConfirms() async throws {
-        let planID = UUID()
-        let here = existingFolder()
-        let fresh = try snapshot(
-            "just-now", time: "2026-10-03T11:00:00Z", paths: [here], tags: [ResticService.planTag(planID)]
-        )
-        let model = makeModel()
-        let repository = makeRepository()
-        loadModel(model, repository: repository, listing: [fresh])
-        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-
-        let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
-        // No warning line — the recent warning is host-aware, so this Mac's
-        // own fresh backup is not called another Mac's work — but the dialog
-        // still asks, because freshness alone is worth one deliberate look.
-        #expect(briefing.warnings.isEmpty)
-        #expect(briefing.needsConfirmation)
     }
 
     @Test("an older foreign backup is named precisely, never as the newest")
@@ -380,11 +353,9 @@ struct AdoptTests {
             == "The newest backup from another Mac was made on “laptop”, \(Format.timestamp(foreign.time)).")
         // Two Macs made the history; the header counts them.
         #expect(briefing.madeLine.hasPrefix("Made \(Format.historySpan(oldest: foreign.time, newest: local.time)) from 2 Macs."))
-        // A foreign writer is the dialog's rule on its own — no recency needed.
-        #expect(briefing.needsConfirmation)
     }
 
-    @Test("a backup carrying another plan's tag too says where it stays")
+    @Test("a backup that also belongs to another plan says where it stays")
     func dualTaggedBackupNote() async throws {
         // The snapshot's one home is its lexicographically first plan tag, so
         // the fixture orders them: this group's UUID sorts first and the
@@ -405,7 +376,7 @@ struct AdoptTests {
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
 
         let briefing = try #require(model.adoptBriefing(for: draft, sourceExists: AppModel.sourceExists(draft.path), now: date("2026-10-03T12:00:00Z")))
-        #expect(briefing.warnings.last == "1 backup also carries another plan’s tag and stays with that plan.")
+        #expect(briefing.warnings.last == "1 backup also belongs to another plan and stays with it.")
     }
 
     @Test("adopt appends one plan with the group's UUID, moves the records and writes no run record")

@@ -8,8 +8,6 @@ struct AdoptBriefing: Equatable {
     var repositoryLine: String
     /// In the order the sheet shows them.
     var warnings: [String]
-    var needsConfirmation: Bool
-    var confirmation: ConfirmationCopy
 
     static let footer = "Don’t continue backups another Mac still makes — the two Macs would share one history."
 }
@@ -92,16 +90,15 @@ extension AppModel {
             warnings.append(Self.missingSourcesWarning)
         }
         // Both conditions: a stale foreign host is not another Mac still
-        // writing, and a fresh backup this Mac made is the confirmation's
-        // business below, not the warning's.
+        // writing, and a fresh backup this Mac made is this Mac's own.
         if hasForeignHost && isRecent {
             warnings.append("These backups are recent — a plan on another Mac may still be writing them.")
         }
         let dualTagged = snapshots.filter { $0.planTags.count > 1 }.count
         if dualTagged == 1 {
-            warnings.append("1 backup also carries another plan’s tag and stays with that plan.")
+            warnings.append("1 backup also belongs to another plan and stays with it.")
         } else if dualTagged > 1 {
-            warnings.append("\(Format.plural(dualTagged, "backup")) also carry another plan’s tag and stay with that plan.")
+            warnings.append("\(Format.plural(dualTagged, "backup")) also belong to another plan and stay with it.")
         }
 
         let historyLine = snapshots.count == 1
@@ -110,22 +107,11 @@ extension AppModel {
         let madeLine = "Made \(Format.historySpan(oldest: snapshots[snapshots.count - 1].time, newest: newest.time))"
             + " from \(madeFrom). Nothing in “\(label(of: repository))” changes."
 
-        let name = label(of: draft)
-
         return AdoptBriefing(
             historyLine: historyLine,
             madeLine: madeLine,
             repositoryLine: label(of: repository),
-            warnings: warnings,
-            // Broader than the recent warning: a fresh backup this Mac made
-            // gets the confirmation too.
-            needsConfirmation: hasForeignHost || isRecent,
-            confirmation: ConfirmationCopy(
-                title: "Continue “\(name)” on this Mac?",
-                message: "Nothing is written to “\(label(of: repository))”."
-                    + " If another Mac still runs this plan, both Macs share one history and the same rules for removing old backups"
-                    + " — continue only backups no other Mac is still making."
-            )
+            warnings: warnings
         )
     }
 

@@ -104,10 +104,9 @@ struct HookTests {
         #expect(outcome.summary.contains("timed out"))
     }
 
-    @Test("only a before hook can cancel the run")
+    @Test("a failing before hook always cancels the run, an after hook never")
     func onlyBeforeHooksCanAbort() {
         var hook = BackupHook()
-        hook.failureBehaviour = .abortBackup
         hook.event = .beforeBackup
         #expect(hook.abortsRunOnFailure)
         // By the time it runs the snapshot exists: "cancel" would be meaningless.
@@ -136,7 +135,7 @@ struct HookTests {
         for old in ["afterSuccess", "afterWarning", "afterFailure", "afterAny", "afterBackup"] {
             #expect(try read(#""event":"\#(old)","command":"true""#)?.event == .afterBackup, "\(old)")
         }
-        #expect(try read(#""event":"beforeBackup","command":"true","failureBehaviour":"abortBackup""#)?.abortsRunOnFailure == true)
+        #expect(try read(#""event":"beforeBackup","command":"true","failureBehaviour":"ignore""#)?.abortsRunOnFailure == true)
         #expect(try read(#""event":"afterSuccess","command":"true","isEnabled":false"#) == nil)
         #expect(try read(#""event":"beforeMaintenance","command":"true""#) == nil)
         #expect(try read(#""event":"invented","command":"true""#) == nil)
@@ -156,18 +155,17 @@ struct HookTests {
 
     @Test("hooks run in order and stop at one that aborts")
     func runsInOrderAndStops() async {
-        func hook(command: String, aborts: Bool = false) -> BackupHook {
+        func hook(command: String) -> BackupHook {
             var hook = BackupHook()
             hook.event = .beforeBackup
             hook.command = command
-            hook.failureBehaviour = aborts ? .abortBackup : .ignore
             return hook
         }
 
         let hooks = [
             hook(command: "true"),
             hook(command: "   "),
-            hook(command: "false", aborts: true),
+            hook(command: "false"),
             hook(command: "pwd"),
         ]
 
@@ -213,7 +211,6 @@ struct HookTests {
         var hook = BackupHook()
         hook.event = .beforeBackup
         hook.command = "touch '\(started.path)'; sleep 30"
-        hook.failureBehaviour = .abortBackup
 
         let task = Task {
             await HookRunner(runner: ResticRunner())

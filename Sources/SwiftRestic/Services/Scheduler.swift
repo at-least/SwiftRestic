@@ -97,8 +97,7 @@ enum Scheduler {
         now: Date = .now,
         existingRepositoryIDs: Set<UUID>,
         busyPlanIDs: Set<UUID> = [],
-        busyRepositoryIDs: Set<UUID> = [],
-        calendar: Calendar = .current
+        busyRepositoryIDs: Set<UUID> = []
     ) -> [BackupPlan] {
         var startingRepositoryIDs = Set<UUID>()
         return plans
@@ -106,7 +105,7 @@ enum Scheduler {
                 guard plan.runsOnSchedule,
                       let repositoryID = plan.repositoryID, existingRepositoryIDs.contains(repositoryID),
                       !busyPlanIDs.contains(plan.id), !busyRepositoryIDs.contains(repositoryID),
-                      let due = plan.dueSlot(at: now, calendar: calendar)
+                      let due = plan.dueSlot(at: now)
                 else { return nil }
                 return (plan, repositoryID, due)
             }
@@ -185,44 +184,6 @@ enum Scheduler {
             .max { $0.startedAt < $1.startedAt }
         guard let newest, newest.startedAt >= stamp ?? .distantPast else { return nil }
         return newest
-    }
-
-    /// A repository page's Next check or Next cleanup, as the scheduler will
-    /// start it: a hold holds upkeep too, so a timed hold moves the date to its
-    /// end and a due task under an open-ended one reads "Waiting", as a due plan's Next backup
-    /// value does — never "Due now". A due task already in flight reads
-    /// "Running now", ahead of hold, drive and server: the stamp lands only
-    /// when restic finishes. A due task whose local repository's
-    /// drive is away waits for the drive, hold or not: "When “Archive SSD”
-    /// is connected". `driveAway` is read by the caller off the main actor:
-    /// a stalled network share can hold the read for seconds.
-    static func nextMaintenanceText(
-        _ task: MaintenanceTask,
-        of repository: Repository,
-        among repositories: [Repository],
-        hold: ScheduleHold?,
-        driveAway: Bool,
-        awaitingServer: Bool,
-        isRunning: Bool = false,
-        now: Date = .now
-    ) -> String {
-        let due = repository.maintenance.nextDate(for: task, addedAt: repository.createdAt)
-        let date = nextMaintenanceDate(task, of: repository, hold: hold)
-        if due <= now, isRunning {
-            return "Running now"
-        }
-        if due <= now, driveAway, let volume = VolumePresence.volumeName(of: repository.resolvedLocalPath) {
-            return "When “\(volume)” is connected"
-        }
-        if due <= now, awaitingServer {
-            return "When “\(repository.label(among: repositories))” can be reached"
-        }
-        guard date > now else { return hold == nil ? "Due now" : "Waiting" }
-        return Format.timestamp(date)
-    }
-
-    private static func nextMaintenanceDate(_ task: MaintenanceTask, of repository: Repository, hold: ScheduleHold?) -> Date {
-        max(repository.maintenance.nextDate(for: task, addedAt: repository.createdAt), hold?.resumesAt ?? .distantPast)
     }
 
     /// Every complete plan's next run date, in plan order: what

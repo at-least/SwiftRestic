@@ -32,33 +32,18 @@ struct BackupHook: Identifiable, Encodable, Sendable, Hashable {
         }
     }
 
-    enum FailureBehaviour: String, Codable, Sendable, CaseIterable, Identifiable {
-        case ignore
-        /// The raw value keeps its original spelling so existing configs
-        /// still decode.
-        case abortBackup
-
-        var id: String { rawValue }
-        var displayName: String {
-            switch self {
-            case .ignore: "Record it and carry on"
-            case .abortBackup: "Stop the backup"
-            }
-        }
-    }
-
     var id: UUID = UUID()
     var event: Event = .afterBackup
     var command: String = ""
-    var failureBehaviour: FailureBehaviour = .ignore
 
     var isRunnable: Bool {
         !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// A hook can only abort a run that has not started yet.
+    /// A script before the backup that fails always stops it (user
+    /// decision); after the backup there is nothing left to stop.
     var abortsRunOnFailure: Bool {
-        failureBehaviour == .abortBackup && event == .beforeBackup
+        event == .beforeBackup
     }
 
     /// The program it runs, for the run's record and log. The program alone,
@@ -78,7 +63,7 @@ struct StoredHook: Decodable {
     var hook: BackupHook?
 
     private enum CodingKeys: String, CodingKey {
-        case id, event, command, failureBehaviour, isEnabled
+        case id, event, command, isEnabled
     }
 
     init(from decoder: any Decoder) throws {
@@ -93,7 +78,6 @@ struct StoredHook: Decodable {
         hook.id = c.value(.id, default: UUID())
         hook.event = event
         hook.command = c.value(.command, default: "")
-        hook.failureBehaviour = c.value(.failureBehaviour, default: .ignore)
         self.hook = hook
     }
 }

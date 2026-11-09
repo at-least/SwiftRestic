@@ -280,7 +280,7 @@ enum BackupRunEngine {
                 if result.shouldAbort {
                     record.outcome = .failed
                     record.failureMessage =
-                        "The backup didn’t run because a hook that runs before it failed."
+                        "The backup didn’t run because its before-backup script failed."
                     // Stamped although nothing ran: a hook that always refuses
                     // would otherwise be retried every minute.
                     sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)

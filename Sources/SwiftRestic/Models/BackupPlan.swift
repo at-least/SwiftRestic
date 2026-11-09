@@ -15,54 +15,21 @@ struct Schedule: Codable, Sendable, Hashable {
     }
 
     var frequency: Frequency = .daily
-    var hour: Int = 2
-    var minute: Int = 0
-    /// 1 = Sunday, matching `Calendar.component(.weekday:)`.
-    var weekday: Int = 2
 
     init() {}
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         frequency = c.value(.frequency, default: .daily)
-        // An "hour": 25 would match no wall-clock time — the plan would
-        // silently never run.
-        hour = DecodeNotes.clamped(c.value(.hour, default: 2), 0...23, "schedule.hour")
-        minute = DecodeNotes.clamped(c.value(.minute, default: 0), 0...59, "schedule.minute")
-        weekday = DecodeNotes.clamped(c.value(.weekday, default: 2), 1...7, "schedule.weekday")
     }
 
-    /// "Daily at 2:00 AM", "Sunday at 03:00": the time in the Mac's own
-    /// clock — 12- or 24-hour, as Language & Region sets it — the way the
-    /// Next backup value beside it reads (`Format.tileTimestamp`), never a
-    /// fixed 24-hour form of its own. The locale is pinned by tests only.
-    func summary(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
+    func summary() -> String {
         switch frequency {
-        case .manual: return "Manually"
-        case .hourly: return "Every hour"
-        case .daily: return "Daily at \(timeOfDay(calendar: calendar, locale: locale))"
-        case .weekly:
-            var named = calendar
-            named.locale = locale
-            let name = named.weekdaySymbols[max(0, min(6, weekday - 1))]
-            return "\(name) at \(timeOfDay(calendar: calendar, locale: locale))"
+        case .manual: "Manually"
+        case .hourly: "Every hour"
+        case .daily: "Every day"
+        case .weekly: "Every week"
         }
-    }
-
-    func timeOfDay(calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
-        Self.moment(hour: hour, minute: minute, calendar: calendar)
-            .formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).hour().minute())
-    }
-
-    /// `hour` and `minute` as a moment in `calendar`'s zone, on a fixed day
-    /// no clock change falls on anywhere — 1 January 2001, Gregorian
-    /// whatever the Mac's calendar, so a Buddhist or Japanese year never
-    /// lands in an era of odd local offsets — so every time of day exists
-    /// on it. What the editor's time field edits.
-    static func moment(hour: Int, minute: Int, calendar: Calendar = .current) -> Date {
-        var gregorian = Calendar(identifier: .gregorian)
-        gregorian.timeZone = calendar.timeZone
-        return gregorian.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: hour, minute: minute))!
     }
 
     var interval: TimeInterval? {
@@ -77,82 +44,36 @@ struct Schedule: Codable, Sendable, Hashable {
     /// How far behind the moment the window's now can be: its minute clock.
     static let windowClockLag: TimeInterval = 60
 
-    func nextRunDate(after lastRun: Date?, now: Date = .now, calendar: Calendar = .current) -> Date? {
+    /// An interval after the last run, never a time of day (user decision):
+    /// a run missed while the Mac slept or the app was closed starts as soon
+    /// as the app is running again.
+    func nextRunDate(after lastRun: Date?, now: Date = .now) -> Date? {
+        guard let interval else { return nil }
         // A stamp after now comes from a clock that was set ahead; kept, it
-        // would cover every slot until that date and the plan would not run.
-        // Within a minute of now it is a run of this minute: the window's now
-        // is the minute's start (TimelineView(.everyMinute)), and dropping
-        // the stamp made the page say Due now until the minute turned.
-        let lastRun = lastRun.flatMap { $0 <= now.addingTimeInterval(Self.windowClockLag) ? $0 : nil }
-        switch frequency {
-        case .manual:
-            return nil
-        case .hourly:
-            guard let lastRun else { return now }
-            return lastRun.addingTimeInterval(interval!)
-        case .daily:
-            return nextWallClock(after: lastRun, now: now, calendar: calendar, matchingWeekday: nil)
-        case .weekly:
-            return nextWallClock(after: lastRun, now: now, calendar: calendar, matchingWeekday: weekday)
-        }
-    }
-
-    private func nextWallClock(
-        after lastRun: Date?,
-        now: Date,
-        calendar: Calendar,
-        matchingWeekday: Int?
-    ) -> Date? {
-        var components = DateComponents()
-        components.hour = hour
-        components.minute = minute
-        components.second = 0
-        if let matchingWeekday { components.weekday = matchingWeekday }
-
-        // The most recent firing time strictly before `now`: a tick landing
-        // exactly on a slot sees it due on the next tick.
-        guard let previous = calendar.nextDate(
-            after: now,
-            matching: components,
-            matchingPolicy: .nextTime,
-            direction: .backward
-        ) else { return nil }
-
-        // A fall-back day repeats an hour, and the backward search lands on
-        // the second showing of the slot's wall-clock time; a run at the
-        // first must cover it, or the slot runs twice.
-        var slotStart = previous
-        let fold = TimeInterval(
-            calendar.timeZone.secondsFromGMT(for: previous.addingTimeInterval(-86_400))
-                - calendar.timeZone.secondsFromGMT(for: previous)
-        )
-        if fold > 0 {
-            let wallClock: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute]
-            let firstShowing = previous.addingTimeInterval(-fold)
-            if calendar.dateComponents(wallClock, from: firstShowing) == calendar.dateComponents(wallClock, from: previous) {
-                slotStart = firstShowing
-            }
-        }
-
-        if lastRun == nil || lastRun! < slotStart { return previous }
-
-        return calendar.nextDate(
-            after: now,
-            matching: components,
-            matchingPolicy: .nextTime,
-            direction: .forward
-        )
+        // would hold the plan back until that date. Within a minute of now it
+        // is a run of this minute: the window's now is the minute's start
+        // (TimelineView(.everyMinute)), and dropping the stamp made the page
+        // say Due now until the minute turned.
+        guard let lastRun, lastRun <= now.addingTimeInterval(Self.windowClockLag) else { return now }
+        return lastRun.addingTimeInterval(interval)
     }
 }
 
+/// Recommended or Keep everything: the only two choices (user decision).
 struct RetentionPolicy: Codable, Sendable, Hashable {
+    /// Off is Keep everything.
     var isEnabled: Bool = true
+    /// Recommended's rules. Never stored: a configuration's own rules read
+    /// as Recommended. Variables so tests can keep fewer, which makes restic
+    /// remove a backup made seconds before.
     var keepLast: Int = 0
     var keepHourly: Int = 24
     var keepDaily: Int = 7
     var keepWeekly: Int = 4
     var keepMonthly: Int = 12
     var keepYearly: Int = 3
+
+    private enum CodingKeys: String, CodingKey { case isEnabled }
 
     init(
         isEnabled: Bool = true,
@@ -175,16 +96,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = c.value(.isEnabled, default: true)
-        // Only the floor: a negative rule is off, as `forgetArguments` below
-        // reads it. A rule above the editor's range is still one restic
-        // follows; lowering it would remove backups.
-        let rule = 0...Int.max
-        keepLast = DecodeNotes.clamped(c.value(.keepLast, default: 0), rule, "retention.keepLast")
-        keepHourly = DecodeNotes.clamped(c.value(.keepHourly, default: 24), rule, "retention.keepHourly")
-        keepDaily = DecodeNotes.clamped(c.value(.keepDaily, default: 7), rule, "retention.keepDaily")
-        keepWeekly = DecodeNotes.clamped(c.value(.keepWeekly, default: 4), rule, "retention.keepWeekly")
-        keepMonthly = DecodeNotes.clamped(c.value(.keepMonthly, default: 12), rule, "retention.keepMonthly")
-        keepYearly = DecodeNotes.clamped(c.value(.keepYearly, default: 3), rule, "retention.keepYearly")
     }
 
     var forgetArguments: [String] {
@@ -219,77 +130,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         if rules.count == 1, keepLast == 1 { return "Keep the latest backup" }
         let noun = rules.count == 1 && rules[0].0 == 1 ? "backup" : "backups"
         return "Keep " + Format.list(rules.map(\.1)) + " " + noun
-    }
-
-    /// The plain-language answer to how long backups are kept, the editor's
-    /// only control, and the bucket set each answer writes. A derived view of
-    /// the buckets, never a persisted fact.
-    enum Reach: String, Sendable, CaseIterable, Identifiable {
-        case standard
-        case month
-        case quarter
-        case year
-        case keepEverything
-        /// A hand-edited policy, or one from an older build's rule steppers.
-        /// Shown, not offered: its buckets are never lowered unasked, since
-        /// lowering one removes backups.
-        case custom
-
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .standard: "Recommended"
-            case .month: "For about a month"
-            case .quarter: "For about 3 months"
-            case .year: "For about a year"
-            case .keepEverything: "Keep everything"
-            case .custom: "Custom"
-            }
-        }
-
-        init(policy: RetentionPolicy) {
-            guard policy.isEnabled else {
-                self = .keepEverything
-                return
-            }
-            let buckets = (
-                policy.keepLast, policy.keepHourly, policy.keepDaily,
-                policy.keepWeekly, policy.keepMonthly, policy.keepYearly
-            )
-            switch buckets {
-            case (0, 24, 7, 4, 12, 3): self = .standard
-            case (0, 0, 30, 0, 0, 0): self = .month
-            case (0, 0, 90, 0, 0, 0): self = .quarter
-            case (0, 0, 365, 0, 0, 0): self = .year
-            default: self = .custom
-            }
-        }
-
-        /// Writes exactly the window the name promises, every other bucket
-        /// zeroed. Keep everything turns the rules off and leaves the buckets.
-        func apply(to policy: inout RetentionPolicy) {
-            let daily: Int
-            switch self {
-            case .custom: return
-            case .keepEverything:
-                policy.isEnabled = false
-                return
-            case .standard: daily = 7
-            case .month: daily = 30
-            case .quarter: daily = 90
-            case .year: daily = 365
-            }
-            policy = RetentionPolicy(
-                isEnabled: true,
-                keepLast: 0,
-                keepHourly: self == .standard ? 24 : 0,
-                keepDaily: daily,
-                keepWeekly: self == .standard ? 4 : 0,
-                keepMonthly: self == .standard ? 12 : 0,
-                keepYearly: self == .standard ? 3 : 0
-            )
-        }
     }
 }
 
@@ -327,12 +167,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// whatever `notifyOnSuccess` says. Off for an adopted plan and a plan
     /// saved before this existed, whose first backup is long past.
     var announcesFirstBackup = false
-    /// Leave out online-only cloud files (iCloud Drive, OneDrive), with
-    /// restic's `--exclude-cloud-files`. On for new plans; a plan saved
-    /// before the option reads it off, so its backups do not change under it.
-    /// UNVERIFIED (never tried on a real iCloud Drive file): what restic
-    /// does with an online-only file without the flag.
-    var excludeCloudFiles: Bool = true
     /// What developer tools download or build again
     /// (`ExcludeCategory.rebuildableGroups`). On for new plans.
     var skipsDeveloperFiles: Bool = true
@@ -343,7 +177,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, repositoryID, path, excludePatterns, tags, schedule, retention
-        case hooks, lastRunAt, lastSuccessAt, staleAlertedFor, excludeCloudFiles
+        case hooks, lastRunAt, lastSuccessAt, staleAlertedFor
         case skipsDeveloperFiles, skipsMachines, announcesFirstBackup
     }
 
@@ -371,7 +205,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         announcesFirstBackup = c.value(.announcesFirstBackup, default: false)
-        excludeCloudFiles = c.value(.excludeCloudFiles, default: false)
         // A plan saved without either key asked for neither, so its backups
         // do not change under a switch it never turned on.
         let groups = legacy.value(.skipDeveloperGroups, default: [String]())
@@ -478,8 +311,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         isScheduled && isConfigurationComplete
     }
 
-    func dueSlot(at now: Date, calendar: Calendar = .current) -> Date? {
-        schedule.nextRunDate(after: lastRunAt, now: now, calendar: calendar).flatMap { $0 <= now ? $0 : nil }
+    func dueSlot(at now: Date) -> Date? {
+        schedule.nextRunDate(after: lastRunAt, now: now).flatMap { $0 <= now ? $0 : nil }
     }
 
     /// The stored plan wins over the editor's draft for the model-written

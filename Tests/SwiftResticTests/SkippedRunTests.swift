@@ -220,7 +220,6 @@ struct SkippedRunTests {
         #expect(!OverviewMetrics.isHealed(failure, in: [nothing, failure]))
 
         var healthchecks = NotificationChannel()
-        healthchecks.kind = .healthchecks
         healthchecks.url = "https://hc-ping.com/abc-123"
         let alive = AppModel.notificationEvent(for: run, repositoryName: "Home NAS")
         #expect(
@@ -317,12 +316,5 @@ struct SkippedRunTests {
         #expect(older.continuedSnapshotIDs == nil)
         let roundTrip = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(stored))
         #expect(roundTrip.continuedSnapshotIDs == ["bbbb2222", "aaaa1111"])
-    }
-
-    @Test("new plans leave online-only cloud files out; a plan saved before the option keeps backing them up")
-    func cloudFilesDefault() throws {
-        #expect(BackupPlan().excludeCloudFiles)
-        let older = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"name":"Old"}"#.utf8))
-        #expect(!older.excludeCloudFiles)
     }
 }

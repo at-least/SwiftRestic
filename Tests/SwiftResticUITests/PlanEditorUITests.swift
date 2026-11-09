@@ -20,9 +20,10 @@ final class PlanEditorUITests: XCTestCase {
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
 
-        app.buttons[AccessibilityID.Plan.editExcluded].click()
+        app.buttons[AccessibilityID.Plan.edit].click()
         let save = app.buttons[AccessibilityID.PlanEditor.save]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
+        app.radioButtons["Excluded Items"].click()
         // Exclude's + is in view as the editor opens, no scrolling: above
         // the Cancel and Save bar. XCUITest calls a + below the fold hittable
         // too, and the click lands on whatever covers it.
@@ -48,10 +49,11 @@ final class PlanEditorUITests: XCTestCase {
         let folders = try UITestFolders.make("Manually")
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
-        // Not the time itself: macOS puts a narrow no-break space before AM.
-        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.runs].waitForValue(beginningWith: "Daily at "))
+        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.runs].waitForValue("Every day"))
 
-        app.buttons[AccessibilityID.Plan.editSchedule].click()
+        app.buttons[AccessibilityID.Plan.edit].click()
+        XCTAssertTrue(app.buttons[AccessibilityID.PlanEditor.save].waitForExistence(timeout: 10))
+        app.radioButtons["Schedule"].click()
         let howOften = app.popUpButtons[AccessibilityID.PlanEditor.frequency]
         XCTAssertTrue(howOften.waitForExistence(timeout: 10))
         howOften.click()

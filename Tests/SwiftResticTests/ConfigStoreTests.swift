@@ -765,18 +765,10 @@ struct TolerantDecodingTests {
         #expect(record.outcome == .succeeded)
         #expect(record.planName == "Docs")
 
-        let channel = try decode(
-            NotificationChannel.self,
-            #"{"kind":"invented","url":"https://example.com"}"#
-        )
-        #expect(channel.kind == .webhook)
-        #expect(channel.url == "https://example.com")
-
         let hook = try #require(try decode(
             StoredHook.self,
-            #"{"event":"afterSuccess","failureBehaviour":"invented","command":"true"}"#
+            #"{"event":"afterSuccess","command":"true"}"#
         ).hook)
-        #expect(hook.failureBehaviour == .ignore)
         #expect(hook.command == "true")
 
         // The defaults above are substitutions, not readings: each one must
@@ -786,60 +778,23 @@ struct TolerantDecodingTests {
         #expect(recorded.contains("kind"))
         #expect(recorded.contains("frequency"))
         #expect(recorded.contains("outcome"))
-        #expect(recorded.contains("failureBehaviour"))
-        #expect(notes.notes.count == 6)
+        #expect(notes.notes.count == 4)
     }
 
-    @Test("out-of-range schedule values clamp to the nearest runnable time, and say so")
-    func outOfRangeScheduleClamps() throws {
-        // A hand-edited "hour": 25 decodes cleanly and then never matches a
-        // wall-clock time — the plan would silently never run. Clamping keeps
-        // the plan alive at the nearest valid time and reports the edit.
-        let decoder = JSONDecoder()
-        let notes = DecodeNoteBox()
-        let plan = try DecodeNotes.$current.withValue(notes) {
-            try decoder.decode(
-                BackupPlan.self,
-                from: Data(#"{"schedule":{"frequency":"weekly","hour":25,"minute":99,"weekday":9}}"#.utf8)
-            )
-        }
-        #expect(plan.schedule.hour == 23)
-        #expect(plan.schedule.minute == 59)
-        #expect(plan.schedule.weekday == 7)
-        let recorded = notes.notes.joined(separator: " · ")
-        #expect(recorded.contains("hour"))
-        #expect(recorded.contains("minute"))
-        #expect(recorded.contains("weekday"))
-
-        let quiet = try decoder.decode(
+    @Test("stored keep rules read as Recommended; switched off they read as Keep everything; only the switch is written")
+    func storedKeepRulesReadAsRecommended() throws {
+        let plan = try JSONDecoder().decode(
             BackupPlan.self,
-            from: Data(#"{"schedule":{"frequency":"daily","hour":8,"minute":30}}"#.utf8)
+            from: Data(#"{"retention":{"isEnabled":true,"keepLast":1,"keepDaily":30,"keepYearly":500}}"#.utf8)
         )
-        #expect(quiet.schedule.hour == 8)
-        #expect(quiet.schedule.minute == 30)
-    }
-
-    @Test("a negative keep rule reads as off, and says so; a large one stays as written")
-    func negativeKeepRuleClamps() throws {
-        // A hand-edited "keepLast": -1 trapped the plan editor's retention
-        // projection (`0..<-1`). Only the floor clamps: a keep rule above
-        // the editor's range is still a rule restic follows, and lowering
-        // it would remove backups.
-        let notes = DecodeNoteBox()
-        let plan = try DecodeNotes.$current.withValue(notes) {
-            try JSONDecoder().decode(
-                BackupPlan.self,
-                from: Data(#"{"schedule":{"frequency":"daily"},"retention":{"keepLast":-1,"keepDaily":-7,"keepYearly":500}}"#.utf8)
-            )
-        }
-        // Required: unclamped, the projection below would trap the run.
-        try #require(plan.retention.keepLast == 0)
-        try #require(plan.retention.keepDaily == 0)
-        #expect(plan.retention.keepYearly == 500)
-        #expect(notes.notes == [
-            "“retention.keepLast” -1 is out of range — read as 0",
-            "“retention.keepDaily” -7 is out of range — read as 0",
-        ])
+        #expect(plan.retention == RetentionPolicy())
+        let kept = try JSONDecoder().decode(
+            BackupPlan.self,
+            from: Data(#"{"retention":{"isEnabled":false,"keepDaily":365}}"#.utf8)
+        )
+        #expect(kept.retention == RetentionPolicy(isEnabled: false))
+        let written = try JSONSerialization.jsonObject(with: JSONEncoder().encode(RetentionPolicy()))
+        #expect((written as? [String: Bool]) == ["isEnabled": true])
     }
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")

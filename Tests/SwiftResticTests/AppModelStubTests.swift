@@ -1154,13 +1154,10 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "hang-backup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        // Scheduled and never run, so its slot is due — the state the
-        // scheduler starts a run in. Twelve hours off the clock, so the
-        // next slot is never seconds away. Set and started in one turn:
-        // the tick cannot start the plan in between.
-        let hour = (Calendar.current.component(.hour, from: .now) + 12) % 24
+        // Scheduled and never run, so it is due — the state the scheduler
+        // starts a run in. Daily, so the next run is a day away. Set and
+        // started in one turn: the tick cannot start the plan in between.
         harness.model.configuration.plans[0].schedule.frequency = .daily
-        harness.model.configuration.plans[0].schedule.hour = hour
         harness.model.configuration.plans[0].lastRunAt = nil
         harness.model.runBackup(planID: harness.plan.id)
         #expect(harness.model.isRunning(planID: harness.plan.id))
@@ -1287,7 +1284,6 @@ struct AppModelStubTests {
         await server.start()
 
         var capture = NotificationChannel()
-        capture.kind = .webhook
         capture.url = "http://127.0.0.1:\(server.port)/hook"
         var leaky = BackupHook()
         leaky.event = .afterBackup
@@ -1978,10 +1974,10 @@ struct AppModelStubTests {
         let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
         defer { server.stop() }
         await server.start()
+        // A self-hosted Healthchecks address: /ping/<uuid>.
         var monitor = NotificationChannel()
-        monitor.kind = .healthchecks
-        monitor.url = "http://127.0.0.1:\(server.port)/ping"
-        #expect(monitor.wants(.cancelled))
+        monitor.url = "http://127.0.0.1:\(server.port)/ping/6f1c2a3b-0000-4000-8000-000000000001"
+        #expect(monitor.wants(.cancelled, notifyOnSuccess: false))
 
         let harness = try await makeHarness(mode: "hang-backup", channels: [monitor])
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1992,10 +1988,10 @@ struct AppModelStubTests {
         await harness.model.waitForRun(planID: planID)
 
         let deadline = Date.now.addingTimeInterval(5)
-        while !server.capturedRequestLines.contains(where: { $0.contains("/ping/fail") }), Date.now < deadline {
+        while !server.capturedRequestLines.contains(where: { $0.contains("/ping/6f1c2a3b-0000-4000-8000-000000000001/fail") }), Date.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }
-        #expect(server.capturedRequestLines.contains { $0.contains("/ping/fail") },
+        #expect(server.capturedRequestLines.contains { $0.contains("/ping/6f1c2a3b-0000-4000-8000-000000000001/fail") },
                 "requests were \(server.capturedRequestLines)")
         #expect(!harness.model.banners.contains { $0.title.hasPrefix("Couldn’t send") },
                 "banners were \(harness.model.banners.map(\.message))")
@@ -2162,12 +2158,10 @@ struct AppModelStubTests {
         leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
 
         var good = NotificationChannel()
-        good.kind = .webhook
         good.url = "http://127.0.0.1:\(port)/hook"
         // A second channel nothing is listening on: its failure must surface
         // without disturbing the delivered payload.
         var dead = NotificationChannel()
-        dead.kind = .webhook
         dead.url = "http://127.0.0.1:1/hook"
 
         let harness = try await makeHarness(mode: "warn", planHooks: [leaky], channels: [good, dead])
