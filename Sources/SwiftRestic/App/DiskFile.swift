@@ -55,7 +55,7 @@ enum DiskFile: Equatable {
     /// How close a modification time must be to restic's to be the same
     /// one: restic's is read to the millisecond (`ResticDateFormat`), the
     /// disk's to the nanosecond.
-    static let mtimeTolerance: TimeInterval = 0.002
+    private static let mtimeTolerance: TimeInterval = 0.002
 
     /// The pane's line about it, given its versions newest first — each
     /// version's size and modification time as the find read them, nil

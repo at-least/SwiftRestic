@@ -39,7 +39,7 @@ extension AppModel {
     /// start), so the plan's next slot is.
     func quitScheduleNotice(now: Date = .now) -> String? {
         guard !startsAtLogin else { return nil }
-        let hold = scheduleHold(now: now)
+        let hold = scheduleHold(repositoryID: nil, now: now)
         let plansAfterQuit = configuration.plans.map { plan in
             guard let run = activity[plan.id] else { return plan }
             var plan = plan
@@ -227,7 +227,7 @@ extension AppModel {
 
     /// A plan belongs to its repository, and one pointing nowhere could
     /// never run again.
-    func deletePlansWithoutRepository() {
+    private func deletePlansWithoutRepository() {
         let configured = Set(configuration.repositories.map(\.id))
         for plan in configuration.plans where plan.repositoryID.map(configured.contains) != true {
             deletePlan(id: plan.id)

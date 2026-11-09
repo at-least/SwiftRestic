@@ -59,7 +59,7 @@ final class AppRouter {
     /// A folder a backup's tree should open and select when it next loads
     /// this exact record — the Files view's Show in Backups, which leaves
     /// the folder or file the user was reading and must not lose their place.
-    struct RestoreFocus: Equatable {
+    private struct RestoreFocus: Equatable {
         var repositoryID: UUID
         var snapshotID: String
         var path: String
@@ -67,7 +67,7 @@ final class AppRouter {
 
     /// Transient, never persisted. Keyed on the record so a stale request can
     /// never steer an unrelated load; the pane spends it on its next load.
-    private(set) var restoreFocus: RestoreFocus?
+    private var restoreFocus: RestoreFocus?
 
     /// The toolbar's Overview | Backups | Files, one choice for every page
     /// (the user's call, 2026-10-24): switching plans keeps the view. Read

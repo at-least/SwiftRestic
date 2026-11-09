@@ -481,7 +481,7 @@ extension FilesTree.Entry {
         }
     }
 
-    static func notBackedUp(notRead: String?) -> String {
+    private static func notBackedUp(notRead: String?) -> String {
         "Not backed up. " + notBackedUpReason(notRead: notRead)
     }
 
@@ -511,11 +511,11 @@ extension FilesTree.Entry {
 /// What a Files view's load task is keyed by (`FilesTree.loadKey`): a
 /// change restarts it.
 struct FilesLoadKey: Equatable {
-    let nodes: [FileNode]
-    let listings: [UUID: Date]
-    let indexTaken: [UUID: UInt64]
-    let diskGeneration: UInt64
-    let rereads: Int
+    fileprivate let nodes: [FileNode]
+    fileprivate let listings: [UUID: Date]
+    fileprivate let indexTaken: [UUID: UInt64]
+    fileprivate let diskGeneration: UInt64
+    fileprivate let rereads: Int
 }
 
 struct FilesSearchAnswer: Equatable {

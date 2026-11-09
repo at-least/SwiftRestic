@@ -64,7 +64,7 @@ enum ActivitySeenStore {
         defaults.object(forKey: activityKey) as? Date
     }
 
-    static func saveActivitySeenAt(_ stamp: Date, to defaults: UserDefaults) {
+    fileprivate static func saveActivitySeenAt(_ stamp: Date, to defaults: UserDefaults) {
         defaults.set(stamp, forKey: activityKey)
     }
 }

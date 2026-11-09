@@ -148,7 +148,7 @@ extension AppModel {
         }
     }
 
-    nonisolated static func itemsLabel(_ names: [String]) -> String {
+    nonisolated private static func itemsLabel(_ names: [String]) -> String {
         names.count == 1 ? names[0] : "\(names[0]) and \(Format.count(names.count - 1)) more"
     }
 
@@ -466,7 +466,7 @@ extension AppModel {
         let destination = stagingDirectory
             .appendingPathComponent("\(dragRestorePrefix)\(UUID().uuidString)")
         _ = try await service.restore(
-            await Self.dragContext(repository: repository, label: repositoryLabel, secrets: secrets),
+            await Self.readContext(for: repository, label: repositoryLabel, secrets: secrets),
             snapshotID: snapshotID,
             node: node,
             destinationDirectory: destination,
@@ -482,10 +482,10 @@ extension AppModel {
         return ResticService.restoredItemURL(named: node.name, in: destination)
     }
 
-    /// One definition of the password rules, shared by the drag path above
-    /// and the instance `context(for:)`.
-    nonisolated static func dragContext(
-        repository: Repository,
+    /// The one definition of the password rules, off the main actor for the
+    /// drag path above; `context(for:)` caches its answer.
+    nonisolated static func readContext(
+        for repository: Repository,
         label: String,
         secrets: SecretStore
     ) async throws -> RepositoryContext {

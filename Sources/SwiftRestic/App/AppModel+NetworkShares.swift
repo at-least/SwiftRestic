@@ -1,7 +1,7 @@
 import Foundation
 
 extension AppModel {
-    func networkShare(forVolume volumeName: String) -> NetworkShare? {
+    private func networkShare(forVolume volumeName: String) -> NetworkShare? {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
 
@@ -117,7 +117,7 @@ extension AppModel {
     }
 }
 
-struct ShareNotReconnected: LocalizedError {
+private struct ShareNotReconnected: LocalizedError {
     let message: String
     var errorDescription: String? { message }
 }

@@ -3,7 +3,7 @@ import Foundation
 import Network
 
 extension AppModel {
-    static let schedulerTick: Duration = .seconds(60)
+    private static let schedulerTick: Duration = .seconds(60)
 
     func startScheduler() {
         schedulerTask?.cancel()
@@ -96,16 +96,12 @@ extension AppModel {
 
     /// Pause Backups, the one hold on every run. Stops the scheduler's tick.
     var scheduleHold: ScheduleHold? {
-        scheduleHold(now: .now)
-    }
-
-    func scheduleHold(now: Date) -> ScheduleHold? {
-        Scheduler.hold(pause: configuration.settings.schedulePause, isOnMeteredNetwork: false, repositoryUsesNetwork: false, now: now)
+        Scheduler.hold(pause: configuration.settings.schedulePause, isOnMeteredNetwork: false, repositoryUsesNetwork: false)
     }
 
     /// What holds this repository's scheduled runs: `scheduleHold`, or a
     /// metered network if it would use it. A disk on this Mac never waits for
-    /// a network.
+    /// a network; no repository is the pause alone.
     func scheduleHold(repositoryID: UUID?, now: Date = .now) -> ScheduleHold? {
         let usesNetwork = repository(id: repositoryID).map { $0.usesNetwork(shares: configuration.settings.networkShares) } ?? false
         return Scheduler.hold(

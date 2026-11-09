@@ -98,7 +98,7 @@ enum BackupStamp: Equatable, Sendable {
 /// of an hour, then fail.
 @MainActor
 enum ReachabilityGate {
-    enum Verdict {
+    fileprivate enum Verdict {
         /// Run. Carries the reconnect failures, for a partial skip's words
         /// later in the run (a folder whose share would not mount).
         case clear(reconnectFailures: [String: String])
@@ -121,7 +121,7 @@ enum ReachabilityGate {
         case drive, server
     }
 
-    static func verdict(
+    fileprivate static func verdict(
         of repository: Repository,
         needing paths: [String],
         sink: some RunEngineSink,

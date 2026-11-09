@@ -1856,7 +1856,7 @@ struct KeychainFailureHonestyTests {
         repository.localPath = "/tmp/some-repo"
 
         await #expect(throws: KeychainStore.KeychainError.self) {
-            _ = try await AppModel.dragContext(repository: repository, label: "some-repo", secrets: secrets)
+            _ = try await AppModel.readContext(for: repository, label: "some-repo", secrets: secrets)
         }
     }
 

@@ -150,7 +150,7 @@ extension AppModel {
     /// its removal path remembers. UUIDs are never reused, so an entry
     /// missed here is never cleared again. (`loadingSnapshots` is not here:
     /// it is cleared by the in-flight refresh's own `defer`.)
-    func clearRuntimeState(repositoryID id: UUID) {
+    private func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil
         retireRunToken(for: .maintenance(id))
         snapshots[id] = nil
@@ -173,8 +173,8 @@ extension AppModel {
         try await secrets.load(repositoryID)
     }
     /// Builds everything a restic command needs, or explains what is missing.
-    /// The password rules live once, in the drag path's main-actor-free
-    /// variant (`AppModel.dragContext`) — this delegates to it, and caches
+    /// The password rules live once, in the main-actor-free
+    /// `AppModel.readContext` — this delegates to it, and caches
     /// the answer beside the repository value it was built from, which
     /// holds everything but the secrets, rate limits included; secret
     /// edits are covered by `upsert`'s explicit invalidation, and a stale
@@ -185,7 +185,7 @@ extension AppModel {
             return cached.context
         }
         let generation = contextGenerations[repository.id, default: 0]
-        let context = try await Self.dragContext(repository: repository, label: label(of: repository), secrets: secrets)
+        let context = try await Self.readContext(for: repository, label: label(of: repository), secrets: secrets)
         if contextGenerations[repository.id, default: 0] == generation {
             resolvedContexts[repository.id] = (repository, context)
         }
@@ -262,7 +262,7 @@ extension AppModel {
     }
 }
 
-struct PasswordNotStored: LocalizedError {
+private struct PasswordNotStored: LocalizedError {
     let repositoryName: String
     let reason: String
 

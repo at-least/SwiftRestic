@@ -78,7 +78,7 @@ extension AppModel {
     /// The maintenance mirror of `installPlanActivity`: a fresh activity
     /// carries a new run token, so a line still in flight from the previous
     /// job drops instead of writing into this one.
-    func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool = true) {
+    private func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool) {
         rotateRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = MaintenanceActivity(task: task, askedByUser: askedByUser)
         reconcileSleepAssertion()
@@ -89,7 +89,7 @@ extension AppModel {
     /// from the job's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
     /// `tasks.drain()` would no longer wait for its record.
-    func unwindMaintenanceRun(_ repositoryID: UUID) {
+    private func unwindMaintenanceRun(_ repositoryID: UUID) {
         tasks.clear(.maintenance(repositoryID))
         // The token retires with the strip, so a late hop from this job
         // drops.

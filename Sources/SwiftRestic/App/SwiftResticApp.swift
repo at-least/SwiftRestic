@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tray is AppKit-owned (see TrayStatusItem for why); it is created
     /// once, when the model and router first reach the delegate together —
     /// the scene's `task` hands both over as a pair.
-    func wireAppSurface(model: AppModel, router: AppRouter) {
+    fileprivate func wireAppSurface(model: AppModel, router: AppRouter) {
         guard tray == nil else { return }
         self.model = model
         self.router = router

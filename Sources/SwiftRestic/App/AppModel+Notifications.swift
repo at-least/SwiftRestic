@@ -264,7 +264,7 @@ extension AppModel {
         }
     }
 
-    static let notificationSettingsURL = URL(
+    private static let notificationSettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(Bundle.main.bundleIdentifier!)"
     )!
 

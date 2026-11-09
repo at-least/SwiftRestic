@@ -351,7 +351,7 @@ final class AppModel {
         }
     }
 
-    static let saveDebounce: Duration = .milliseconds(400)
+    private static let saveDebounce: Duration = .milliseconds(400)
 
     /// Coalesces rapid edits (typing in a text field) into one write.
     private func scheduleSave() {

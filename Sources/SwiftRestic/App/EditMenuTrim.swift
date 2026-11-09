@@ -7,7 +7,7 @@ enum EditMenuTrim {
     /// Writing Tools and AutoFill have no defaults key that turns them off
     /// (macOS 27.0.1): AppKit adds them again on every update of the Edit
     /// menu, so they are taken out each time they arrive.
-    static let removedIdentifiers: Set<String> = [
+    private static let removedIdentifiers: Set<String> = [
         "__NSTextViewContextSubmenuIdentifierWritingTools",
         "_NSMenuItemAutoFillIdentifier",
     ]

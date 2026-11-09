@@ -57,7 +57,7 @@ extension AppModel {
         guard let expected = repository.resticID else { throw LocateRefusal.neverRead(name: name) }
 
         let service = try service()
-        let context = try await Self.dragContext(repository: moved, label: name, secrets: secrets)
+        let context = try await Self.readContext(for: moved, label: name, secrets: secrets)
         let found: String
         do {
             found = try await service.resticID(context, timeout: EditorRequirements.probeTimeout)

@@ -9,7 +9,7 @@ extension AppModel {
     /// The most backups `fileHistory` names to restic: `--snapshot` plus a
     /// 64-character ID is 92 bytes a backup on the command line, and macOS
     /// caps arguments and environment together at 1 MiB (`ARG_MAX`).
-    static let fileHistoryNamedLimit = 2_000
+    private static let fileHistoryNamedLimit = 2_000
 
     func refreshAllSnapshots() async {
         // Concurrent: one slow or unreachable location must not delay another's rows.
