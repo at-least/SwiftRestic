@@ -20,7 +20,7 @@
 /// two names that differ only in Unicode normalization are two paths
 /// (`PathKey`).
 enum ResticPath {
-    static let separator = UInt8(ascii: "/")
+    private static let separator = UInt8(ascii: "/")
 
     /// The spelling a path is keyed by: every trailing `/` stripped, except
     /// that the root stays "/" (and "" stays ""). A path with no trailing

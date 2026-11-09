@@ -137,7 +137,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// prints both for a server it has never seen, which it cannot ask
     /// about without a terminal, and for one whose key changed (checked
     /// against restic 0.19.1 over sftp, run as the app runs it).
-    static func sshHostKeyAdvice(_ message: String) -> String? {
+    private static func sshHostKeyAdvice(_ message: String) -> String? {
         guard message.contains("Host key verification failed") else { return nil }
         if message.contains("has changed") {
             return "This server’s SSH key has changed since this Mac last connected, and SSH refuses it: "
@@ -171,7 +171,7 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     /// Exit 10's cause and fix, for every kind of location; a disk's also
     /// gets Locate beside it (`RunFix.locate`).
-    static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
+    private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
@@ -192,7 +192,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// could not delete snapshots (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
     static let repositoryMissingCode: Int32 = 10
-    static let repositoryLockedCode: Int32 = 11
+    private static let repositoryLockedCode: Int32 = 11
     static let wrongPasswordCode: Int32 = 12
 
     static func isRepositoryLocked(_ error: Error) -> Bool {

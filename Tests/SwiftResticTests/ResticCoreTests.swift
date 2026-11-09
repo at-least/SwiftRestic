@@ -224,7 +224,7 @@ struct ResticBinaryTests {
         let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path
         let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
         #expect(path.first == helpers, "\(path.first ?? "none") leads instead of \(helpers)")
-        for directory in ResticBinary.helperDirectories {
+        for directory in ResticRunner.toolDirectories {
             #expect(path.contains(directory), "\(directory) missing from \(path)")
         }
     }

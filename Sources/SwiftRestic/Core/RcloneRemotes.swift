@@ -104,7 +104,7 @@ struct RcloneBinary: Sendable {
     var url: URL
 
     static var bundled: RcloneBinary {
-        RcloneBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/rclone"))
+        RcloneBinary(url: Bundle.main.helpersURL.appendingPathComponent("rclone"))
     }
 
     /// `bundled` when it is there and runnable; nil says a damaged install —

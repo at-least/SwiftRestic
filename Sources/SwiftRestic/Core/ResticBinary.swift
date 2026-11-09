@@ -7,7 +7,7 @@ struct ResticBinary: Sendable {
     /// `Tools/embed-helpers.sh` puts it here. Not looked for on the Mac: a
     /// restic the tests never ran could change what a backup means.
     static var bundled: ResticBinary {
-        ResticBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/restic"))
+        ResticBinary(url: Bundle.main.helpersURL.appendingPathComponent("restic"))
     }
 
     /// An executable *file*. `FileManager.isExecutableFile` alone also accepts
@@ -20,12 +20,11 @@ struct ResticBinary: Sendable {
         else { return false }
         return FileManager.default.isExecutableFile(atPath: path)
     }
+}
 
-    /// The extra PATH entries restic runs with, before the system folders —
-    /// where a brew ssh lives, which an sftp location needs. rclone is not
-    /// among them: the bundled copy leads restic's PATH
-    /// (`ResticRunner.baseEnvironment`).
-    static let helperDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
+extension Bundle {
+    /// Where `Tools/embed-helpers.sh` puts the pinned restic and rclone.
+    var helpersURL: URL { bundleURL.appendingPathComponent("Contents/Helpers") }
 }
 
 enum ResticState {

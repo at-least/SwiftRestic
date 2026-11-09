@@ -152,11 +152,9 @@ struct ResticInitialized: Sendable, Equatable, Decodable {
 /// with `--metadata`) and `?` bitrot. restic concatenates them when more than
 /// one applies — a file that became a symlink and lost its mode bits arrives as
 /// `"TU"` — so the raw string is kept and the categories are derived from it.
-struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable {
-    enum Category: String, Sendable, CaseIterable, Identifiable {
+struct ResticDiffChange: Sendable, Equatable, Decodable {
+    enum Category: Sendable, CaseIterable {
         case added, removed, modified, metadataOnly
-
-        var id: String { rawValue }
 
         var displayName: String {
             switch self {
@@ -170,8 +168,6 @@ struct ResticDiffChange: Sendable, Equatable, Hashable, Identifiable, Decodable 
 
     var path: String
     var modifier: String
-
-    var id: String { path }
 
     /// restic marks directories with a trailing slash — read bytewise
     /// (`ResticPath`): after a Prepend character such as U+0600 the slash is

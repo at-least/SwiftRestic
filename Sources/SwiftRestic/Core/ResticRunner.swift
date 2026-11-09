@@ -40,7 +40,7 @@ struct ResticInvocation: Sendable {
     /// console tokenizer's shell-style quoting, so a path with spaces stays
     /// one word on screen instead of reading as two arguments the run never
     /// received.
-    var displayCommand: String {
+    fileprivate var displayCommand: String {
         CommandLineTokenizer.render(["restic"] + arguments)
     }
 }
@@ -55,7 +55,7 @@ struct ResticRunResult: Sendable {
     /// record reports this number instead of dropping the lines.
     var malformedCount: Int = 0
 
-    var exitError: ResticExitError? {
+    private var exitError: ResticExitError? {
         for message in messages.reversed() {
             if case let .exitError(error) = message { return error }
         }
@@ -83,7 +83,7 @@ struct ResticRunResult: Sendable {
     /// after …" line on stderr — "Stat(<config/>) returned error, retrying
     /// after 38.6s: Head "http://…/config": dial tcp 127.0.0.1:18000:
     /// connect: connection refused" gives "connection refused" — or empty.
-    static func retryCause(in stderr: String) -> String {
+    fileprivate static func retryCause(in stderr: String) -> String {
         guard let line = stderr.split(separator: "\n").last(where: { $0.contains(" returned error, retrying after ") }) else { return "" }
         return line.components(separatedBy: ": ").last ?? ""
     }
@@ -94,7 +94,7 @@ struct ResticRunResult: Sendable {
     /// restic/restic/cmd/restic/cmd_forget.go:67\n…". It ends before the
     /// first frame: a line followed by a tab-indented "….go:<line>". The
     /// run's log keeps the whole line.
-    static func withoutGoStackTrace(_ message: String) -> String {
+    private static func withoutGoStackTrace(_ message: String) -> String {
         let lines = message.split(separator: "\n", omittingEmptySubsequences: false)
         for index in lines.indices.dropLast() {
             let next = lines[index + 1]
@@ -158,7 +158,7 @@ actor ResticRunner {
     /// every stop path answer: the invariant is that a run ends at most this
     /// long after its child dies, whatever a grandchild does. Bytes a
     /// grandchild writes afterwards get EPIPE, which usually ends it too.
-    static let grandchildGrace: TimeInterval = 2
+    private static let grandchildGrace: TimeInterval = 2
 
     private var running: [UUID: ProcessBox] = [:]
 
@@ -391,6 +391,11 @@ actor ResticRunner {
         "RESTIC_PASSWORD_COMMAND", "RESTIC_HOST",
     ]
 
+    /// The extra PATH entries restic runs with, before the system folders —
+    /// where a brew ssh lives, which an sftp location needs. rclone is not
+    /// among them: the bundled copy leads restic's PATH.
+    static let toolDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
+
     /// A predictable environment for the child. A GUI app's inherited environment
     /// is nearly empty, so we rebuild the parts restic actually reads. It has
     /// no `SSH_AUTH_SOCK` and no terminal, so an SFTP repository's key must
@@ -406,12 +411,12 @@ actor ResticRunner {
         for key in Self.protectedEnvironmentKeys {
             env.removeValue(forKey: key)
         }
-        let extraPaths = ResticBinary.helperDirectories + ["/bin", "/usr/sbin", "/sbin"]
+        let extraPaths = toolDirectories + ["/bin", "/usr/sbin", "/sbin"]
         let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
         // The app's own helpers first: restic shells out to rclone by name,
         // and the pinned one, not a brew rclone on the inherited PATH, is
         // what every test ran.
-        var merged = [Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path]
+        var merged = [Bundle.main.helpersURL.path]
         merged += existing
         for path in extraPaths where !merged.contains(path) { merged.append(path) }
         env["PATH"] = merged.joined(separator: ":")
