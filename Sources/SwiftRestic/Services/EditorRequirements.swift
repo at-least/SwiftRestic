@@ -30,8 +30,10 @@ enum EditorRequirements {
         return nil
     }
 
+    /// Trimmed before the tilde expands: a pasted " ~/Documents" does not
+    /// start with `~`.
     private static func comparable(_ path: String) -> String {
-        ResticPath.normalized(PathListEntry.value(for: path, expandsTildeInPath: true, escapesGlobs: false) ?? "")
+        ResticPath.normalized((path.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath)
     }
 
     /// Bounds Save's check: against a REST server that refuses connections
@@ -83,8 +85,7 @@ enum EditorRequirements {
 
     /// Whether an edit's Save asks restic first: when it changes what
     /// reaches restic — the location, a credential, the environment — or
-    /// the password, any of which a typo turns into every plan failing. A
-    /// rate limit, a maintenance setting or a hook saves at once.
+    /// the password, any of which a typo turns into every plan failing.
     static func editReachesRestic(
         draft: Repository,
         initial: Repository,
@@ -147,9 +148,9 @@ enum EditorRequirements {
         case .local:
             if draft.localPath.isEmpty { return "Choose a folder to save it." }
         case .sftp:
-            if draft.sftpHostName.isEmpty || draft.sftpPath.isEmpty { return "Enter the host and path to save it." }
+            if draft.sftpHostName.isEmpty || draft.sftpPath.isEmpty { return "Enter the server and path to save it." }
             if !draft.sftpPortText.isEmpty, !(1 ... 65535).contains(Int(draft.sftpPortText) ?? 0) {
-                return "Write a port after the host as host:port, from 1 to 65535."
+                return "Write a port after the server as user@host:port, from 1 to 65535."
             }
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }

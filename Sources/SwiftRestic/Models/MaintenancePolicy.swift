@@ -64,14 +64,6 @@ enum CheckDataSubset: Equatable, Sendable {
         case let .slice(n, total): "\(n)/\(total)"
         }
     }
-
-    var words: String {
-        switch self {
-        case .percent(100): "all of the data"
-        case let .percent(percent): "\(percent)% of the data"
-        case let .slice(n, total): "part \(n) of \(total)"
-        }
-    }
 }
 
 enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {

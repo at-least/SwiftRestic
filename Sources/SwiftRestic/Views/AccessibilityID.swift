@@ -8,7 +8,7 @@ enum AccessibilityID {
     enum FirstBackup {
         static let source = "firstBackup.source"
         static let changeSource = "firstBackup.changeSource"
-        static let disk = "firstBackup.disk"
+        static let destination = "firstBackup.destination"
         static let password = "firstBackup.password"
         static let confirmPassword = "firstBackup.confirmPassword"
         static let requirement = "firstBackup.requirement"
@@ -19,13 +19,12 @@ enum AccessibilityID {
         static let total = "plan.total"
         static let backUpNow = "plan.backUpNow"
         static let edit = "plan.edit"
-        static let runs = "plan.runs"
+        static let frequency = "plan.frequency"
         static let nextBackup = "plan.nextBackup"
     }
 
     enum PlanEditor {
         static let save = "planEditor.save"
-        static let frequency = "planEditor.frequency"
     }
 
     enum PathList {
@@ -34,6 +33,7 @@ enum AccessibilityID {
 
     enum FilesPane {
         static let restore = "filesPane.restore"
+        static let restoreTo = "filesPane.restoreTo"
     }
 
     enum FilesSearch {
@@ -43,6 +43,7 @@ enum AccessibilityID {
     enum FileVersions {
         static let list = "fileVersions.list"
         static let restore = "fileVersions.restore"
+        static let restoreTo = "fileVersions.restoreTo"
     }
 
     enum RepositoryEditor {

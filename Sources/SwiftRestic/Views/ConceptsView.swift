@@ -26,7 +26,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Keep old backups tidy",
-            text: "The Old Backups tab in a plan’s editor chooses which old backups to remove after each backup. A cleanup frees the space they held: Location ▸ Clean Up Now, or the automatic one. Verify Backups, in the Location menu, makes sure nothing is damaged. SwiftRestic verifies each location every week on its own."
+            text: "Remove old backups automatically, on a plan’s page, removes old backups after each backup and frees the space they held. Verify Backups, in the Location menu, makes sure nothing is damaged. SwiftRestic verifies each location every week on its own."
         ),
         Topic(
             title: "Backups from elsewhere",
@@ -38,8 +38,8 @@ struct ConceptsView: View {
         Topic(title: "Backup Location", text: "Where backups are kept: a drive, another computer, or cloud storage. Everything in it is encrypted with its password. restic calls it a repository."),
         Topic(title: "Backup Plan", text: "One folder, the backup location it backs up to, and when."),
         Topic(title: "Backup", text: "The folder as it was at one moment. restic calls it a snapshot."),
-        Topic(title: "Cleanup", text: "Frees the space of removed backups. Slow; backups to the location wait for it."),
-        Topic(title: "Verification", text: "Makes sure a location’s backups are sound. Reading data back finds more damage, and takes longer."),
+        Topic(title: "Cleanup", text: "Frees the space of removed backups, on its own. Slow; backups to the location wait for it."),
+        Topic(title: "Verification", text: "Makes sure a location’s backups are sound."),
     ]
 
     var body: some View {

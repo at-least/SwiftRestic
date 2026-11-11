@@ -14,7 +14,6 @@ struct PlanCommandState: Equatable {
     var stopTitle = "Stop Backup"
     var canEdit = false
     var canDelete = false
-    var canBackUpAll = false
     var backupsPaused = false
     var canPauseBackups = false
 }
@@ -53,7 +52,6 @@ extension AppModel {
             isResticDamaged: !isResticAvailable,
             lockedRepositories: lockedRepositories
         )
-        state.canBackUpAll = rows.contains { $0.action == .backUp && $0.isEnabled }
         if case .paused = scheduleHold {
             state.backupsPaused = true
         } else {
@@ -156,15 +154,6 @@ extension AppModel {
                 // from what removal does.
                 message: removalConsequences(for: id)
             )
-        case let .check(id):
-            guard let repository = repository(id: id) else { return nil }
-            // Reading data costs time in proportion to the size, so the
-            // dialog names the size the user holds.
-            var message = "Backups to it wait until verification finishes."
-            if let size = repositoryStats[id]?.totalSize {
-                message += " It holds \(Format.bytes(size))."
-            }
-            return ConfirmationCopy(title: "Verify “\(label(of: repository))”?", message: message)
         case let .prune(id):
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(

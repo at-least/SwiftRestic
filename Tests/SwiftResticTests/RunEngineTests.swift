@@ -680,8 +680,8 @@ struct BackupRunEngineTests {
         #expect(client.transcriptBound["forget"] == true)
         #expect(sink.deliveredTranscripts.count == 1)
         let notes = sink.deliveredNotes
-        #expect(notes.contains("Hook “true” succeeded."), "notes were \(notes)")
-        #expect(notes.contains("Hook “pwd” succeeded."), "notes were \(notes)")
+        #expect(notes.contains("Script “true” succeeded."), "notes were \(notes)")
+        #expect(notes.contains("Script “pwd” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Removed 0 backups"), "notes were \(notes)")
     }
 
@@ -694,7 +694,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(sink.deliveredRecords.first?.outcome == .cancelled)
-        #expect(!sink.deliveredNotes.contains("Hook “true” succeeded."), "a stopped run fired its after-backup hook: \(sink.deliveredNotes)")
+        #expect(!sink.deliveredNotes.contains("Script “true” succeeded."), "a stopped run fired its after-backup hook: \(sink.deliveredNotes)")
     }
 
     @Test("a failed forget is noted in the log as a retention skip")
@@ -749,7 +749,7 @@ struct BackupRunEngineTests {
         let abortedRecord = try #require(aborted.deliveredRecords.first)
         #expect(abortedRecord.outcome == .failed)
         #expect(abortedRecord.exitCode == nil)
-        #expect(aborted.deliveredNotes == ["Hook “exit” exited 1."])
+        #expect(aborted.deliveredNotes == ["Script “exit” failed (exit code 1)."])
     }
 
     @Test("the blocked-item tally counts every error, not the 50 kept")
@@ -849,7 +849,7 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords.first?.outcome == .succeeded)
     }
 
-    @Test("a check reads the rotation's next slice, says so and moves it on; where storage bills reads, the structure only")
+    @Test("a check reads the rotation's next slice and moves it on; where storage bills reads, the structure only")
     func checkReadsTheRotation() async throws {
         var repository = Repository()
         repository.maintenance.nextCheckDataSlice = 3
@@ -862,14 +862,13 @@ struct MaintenanceRunEngineTests {
 
         let (sliced, slicedClient) = await check(repository)
         #expect(slicedClient.checkSubsets == [.slice(3, of: 12)])
-        #expect(sliced.deliveredRecords.first?.checkRead == "part 3 of 12")
+        #expect(sliced.deliveredRecords.first?.outcome == .succeeded)
         #expect(sliced.log.contains("advance-slice"))
 
         var billed = repository
         billed.kind = .s3
         let (structure, structureClient) = await check(billed)
         #expect(structureClient.checkSubsets == [nil])
-        #expect(structure.deliveredRecords.first?.checkRead == "structure only")
         #expect(!structure.log.contains("advance-slice"))
 
         // A check restic could not finish read nothing: the slice waits.

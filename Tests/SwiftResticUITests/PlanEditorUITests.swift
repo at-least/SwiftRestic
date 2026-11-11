@@ -23,7 +23,6 @@ final class PlanEditorUITests: XCTestCase {
         app.buttons[AccessibilityID.Plan.edit].click()
         let save = app.buttons[AccessibilityID.PlanEditor.save]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
-        app.radioButtons["Excluded Items"].click()
         // Exclude's + is in view as the editor opens, no scrolling: above
         // the Cancel and Save bar. XCUITest calls a + below the fold hittable
         // too, and the click lands on whatever covers it.
@@ -43,26 +42,20 @@ final class PlanEditorUITests: XCTestCase {
         attachScreenshot()
     }
 
-    /// Manually: the page says so, and that the next backup waits for Back Up Now.
+    /// How often, set on the plan page, is saved at once: Manually, and the
+    /// next backup waits for Back Up Now.
     @MainActor
     func testManuallyWaitsForBackUpNow() throws {
         let folders = try UITestFolders.make("Manually")
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
-        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.runs].waitForValue("Every day"))
+        let howOften = app.popUpButtons[AccessibilityID.Plan.frequency]
+        XCTAssertTrue(howOften.waitForValue("Daily"))
 
-        app.buttons[AccessibilityID.Plan.edit].click()
-        XCTAssertTrue(app.buttons[AccessibilityID.PlanEditor.save].waitForExistence(timeout: 10))
-        app.radioButtons["Schedule"].click()
-        let howOften = app.popUpButtons[AccessibilityID.PlanEditor.frequency]
-        XCTAssertTrue(howOften.waitForExistence(timeout: 10))
         howOften.click()
         howOften.menuItems["Manually"].click()
-        let save = app.buttons[AccessibilityID.PlanEditor.save]
-        save.click()
-        XCTAssertTrue(save.waitForNonExistence(timeout: 10))
 
-        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.runs].waitForValue("Manually"))
+        XCTAssertTrue(howOften.waitForValue("Manually"))
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.nextBackup].waitForValue("When you click Back Up Now"))
         attachScreenshot()
     }

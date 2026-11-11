@@ -65,17 +65,17 @@ struct HookRunner: Sendable {
         var logLine: String { verdict(withDetail: false) }
 
         private func verdict(withDetail: Bool) -> String {
-            let base = "Hook “\(hookName)”"
+            let base = "Script “\(hookName)”"
             if cancelled { return "\(base) was stopped before it finished." }
             if timedOut { return "\(base) timed out and was stopped." }
             if exitCode == 0 { return "\(base) succeeded." }
-            if !withDetail { return "\(base) exited \(exitCode)." }
+            if !withDetail { return "\(base) failed (exit code \(exitCode))." }
             let firstLine = output
                 .split(separator: "\n", omittingEmptySubsequences: true)
                 .first
                 .map { String($0.prefix(160)) } ?? ""
             let detail = firstLine.isEmpty ? "" : " — \(firstLine)"
-            return "Hook “\(hookName)” exited \(exitCode)\(detail)"
+            return "\(base) failed (exit code \(exitCode))\(detail)"
         }
     }
 

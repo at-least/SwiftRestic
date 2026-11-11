@@ -23,15 +23,6 @@ struct Schedule: Codable, Sendable, Hashable {
         frequency = c.value(.frequency, default: .daily)
     }
 
-    func summary() -> String {
-        switch frequency {
-        case .manual: "Manually"
-        case .hourly: "Every hour"
-        case .daily: "Every day"
-        case .weekly: "Every week"
-        }
-    }
-
     var interval: TimeInterval? {
         switch frequency {
         case .manual: nil
@@ -115,22 +106,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     /// restic refuses `forget` with no `--keep-*` rule (it would delete every
     /// snapshot). Guarded here rather than at each call site.
     var isSafeToRun: Bool { isEnabled && !forgetArguments.isEmpty }
-
-    var summary: String {
-        guard isEnabled else { return "Keep everything" }
-        guard isSafeToRun else { return "No rules set" }
-        // Counts of backups, not spans: restic keeps the newest backup of
-        // each of the last N hours (days, …) that hold one, so a daily plan's
-        // 24 hourly backups reach back 24 days. "24h" read as either.
-        let rules = [
-            (keepLast, keepLast == 1 ? "the latest one" : "the latest \(keepLast)"), (keepHourly, "\(keepHourly) hourly"),
-            (keepDaily, "\(keepDaily) daily"), (keepWeekly, "\(keepWeekly) weekly"),
-            (keepMonthly, "\(keepMonthly) monthly"), (keepYearly, "\(keepYearly) yearly"),
-        ].filter { $0.0 > 0 }
-        if rules.count == 1, keepLast == 1 { return "Keep the latest backup" }
-        let noun = rules.count == 1 && rules[0].0 == 1 ? "backup" : "backups"
-        return "Keep " + Format.list(rules.map(\.1)) + " " + noun
-    }
 }
 
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
@@ -315,17 +290,20 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         schedule.nextRunDate(after: lastRunAt, now: now).flatMap { $0 <= now ? $0 : nil }
     }
 
-    /// The stored plan wins over the editor's draft for the model-written
-    /// fields the draft may hold stale: the run stamps (`markPlanRun`), the
-    /// quiet-plan alert's mark.
-    /// A new model-written field joins this list, or the next save reverts it
-    /// to the draft.
+    /// The stored plan wins over the editor's draft for the fields the
+    /// editor does not edit and the draft may hold stale: the run stamps
+    /// (`markPlanRun`), the quiet-plan alert's mark, and the schedule and
+    /// retention the plan page saves as they change while the editor is open.
+    /// A new field written outside the editor joins this list, or the next
+    /// save reverts it to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt
         merged.lastSuccessAt = lastSuccessAt
         merged.staleAlertedFor = staleAlertedFor
         merged.announcesFirstBackup = announcesFirstBackup
+        merged.schedule = schedule
+        merged.retention = retention
         return merged
     }
 }

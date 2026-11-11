@@ -2,14 +2,18 @@ import Foundation
 
 extension AppModel {
     /// `askedByUser` is false for the scheduler's and a mount's runs, which
-    /// wait for a check or prune without a banner: no one clicked.
+    /// a check or prune drops without a banner: no one clicked, and the
+    /// next slot or mount brings them back. One the user asked for waits in
+    /// the repository's queue, as its banner says, and starts as the job
+    /// holding the lock unwinds (`startQueuedBackups`).
     func runBackup(planID: UUID, askedByUser: Bool = true) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
         guard let plan = plan(id: planID) else { return }
         if let reason = backupLockReason(for: plan) {
-            if askedByUser {
-                post(Banner(title: "“\(label(of: plan))” waits", message: reason, isError: false, symbolName: "clock"))
+            if askedByUser, let repositoryID = plan.repositoryID {
+                enqueue(planID, in: repositoryID, askedByUser: true)
+                post(Banner(title: "“\(label(of: plan))” waits", message: reason, level: .notice))
             }
             return
         }
@@ -19,7 +23,7 @@ extension AppModel {
             post(Banner(
                 title: "Plan is incomplete",
                 message: "Choose a backup location and a folder or file to back up.",
-                isError: true
+                level: .error
             ))
             return
         }
@@ -51,21 +55,7 @@ extension AppModel {
         startQueuedBackups()
     }
 
-    /// Back Up All Plans Now: every complete plan, less those whose
-    /// repository a check or prune holds — restic would refuse their lock
-    /// at once, and no plan's run ends there to start them after it. A plan
-    /// whose repository another plan's run holds, its retention step too,
-    /// waits its turn (`runBackups`).
-    func backUpAllPlans() {
-        runBackups(planIDs: configuration.plans
-            .filter { plan in
-                guard plan.isConfigurationComplete, let repositoryID = plan.repositoryID else { return false }
-                return maintenance[repositoryID] == nil
-            }
-            .map(\.id))
-    }
-
-    /// Starts several plans' backups — Back Up All's, a mount's catch-up —
+    /// Starts several plans' backups — a mount's catch-up —
     /// one at a time per repository, the scheduler's rule
     /// (`Scheduler.duePlans`): started together, the first to finish ran
     /// its retention while the other's backup still held the repository,
@@ -77,7 +67,7 @@ extension AppModel {
     func runBackups(planIDs: [UUID], askedByUser: Bool = true) {
         for planID in planIDs where activity[planID] == nil && !isQueued(planID) {
             if let repositoryID = plan(id: planID)?.repositoryID, planRunHolds(repositoryID) {
-                backupQueue[repositoryID, default: []].append(QueuedBackup(planID: planID, askedByUser: askedByUser))
+                enqueue(planID, in: repositoryID, askedByUser: askedByUser)
             } else {
                 runBackup(planID: planID, askedByUser: askedByUser)
             }
@@ -86,6 +76,11 @@ extension AppModel {
 
     func isQueued(_ planID: UUID) -> Bool {
         backupQueue.values.contains { $0.contains { $0.planID == planID } }
+    }
+
+    private func enqueue(_ planID: UUID, in repositoryID: UUID, askedByUser: Bool) {
+        guard !isQueued(planID) else { return }
+        backupQueue[repositoryID, default: []].append(QueuedBackup(planID: planID, askedByUser: askedByUser))
     }
 
     private func planRunHolds(_ repositoryID: UUID) -> Bool {
@@ -99,14 +94,17 @@ extension AppModel {
         }
     }
 
-    /// Starts the next plan in each queue whose repository no plan's run
-    /// holds now — called as every run unwinds. A plan that does not start
+    /// Starts the next plan in each queue whose repository no plan's run or
+    /// check or prune holds now — called as every run and every check or
+    /// prune unwinds. A plan that does not start
     /// (removed meanwhile, the app quitting, its repository locked) gives
     /// its turn to the next. A catch-up nobody asked for waits out a hold as
     /// the scheduler's runs do, and is dropped meanwhile:
     /// a later mount or its next slot brings it back.
-    private func startQueuedBackups() {
-        for repositoryID in Array(backupQueue.keys) where !planRunHolds(repositoryID) {
+    func startQueuedBackups() {
+        // Not `runBackup`'s lock test alone: a plan it re-queues behind a
+        // held lock would come straight back to the front of this loop.
+        for repositoryID in Array(backupQueue.keys) where !planRunHolds(repositoryID) && maintenance[repositoryID] == nil {
             while let next = backupQueue[repositoryID]?.first {
                 removeFromBackupQueue(next.planID)
                 guard next.askedByUser || scheduleHold(repositoryID: repositoryID) == nil else { continue }
@@ -197,9 +195,10 @@ extension AppModel: BackupRunEngine.Sink {
 
     func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String) {
         // A drive's absence reads as the listing's own; a silent server
-        // keeps the run's words.
-        if let repository = repository(id: repositoryID), away == .drive {
-            snapshotListingOutcomes[repositoryID] = driveAwayOutcome(repository)
+        // keeps the run's words. The location's path can change while the
+        // run looked, to one on no volume: then the run's words too.
+        if away == .drive, let volume = repository(id: repositoryID)?.driveVolumeName {
+            snapshotListingOutcomes[repositoryID] = .notConnected(volume: volume)
         } else {
             snapshotListingOutcomes[repositoryID] = .failed(reason)
         }
@@ -226,8 +225,7 @@ extension AppModel: BackupRunEngine.Sink {
     /// milliseconds, the strip's flash saying nothing, and no surface but
     /// Activity records a skip. How every other run went is the sidebar's
     /// caption, the plan page's problem row, Activity's badge and the menu
-    /// bar's — where a banner over every page said it again, the whole
-    /// queue's worth after Back Up All.
+    /// bar's — where a banner over every page said it again.
     /// A skip nobody asked for — a drive away at every slot of an hourly
     /// plan — stays in Activity, and the quiet-plan alert speaks if the
     /// drive stays away. The queue is global, so the title names the plan
@@ -245,8 +243,7 @@ extension AppModel: BackupRunEngine.Sink {
         post(Banner(
             title: "“\(name)” skipped",
             message: record.detailText ?? "",
-            isError: false,
-            symbolName: RunRecord.Outcome.skipped.symbolName
+            level: .notice
         ))
     }
 }

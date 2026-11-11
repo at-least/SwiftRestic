@@ -96,6 +96,7 @@ extension AppModel {
         retireRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = nil
         reconcileSleepAssertion()
+        startQueuedBackups()
     }
 
     func cancelMaintenance(repositoryID: UUID) {
@@ -140,15 +141,14 @@ extension AppModel: MaintenanceRunEngine.Sink {
         append(record: record)
         switch record.outcome {
         case .skipped:
-            // The drive away: Check or Clean Up Now is answered, as Back Up
+            // The drive away: Verify Backups or Clean Up Now is answered, as Back Up
             // Now is; a scheduled one waits in silence, Next check saying
             // for what.
             guard maintenance[repository.id]?.askedByUser == true else { break }
             post(Banner(
                 title: "\(record.kind.displayName) of “\(label(of: repository))” skipped",
                 message: record.detailText ?? "",
-                isError: false,
-                symbolName: RunRecord.Outcome.skipped.symbolName
+                level: .notice
             ))
         case .succeeded, .completedWithErrors, .failed, .cancelled:
             break

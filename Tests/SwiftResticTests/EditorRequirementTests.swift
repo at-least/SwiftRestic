@@ -78,31 +78,9 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.newPassword("correct horse", confirm: "correct horse") == nil)
     }
 
-    @Test("a browsed or dropped exclude is the item's own path, glob characters escaped; a typed one is a pattern")
+    @Test("a browsed or dropped exclude is the item's own path, glob characters escaped")
     func excludeEntries() {
-        #expect(PathListEntry.value(for: " /Users/me/a[1].txt ", expandsTildeInPath: false, escapesGlobs: true)
-            == #"/Users/me/a\[1].txt"#)
-        #expect(PathListEntry.value(for: "**/node_modules", expandsTildeInPath: false, escapesGlobs: false)
-            == "**/node_modules")
-        #expect(PathListEntry.value(for: "   ", expandsTildeInPath: false, escapesGlobs: true) == nil)
-        #expect(PathListEntry.value(for: " ~/Documents", expandsTildeInPath: true, escapesGlobs: false)
-            == NSHomeDirectory() + "/Documents")
-    }
-
-    @Test("an exclude edited in place is written as typed; blank or another row's value holds the row's value from before; finishing on a duplicate drops the row")
-    func excludeEdits() {
-        let paths = ["**/*.iso", #"/Users/me/a\[1].txt"#, "~/Downloads"]
-        // Each keystroke lands, so Save mid-edit saves what the field shows.
-        #expect(PathListEntry.typing(" **/*.dmg ", at: 0, original: "**/*.iso", in: paths)
-            == ["**/*.dmg", #"/Users/me/a\[1].txt"#, "~/Downloads"])
-        // Erased down to nothing after a partial value: the original, not the fragment.
-        let partial = ["*", #"/Users/me/a\[1].txt"#, "~/Downloads"]
-        #expect(PathListEntry.typing("  ", at: 0, original: "**/*.iso", in: partial) == paths)
-        #expect(PathListEntry.typing("~/Downloads", at: 0, original: "**/*.iso", in: partial) == paths)
-        #expect(PathListEntry.finishing("~/Downloads", at: 0, in: paths)
-            == [#"/Users/me/a\[1].txt"#, "~/Downloads"])
-        #expect(PathListEntry.finishing("**/*.iso", at: 0, in: paths) == paths)
-        #expect(PathListEntry.finishing("", at: 0, in: paths) == paths)
+        #expect(ResticService.globEscaped("/Users/me/a[1].txt") == #"/Users/me/a\[1].txt"#)
     }
 
     @Test("the repository editor names the first unmet requirement per kind")
@@ -118,7 +96,7 @@ struct EditorRequirementTests {
         // and every one is pinned so a field rename cannot desync its copy.
         draft.kind = .sftp
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [])
-            == "Enter the host and path to save it.")
+            == "Enter the server and path to save it.")
         draft.kind = .s3
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [])
             == "Enter the bucket and access key ID to save it.")
@@ -168,8 +146,8 @@ struct EditorRequirementTests {
         ) == nil)
         // Twins: earlier builds named repositories, and one place
         // could be added twice under two names. A saved repository's
-        // location is fixed, so its edits — a password this Mac lacks, a
-        // bandwidth limit — must save.
+        // location is fixed, so its edits — a password this Mac lacks —
+        // must save.
         var twin = saved
         twin.id = UUID()
         #expect(EditorRequirements.repository(
@@ -193,7 +171,7 @@ struct EditorRequirementTests {
             if bad.isEmpty {
                 #expect(requirement() == nil, "a bare trailing colon is no port")
             } else {
-                #expect(requirement() == "Write a port after the host as host:port, from 1 to 65535.", "\(bad)")
+                #expect(requirement() == "Write a port after the server as user@host:port, from 1 to 65535.", "\(bad)")
             }
         }
         for good in ["nas.local", "nas.local:22", "nas.local:2222", "nas.local:65535"] {
@@ -201,11 +179,7 @@ struct EditorRequirementTests {
             #expect(requirement() == nil, "\(good)")
         }
         draft.sftpHost = ":2222"
-        #expect(requirement() == "Enter the host and path to save it.")
-        // A port an older build stored in its own field is held to the same rule.
-        draft.sftpHost = "nas.local"
-        draft.sftpPort = "70000"
-        #expect(requirement() == "Write a port after the host as host:port, from 1 to 65535.")
+        #expect(requirement() == "Enter the server and path to save it.")
     }
 
     @Test("a new location at a folder that already holds backups asks for their password once, with no confirmation")

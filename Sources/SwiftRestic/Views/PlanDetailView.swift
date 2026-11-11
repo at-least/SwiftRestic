@@ -5,6 +5,10 @@ struct PlanDetailView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
     let planID: UUID
+    /// Whether Remove old backups automatically was turned on on this visit:
+    /// the dry run that says what it leaves runs then, not on every visit,
+    /// where it would ask a cloud location again each time.
+    @State private var showsRetentionPreview = false
 
     private var plan: BackupPlan? { model.plan(id: planID) }
 
@@ -26,6 +30,7 @@ struct PlanDetailView: View {
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
         .navigationSubtitle(plan.map(subtitle) ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)), tabs: SidebarItem.plan(planID).pageTabs)
+        .onChange(of: planID) { showsRetentionPreview = false }
         .pageSearch(
             page: .plan(planID),
             roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
@@ -135,9 +140,13 @@ struct PlanDetailView: View {
                 }
                 Spacer(minLength: 12)
                 // The failure's one known fix, left of the way to its record.
+                // Show Plan is no fix on the plan page itself: its switch is
+                // already on screen.
                 if let fix = model.fix(for: run) {
-                    RunFixButton(fix: fix)
-                        .controlSize(.small)
+                    if case .showPlan = fix {} else {
+                        RunFixButton(fix: fix)
+                            .controlSize(.small)
+                    }
                 }
                 if let onShowInActivity {
                     // The visible title is the accessible name, as on the
@@ -174,9 +183,19 @@ struct PlanDetailView: View {
                 }
             }
             if model.snapshotListingOutcome(for: plan.repositoryID) != .loaded {
-                Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID)) }
+                Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID), repositoryID: plan.repositoryID) }
             }
             scheduleSection(plan)
+            // The rest of the plan — what it leaves out, its scripts — in
+            // the editor, as System Settings keeps a pane's rarer settings
+            // behind Options….
+            Section {
+                HStack {
+                    Spacer()
+                    Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
+                        .accessibilityIdentifier(AccessibilityID.Plan.edit)
+                }
+            }
         }
         .formStyle(.grouped)
     }
@@ -243,7 +262,7 @@ struct PlanDetailView: View {
                     .accessibilityIdentifier(AccessibilityID.Plan.total)
             }
             LabeledContent("Last backup") { lastBackupValue(plan, snapshots: snapshots) }
-            LabeledContent("Old backups", value: plan.retention.summary)
+            retentionSwitch(plan, newestBackupID: snapshots.first?.id)
         } header: {
             HStack {
                 Text("Backups")
@@ -264,23 +283,42 @@ struct PlanDetailView: View {
             isBackingUp: model.activity[plan.id] != nil,
             now: now
         )
-        return Section {
-            LabeledContent("Runs") {
-                Text(plan.schedule.summary())
-                    .accessibilityIdentifier(AccessibilityID.Plan.runs)
+        return Section("Schedule") {
+            // Saved as it changes, as System Settings' pop-ups are.
+            Picker("How often", selection: Binding(
+                get: { plan.schedule.frequency },
+                set: { frequency in model.updatePlan(plan.id) { $0.schedule.frequency = frequency } }
+            )) {
+                ForEach(Schedule.Frequency.allCases) { frequency in
+                    Text(frequency.displayName).tag(frequency)
+                }
             }
+            .accessibilityIdentifier(AccessibilityID.Plan.frequency)
             LabeledContent("Next backup") {
                 Text(next.value)
                     .accessibilityIdentifier(AccessibilityID.Plan.nextBackup)
                     .modifier(TileHelp(help: next.help))
             }
-        } header: {
-            HStack {
-                Text("Schedule")
-                Spacer()
-                Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
-                    .accessibilityIdentifier(AccessibilityID.Plan.edit)
-                    .controlSize(.small)
+        }
+    }
+
+    /// Recommended or Keep everything, nothing between (user decision): on
+    /// writes Recommended's rules. Saved as it changes; the removal runs
+    /// after the next backup. Turned on, restic's own answer for what that
+    /// removal leaves, once there is a history to judge.
+    private func retentionSwitch(_ plan: BackupPlan, newestBackupID: String?) -> some View {
+        let showsPreview = showsRetentionPreview && plan.retention.isSafeToRun && newestBackupID != nil
+        return VStack(alignment: .leading, spacing: 6) {
+            Toggle("Remove old backups automatically", isOn: Binding(
+                get: { plan.retention.isEnabled },
+                set: { isOn in
+                    model.updatePlan(plan.id) { $0.retention = RetentionPolicy(isEnabled: isOn) }
+                    showsRetentionPreview = isOn
+                }
+            ))
+            .editorSwitches()
+            if showsPreview {
+                RetentionOutcomePreview(plan: plan, newestBackupID: newestBackupID)
             }
         }
     }
@@ -341,6 +379,9 @@ struct PlanDetailView: View {
                             : PlanStatus.noneFromThisPlanFact
                     )
                     .foregroundStyle(.secondary)
+                case .notConnected, .passwordRefused:
+                    // The caveat holds the fix.
+                    Text("—")
                 case let .failed(_, fix):
                     Text("—")
                     // A known fix sits on the caveat; trying again can't help.
@@ -361,6 +402,57 @@ struct PlanDetailView: View {
         } else {
             Text(BackupPlan.noBackupLocationReason)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The dry run over the plan's rules: `forget --dry-run --no-lock`, no lock
+/// taken and nothing removed. A failure stays here and changes nothing.
+private struct RetentionOutcomePreview: View {
+    @Environment(AppModel.self) private var model
+    let plan: BackupPlan
+    /// The newest backup the rules would judge: one landing while the page
+    /// is open changes the answer.
+    let newestBackupID: String?
+
+    @State private var load = RetentionPreviewLoad()
+
+    /// Plus Try Again.
+    private struct PreviewKey: Hashable {
+        var newestBackupID: String?
+        var retry: Int
+    }
+
+    private var previewKey: PreviewKey {
+        PreviewKey(newestBackupID: newestBackupID, retry: load.retry)
+    }
+
+    var body: some View {
+        // The task rides on the always-present container: a modifier on an
+        // `if` branch never renders while that branch is empty, and the
+        // preview would never start.
+        VStack(alignment: .leading, spacing: 6) {
+            if load.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Working out which backups stay…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let failure = load.failure {
+                WarningLine(text: Format.firstSentence(failure))
+                    .help(failure)
+                Button("Try Again") { load.requestRetry() }
+                    .controlSize(.small)
+            } else if let result = load.result {
+                Text(result.outcomeLine)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .font(.callout)
+        .task(id: previewKey) {
+            await load.load { try await model.previewRetention(plan: plan) }
         }
     }
 }

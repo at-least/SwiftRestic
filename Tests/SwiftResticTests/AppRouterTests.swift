@@ -55,7 +55,16 @@ struct AppRouterTests {
             router.request(intent)
             #expect(router.takePendingIntent() == intent)
         }
-        #expect(CommandConfirmation.check(a).id == .check(a))
+        #expect(CommandConfirmation.prune(a).id == .prune(a))
+    }
+
+    @Test("Verify Backups and Clean Up land on the location's page, the only place their progress shows")
+    func maintenanceShowsTheLocationPage() {
+        let router = AppRouter()
+        let repository = UUID()
+        router.selection = .activity
+        router.showMaintenance(of: repository)
+        #expect(router.selection == .repository(repository))
     }
 
     @Test("Show in Backups opens the page's Backups tab on its backup, and its focus steers only that record's load, once")

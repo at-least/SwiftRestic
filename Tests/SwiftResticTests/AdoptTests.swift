@@ -228,7 +228,6 @@ struct AdoptTests {
 
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(!draft.retention.isEnabled)
-        #expect(draft.retention.summary == "Keep everything")
     }
 
     @Test("a UUID that names a configured plan is its moved history, never adoptable")
@@ -514,9 +513,9 @@ struct AdoptHistorySpanTests {
     }
 }
 
-/// The adopt sheet's dry-run line: what the rules would leave, never how
-/// many they would remove — nothing follows from the sheet.
-@Suite("Adoption preview line")
+/// The plan page's dry-run line under Remove old backups automatically: what
+/// the next backup's removal leaves, never how many it removes.
+@Suite("Retention preview line")
 struct AdoptionPreviewLineTests {
     private func snapshot(_ id: String) -> Snapshot {
         try! snapshotFixture(
@@ -527,13 +526,13 @@ struct AdoptionPreviewLineTests {
     @Test("a thinning policy says what the history becomes; a keeping one says it all stays")
     func lineShapes() {
         #expect(RetentionPreview(kept: [snapshot("b")], removed: [snapshot("a")]).outcomeLine
-            == "With these rules, 2 backups would become 1.")
+            == "At the next backup, 2 backups become 1.")
         #expect(RetentionPreview(kept: [snapshot("c"), snapshot("b")], removed: [snapshot("a")]).outcomeLine
-            == "With these rules, 3 backups would become 2.")
+            == "At the next backup, 3 backups become 2.")
         #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).outcomeLine
-            == "All 2 backups would stay.")
+            == "All 2 backups stay.")
         #expect(RetentionPreview(kept: [snapshot("a")], removed: []).outcomeLine
-            == "The backup would stay.")
+            == "The backup stays.")
         // Nothing to judge: the honest empty, not a claim of survival.
         #expect(RetentionPreview(kept: [], removed: []).outcomeLine
             == "This plan has no backups in this location yet.")

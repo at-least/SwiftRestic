@@ -138,7 +138,7 @@ extension AppModel {
                 : count == 1
                     ? "Its 1 existing backup is now its history."
                     : "Its \(Format.plural(count, "existing backup")) are now its history.",
-            isError: false
+            level: .notice
         ))
     }
 

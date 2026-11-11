@@ -74,7 +74,6 @@ struct CommandStateTests {
 
         model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
-        #expect(!model.planCommands(for: nil).canBackUpAll)
         #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a cleanup — backups wait until it finishes.")
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
         #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a verification — backups wait until it finishes.")
@@ -181,10 +180,14 @@ struct CommandStateTests {
         model.runBackup(planID: documents.id, askedByUser: false)
         #expect(model.banners.isEmpty)
         #expect(!model.isRunning(planID: documents.id))
+        #expect(!model.isQueued(documents.id))
 
+        // Asked for, it waits in the queue its banner promises, once.
         model.runBackup(planID: documents.id)
-        #expect(model.banners.map(\.title) == ["“Documents” waits"])
+        model.runBackup(planID: documents.id)
+        #expect(model.banners.first?.title == "“Documents” waits")
         #expect(!model.isRunning(planID: documents.id))
+        #expect(model.backupQueue[repository.id]?.map(\.planID) == [documents.id])
     }
 
     @Test("Verify or Clean Up Now on a location a backup is using says it is busy and starts nothing")
@@ -267,8 +270,8 @@ struct CommandStateTests {
         #expect(model.activity.isEmpty)
     }
 
-    @Test("Back Up All queues a plan behind another plan's run on its repository, its retention step too, and leaves out one whose repository a check or prune holds")
-    func backUpAllQueuesBehindAPlansRun() {
+    @Test("several plans' backups queue behind another plan's run on their repository, its retention step too, and behind a check or prune")
+    func runBackupsQueueBehindAPlansRun() {
         let model = makeModel()
         let home = makeRepository("Home NAS")
         let offsite = makeRepository("Offsite")
@@ -281,14 +284,13 @@ struct CommandStateTests {
         // minutes. Its unwind starts the next plan in Home NAS's queue.
         model.activity[photos.id] = PlanActivity(of: photos, phase: .backingUp)
         model.setActivityPhase(.applyingRetention, for: photos.id)
-        // Offsite's check holds it exclusively, and no plan's run ends there
-        // to start a plan that waited for it.
+        // Offsite's check holds it exclusively; its unwind starts Music.
         model.maintenance[offsite.id] = MaintenanceActivity(task: .check)
 
-        model.backUpAllPlans()
+        model.runBackups(planIDs: [documents.id, photos.id, music.id])
         #expect(model.isQueued(documents.id), "Documents waits for Photos' run, as it does while Photos backs up")
         #expect(!model.isRunning(planID: documents.id))
-        #expect(!model.isQueued(music.id))
+        #expect(model.isQueued(music.id))
         #expect(!model.isRunning(planID: music.id))
 
         // A deleted plan leaves its queue: adopting its backups again brings
@@ -331,8 +333,6 @@ struct CommandStateTests {
             #expect(!state.canBackUp && !state.canStop && !state.canEdit)
             #expect(!state.canDelete)
             #expect(state.stopTitle == "Stop Backup")
-            // Back Up All Plans Now is not about the selection.
-            #expect(state.canBackUpAll)
         }
         #expect(model.planCommands(for: .plan(UUID())).planID == nil)
 
@@ -402,7 +402,6 @@ struct CommandStateTests {
 
         let state = model.planCommands(for: .plan(plan.id))
         #expect(!state.canBackUp)
-        #expect(!state.canBackUpAll)
         #expect(state.canEdit && state.canDelete)
 
         let repositoryState = model.repositoryCommands(for: .repository(repository.id))
@@ -411,27 +410,6 @@ struct CommandStateTests {
         #expect(!repositoryState.canRefreshAll)
         #expect(!repositoryState.canOpenConsole)
         #expect(repositoryState.canEdit && repositoryState.canRemove)
-    }
-
-    @Test("Back Up All Plans Now needs a complete, idle plan and restic")
-    func backUpAllNeedsAnIdleCompletePlan() {
-        let model = makeModel()
-        #expect(!model.planCommands(for: nil).canBackUpAll)
-
-        let repository = makeRepository()
-        let plan = makePlan(on: repository)
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [plan]
-        #expect(model.planCommands(for: nil).canBackUpAll)
-
-        model.activity[plan.id] = PlanActivity(of: plan)
-        #expect(!model.planCommands(for: nil).canBackUpAll)
-        model.activity[plan.id] = nil
-
-        var incomplete = plan
-        incomplete.path = ""
-        model.configuration.plans = [incomplete]
-        #expect(!model.planCommands(for: nil).canBackUpAll)
     }
 
     @Test("the Repository menu acts on the selected repository, a record's, or the selected plan's")
@@ -587,7 +565,6 @@ struct CommandStateTests {
 
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
-        #expect(model.confirmationCopy(for: .check(repository.id))?.title == "Verify “NAS”?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
 
@@ -598,12 +575,6 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
             == model.removalConsequences(for: repository.id))
         model.activity[plan.id] = nil
-
-        // The check dialog says which size of slow the user is holding.
-        #expect(model.confirmationCopy(for: .check(repository.id))?.message.contains("It holds") == false)
-        model.repositoryStats[repository.id] = RepositoryStats(totalSize: 2_000_000)
-        #expect(model.confirmationCopy(for: .check(repository.id))?.message
-            .contains("It holds \(Format.bytes(2_000_000)).") == true)
 
         // A plan is called by its folder; one with no path yet has nothing
         // to be called.

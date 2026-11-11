@@ -40,26 +40,13 @@ struct CommandPresentations: ViewModifier {
             Button("Remove Plan") { model.deletePlan(id: id) }
         case let .deleteRepository(id):
             Button("Remove") { model.deleteRepository(id: id) }
-        case let .check(id):
-            Button("Verify") {
-                model.runMaintenance(repositoryID: id, task: .check)
-                showMaintenance(of: id)
-            }
         case let .prune(id):
             Button("Clean Up") {
                 model.runMaintenance(repositoryID: id, task: .prune)
-                showMaintenance(of: id)
+                // The location's page is the only place a prune shows its
+                // progress and Cancel.
+                router.showMaintenance(of: id)
             }
-        }
-    }
-
-    /// The repository page's Maintenance section is the only place a check or
-    /// prune shows its progress — elapsed time, Cancel — and a check that
-    /// passes posts no banner. Asked from anywhere else, it would run from
-    /// start to finish with nothing in the window.
-    private func showMaintenance(of id: UUID) {
-        if router.selection != .repository(id) {
-            router.selection = .repository(id)
         }
     }
 }

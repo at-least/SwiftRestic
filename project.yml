@@ -80,9 +80,6 @@ targets:
           # its AppDelegate — neither belongs in the test bundle.
           - SwiftResticApp.swift
           - CaptureSupport.swift
-      # One view, deliberately: the row edit field's scrolling and focus
-      # hand-back are AppKit behavior that only a hosted-window test checks.
-      - path: Sources/SwiftRestic/Views/RowEditField.swift
     dependencies:
       - package: GRDB
     settings:

@@ -306,7 +306,7 @@ struct SwiftResticApp: App {
         openWindow(id: Self.mainWindowID)
     }
 
-    /// Backups: the selected plan's and, below them, every plan's. Items
+    /// Backups: the selected plan's, then pausing every plan's. Items
     /// acting on the selection grey out when it is anything else — an enabled
     /// item over an action that does nothing is a menu that lies. Titles stay
     /// put, so Help-menu search and muscle memory find them; only the state
@@ -328,9 +328,6 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Back Up All Plans Now") { model.backUpAllPlans() }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
-                .disabled(!p.canBackUpAll)
             if p.backupsPaused {
                 Button("Resume Backups") { model.resumeBackups() }
             } else {
@@ -422,18 +419,19 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// Acts on `commandRepositoryID(for:)`. Check and Clean Up also start
-    /// from the repository page's Maintenance header and the sidebar row's
-    /// menu, through the shared confirmations. Nothing destructive has a key.
+    /// Acts on `commandRepositoryID(for:)`. Verify Backups also starts from
+    /// the repository page's Maintenance header and the sidebar row's menu.
+    /// Clean Up is no command: retention's own cleanup runs on its schedule,
+    /// and a full location's fix and Activity's retry ask for one. Nothing
+    /// destructive has a key.
     private var locationMenu: some Commands {
         CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)
-            Button("Verify Backups…") {
-                if let id = r.repositoryID { ask(.confirm(.check(id))) }
-            }
-            .disabled(!r.canMaintain)
-            Button("Clean Up Now…") {
-                if let id = r.repositoryID { ask(.confirm(.prune(id))) }
+            Button("Verify Backups") {
+                if let id = r.repositoryID {
+                    router.request(.verifyBackups(id))
+                    openWindow(id: Self.mainWindowID)
+                }
             }
             .disabled(!r.canMaintain)
 

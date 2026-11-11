@@ -51,7 +51,7 @@ struct BackupHook: Identifiable, Encodable, Sendable, Hashable {
     /// and a command's arguments and leading `VAR=` hold its tokens.
     var displayName: String {
         let program = command.split(whereSeparator: \.isWhitespace).first { !$0.contains("=") }
-        return program.map { ($0 as NSString).lastPathComponent } ?? "Untitled Hook"
+        return program.map { ($0 as NSString).lastPathComponent } ?? "Untitled Script"
     }
 
     init() {}

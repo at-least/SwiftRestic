@@ -138,7 +138,7 @@ enum ReachabilityGate {
             )
         }
         if repository.kind == .local {
-            if await sink.isDriveAway(repository) {
+            if await sink.isVolumeMissing(repository) {
                 return .driveAway(reason: RunRecord.skippedReason(
                     sources: [repository.resolvedLocalPath],
                     reconnectFailures: failures.reasonsByVolume
@@ -178,7 +178,7 @@ protocol RunEngineSink: AnyObject {
 extension RunEngineSink {
     /// A local repository whose drive is not mounted. False for every other
     /// kind, and while the mount cannot be told.
-    func isDriveAway(_ repository: Repository) async -> Bool {
+    func isVolumeMissing(_ repository: Repository) async -> Bool {
         guard repository.kind == .local else { return false }
         return await isMounted(volumeOf: repository.resolvedLocalPath) == false
     }
@@ -589,7 +589,6 @@ enum MaintenanceRunEngine {
                 let summary = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                     try await service.check(context, readDataSubset: subset)
                 }
-                record.checkRead = subset?.words ?? "structure only"
                 if case .slice = subset {
                     sink.advanceCheckDataSlice(repositoryID: repository.id)
                 }

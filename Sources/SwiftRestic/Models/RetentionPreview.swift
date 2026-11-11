@@ -41,14 +41,15 @@ struct RetentionPreview: Sendable, Equatable {
         )
     }
 
-    /// What the rules would leave of the plan's history. A count, since the
-    /// editor's rules are not applied yet: nothing has been removed.
+    /// What the next backup's removal leaves of the plan's history, under
+    /// the plan page's switch. A count of what the history becomes, never of
+    /// what goes: nothing has been removed yet.
     var outcomeLine: String {
         let total = kept.count + removed.count
         guard total > 0 else { return "This plan has no backups in this location yet." }
         if removed.isEmpty {
-            return total == 1 ? "The backup would stay." : "All \(Format.plural(total, "backup")) would stay."
+            return total == 1 ? "The backup stays." : "All \(Format.plural(total, "backup")) stay."
         }
-        return "With these rules, \(Format.plural(total, "backup")) would become \(kept.count)."
+        return "At the next backup, \(Format.plural(total, "backup")) become \(kept.count)."
     }
 }

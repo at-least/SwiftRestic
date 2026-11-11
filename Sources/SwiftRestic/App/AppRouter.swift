@@ -1,10 +1,6 @@
 import Observation
 import SwiftUI
 
-/// Here, not nested in the sheet: the test bundle compiles this file without
-/// the views.
-enum PlanEditorTab: CaseIterable { case files, schedule, retention }
-
 /// Not on `AppModel`: none of this is domain state — it is the navigation
 /// surface the views and the menu bar share, and pane switches would
 /// otherwise write through the same object the domains mutate. Intents
@@ -28,9 +24,15 @@ final class AppRouter {
         // the consume re-checks planCommands(for: router.selection) the same
         // way.
         case stopPlan(UUID)
-        case editPlan(UUID, tab: PlanEditorTab = .files)
+        case editPlan(UUID)
         case editRepository(UUID)
         case confirm(CommandConfirmation)
+        /// Verify Backups, from every surface that offers it: at once, with
+        /// no question — a check only reads, and a backup asked for
+        /// meanwhile waits its turn. Then the location's page, the only
+        /// place a check shows its progress and Cancel; a check that passes
+        /// posts no banner.
+        case verifyBackups(UUID)
     }
 
     var selection: SidebarItem?
@@ -100,6 +102,12 @@ final class AppRouter {
     /// ⌘F, and Search All Backups on arrival. The page spends it once its
     /// field has the focus.
     var searchFocus: SidebarItem?
+
+    func showMaintenance(of repositoryID: UUID) {
+        if selection != .repository(repositoryID) {
+            selection = .repository(repositoryID)
+        }
+    }
 
     func searchFiles(on page: SidebarItem) {
         setTab(.files, of: page)
@@ -304,7 +312,6 @@ enum PageTab: Hashable, CaseIterable {
 enum CommandConfirmation: Hashable, Identifiable {
     case deletePlan(UUID)
     case deleteRepository(UUID)
-    case check(UUID)
     case prune(UUID)
 
     var id: Self { self }

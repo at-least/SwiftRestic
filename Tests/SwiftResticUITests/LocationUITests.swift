@@ -1,14 +1,15 @@
 import XCTest
 
-/// The Location menu on the plan's backup location: Verify Backups… and
+/// The Location menu on the plan's backup location: Verify Backups and
 /// Remove from SwiftRestic….
 final class LocationUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
-    /// The scheduled check, asked for by hand, of a fresh repository: Activity records
-    /// it with restic's verdict.
+    /// The scheduled check, asked for by hand, of a fresh repository: it runs
+    /// at once, with no question, and Activity records it with restic's
+    /// verdict.
     @MainActor
     func testVerifyFindsNoErrors() throws {
         let folders = try UITestFolders.make("Verify")
@@ -17,10 +18,7 @@ final class LocationUITests: XCTestCase {
 
         let location = app.menuBars.menuBarItems["Location"]
         location.click()
-        location.menuItems["Verify Backups…"].click()
-        let verify = app.buttons["Verify"]
-        XCTAssertTrue(verify.waitForExistence(timeout: 10))
-        verify.click()
+        location.menuItems["Verify Backups"].click()
 
         app.outlines["Sidebar"].staticTexts["Activity"].click()
         let table = app.outlines[AccessibilityID.Activity.table]

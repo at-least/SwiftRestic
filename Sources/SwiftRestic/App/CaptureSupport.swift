@@ -130,11 +130,6 @@ extension AppDelegate {
     }
 
     private func captureMainWindow(to url: URL) async {
-        // Known cacheDisplay artifact: a sheet's tab picker (the
-        // Repository/Hooks segmented control) can render as a black pill with
-        // an invisible label in these captures; the control draws fine in a
-        // real window. Check the running app before treating it as a product
-        // defect.
         // A presented sheet is its own window, and is what should be captured
         // rather than the dimmed window behind it. `keyWindow` is nil when the
         // app was launched without being activated, so check for a sheet first.

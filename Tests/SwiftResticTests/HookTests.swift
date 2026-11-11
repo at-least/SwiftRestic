@@ -88,7 +88,7 @@ struct HookTests {
         #expect(!outcome.succeeded)
         #expect(outcome.exitCode == 7)
         #expect(outcome.output.contains("to stderr"))
-        #expect(outcome.summary.contains("exited 7"))
+        #expect(outcome.summary == "Script “echo” failed (exit code 7) — to stderr")
     }
 
     @Test("a hook that never returns is stopped rather than hanging the backup")
@@ -123,8 +123,8 @@ struct HookTests {
         }
         #expect(name("/usr/local/bin/notify.sh --token abc") == "notify.sh")
         #expect(name("TOKEN=abc curl https://example.com") == "curl")
-        #expect(name("   ") == "Untitled Hook")
-        #expect(name("A=1 B=2") == "Untitled Hook")
+        #expect(name("   ") == "Untitled Script")
+        #expect(name("A=1 B=2") == "Untitled Script")
     }
 
     @Test("an older build's hooks: every end reads as after a backup, a switched-off or repository one never starts running")
@@ -193,14 +193,14 @@ struct HookTests {
     @Test("a hook's log line carries its verdict, never its output")
     func hookLogLine() {
         let failed = HookRunner.Outcome(hookName: "n", exitCode: 1, output: "Authorization: Bearer x", timedOut: false)
-        #expect(failed.logLine == "Hook “n” exited 1.")
+        #expect(failed.logLine == "Script “n” failed (exit code 1).")
         #expect(!failed.logLine.contains("Bearer"))
         let succeeded = HookRunner.Outcome(hookName: "n", exitCode: 0, output: "secret", timedOut: false)
-        #expect(succeeded.logLine == "Hook “n” succeeded.")
+        #expect(succeeded.logLine == "Script “n” succeeded.")
         let timedOut = HookRunner.Outcome(hookName: "n", exitCode: -1, output: "secret", timedOut: true)
-        #expect(timedOut.logLine == "Hook “n” timed out and was stopped.")
+        #expect(timedOut.logLine == "Script “n” timed out and was stopped.")
         let cancelled = HookRunner.Outcome(hookName: "n", exitCode: -1, output: "", timedOut: false, cancelled: true)
-        #expect(cancelled.logLine == "Hook “n” was stopped before it finished.")
+        #expect(cancelled.logLine == "Script “n” was stopped before it finished.")
     }
 
     @Test("a cancelled run is not recorded as a failed hook")
@@ -227,11 +227,11 @@ struct HookTests {
         #expect(result.outcomes.count == 1)
 
         // The user's cancel must not masquerade as the hook failing: no
-        // "exited -1" line reading as a hook error, and no abort decision
+        // "failed (exit code -1)" line reading as a script error, and no abort decision
         // made on the cancel's behalf.
         #expect(!result.shouldAbort, "a cancelled hook must not abort the run")
         #expect(
-            !result.outcomes.contains { $0.summary.contains("exited") },
+            !result.outcomes.contains { $0.summary.contains("exit code") },
             "summaries were: \(result.outcomes.map(\.summary))"
         )
     }
