@@ -263,6 +263,10 @@ struct RunRecordPresentationTests {
         refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == nil)
         #expect(RunFix.showPlan(plan).title == "Show Plan")
+        #expect(
+            RunFix.showPlan(plan).help == "Remove old backups automatically is on the plan page",
+            "Show Plan's tooltip names the switch that turns retention off"
+        )
     }
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")

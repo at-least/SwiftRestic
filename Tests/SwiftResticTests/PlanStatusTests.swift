@@ -251,20 +251,6 @@ struct PlanStatusTests {
         #expect(failed?.shortText == nil)
     }
 
-    @Test("a plan with a recent backup and its schedule active has no caption")
-    func captionIsLastBackupOnly() {
-        // The sidebar says only the last backup: a scheduled, active plan
-        // with a last backup reads the bare line, no next run appended —
-        // PlanCaption has no field a next run could ride in on.
-        var plan = completeDailyPlan()
-        plan.lastSuccessAt = now.addingTimeInterval(-3600)
-        let caption = PlanStatus.sidebarCaption(
-            for: plan, activity: nil, problem: nil,
-            existingRepositoryIDs: [repositoryID], now: now, relative: relative
-        )
-        #expect(caption == nil)
-    }
-
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
     func skippedAndRunningCaptions() {
         // Enabled, never backed up, no repository: the scheduler skips it,

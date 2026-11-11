@@ -376,6 +376,26 @@ struct OverviewMetricsTests {
         #expect(rows.map(\.stateText) == ["Connect “Archive SSD” to see its backups"])
     }
 
+    @Test("a refused password is a failed read: its row says the password doesn’t open the location")
+    func passwordRefusedRowNamesTheLocation() {
+        let repository = UUID()
+        let docs = plan("Docs", repository: repository)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [docs],
+            latestSnapshot: { _, _ in nil },
+            repositoryHasSnapshots: { _ in false },
+            listingOutcome: { _ in .passwordRefused(repositoryName: "NAS") },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
+        )
+        #expect(
+            rows.first?.stateText.hasPrefix("Can’t read backups — This password doesn’t open “NAS”") == true,
+            "the Status row names the location whose password was refused"
+        )
+        #expect(rows.first?.didFail == true, "a refused password is a failed read")
+    }
+
     private func protectionRow(
         _ name: String,
         isKnown: Bool,
@@ -496,14 +516,18 @@ struct OverviewMetricsTests {
         // An up-to-date plan that will not run by itself needs the user.
         #expect(summary?.attentionLines.map(\.text) == ["Code: Not scheduled"])
 
-        // An out-of-date plan's line is its warning, never a second one.
-        let exposed = UpToDateRow(plan: photos, among: [], stateText: "No backups yet", isKnown: true, isUpToDate: false, didFail: false)
+        // An out-of-date plan's line is its warning, never a second one,
+        // though the scheduler skips it too.
+        let exposed = UpToDateRow(plan: code, among: [], stateText: "No backups yet", isKnown: true, isUpToDate: false, didFail: false)
         let warned = OverviewMetrics.upToDateSummary(
             rows: [exposed], listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { byID[$0].flatMap(caption) },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(warned?.attentionLines.map(\.text) == ["Photos: No backups yet"])
+        #expect(
+            warned?.attentionLines.map(\.text) == ["Code: No backups yet"],
+            "an out-of-date plan the scheduler skips gets one line, not a second Not scheduled"
+        )
     }
 
     @Test("the Status card names each plan that is not up to date in the sidebar warning's words, and a run in flight")
