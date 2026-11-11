@@ -19,37 +19,6 @@ struct PlanStatusTests {
         return plan
     }
 
-    @Test("the plan editor's Next backup is the page's tile for the plan as Save would store it")
-    func editorNextBackup() throws {
-        // The stored plan ran an hour ago; the draft carries no stamp
-        // (opened before that run), and must not read as due.
-        let stored = completeDailyPlan()
-        var draft = stored
-        draft.lastRunAt = nil
-        let face = PlanStatus.editorNextBackup(
-            draft: draft, stored: stored, existingRepositoryIDs: [repositoryID], now: now
-        )
-        #expect(face == PlanStatus.nextBackupTile(for: stored, existingRepositoryIDs: [repositoryID], now: now))
-        #expect(face?.value != "Due now")
-
-        draft.schedule.frequency = .weekly
-        #expect(PlanStatus.editorNextBackup(draft: draft, stored: stored, existingRepositoryIDs: [repositoryID], now: now)
-            == PlanStatus.nextBackupTile(for: stored.merging(draft: draft), existingRepositoryIDs: [repositoryID], now: now))
-
-        // A new plan has never run: due at once, as the footer says.
-        #expect(PlanStatus.editorNextBackup(draft: draft, stored: nil, existingRepositoryIDs: [repositoryID], now: now)?.value
-            == "Due now")
-
-        // Nothing where the tab already speaks: manual, or a setup the footer
-        // says is incomplete.
-        var manual = draft
-        manual.schedule.frequency = .manual
-        var incomplete = draft
-        incomplete.path = ""
-        #expect(PlanStatus.editorNextBackup(draft: manual, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
-        #expect(PlanStatus.editorNextBackup(draft: incomplete, stored: stored, existingRepositoryIDs: [repositoryID], now: now) == nil)
-    }
-
     @Test("an enabled plan the scheduler skips reads Not scheduled, never a date")
     func skippedPlanTile() {
         var orphaned = completeDailyPlan()
@@ -241,15 +210,14 @@ struct PlanStatusTests {
         let overdue = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: nil, existingRepositoryIDs: existing, now: now, relative: relative
         )
-        #expect(overdue.text == "Not backed up for 9 days")
-        #expect(overdue.outcome == .completedWithErrors)
+        #expect(overdue?.text == "Not backed up for 9 days")
+        #expect(overdue?.outcome == .completedWithErrors)
 
         plan.schedule.frequency = .manual
         let manual = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: nil, existingRepositoryIDs: existing, now: now, relative: relative
         )
-        #expect(manual.text == "Last backup 5 minutes ago")
-        #expect(manual.outcome == nil)
+        #expect(manual == nil)
     }
 
     @Test("a plan waiting for its turn says so over its standing problem, and a run in flight over both")
@@ -259,32 +227,31 @@ struct PlanStatusTests {
             for: plan, activity: nil, isQueued: true, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(waiting.text == "Waiting for another backup…")
-        #expect(waiting.outcome == nil)
+        #expect(waiting == PlanCaption(text: "Waiting for another backup…"))
         let running = PlanStatus.sidebarCaption(
             for: plan, activity: PlanActivity(phase: .backingUp), isQueued: true, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(running.text == "Backing up…")
+        #expect(running?.text == "Backing up…")
     }
 
     @Test("a completed-with-errors caption has a short spelling for a narrow column; other outcomes none")
-    func captionShortForm() {
+    func captionShortForm() throws {
         let plan = completeDailyPlan()
-        let withErrors = PlanStatus.sidebarCaption(
+        let withErrors = try #require(PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: run(.completedWithErrors),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
-        )
+        ))
         #expect(withErrors.text.hasPrefix("Completed with warnings — "))
         #expect(withErrors.shortText == "Warnings — " + withErrors.text.dropFirst("Completed with warnings — ".count))
         let failed = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(failed.shortText == nil)
+        #expect(failed?.shortText == nil)
     }
 
-    @Test("the caption's plain state is the last backup alone, with the schedule active")
+    @Test("a plan with a recent backup and its schedule active has no caption")
     func captionIsLastBackupOnly() {
         // The sidebar says only the last backup: a scheduled, active plan
         // with a last backup reads the bare line, no next run appended —
@@ -295,8 +262,7 @@ struct PlanStatusTests {
             for: plan, activity: nil, problem: nil,
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
-        #expect(caption.text == "Last backup 5 minutes ago")
-        #expect(caption == PlanCaption(text: "Last backup 5 minutes ago", outcome: nil))
+        #expect(caption == nil)
     }
 
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
@@ -310,7 +276,7 @@ struct PlanStatusTests {
             PlanStatus.sidebarCaption(
                 for: orphaned, activity: nil, problem: nil,
                 existingRepositoryIDs: [repositoryID], now: now, relative: relative
-            ).text == "Not scheduled"
+            )?.text == "Not scheduled"
         )
         var fresh = completeDailyPlan()
         fresh.lastSuccessAt = nil
@@ -318,7 +284,7 @@ struct PlanStatusTests {
             PlanStatus.sidebarCaption(
                 for: fresh, activity: nil, problem: nil,
                 existingRepositoryIDs: [repositoryID], now: now, relative: relative
-            ).text == fresh.schedule.summary()
+            ) == nil
         )
         var manual = fresh
         manual.schedule.frequency = .manual
@@ -327,7 +293,7 @@ struct PlanStatusTests {
             PlanStatus.sidebarCaption(
                 for: manual, activity: nil, problem: nil,
                 existingRepositoryIDs: [repositoryID], now: now, relative: relative
-            ).text == "Manually"
+            ) == nil
         )
 
         var activity = PlanActivity()
@@ -337,6 +303,36 @@ struct PlanStatusTests {
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
         #expect(running == PlanCaption(text: "Backing up…", outcome: nil))
+    }
+
+    @Test("a healthy row is one line; Not scheduled shows with the warning glyph even after a backup")
+    func healthyRowIsQuiet() {
+        var plan = completeDailyPlan()
+        plan.lastSuccessAt = now.addingTimeInterval(-3600)
+        let healthy = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(healthy == nil)
+        var fresh = plan
+        fresh.lastSuccessAt = nil
+        #expect(PlanStatus.sidebarCaption(
+            for: fresh, activity: nil, problem: nil,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ) == nil)
+
+        // Its repository gone: the scheduler skips it though it has a backup.
+        let skipped = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: nil,
+            existingRepositoryIDs: [], now: now, relative: relative
+        )
+        #expect(skipped == PlanCaption(text: "Not scheduled", outcome: .completedWithErrors))
+
+        let failed = PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: run(.failed),
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        )
+        #expect(failed != nil)
     }
 
     private func run(_ outcome: RunRecord.Outcome) -> RunRecord {
@@ -366,7 +362,7 @@ struct PlanStatusTests {
         aborted.hookMessages = ["mount-nas.sh exited with status 1"]
         let abortSummary = PlanStatus.summary(of: aborted)
         #expect(abortSummary.message == aborted.failureMessage)
-        #expect(abortSummary.facts == ["1 failed hook"])
+        #expect(abortSummary.facts == ["1 failed script"])
     }
 
     @Test("restic's count, not the stored lines, is the unreadable count")
@@ -428,7 +424,7 @@ struct PlanStatusTests {
         hooked.hookMessages = ["notify.sh exited with status 1"]
         let hookSummary = PlanStatus.summary(of: hooked)
         #expect(hookSummary.message == "notify.sh exited with status 1")
-        #expect(hookSummary.facts == ["1 failed hook"])
+        #expect(hookSummary.facts == ["1 failed script"])
         #expect(hookSummary.items.isEmpty)
 
         // restic exited 3 and named nothing: the row must not be a bare
@@ -461,7 +457,7 @@ struct PlanStatusTests {
         withHook.itemErrors = partial.itemErrors
         withHook.hookMessages = ["Hook “notify” exited 1"]
         let hookSummary = PlanStatus.summary(of: withHook)
-        #expect(hookSummary.facts == ["Old backups not removed", "1 failed hook"])
+        #expect(hookSummary.facts == ["Old backups not removed", "1 failed script"])
         #expect(RunRecordPresentation.detail(for: withHook) == hookSummary.facts.joined(separator: " · "))
     }
 
@@ -475,48 +471,34 @@ struct PlanStatusTests {
         #expect(summary.facts.isEmpty)
     }
 
-    private func repository(kind: Repository.Kind, at path: String) -> Repository {
-        var repository = Repository()
-        repository.kind = kind
-        repository.localPath = path
-        return repository
-    }
-
-    @Test("only a failed read gives the row a second line")
+    @Test("only a failed read or an away disk gives the row a second line")
     func nothingUnlessFailed() {
-        let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
-        #expect(PlanStatus.repositoryCaption(repository: repository, outcome: .idle) == nil)
-        #expect(PlanStatus.repositoryCaption(repository: repository, outcome: .loaded) == nil)
+        #expect(PlanStatus.repositoryCaption(outcome: .idle) == nil)
+        #expect(PlanStatus.repositoryCaption(outcome: .loaded) == nil)
     }
 
-    @Test("a local repository whose drive is away says so, its whole failure in the tooltip")
+    @Test("a local repository whose drive is away says so, its whole message in the tooltip")
     func notConnectedNamesTheDrive() {
-        let repository = repository(kind: .local, at: "/Volumes/Archive SSD/Backups")
-        let message = RunRecord.skippedReason(sources: [repository.resolvedLocalPath])
-        let caption = PlanStatus.repositoryCaption(repository: repository, outcome: .failed(message))
+        let message = "Connect “Archive SSD” to see its backups."
+        let outcome = SnapshotListingOutcome.notConnected(volume: "Archive SSD")
+        let caption = PlanStatus.repositoryCaption(outcome: outcome)
         #expect(caption == .notConnected(full: message))
         #expect(caption?.text == "Not connected")
         #expect(caption?.help == message)
     }
 
-    @Test("a failed read of a repository elsewhere never claims a local drive is away")
-    func failedElsewhereKeepsItsSentence() {
-        // A network repository: its failed sentence is its own even when it
-        // spells a missing volume.
-        let remote = repository(kind: .sftp, at: "/Volumes/Archive SSD/Backups")
-        let message = RunRecord.skippedReason(sources: ["/Volumes/Archive SSD/Backups"])
-        let caption = PlanStatus.repositoryCaption(repository: remote, outcome: .failed(message))
-        #expect(caption == .failed(Format.firstSentence(message), full: message))
-        #expect(caption?.text == "“Archive SSD” is not connected.")
-        #expect(caption?.help == message)
+    @Test("a read that failed keeps its first sentence, Locate or not")
+    func failedKeepsItsSentence() {
+        // restic's exit 10 on a local location carries Locate too, and is a
+        // read that failed.
+        let missing = AppModel.missingRepositoryReason(kind: .local)
+        let located = SnapshotListingOutcome.failed(missing, fix: .locate(UUID()))
+        #expect(PlanStatus.repositoryCaption(outcome: located) == .failed(Format.firstSentence(missing), full: missing))
 
-        // A local repository whose folder is not on a volume: its sentence
-        // stands, cut at the first boundary.
-        let plain = repository(kind: .local, at: "/Users/someone/Backups")
         let refused = "Cannot reach nas.local: connection refused. Check the host and try again."
-        let local = PlanStatus.repositoryCaption(repository: plain, outcome: .failed(refused))
-        #expect(local == .failed("Cannot reach nas.local: connection refused", full: refused))
-        #expect(local?.help == refused)
+        let caption = PlanStatus.repositoryCaption(outcome: .failed(refused))
+        #expect(caption == .failed("Cannot reach nas.local: connection refused", full: refused))
+        #expect(caption?.help == refused)
     }
 }
 

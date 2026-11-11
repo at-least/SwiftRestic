@@ -152,13 +152,11 @@ struct SidebarView: View {
         Button("Back Up a Folder…") { onNewPlan(repository.id) }
         Divider()
         Button("Edit Backup Location…") { onEditRepository(repository) }
-        // The two of the Location menu's a row most often wants; the
-        // shared confirmations ask first. Left out, not dimmed, while they
-        // can't run, as the plan row's commands.
+        // Left out, not dimmed, while it can't run, as the plan row's
+        // commands.
         if commands.canMaintain {
             Divider()
-            Button("Verify Backups…") { router.request(.confirm(.check(repository.id))) }
-            Button("Clean Up Now…") { router.request(.confirm(.prune(repository.id))) }
+            Button("Verify Backups") { router.request(.verifyBackups(repository.id)) }
         }
         Divider()
         Button("Remove from SwiftRestic…", role: .destructive) {
@@ -194,16 +192,16 @@ struct SidebarView: View {
     /// in the tooltip.
     @ViewBuilder
     private func readProblem(_ repository: Repository) -> some View {
-        let caption = PlanStatus.repositoryCaption(
-            repository: repository,
-            outcome: model.snapshotListingOutcome(for: repository.id)
-        )
+        let caption = PlanStatus.repositoryCaption(outcome: model.snapshotListingOutcome(for: repository.id))
         if let caption {
             HStack(spacing: 3) {
                 // The plan rows' glyph; the words stay secondary, as theirs.
-                StatusGlyph(outcome: .completedWithErrors)
-                    .imageScale(.small)
-                    .accessibilityHidden(true)
+                // A disk not connected is a normal state and wears none.
+                if case .failed = caption {
+                    StatusGlyph(outcome: .completedWithErrors)
+                        .imageScale(.small)
+                        .accessibilityHidden(true)
+                }
                 Text(caption.text)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -442,38 +440,9 @@ private struct PlanSidebarRow: View {
                 Text(model.label(of: plan))
                     .lineLimit(1)
                     .help((plan.path as NSString).abbreviatingWithTildeInPath)
-                HStack(spacing: 3) {
-                    // The words stay secondary: orange caption text is too
-                    // low-contrast on the light sidebar.
-                    if let outcome = caption.outcome {
-                        StatusGlyph(outcome: outcome)
-                            .imageScale(.small)
-                            .accessibilityHidden(true)
-                    }
-                    // The whole line when it fits, its shorter spelling when
-                    // one exists ("Warnings — 2 days ago"), and only then the
-                    // middle cut: the trailing marker narrows the column,
-                    // and a tail cut would take "ago" — when it happened.
-                    // The tooltip and VoiceOver keep the whole line.
-                    Group {
-                        if let shortText = caption.shortText {
-                            ViewThatFits(in: .horizontal) {
-                                Text(caption.text)
-                                Text(shortText)
-                                Text(caption.text)
-                                    .truncationMode(.middle)
-                            }
-                        } else {
-                            Text(caption.text)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .help(caption.text)
-                    .accessibilityLabel(caption.text)
+                if let caption {
+                    captionLine(caption)
                 }
-                .font(.caption)
             }
             // State trails identity, the sidebar's one reading rule —
             // Activity's badge follows it too. A trailing marker takes only
@@ -481,6 +450,41 @@ private struct PlanSidebarRow: View {
             Spacer(minLength: 0)
             marker
         }
+    }
+
+    private func captionLine(_ caption: PlanCaption) -> some View {
+        HStack(spacing: 3) {
+            // The words stay secondary: orange caption text is too
+            // low-contrast on the light sidebar.
+            if let outcome = caption.outcome {
+                StatusGlyph(outcome: outcome)
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            // The whole line when it fits, its shorter spelling when
+            // one exists ("Warnings — 2 days ago"), and only then the
+            // middle cut: the trailing marker narrows the column,
+            // and a tail cut would take "ago" — when it happened.
+            // The tooltip and VoiceOver keep the whole line.
+            Group {
+                if let shortText = caption.shortText {
+                    ViewThatFits(in: .horizontal) {
+                        Text(caption.text)
+                        Text(shortText)
+                        Text(caption.text)
+                            .truncationMode(.middle)
+                    }
+                } else {
+                    Text(caption.text)
+                        .truncationMode(.middle)
+                }
+            }
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .help(caption.text)
+            .accessibilityLabel(caption.text)
+        }
+        .font(.caption)
     }
 
     @ViewBuilder

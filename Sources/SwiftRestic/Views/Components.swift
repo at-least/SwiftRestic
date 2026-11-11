@@ -6,56 +6,35 @@ import UniformTypeIdentifiers
 /// Banners built in place (rather than posted to the queue) have nothing to
 /// dismiss, so they hide the close button.
 ///
-/// Banners keep their icons by rule, where run lists and tiles drop theirs:
-/// a banner is action feedback — success ones dismiss themselves within
-/// seconds, and a persistent error banner *is* the intervention marker —
-/// so neither is ambient decoration competing for attention. The glyph is
-/// bare: colouring a plate behind it is the one ornament the interface
-/// grammar elsewhere refuses.
+/// Only an error and a warning carry a glyph: they are the ones that need
+/// the reader. A success or a notice is its title and message alone. The
+/// glyph is bare: colouring a plate behind it is the one ornament the
+/// interface grammar elsewhere refuses.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
     var isDismissible = true
 
-    /// The status palette's glyph and hue for the banner's level, so a
-    /// colour means one thing app-wide: a failure's red octagon and a
-    /// warning's orange triangle are Activity's and the sidebar's for a run
-    /// that failed or completed with warnings.
-    private var hue: Color {
+    /// The status palette's glyph, hue and spoken name for a run that failed
+    /// or completed with warnings, so a colour means one thing app-wide. Not
+    /// every error's title says it failed ("Keychain"), so the glyph is named.
+    private var mark: (symbol: String, hue: Color, label: String)? {
         switch banner.level {
-        case .error: StatusPalette.status(.failed)
-        case .warning: StatusPalette.status(.completedWithErrors)
-        case .success, .notice: .secondary
-        }
-    }
-    private var symbol: String {
-        switch banner.level {
-        case .error: RunRecord.Outcome.failed.symbolName!
-        case .warning: RunRecord.Outcome.completedWithErrors.symbolName!
-        case .success: "checkmark.circle.fill"
-        case .notice: banner.symbolName ?? "info.circle"
-        }
-    }
-    /// Named for what it means — not every error's title says it failed
-    /// ("Keychain") — and silent for success and news, whose titles say it.
-    private var symbolLabel: String? {
-        switch banner.level {
-        case .error: "Error"
-        case .warning: "Warning"
-        case .success, .notice: nil
+        case .error: (RunRecord.Outcome.failed.symbolName!, StatusPalette.status(.failed), "Error")
+        case .warning:
+            (RunRecord.Outcome.completedWithErrors.symbolName!, StatusPalette.status(.completedWithErrors), "Warning")
+        case .notice: nil
         }
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            // The success check is decoration beside a title that already
-            // says what happened, and its SF label read "Selected" to
-            // VoiceOver.
-            Image(systemName: symbol)
-                .imageScale(.large)
-                .foregroundStyle(hue)
-                .accessibilityLabel(symbolLabel ?? "")
-                .accessibilityHidden(symbolLabel == nil)
+            if let mark {
+                Image(systemName: mark.symbol)
+                    .imageScale(.large)
+                    .foregroundStyle(mark.hue)
+                    .accessibilityLabel(mark.label)
+            }
             // Title and message read as one utterance; the Show in Finder action and
             // the dismiss button stay their own elements beside them.
             VStack(alignment: .leading, spacing: 4) {
@@ -288,10 +267,23 @@ struct WarningLine: View {
 /// all for a keyboard or VoiceOver user.
 struct SnapshotListingCaveat: View {
     let outcome: SnapshotListingOutcome
+    let repositoryID: UUID?
 
     var body: some View {
-        switch outcome {
-        case let .failed(message, fix):
+        if case let .notConnected(volume) = outcome {
+            // A normal state, not a failed read: its sentence alone, with
+            // Locate for a disk renamed.
+            VStack(alignment: .leading, spacing: 6) {
+                Text(SnapshotListingOutcome.connectText(volume: volume))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let repositoryID {
+                    RunFixButton(fix: .locate(repositoryID))
+                        .controlSize(.small)
+                }
+            }
+        } else if let message = outcome.failureMessage {
             // The glyph carries the alarm and the words stay secondary:
             // a warning-coloured sentence at caption size is too
             // low-contrast to read. The whole message, where the rows have
@@ -306,17 +298,15 @@ struct SnapshotListingCaveat: View {
                         .foregroundStyle(Theme.warning)
                 }
                 .font(.caption)
-                if let fix {
+                if let fix = repositoryID.flatMap(outcome.failureFix(repositoryID:)) {
                     RunFixButton(fix: fix)
                         .controlSize(.small)
                 }
             }
-        case .idle:
+        } else if outcome == .idle {
             Text(OverviewMetrics.listingIdleText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        case .loaded:
-            EmptyView()
         }
     }
 }
@@ -413,31 +403,16 @@ extension SnapshotNode {
     }
 }
 
-/// A list of paths with add/remove buttons: a plan's exclude patterns. A row
-/// is edited in place, as Finder renames: double-click or Return on it, or
-/// Edit in its menu; Return or a click away keeps the edit, Escape drops it.
-///
-/// Typing, pasting and dropping are first-class: the audience keeps paths on
-/// the clipboard, and an NSOpenPanel per entry is the app's biggest
-/// efficiency tax.
+/// A plan's exclude list: + chooses items in a panel, as Time Machine's
+/// exclusions do, a drop from Finder adds them, − removes the selected rows.
+/// Every entry is an item's own path, glob characters escaped
+/// (`ResticService.globEscaped`): "a[1].txt" would otherwise match "a1.txt"
+/// and not itself. A pattern saved earlier still lists and removes.
 struct PathListEditor: View {
-    let title: String
     @Binding var paths: [String]
-    var placeholder = "Add a pattern"
-    var browseMessage = "Choose folders and files to exclude from backups"
-    var browsePrompt = "Add"
-    /// Excludes: an item chosen in the panel or dropped from Finder is
-    /// entered as its own path, matching itself alone (`PathListEntry`).
-    var escapesPickedGlobs = false
 
     @State private var selection: Set<String> = []
-    @State private var draft = ""
     @State private var isDropTargeted = false
-    /// The row being edited in place, its text so far, and its value
-    /// before the edit, which Escape puts back.
-    @State private var editing: Int?
-    @State private var editDraft = ""
-    @State private var editOriginal = ""
 
     /// About six one-line rows: the list scrolls past them rather than
     /// pushing the switches off the sheet.
@@ -446,42 +421,17 @@ struct PathListEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             List(selection: $selection) {
-                // By position, not value: the edited row's value changes per
-                // keystroke, and a new identity would drop the field's focus.
-                ForEach(Array(paths.enumerated()), id: \.offset) { index, path in
-                    if editing == index {
-                        RowEditField(
-                            text: editDraft,
-                            accessibilityLabel: title,
-                            onChange: {
-                                editDraft = $0
-                                paths = PathListEntry.typing($0, at: index, original: editOriginal, in: paths)
-                                // The row's tag is its value: keep it selected.
-                                selection = [paths[index]]
-                            },
-                            onSubmit: commitEdit,
-                            onCancel: cancelEdit,
-                            onEnd: commitEdit
-                        )
-                        .tag(path)
-                    } else {
-                        Text(path)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(path)
-                            .tag(path)
-                    }
+                ForEach(paths, id: \.self) { path in
+                    Text(path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(path)
                 }
             }
             .contextMenu(forSelectionType: String.self) { items in
-                if items.count == 1, let path = items.first {
-                    Button("Edit") { startEditing(path) }
-                }
                 Button("Remove") { remove(items) }
-            } primaryAction: { items in
-                guard items.count == 1, let path = items.first else { return }
-                startEditing(path)
             }
+            .accessibilityLabel("Excluded Items")
             .listStyle(.plain)
             .alternatingRowBackgrounds()
             .environment(\.defaultMinListRowHeight, 22)
@@ -501,34 +451,18 @@ struct PathListEditor: View {
                 // would silently become a pattern matching nothing.
                 let filePaths = urls.filter(\.isFileURL).map(\.path)
                 guard !filePaths.isEmpty else { return false }
-                addPaths(filePaths, picked: true)
+                addPaths(filePaths)
                 return true
             } isTargeted: { isDropTargeted = $0 }
             Divider()
-            // + chooses items in a panel, as Time Machine's exclusions do;
-            // a pattern is typed into the bar's field beside it.
             HStack(spacing: 0) {
                 ListBarButton(symbol: "plus", title: "Choose items") { browse() }
                     .accessibilityIdentifier(AccessibilityID.PathList.add)
                 Divider()
                     .frame(height: 14)
                 ListBarButton(symbol: "minus", title: "Remove") { remove(selection) }
-                .disabled(selection.isEmpty)
-                Divider()
-                    .frame(height: 14)
-                // The placeholder is a prompt, not a label: inside a form a
-                // title would stand beside the field as a row's label.
-                TextField(text: $draft, prompt: Text(placeholder)) { Text(title) }
-                    .labelsHidden()
-                    .textFieldStyle(.plain)
-                    .font(.callout)
-                    .padding(.horizontal, 8)
-                    .onSubmit(addDraft)
-                Button("Add", action: addDraft)
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .padding(.trailing, 6)
-                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(selection.isEmpty)
+                Spacer()
             }
             .padding(.leading, 2)
             .frame(height: 26)
@@ -540,58 +474,24 @@ struct PathListEditor: View {
         }
     }
 
-    private func addDraft() {
-        addPaths([draft], picked: false)
-        draft = ""
-    }
-
     private func remove(_ items: Set<String>) {
-        // − takes no focus, so the edit is still open; its row's position
-        // is about to move.
-        commitEdit()
         paths.removeAll { items.contains($0) }
         selection.subtract(items)
     }
 
-    private func startEditing(_ path: String) {
-        guard let index = paths.firstIndex(of: path) else { return }
-        editDraft = path
-        editOriginal = path
-        editing = index
-    }
-
-    private func commitEdit() {
-        guard let index = editing else { return }
-        editing = nil
-        let finished = PathListEntry.value(for: editDraft, expandsTildeInPath: false, escapesGlobs: false)
-        paths = PathListEntry.finishing(editDraft, at: index, in: paths)
-        selection = [finished ?? editOriginal]
-    }
-
-    private func cancelEdit() {
-        guard let index = editing else { return }
-        editing = nil
-        paths[index] = editOriginal
-        selection = [editOriginal]
-    }
-
-    /// `picked`: the paths came from the panel or a drop, not the field.
-    private func addPaths(_ rawPaths: [String], picked: Bool) {
-        for raw in rawPaths {
-            // Stored as typed, `~` and all: the run expands it
-            // (`ResticService.backup`).
-            guard let value = PathListEntry.value(
-                for: raw,
-                expandsTildeInPath: false,
-                escapesGlobs: picked && escapesPickedGlobs
-            ), !paths.contains(value) else { continue }
+    private func addPaths(_ rawPaths: [String]) {
+        for path in rawPaths {
+            let value = ResticService.globEscaped(path)
+            guard !paths.contains(value) else { continue }
             paths.append(value)
         }
     }
 
     private func browse() {
-        guard let chosen = FilePicker.chooseFoldersAndFiles(message: browseMessage, prompt: browsePrompt) else { return }
-        addPaths(chosen.map(\.path), picked: true)
+        guard let chosen = FilePicker.chooseFoldersAndFiles(
+            message: "Choose folders and files to exclude from backups", prompt: "Exclude"
+        ) else { return }
+        addPaths(chosen.map(\.path))
     }
 }
 
@@ -840,7 +740,7 @@ struct IndexFailureView: View {
         } description: {
             Text(message)
         } actions: {
-            Button("Rebuild Search Index") {
+            Button("Try Again") {
                 model.rebuildIndex(repositoryID: repositoryID)
             }
         }

@@ -54,7 +54,7 @@ extension AppModel {
                 post(Banner(
                     title: "Couldn’t remove the password for “\(share.url)”",
                     message: error.localizedDescription,
-                    isError: true
+                    level: .error
                 ))
             }
         }
@@ -66,7 +66,7 @@ extension AppModel {
     /// (`ShareNotReconnected`). A volume with no saved share is left to the
     /// read, as before.
     func reconnectShare(before repository: Repository) async throws {
-        guard await isDriveAway(repository), let volume = repository.driveVolumeName else { return }
+        guard await isVolumeMissing(repository), let volume = repository.driveVolumeName else { return }
         let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
         guard failures.isEmpty else {
             throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume))

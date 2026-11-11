@@ -11,15 +11,6 @@ extension AppModel {
         return problem
     }
 
-    /// The plan's newest backup, when it backed up the rest of the plan
-    /// around an away drive's folders (`RunRecord.isPartialSkip`, a record
-    /// of an earlier build) — the record whose words name the drive, for
-    /// the Status section. Nil once any later backup ran.
-    func standingPartialSkip(for planID: UUID) -> RunRecord? {
-        guard let newest = newestRun(for: planID), newest.isPartialSkip else { return nil }
-        return newest
-    }
-
     /// The sidebar's Activity badge: the week's problems the menu bar still
     /// stands for (`OverviewMetrics.isHealed`) that finished after Activity
     /// was last open. Opening Activity is the Mail "read" for all of them at

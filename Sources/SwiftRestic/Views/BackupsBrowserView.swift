@@ -187,7 +187,17 @@ private struct BackupsStatusRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else if case let .failed(message, fix) = outcome {
+        } else if case let .notConnected(volume) = outcome {
+            VStack(alignment: .leading, spacing: 4) {
+                // A normal state: no glyph.
+                Text(SnapshotListingOutcome.connectText(volume: volume))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                RunFixButton(fix: .locate(repositoryID))
+                    .controlSize(.small)
+            }
+        } else if let message = outcome.failureMessage {
             VStack(alignment: .leading, spacing: 4) {
                 // Orange only on the glyph, the words secondary — the
                 // plan rows' contrast rule.
@@ -201,7 +211,7 @@ private struct BackupsStatusRow: View {
                         .lineLimit(2)
                 }
                 .font(.caption)
-                if let fix {
+                if let fix = outcome.failureFix(repositoryID: repositoryID) {
                     RunFixButton(fix: fix)
                         .controlSize(.small)
                 } else {

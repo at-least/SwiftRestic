@@ -5,8 +5,7 @@ extension AppModel {
         post(Banner(
             title: "“\(label(of: repository))” is busy",
             message: "A backup or other work is already using this location.",
-            isError: false,
-            symbolName: "clock"
+            level: .notice
         ))
     }
 

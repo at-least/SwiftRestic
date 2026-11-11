@@ -683,10 +683,7 @@ struct AppModelTests {
         let id = harness.repository.id
         let rows = model.snapshots[id]
         let banners = model.banners.count
-        let away = SnapshotListingOutcome.failed(
-            "“SwiftRestic Absent Drive” is not connected. Connect it to read its backups.",
-            fix: .locate(id)
-        )
+        let away = SnapshotListingOutcome.notConnected(volume: "SwiftRestic Absent Drive")
         let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
         model.configuration.repositories[index].localPath = "/Volumes/SwiftRestic Absent Drive/restic"
 
@@ -732,7 +729,7 @@ struct AppModelTests {
         #expect(banner.title.hasSuffix("skipped"))
         #expect(banner.message == "“SwiftRestic Absent Drive” is not connected.")
         #expect(!banner.isError, "it goes by itself, like a success's")
-        #expect(banner.symbolName == "minus.circle", "the skipped row's glyph, not a success's check")
+        #expect(banner.level == .notice)
 
         // The same skip at a scheduled slot posts nothing.
         model.banners.removeAll()
@@ -860,6 +857,41 @@ struct AppModelTests {
         #expect(off.contains("--exclude \(NSHomeDirectory())/.android/avd"))
 
         await model.shutdown()
+    }
+
+    @Test("a saved password is refused once its listing says exit 12, and not for another failure")
+    @MainActor
+    func passwordRefused() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticRefused-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        let id = UUID()
+        #expect(!model.passwordRefused(repositoryID: id))
+
+        model.snapshotListingOutcomes[id] = .passwordRefused(repositoryName: "NAS")
+        #expect(model.passwordRefused(repositoryID: id))
+        model.snapshotListingOutcomes[id] = .failed("Away.", fix: .locate(id))
+        #expect(!model.passwordRefused(repositoryID: id))
+    }
+
+    @Test("a listing that reads fine, or a password never saved, is no refusal, whatever the latest run said")
+    @MainActor
+    func passwordRefusedFollowsTheListing() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticRefusedListing-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+        let id = UUID()
+        var refused = RunRecord(kind: .backup, planName: "Docs")
+        refused.repositoryID = id
+        refused.exitCode = ResticError.wrongPasswordCode
+        model.configuration.runs = [refused]
+
+        model.snapshotListingOutcomes[id] = .loaded
+        #expect(!model.passwordRefused(repositoryID: id), "the right password entered after the run")
+        model.snapshotListingOutcomes[id] = .failed(
+            "No password is saved for “NAS”. Add it to read its backups.", fix: .editRepository(id)
+        )
+        #expect(!model.passwordRefused(repositoryID: id), "a missing password is not a refused one")
+        model.snapshotListingOutcomes[id] = .passwordRefused(repositoryName: "NAS")
+        #expect(model.passwordRefused(repositoryID: id))
     }
 
     @Test("the launch sweep empties its own configuration's staging folder of drag and preview copies, and nothing else")
@@ -1025,7 +1057,7 @@ struct AppModelTests {
         // code has to be visible somewhere.
         #expect(record.outcome != .failed)
         #expect(record.snapshotID != nil)
-        #expect(record.hookMessages.contains { $0.contains("exit") && $0.contains("exited 9") })
+        #expect(record.hookMessages.contains { $0.contains("“exit”") && $0.contains("failed (exit code 9)") })
         #expect(record.itemErrors.isEmpty)
         #expect(model.plan(id: plan.id)?.lastSuccessAt != nil)
 
@@ -1148,8 +1180,8 @@ struct BannerQueueTests {
     @Test("newest first, dismissal by identity")
     func queueSemantics() {
         let model = makeModel("SwiftResticBanners").model
-        model.post(Banner(title: "first", message: "", isError: true))
-        model.post(Banner(title: "second", message: "", isError: true))
+        model.post(Banner(title: "first", message: "", level: .error))
+        model.post(Banner(title: "second", message: "", level: .error))
         #expect(model.banners.map(\.title) == ["second", "first"])
 
         model.dismiss(model.banners[0])
@@ -1160,7 +1192,7 @@ struct BannerQueueTests {
     func bounded() {
         let model = makeModel("SwiftResticBanners").model
         for index in 0 ..< 10 {
-            model.post(Banner(title: "banner \(index)", message: "", isError: true))
+            model.post(Banner(title: "banner \(index)", message: "", level: .error))
         }
         #expect(model.banners.count == 4)
         // The newest survive: the oldest were dropped, not the ones the user
@@ -1171,13 +1203,13 @@ struct BannerQueueTests {
     @Test("the cap evicts a success before it gives up an error")
     func capPrefersErrors() {
         let model = makeModel("SwiftResticBanners").model
-        model.post(Banner(title: "error", message: "", isError: true))
+        model.post(Banner(title: "error", message: "", level: .error))
         for index in 0 ..< 4 {
-            model.post(Banner(title: "ok \(index)", message: "", isError: false))
+            model.post(Banner(title: "ok \(index)", message: "", level: .notice))
         }
         // Queue is at the cap ("ok 3" … "ok 0", "error"). One more post has to
         // evict the oldest success, never the unread error.
-        model.post(Banner(title: "ok 4", message: "", isError: false))
+        model.post(Banner(title: "ok 4", message: "", level: .notice))
         #expect(model.banners.count == 4)
         #expect(model.banners.contains { $0.title == "error" })
         #expect(model.banners.first?.title == "ok 4")
@@ -1185,7 +1217,7 @@ struct BannerQueueTests {
         // An all-error queue falls back to dropping its oldest.
         let errors = makeModel("SwiftResticBanners").model
         for index in 0 ..< 5 {
-            errors.post(Banner(title: "e\(index)", message: "", isError: true))
+            errors.post(Banner(title: "e\(index)", message: "", level: .error))
         }
         #expect(errors.banners.map(\.title) == ["e4", "e3", "e2", "e1"])
     }
@@ -1195,10 +1227,10 @@ struct BannerQueueTests {
         let model = makeModel("SwiftResticBanners").model
         // A repeatable action failing twice must not stack copies that evict
         // successes — one copy of the same words stays.
-        model.post(Banner(title: "same", message: "one", isError: true))
-        model.post(Banner(title: "same", message: "one", isError: true))
+        model.post(Banner(title: "same", message: "one", level: .error))
+        model.post(Banner(title: "same", message: "one", level: .error))
         #expect(model.banners.map(\.title) == ["same"])
-        model.post(Banner(title: "same", message: "two", isError: true))
+        model.post(Banner(title: "same", message: "two", level: .error))
         #expect(model.banners.count == 2)
     }
 }
@@ -1291,7 +1323,7 @@ struct NewestChainSnapshotTests {
 @Suite("Editor upsert preserves model-written stamps")
 @MainActor
 struct UpsertStampTests {
-    @Test("a stale plan draft keeps the last-run and last-success stamps")
+    @Test("a stale plan draft keeps the last-run and last-success stamps, and the schedule and retention the plan page set")
     func planStampsSurviveStaleUpsert() {
         let model = makeModel("SwiftResticUpsert").model
         var plan = BackupPlan()
@@ -1305,14 +1337,20 @@ struct UpsertStampTests {
         model.configuration.plans[0].lastRunAt = ranAt
         model.configuration.plans[0].lastSuccessAt = ranAt
 
-        // A draft taken before that run is saved with an unrelated edit.
+        // The plan page changes How often and the switch while the editor is
+        // open; the editor's draft, taken before all that, is saved with its
+        // own edit.
+        model.configuration.plans[0].schedule.frequency = .weekly
+        model.configuration.plans[0].retention.isEnabled = false
         var staleDraft = plan
-        staleDraft.schedule.frequency = .weekly
+        staleDraft.excludePatterns = ["/tmp/cache"]
         model.upsert(plan: staleDraft)
 
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
         #expect(model.configuration.plans[0].schedule.frequency == .weekly)
+        #expect(model.configuration.plans[0].retention.isEnabled == false)
+        #expect(model.configuration.plans[0].excludePatterns == ["/tmp/cache"])
     }
 
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
@@ -1347,12 +1385,12 @@ struct UpsertStampTests {
         model.configuration.repositories[0].maintenance.lastPruneAt = checkedAt
 
         var staleDraft = repository
-        staleDraft.uploadLimitKiBps = 512
+        staleDraft.localPath = "/tmp/elsewhere"
         await model.upsert(repository: staleDraft, password: nil, providerSecret: nil)
 
         #expect(model.configuration.repositories[0].maintenance.lastCheckAt == checkedAt)
         #expect(model.configuration.repositories[0].maintenance.lastPruneAt == checkedAt)
-        #expect(model.configuration.repositories[0].uploadLimitKiBps == 512)
+        #expect(model.configuration.repositories[0].localPath == "/tmp/elsewhere")
     }
 }
 
@@ -2527,7 +2565,7 @@ struct IndexCompletenessTests {
         await model.shutdown()
     }
 
-    @Test("Rebuild Search Index: the thrown-away store takes the listing again and is complete once more")
+    @Test("Try Again on a failed search index: the thrown-away store takes the listing again and is complete once more")
     func rebuildIndexLandsTheListingAgain() async throws {
         let (model, root) = makeModel("SwiftResticRebuild")
         defer { try? FileManager.default.removeItem(at: root) }

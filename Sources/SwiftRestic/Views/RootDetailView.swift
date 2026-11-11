@@ -35,7 +35,7 @@ struct RootDetailView: View {
             // state, so there is nothing to dismiss.
             if model.isResticDamaged, router.selection != nil {
                 BannerView(
-                    banner: Banner(title: ResticError.damagedInstall.localizedDescription, message: "", isError: true),
+                    banner: Banner(title: ResticError.damagedInstall.localizedDescription, message: "", level: .error),
                     isDismissible: false
                 )
             }

@@ -206,8 +206,8 @@ final class AppModel {
     /// needs it at the same tick awaits the first's answer rather than
     /// mounting it twice.
     @ObservationIgnored var shareReconnects: [String: Task<ShareReconnect, Never>] = [:]
-    /// Resolved restic contexts per repository (repo string + credentials +
-    /// rate limits), so a restic call does not re-read the Keychain. Entries
+    /// Resolved restic contexts per repository (repo string + credentials),
+    /// so a restic call does not re-read the Keychain. Entries
     /// are rebuilt when the repository value changes (`AppModel.context(for:)`
     /// keeps the value it was built from), and dropped on secret edits
     /// (`upsert`), repository removal, and auth-class failures
@@ -355,7 +355,7 @@ final class AppModel {
                 self.post(Banner(
                     title: "Couldn’t save your configuration",
                     message: error.localizedDescription,
-                    isError: true
+                    level: .error
                 ))
             }
         }

@@ -208,16 +208,10 @@ struct SkippedRunTests {
         )
         #expect(log.contains("— Skipped\n“Archive SSD” is not connected; the other folders were backed up."))
 
-        // It wrote a snapshot: a backup went through, so it heals an older
-        // failure and a dead-man's switch hears it alive. A skip that wrote
-        // none does neither.
-        var failure = RunRecord(kind: .backup, planID: UUID(), planName: "Documents", startedAt: now.addingTimeInterval(-3600))
-        failure.outcome = .failed
-        run.planID = failure.planID
-        #expect(OverviewMetrics.isHealed(failure, in: [run, failure]))
+        // It wrote a snapshot: a dead-man's switch hears it alive. A skip
+        // that wrote none does not.
         var nothing = run
         nothing.snapshotID = nil
-        #expect(!OverviewMetrics.isHealed(failure, in: [nothing, failure]))
 
         var healthchecks = NotificationChannel()
         healthchecks.url = "https://hc-ping.com/abc-123"
@@ -233,7 +227,7 @@ struct SkippedRunTests {
             == "https://hc-ping.com/abc-123/fail")
     }
 
-    @Test("a skip that continues the plan's last one — same reason, nothing written — becomes one record that counts the runs")
+    @Test("a skip that continues the plan's last one — same reason — becomes one record that counts the runs")
     func standingSkipMerges() throws {
         let planID = UUID()
         func skip(_ minutes: Double, reason: String = "“Archive SSD” is not connected.") -> RunRecord {
@@ -253,9 +247,6 @@ struct SkippedRunTests {
 
         // Anything that makes the earlier record its own news keeps it.
         #expect(skip(60, reason: "“Travel” is not connected.").continuingSkip(of: first) == nil)
-        var wrote = first
-        wrote.snapshotID = "b824a66c"
-        #expect(skip(60).continuingSkip(of: wrote) == nil)
         var complained = first
         complained.hookMessages = ["“eject” exited with 1"]
         #expect(skip(60).continuingSkip(of: complained) == nil)
@@ -284,7 +275,7 @@ struct SkippedRunTests {
         #expect(roundTrip.skippedSince == third.skippedSince)
     }
 
-    @Test("a merged skip an earlier build wrote around an away drive keeps its record: its snapshots resolve to it, and a new skip does not continue it")
+    @Test("a merged skip an earlier build wrote around an away drive keeps its record: its snapshots resolve to it")
     func partialSkipRecordsStand() throws {
         let planID = UUID()
         var stored = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(7200))
@@ -303,13 +294,6 @@ struct SkippedRunTests {
         #expect(bySnapshot["cccc3333"]?.id == stored.id)
         #expect(RunRecordPresentation.detail(for: stored)
             == "“Archive SSD” is not connected; the other folders were backed up. Skipped 3 times since \(Format.timestamp(now)).")
-
-        // A skip now writes no snapshot: its own news, never folded into
-        // the record that holds one.
-        var whole = RunRecord(kind: .backup, planID: planID, planName: "Archive", startedAt: now.addingTimeInterval(10800))
-        whole.outcome = .skipped
-        whole.detailText = stored.detailText
-        #expect(whole.continuingSkip(of: stored) == nil)
 
         // Older records carry no list; a merged one round-trips.
         let older = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"outcome":"skipped"}"#.utf8))

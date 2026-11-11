@@ -159,7 +159,7 @@ struct NotificationTests {
     @Test("a channel reads as its address's host; one with no address yet as a webhook")
     func channelName() {
         #expect(channel(.slack, url: "https://hooks.slack.com/services/x").displayName == "hooks.slack.com")
-        #expect(channel(.webhook, url: "").displayName == "Webhook")
+        #expect(channel(.webhook, url: "").displayName == "Address")
     }
 
     @Test("an older build's channels: a switched-off one doesn't start sending")
@@ -400,7 +400,7 @@ struct NotificationSafetyTests {
             output: "connecting…\nAuthorization: Bearer sk-live-abcdef\ndone",
             timedOut: false
         )
-        #expect(outcome.summary.contains("exited 4"))
+        #expect(outcome.summary.contains("failed (exit code 4)"))
         #expect(outcome.summary.contains("connecting"))
         #expect(!outcome.summary.contains("Bearer"))
     }
@@ -630,10 +630,6 @@ struct RepeatedProblemNotificationTests {
         // A backup skipped whole or stopped ran nothing: the stretch goes on.
         #expect(counts([warned(600), ended(540, .skipped), warned(480)]) == [2, nil, 1])
         #expect(counts([warned(600), ended(540, .cancelled), warned(480)]) == [2, nil, 1])
-        // One that backed up the rest around an away drive heals, as a success does.
-        var partial = ended(540, .skipped)
-        partial.snapshotID = "0ef0dab0"
-        #expect(counts([warned(600), partial, warned(480)]) == [1, nil, 1])
         #expect(counts([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == [1, 1])
         #expect(counts([failed(600), warned(540)]) == [1, 1])
         // Another plan's runs, and the plan's own retention run, neither end

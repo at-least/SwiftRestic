@@ -194,22 +194,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// other run.
     var retentionRefused: Int?
 
-    /// What a check read besides the structure, in the repository page's
-    /// words — "part 3 of 12", "5% of the data", "all of the data" — or
-    /// "structure only". Nil for any other run, and for a check an older
-    /// build recorded.
-    var checkRead: String?
-
-    /// A check an older build recorded stored "data slice 3 of 12",
-    /// "5% of data" or "all data"; read in today's words, so Last check
-    /// never mixes the two.
-    private static func currentCheckWords(_ stored: String) -> String {
-        if stored == "all data" { return "all of the data" }
-        if stored.hasSuffix("% of data") { return stored.dropLast("data".count) + "the data" }
-        if stored.hasPrefix("data slice ") { return "part " + stored.dropFirst("data slice ".count) }
-        return stored
-    }
-
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
@@ -298,7 +282,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         refusedShares = c.optional(.refusedShares)
         repositoryFull = c.optional(.repositoryFull)
         retentionRefused = c.optional(.retentionRefused)
-        checkRead = (c.optional(.checkRead) as String?).map(Self.currentCheckWords)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
@@ -507,16 +490,6 @@ extension RunRecord {
         return merged(after: previous)
     }
 
-    /// A backup that went around an away drive's folders and wrote a
-    /// snapshot of the rest: the rest is backed up, the drive's folders are
-    /// not, which the Status section names and a later whole backup heals.
-    /// Only older builds, whose plans held several folders,
-    /// recorded one — a plan of one path is backed up or skipped whole —
-    /// and the history keeps them.
-    var isPartialSkip: Bool {
-        kind == .backup && outcome == .skipped && snapshotID != nil
-    }
-
     static func notConnected(_ sources: [String]) -> String? {
         let found = volumeNames(sources)
         guard !found.isEmpty, !found.contains(nil) else { return nil }
@@ -547,14 +520,10 @@ extension RunRecord {
     /// hook's complaint: one record, this run's, counting `previous`'s runs
     /// and keeping when the skips began. An hourly plan whose drive is away
     /// a week is one row, not 168, and leaves the history cap to real runs.
-    /// A skip writes no snapshot; one an earlier build stored with a
-    /// snapshot of the other folders (`isPartialSkip`) stays its own
-    /// record, keeping that snapshot's run. Nil when it does not continue
-    /// it.
+    /// Nil when it does not continue it.
     func continuingSkip(of previous: RunRecord) -> RunRecord? {
         guard continuesPlanBackup(previous),
               outcome == .skipped, previous.outcome == .skipped,
-              (snapshotID == nil) == (previous.snapshotID == nil),
               detailText == previous.detailText, itemErrors == previous.itemErrors
         else { return nil }
         return merged(after: previous)

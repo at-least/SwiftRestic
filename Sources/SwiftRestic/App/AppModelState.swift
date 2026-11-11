@@ -26,7 +26,7 @@ struct PlanActivity: Sendable, Equatable {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
             case .applyingRetention: "Removing old backups…"
-            case .runningHooks: "Running hooks…"
+            case .runningHooks: "Running scripts…"
             case .notifying: "Sending notifications…"
             case .cancelling: "Stopping…"
             }
@@ -61,11 +61,10 @@ struct MaintenanceActivity: Sendable, Equatable {
 }
 
 struct Banner: Identifiable, Equatable {
-    /// The glyph and colour are the status palette's own (`StatusPalette`),
-    /// so a colour means one thing app-wide.
+    /// Only an error and a warning carry a glyph, the status palette's own
+    /// (`StatusPalette`), so a colour means one thing app-wide.
     enum Level: Equatable {
-        case success
-        /// News, neither good nor bad — a skipped run, an ask that waits.
+        /// News: a success, a skipped run, an ask that waits.
         case notice
         /// Something did not work that leaves the backups unharmed.
         case warning
@@ -85,9 +84,6 @@ struct Banner: Identifiable, Equatable {
     /// them all — a restore that ends with "here is the path" reads finished
     /// only half-way.
     var revealPaths: [String] = []
-    /// A notice's glyph, in the secondary colour — a skipped run's own —
-    /// instead of the generic one.
-    var symbolName: String?
     var link: Link?
 
     init(
@@ -95,25 +91,13 @@ struct Banner: Identifiable, Equatable {
         message: String,
         level: Level,
         revealPaths: [String] = [],
-        symbolName: String? = nil,
         link: Link? = nil
     ) {
         self.title = title
         self.message = message
         self.level = level
         self.revealPaths = revealPaths
-        self.symbolName = symbolName
         self.link = link
-    }
-
-    init(title: String, message: String, isError: Bool, revealPaths: [String] = [], symbolName: String? = nil) {
-        self.init(
-            title: title,
-            message: message,
-            level: isError ? .error : symbolName == nil ? .success : .notice,
-            revealPaths: revealPaths,
-            symbolName: symbolName
-        )
     }
 
     var isError: Bool { level == .error }
@@ -214,4 +198,39 @@ enum SnapshotListingOutcome: Equatable {
     /// previous listing succeeded) stay visible next to it. `fix` is the one
     /// action that helps; without one, trying again is all there is.
     case failed(String, fix: RunFix? = nil)
+    /// restic exit 12: the saved password does not open the location. Its
+    /// editor opens on the password field (`AppModel.passwordRefused`).
+    case passwordRefused(repositoryName: String)
+    /// A disk location whose volume is not mounted: a normal state, not a
+    /// failed read, said without the warning glyph and without "Can’t read
+    /// backups". Locate is for a disk renamed: it never mounts under the
+    /// saved name.
+    case notConnected(volume: String)
+
+    /// The words of a read that failed, a refused password's among them.
+    var failureMessage: String? {
+        switch self {
+        case let .failed(message, _): message
+        case let .passwordRefused(name): Self.passwordRefusedText(repositoryName: name)
+        case .idle, .loaded, .notConnected: nil
+        }
+    }
+
+    /// The one action that helps a failed read; nil where trying again is
+    /// all there is.
+    func failureFix(repositoryID: UUID) -> RunFix? {
+        switch self {
+        case let .failed(_, fix): fix
+        case .passwordRefused: .editRepository(repositoryID)
+        case .idle, .loaded, .notConnected: nil
+        }
+    }
+
+    static func passwordRefusedText(repositoryName: String) -> String {
+        "This password doesn’t open “\(repositoryName)”."
+    }
+
+    static func connectText(volume: String) -> String {
+        "Connect “\(volume)” to see its backups."
+    }
 }

@@ -119,8 +119,7 @@ struct AppModelStubTests {
     }
 
     /// The stub's invocations in order, each its arguments after a space,
-    /// so " forget " finds the subcommand wherever it stands — first, with
-    /// no rate limit before it.
+    /// so " forget " finds the subcommand wherever it stands.
     private func invocations(_ harness: Harness) throws -> [String] {
         try String(contentsOf: harness.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
             .components(separatedBy: "\n")
@@ -137,7 +136,7 @@ struct AppModelStubTests {
         return false
     }
 
-    @Test("Back Up All runs one plan per repository at a time: the second waits its turn, and the first's retention no longer loses the lock to its backup")
+    @Test("several plans' backups run one plan per repository at a time: the second waits its turn, and the first's retention no longer loses the lock to its backup")
     func backUpAllTakesTurnsPerRepository() async throws {
         let harness = try await makeHarness(mode: "holdbackup")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -146,7 +145,7 @@ struct AppModelStubTests {
         let held = try addHeldPlan(to: harness)
         #expect(quick.retention.isSafeToRun && held.retention.isSafeToRun, "both plans apply retention after their backup")
 
-        model.backUpAllPlans()
+        model.runBackups(planIDs: model.configuration.plans.map(\.id))
         // The first runs; the second waits, and its sidebar row says so.
         #expect(model.isRunning(planID: quick.id))
         #expect(model.isQueued(held.id))
@@ -155,7 +154,7 @@ struct AppModelStubTests {
             for: held, activity: model.activity[held.id], isQueued: model.isQueued(held.id),
             problem: nil, existingRepositoryIDs: [harness.repository.id]
         )
-        #expect(caption.text == "Waiting for another backup…")
+        #expect(caption?.text == "Waiting for another backup…")
 
         // The first's run is over, its retention included, and the second's
         // has begun.
@@ -188,7 +187,7 @@ struct AppModelStubTests {
         let held = try addHeldPlan(to: harness, first: true)
         let waiting = harness.plan
 
-        model.backUpAllPlans()
+        model.runBackups(planIDs: model.configuration.plans.map(\.id))
         #expect(model.isRunning(planID: held.id))
         #expect(model.isQueued(waiting.id))
         #expect(try await backupStarts(of: held.path, in: harness), "the held backup never started")
@@ -202,6 +201,26 @@ struct AppModelStubTests {
         let backups = try invocations(harness).filter { $0.contains(" backup ") }
         #expect(backups.contains { $0.contains(held.path) })
         #expect(!backups.contains { $0.contains(waiting.path) })
+    }
+
+    @Test("Back Up Now during a check waits as its banner says, and starts once the check is done")
+    func backUpNowDuringACheckStartsAfterIt() async throws {
+        let harness = try await makeHarness(mode: "holdbackup")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let plan = harness.plan
+
+        model.runMaintenance(repositoryID: harness.repository.id, task: .check)
+        model.runBackup(planID: plan.id)
+        #expect(model.banners.map(\.title).contains("“Stub Plan” waits"))
+        #expect(model.isQueued(plan.id))
+        #expect(!model.isRunning(planID: plan.id))
+
+        await model.waitForMaintenance(repositoryID: harness.repository.id)
+        #expect(model.isRunning(planID: plan.id), "the check's end started nothing")
+        await model.waitForRun(planID: plan.id)
+        #expect(model.configuration.runs.contains { $0.kind == .backup && $0.planID == plan.id && $0.outcome == .succeeded })
+        await model.shutdown()
     }
 
     @Test("a mount's catch-up of two plans on one repository runs them one at a time")
@@ -909,10 +928,7 @@ struct AppModelStubTests {
         await reading.value
         await harness.model.tasks.drain()
 
-        #expect(harness.model.snapshotListingOutcome(for: id) == .failed(
-            "“SwiftRestic Absent Drive” is not connected. Connect it to read its backups.",
-            fix: .locate(id)
-        ))
+        #expect(harness.model.snapshotListingOutcome(for: id) == .notConnected(volume: "SwiftRestic Absent Drive"))
 
         await harness.model.shutdown()
     }
@@ -1718,11 +1734,8 @@ struct AppModelStubTests {
         let record = try #require(model.configuration.runs.first)
         #expect(record.outcome == .skipped)
         #expect(await mounts.calls == 1)
-        // The drive-away verdict, not the run's bare words: the listing
-        // carries the Locate fix and the connect sentence, as a plain
-        // absence does.
-        #expect(model.snapshotListingOutcomes[id]
-            == model.driveAwayOutcome(model.configuration.repositories[index]))
+        // Not connected, not the run's bare words, as a plain absence.
+        #expect(model.snapshotListingOutcomes[id] == .notConnected(volume: volume))
 
         await model.shutdown()
     }
@@ -2047,7 +2060,6 @@ struct AppModelStubTests {
         )
         let refused = await bannerTitled("A restore is already running", in: harness.model)
         #expect(refused?.level == .notice, "banners were: \(harness.model.banners.map(\.title))")
-        #expect(refused?.symbolName == "clock")
 
         harness.model.cancelRestore()
         await waitUntilRestoreFinishes(in: harness.model)
@@ -2085,10 +2097,7 @@ struct AppModelStubTests {
             cancelledBanner?.isError == false,
             "banners were: \(harness.model.banners.map(\.title))"
         )
-        // News in the cancelled run's own glyph, as Activity shows its
-        // record — never the success check: nothing was restored.
         #expect(cancelledBanner?.level == .notice)
-        #expect(cancelledBanner?.symbolName == RunRecord.Outcome.cancelled.symbolName)
 
         await harness.model.shutdown()
     }
@@ -2131,15 +2140,10 @@ struct AppModelStubTests {
         let harness = try await makeHarness(mode: "wrongpassword")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
-            Issue.record(
-                "expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))"
-            )
-            return
-        }
-        #expect(message == "This password doesn’t open “Stub Repo”.")
-        guard case let .failed(_, fix) = harness.model.snapshotListingOutcome(for: harness.repository.id) else { return }
-        #expect(fix == .editRepository(harness.repository.id), "trying again can't help")
+        let outcome = harness.model.snapshotListingOutcome(for: harness.repository.id)
+        #expect(outcome == .passwordRefused(repositoryName: "Stub Repo"))
+        #expect(outcome.failureMessage == "This password doesn’t open “Stub Repo”.")
+        #expect(outcome.failureFix(repositoryID: harness.repository.id) == .editRepository(harness.repository.id), "trying again can't help")
 
         await harness.model.shutdown()
     }

@@ -154,31 +154,23 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in nil }
         )
-        let sidebar = PlanStatus.sidebarCaption(
-            for: photos, activity: nil, problem: nil, existingRepositoryIDs: [repository]
-        )
-        // The caption is the bare last-backup line — the sidebar carries
-        // no next run — so the shared derivation shows directly: the
-        // "Last backup" moment itself, spelled identically, and the row's
-        // lastBackupAt is that same moment (the run's stamp, not the
-        // snapshot's own time).
-        #expect(sidebar.text == rows[0].stateText)
+        // The run's stamp, not the snapshot's own time.
         #expect(rows.first?.lastBackupAt == photos.lastSuccessAt)
         #expect(rows.first?.isUpToDate == true)
     }
 
-    @Test("one Last backup: the caption, the Status line and the plan page's value say the same moment")
+    @Test("one Last backup: the row, the Status line and the plan page's value say the same moment")
     func lastBackupSaidOneWay() {
-        // The surfaces that say when a plan last backed up — the sidebar
-        // caption, the repository page's Status line, the plan page's
-        // Last backup value — all read PlanStatus.lastBackupAt, spelled by
+        // The surfaces that say when a plan last backed up — the
+        // repository page's Status line, the plan page's Last backup
+        // value — all read PlanStatus.lastBackupAt, spelled by
         // one formatter as of one tick. The menu bar's menu repeats the
         // Status line.
         let repository = UUID()
         let tick = Date.now
         let ago = { Format.ago($0, now: tick) }
 
-        func surfaces(_ plan: BackupPlan, newest: Snapshot?) -> (caption: String, row: String, line: String?, page: String) {
+        func surfaces(_ plan: BackupPlan, newest: Snapshot?) -> (row: String, line: String?, page: String) {
             let rows = OverviewMetrics.protectionRows(
                 plans: [plan],
                 latestSnapshot: { _, _ in newest },
@@ -193,14 +185,10 @@ struct OverviewMetricsTests {
                 rows: rows, listingLoaded: true, otherBackupsCount: 0,
                 willNotRun: { _ in nil }, hold: nil, now: tick, relative: ago
             )
-            let caption = PlanStatus.sidebarCaption(
-                for: plan, activity: nil, problem: nil, latestSnapshot: newest,
-                existingRepositoryIDs: [repository], now: tick, relative: ago
-            )
             // The plan page's value is this moment through the same
             // formatter (PlanDetailView.lastBackupValue).
             let page = ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: newest?.time))
-            return (caption.text, rows[0].stateText, summary?.text, page)
+            return (rows[0].stateText, summary?.text, page)
         }
 
         // History that arrived with the repository: no run of the plan's
@@ -217,7 +205,6 @@ struct OverviewMetricsTests {
         let adoptedSnapshotTime = tick.addingTimeInterval(-2 * 86_400 - 3_600)
         let adoptedWords = ago(adoptedSnapshotTime)
         let adoptedSurfaces = surfaces(adopted, newest: snapshot("snapDocs", at: adoptedSnapshotTime))
-        #expect(adoptedSurfaces.caption == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.row == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.page == adoptedWords)
         #expect(adoptedSurfaces.line == "1 of 1 plan up to date · Last backup \(adoptedWords)")
@@ -229,7 +216,6 @@ struct OverviewMetricsTests {
         ranHere.lastSuccessAt = tick.addingTimeInterval(-207)
         let ranWords = ago(tick.addingTimeInterval(-207))
         let ranSurfaces = surfaces(ranHere, newest: snapshot("snapPhotos", at: tick.addingTimeInterval(-162)))
-        #expect(ranSurfaces.caption == "Last backup \(ranWords)")
         #expect(ranSurfaces.row == "Last backup \(ranWords)")
         #expect(ranSurfaces.page == ranWords)
         #expect(ranSurfaces.line == "1 of 1 plan up to date · Last backup \(ranWords)")
@@ -283,7 +269,7 @@ struct OverviewMetricsTests {
     }
 
     @Test("a standing failure says the sidebar's words and leaves the plan out of date")
-    func standingFailure() {
+    func standingFailure() throws {
         let repository = UUID()
         let docs = plan("Docs", repository: repository)
         var failed = RunRecord(kind: .backup, planName: "Docs", startedAt: .now.addingTimeInterval(-300))
@@ -301,9 +287,9 @@ struct OverviewMetricsTests {
         )
         // One derivation of the words: the dashboard's row must say the
         // sidebar's caption, not a "Last backup" beside a standing failure.
-        let sidebar = PlanStatus.sidebarCaption(
+        let sidebar = try #require(PlanStatus.sidebarCaption(
             for: docs, activity: nil, problem: failed, existingRepositoryIDs: [repository]
-        )
+        ))
         #expect(rows.map(\.stateText) == [sidebar.text])
         #expect(rows.first?.isKnown == true)
         #expect(rows.first?.isUpToDate == false)
@@ -372,6 +358,22 @@ struct OverviewMetricsTests {
         #expect(rows.first?.didFail == true)
         // The line is the listing's, not the hidden failure's.
         #expect(rows.first?.problemOutcome == nil)
+    }
+
+    @Test("a disk not connected is not a failed read: its row asks for the disk, without Can’t read backups")
+    func notConnectedRowAsksForTheDisk() {
+        let repository = UUID()
+        let docs = plan("Docs", repository: repository)
+        let rows = OverviewMetrics.protectionRows(
+            plans: [docs],
+            latestSnapshot: { _, _ in nil },
+            repositoryHasSnapshots: { _ in false },
+            listingOutcome: { _ in .notConnected(volume: "Archive SSD") },
+            isChecking: { _ in false },
+            activity: { _ in nil },
+            standingProblem: { _ in nil }
+        )
+        #expect(rows.map(\.stateText) == ["Connect “Archive SSD” to see its backups"])
     }
 
     private func protectionRow(
@@ -485,19 +487,14 @@ struct OverviewMetricsTests {
             )
         }
         let byID = Dictionary(uniqueKeysWithValues: plans.map { ($0.id, $0) })
-        let skipReason = "“Archive SSD” is not connected; the other folders were backed up."
         let summary = OverviewMetrics.upToDateSummary(
             rows: rows, listingLoaded: true, otherBackupsCount: 0,
             willNotRun: { byID[$0].flatMap(caption) },
-            partialSkip: { $0 == code.id ? skipReason : nil },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(summary?.text == "5 of 5 plans up to date · Last backup 1 hour ago")
-        #expect(summary?.attentionLines.map(\.text) == [])
-        // An up-to-date plan backing up around an away drive is named in the
-        // record's words, beside its held line if it has one.
-        #expect(summary?.skippedLines.map(\.text) == ["Code: \(skipReason)"])
-        #expect(summary?.heldLines.map(\.text) == ["Code: Not scheduled"])
+        // An up-to-date plan that will not run by itself needs the user.
+        #expect(summary?.attentionLines.map(\.text) == ["Code: Not scheduled"])
 
         // An out-of-date plan's line is its warning, never a second one.
         let exposed = UpToDateRow(plan: photos, among: [], stateText: "No backups yet", isKnown: true, isUpToDate: false, didFail: false)
@@ -507,7 +504,6 @@ struct OverviewMetricsTests {
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
         #expect(warned?.attentionLines.map(\.text) == ["Photos: No backups yet"])
-        #expect(warned?.heldLines.map(\.text) == [])
     }
 
     @Test("the Status card names each plan that is not up to date in the sidebar warning's words, and a run in flight")

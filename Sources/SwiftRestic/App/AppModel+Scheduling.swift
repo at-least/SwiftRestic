@@ -86,7 +86,7 @@ extension AppModel {
         var back: Set<UUID> = []
         for id in maintenanceAwaitingDrive {
             guard let repository = repository(id: id) else { back.insert(id); continue }
-            if await !isDriveAway(repository) { back.insert(id) }
+            if await !isVolumeMissing(repository) { back.insert(id) }
         }
         // Only what was read leaves: a repository `markDriveAway` added
         // during the reads stays.
@@ -175,7 +175,7 @@ extension AppModel {
             },
             repositoryReachable: { plan in
                 guard let repository = self.configuration.repository(id: plan.repositoryID) else { return false }
-                return await !self.isDriveAway(repository)
+                return await !self.isVolumeMissing(repository)
             }
         )
         // As at the start: the reads are awaited, and a pause or a quit can
@@ -223,7 +223,7 @@ extension AppModel {
         guard !isShuttingDown else { return }
         maintenanceAwaitingServer.removeAll()
         for repository in configuration.repositories where repository.kind != .local {
-            guard case .failed = snapshotListingOutcomes[repository.id] else { continue }
+            guard snapshotListingOutcomes[repository.id]?.failureMessage != nil else { continue }
             scheduleSnapshotRefresh(repositoryID: repository.id)
         }
         await runSkippedPlansAfterMount()

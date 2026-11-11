@@ -64,7 +64,7 @@ extension AppModel {
         // mounts when the app starts; still away, the words say why. Earlier
         // rows stay, as for any failed read. A mount re-reads it
         // (`refreshRepositories(onVolume:)`).
-        if await isDriveAway(repository) {
+        if await isVolumeMissing(repository) {
             let stayedAway: String?
             do {
                 try await reconnectShare(before: repository)
@@ -78,8 +78,8 @@ extension AppModel {
                 snapshotListingOutcomes[repositoryID] = .failed(stayedAway)
                 return
             }
-            if await isDriveAway(repository) {
-                snapshotListingOutcomes[repositoryID] = driveAwayOutcome(repository)
+            if await isVolumeMissing(repository), let volume = repository.driveVolumeName {
+                snapshotListingOutcomes[repositoryID] = .notConnected(volume: volume)
                 return
             }
         }
@@ -189,10 +189,7 @@ extension AppModel {
             // Trying again can't help: the password has to change.
             guard configuration.repository(id: repositoryID) != nil else { return }
             noteAuthFailure(ResticError.commandFailed(exitCode: code, message: message), repositoryID: repositoryID)
-            snapshotListingOutcomes[repositoryID] = .failed(
-                "This password doesn’t open “\(label(of: repository))”.",
-                fix: .editRepository(repositoryID)
-            )
+            snapshotListingOutcomes[repositoryID] = .passwordRefused(repositoryName: label(of: repository))
         } catch {
             // Keep whatever an earlier successful listing produced — stale
             // rows beside an error beat a blank page that reads as "nothing
@@ -208,20 +205,6 @@ extension AppModel {
     func snapshotListingOutcome(for repositoryID: UUID?) -> SnapshotListingOutcome {
         guard let repositoryID else { return .idle }
         return snapshotListingOutcomes[repositoryID] ?? .idle
-    }
-
-    /// A drive that is away, in two sentences: the sidebar shows the first
-    /// alone. Only a scheduled plan comes back by itself
-    /// (`runSkippedPlansAfterMount`). Locate is for a disk renamed: it never
-    /// mounts under the saved name.
-    func driveAwayOutcome(_ repository: Repository) -> SnapshotListingOutcome {
-        let next = plans(in: repository.id).contains(where: { $0.isScheduled })
-            ? "Connect it and backups continue on their own."
-            : "Connect it to read its backups."
-        return .failed(
-            RunRecord.skippedReason(sources: [repository.resolvedLocalPath]) + " " + next,
-            fix: .locate(repository.id)
-        )
     }
 
     /// The listing's words for restic's exit 10 — no repository where this

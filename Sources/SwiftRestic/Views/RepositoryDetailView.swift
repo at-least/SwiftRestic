@@ -87,8 +87,12 @@ struct RepositoryDetailView: View {
             Text(tile.value)
                 .monospacedDigit()
                 .modifier(TileHelp(help: tile.help))
+        case let .notConnected(volume):
+            Text("—").help(SnapshotListingOutcome.connectText(volume: volume))
         case let .failed(message, _):
             Text("—").help(message)
+        case let .passwordRefused(name):
+            Text("—").help(SnapshotListingOutcome.passwordRefusedText(repositoryName: name))
         case .idle:
             Text("—").help(OverviewMetrics.listingIdleText)
         }
@@ -162,18 +166,11 @@ struct RepositoryDetailView: View {
                 WarningLine(text: "Waiting for a password. Nothing is scheduled until one is saved.")
             }
         } header: {
-            // The page shows the runs' results and progress; the header
-            // starts them, as the plan page's section headers start theirs —
-            // the same confirmations the Location menu and the sidebar row's
-            // menu ask, in the same words.
             HStack {
                 Text("Maintenance")
                 Spacer()
-                let commands = model.repositoryCommands(for: .repository(repositoryID))
-                Button("Verify Backups…") { router.request(.confirm(.check(repositoryID))) }
-                    .disabled(!commands.canMaintain)
-                Button("Clean Up Now…") { router.request(.confirm(.prune(repositoryID))) }
-                    .disabled(!commands.canMaintain)
+                Button("Verify Backups") { router.request(.verifyBackups(repositoryID)) }
+                    .disabled(!model.repositoryCommands(for: .repository(repositoryID)).canMaintain)
             }
             .controlSize(.small)
         }

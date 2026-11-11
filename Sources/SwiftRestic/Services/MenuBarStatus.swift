@@ -305,15 +305,14 @@ enum MenuBarStatus {
         relative: (Date) -> String = { Format.relative($0) }
     ) -> [String] {
         guard activity == nil else { return [] }
-        guard problem != nil else { return [] }
-        let caption = PlanStatus.sidebarCaption(
+        guard problem != nil, let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: nil,
             problem: problem,
             existingRepositoryIDs: [],
             now: now,
             relative: relative
-        )
+        ) else { return [] }
         return ["\(plan.label(among: plans)): \(caption.text)"]
     }
 

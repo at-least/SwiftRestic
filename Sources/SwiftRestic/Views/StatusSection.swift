@@ -29,10 +29,8 @@ struct StatusSection: View {
                 }
                 planRows(summary.failureLines, symbol: RunRecord.Outcome.failed.symbolName!, tint: StatusPalette.status(.failed))
                 planRows(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
-                planRows(summary.skippedLines, symbol: RunRecord.Outcome.skipped.symbolName!, tint: .secondary)
-                planRows(summary.heldLines, symbol: "pause.circle", tint: .secondary)
             } else {
-                SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID))
+                SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID), repositoryID: repositoryID)
             }
             // Not while the location can't be read: a plan for a drive that
             // isn't here is not the next step, reaching it is.
@@ -94,7 +92,9 @@ struct StatusSection: View {
                 router.selection = .orphanPlan(repositoryID: repositoryID, planID: prompt.firstPlanID)
             }
         }
-        .help("Keep backing up from this Mac, with these backups as the history")
+        .help(prompt.isOne
+            ? "Keep backing up from this Mac, with these backups as the history"
+            : "Show the backups other Macs or removed plans made here")
     }
 
     private func planRows(_ lines: [UpToDateLine], symbol: String, tint: some ShapeStyle) -> some View {

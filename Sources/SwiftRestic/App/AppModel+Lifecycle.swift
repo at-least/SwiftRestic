@@ -143,7 +143,7 @@ extension AppModel {
                 post(Banner(
                     title: "Your configuration was restored from a backup copy",
                     message: "config.json couldn’t be read; \(recovered) was loaded instead. Saving will replace both files.",
-                    isError: true
+                    level: .error
                 ))
             }
             if !loaded.decodeNotes.isEmpty {
@@ -151,7 +151,7 @@ extension AppModel {
                     title: "Some stored settings couldn’t be read",
                     message: loaded.decodeNotes.prefix(3).joined(separator: " · ")
                         + (loaded.decodeNotes.count > 3 ? " · …" : ""),
-                    isError: true
+                    level: .error
                 ))
             }
         } catch {
@@ -160,7 +160,7 @@ extension AppModel {
                 title: "Couldn’t read your configuration",
                 message: error.localizedDescription
                     + " Your settings were not changed and nothing will be saved over the backup copies — fix the file and restart SwiftRestic.",
-                isError: true
+                level: .error
             ))
         }
         isLoaded = true
@@ -356,7 +356,7 @@ extension AppModel {
             post(Banner(
                 title: "Couldn’t change the login item",
                 message: error.localizedDescription,
-                isError: true
+                level: .error
             ))
         }
         loginItemState = await Task.detached { readLoginItemState() }.value
@@ -364,8 +364,7 @@ extension AppModel {
             post(Banner(
                 title: "Approval needed",
                 message: LoginItem.approvalNeeded,
-                isError: false,
-                symbolName: "info.circle"
+                level: .notice
             ))
         }
     }

@@ -84,24 +84,13 @@ struct UpToDateSummary: Equatable, Sendable {
     /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
     /// octagon that the plan's own row wears. Empty when none failed.
     var failureLines: [UpToDateLine] = []
-    /// One line per other plan that is not up to date — no backup yet, no
-    /// repository — in these words ("Photos: No backups
-    /// yet"), beside the warning triangle. With the failure lines, the
-    /// count names its subject; both are empty when every plan is
-    /// up to date.
+    /// One line per other plan that needs the user — no backup yet, no
+    /// repository, or up to date but "Not scheduled"
+    /// (`PlanStatus.willNotRunCaption`), so "all up to date" cannot hide a
+    /// plan that has stopped — in these words ("Photos: No backups yet"),
+    /// beside the warning triangle. Empty when every plan is up to date and
+    /// will run.
     var attentionLines: [UpToDateLine] = []
-    /// One line per up-to-date plan whose newest backup left an away
-    /// drive's folders out, in the record's own words ("Journal: “Archive
-    /// SSD” is not connected; the other folders were backed up.") —
-    /// out of date, since the rest is backed up, but not whole. Empty when
-    /// every plan's newest backup read every folder.
-    var skippedLines: [UpToDateLine] = []
-    /// One line per up-to-date plan that will not run by itself now — its
-    /// pause, or "Not scheduled" — in the sidebar's words ("Photos: Paused
-    /// — Sunday at 3:00 AM"), so "all up to date" cannot hide a plan that has
-    /// stopped. A pause is a choice, not a problem: the row gives these
-    /// the pause glyph, not the warning's.
-    var heldLines: [UpToDateLine] = []
 }
 
 /// Derives the protection rows and the recent problems from the
@@ -130,8 +119,7 @@ enum OverviewMetrics {
     }
 
     /// Whether a backup problem no longer stands: a successful backup of the
-    /// same plan finished after it — the next run fixed it. A run skipped
-    /// for an away drive that still wrote a snapshot of the rest counts. Backups only: a
+    /// same plan finished after it — the next run fixed it. Backups only: a
     /// failed check, prune, forget or restore is not fixed by a backup going
     /// through. A retention run older builds recorded under the plan's ID
     /// heals nothing. The sidebar's standing problem and
@@ -140,7 +128,7 @@ enum OverviewMetrics {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
             $0.isBackup(ofPlan: planID)
-                && ($0.outcome == .succeeded || $0.isPartialSkip)
+                && $0.outcome == .succeeded
                 && $0.finishedAt > problem.finishedAt
         }
     }
@@ -260,7 +248,11 @@ enum OverviewMetrics {
             )
         }
         let latest = latestSnapshot(repositoryID, plan.id)
-        switch listingOutcome(repositoryID) {
+        let outcome = listingOutcome(repositoryID)
+        func failedRow(_ stateText: String) -> UpToDateRow {
+            UpToDateRow(plan: plan, among: plans, stateText: stateText, isKnown: false, isUpToDate: false, didFail: true)
+        }
+        switch outcome {
         case .loaded:
             let line: String
             var moment: Date?
@@ -289,13 +281,12 @@ enum OverviewMetrics {
                 plan: plan, among: plans, stateText: line, isKnown: true,
                 isUpToDate: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
             )
+        case let .notConnected(volume):
+            return failedRow(Format.withoutFinalPeriod(SnapshotListingOutcome.connectText(volume: volume)))
         case let .failed(message, _):
-            return UpToDateRow(
-                plan: plan,
-                among: plans,
-                stateText: listingFailureText(message),
-                isKnown: false, isUpToDate: false, didFail: true
-            )
+            return failedRow(listingFailureText(message))
+        case let .passwordRefused(name):
+            return failedRow(listingFailureText(SnapshotListingOutcome.passwordRefusedText(repositoryName: name)))
         case .idle:
             let checking = isChecking(repositoryID)
             return UpToDateRow(
@@ -330,7 +321,6 @@ enum OverviewMetrics {
         listingLoaded: Bool,
         otherBackupsCount: Int,
         willNotRun: (UUID) -> String?,
-        partialSkip: (UUID) -> String? = { _ in nil },
         hold: ScheduleHold?,
         now: Date,
         relative: (Date) -> String = { Format.relative($0) }
@@ -373,25 +363,18 @@ enum OverviewMetrics {
                 attention.append(line)
             }
         }
-        // The up-to-date plans that will not run by themselves
-        // (`PlanStatus.willNotRunCaption`); an out-of-date one's line above
-        // already names it.
-        var held: [UpToDateLine] = []
-        // And the up-to-date plans whose newest backup went around an away
-        // drive (`partialSkip`: the record's words), which "up to date"
-        // alone would hide.
-        var skipped: [UpToDateLine] = []
+        // The up-to-date plans that will not run by themselves; an
+        // out-of-date one's line above already names it.
         for row in rows where row.isKnown && row.isUpToDate && !row.isRunning {
-            if let caption = willNotRun(row.planID) { held.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(caption)")) }
-            if let skip = partialSkip(row.planID) { skipped.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(skip)")) }
+            if let caption = willNotRun(row.planID) {
+                attention.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(caption)"))
+            }
         }
         return UpToDateSummary(
             text: segments.joined(separator: " · "),
             showsResume: showsResume,
             failureLines: failures,
-            attentionLines: attention,
-            skippedLines: skipped,
-            heldLines: held
+            attentionLines: attention
         )
     }
 

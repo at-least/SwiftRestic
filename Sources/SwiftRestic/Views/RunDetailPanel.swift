@@ -47,19 +47,11 @@ struct RunDetailPanel: View {
         .frame(height: hasMessages ? 320 : 220)
     }
 
+    // No outcome glyph: the selected row above already wears it. How long
+    // it took lives here, not in a table column of its own.
     private var header: some View {
-        HStack(spacing: 6) {
-            // Decorative beside words that already say the outcome — the
-            // table cell keeps the glyph's own label.
-            if let symbolName = run.outcome.symbolName {
-                Image(systemName: symbolName)
-                    .foregroundStyle(StatusPalette.status(run.outcome))
-                    .accessibilityHidden(true)
-            }
-            // How long it took lives here, not in a table column of its own.
-            Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt)) · \(Format.duration(run.duration))")
-                .font(.headline)
-        }
+        Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt)) · \(Format.duration(run.duration))")
+            .font(.headline)
     }
 
     private var repositoryName: String? { model.repository(id: run.repositoryID).map { model.label(of: $0) } }
@@ -222,12 +214,12 @@ struct RunDetailPanel: View {
                 RunFixButton(fix: fix)
             }
             // A check's verdict stands a week with nothing on its page to
-            // act on it; its re-run sits here, beside the fix. Greyed as
-            // the menu's command is while the repository is busy.
+            // act on it; its re-run sits here, beside the fix. Greyed while
+            // the repository is busy.
             if let retry = RunRecordPresentation.maintenanceRetry(for: run, repositoryExists: repositoryName != nil) {
                 Button(retry.title) {
                     switch retry {
-                    case let .check(id): router.request(.confirm(.check(id)))
+                    case let .check(id): router.request(.verifyBackups(id))
                     case let .prune(id): router.request(.confirm(.prune(id)))
                     }
                 }
@@ -266,8 +258,8 @@ struct RunDetailPanel: View {
     }
 }
 
-/// A failure's one known fix, through the menus' own path: an editor
-/// sheet, or a confirmed command.
+/// A failure's one known fix: an editor sheet or a confirmed command, asked
+/// as the menus ask (`AppRouter.request`); Locate's folder panel opens here.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppModel.self) private var model
@@ -282,7 +274,10 @@ struct RunFixButton: View {
             case .addRepository: router.request(.newRepository)
             case let .locate(id): locate(id)
             case let .editPlanShare(id): router.request(.editPlan(id))
-            case let .editPlanRetention(id): router.request(.editPlan(id, tab: .retention))
+            case let .showPlan(id):
+                // The switch is on the plan page's Overview.
+                router.setTab(.overview, of: .plan(id))
+                router.selection = .plan(id)
             case let .pruneNow(id): router.request(.confirm(.prune(id)))
             }
         }
@@ -297,7 +292,7 @@ struct RunFixButton: View {
             do {
                 try await model.locateRepository(id: id, atPath: url.path)
             } catch {
-                model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, isError: true))
+                model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
             }
         }
     }
@@ -342,7 +337,7 @@ private struct RunSnapshotRow: View {
                 completenessMark(for: snapshot.id)
                 showInBackupsButton(snapshot.id)
             case .removed?:
-                Text("Removed since — by this plan’s rules or another app")
+                Text("Removed since")
                     .foregroundStyle(.secondary)
             case .unavailable?:
                 madeTime(run.snapshotTime)

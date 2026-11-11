@@ -38,11 +38,11 @@ struct PlanCaption: Equatable, Sendable {
 }
 
 /// What a repository's sidebar row says under its name after a failed read
-/// — nil renders nothing. `full` is the tooltip the renderer hangs under its
-/// truncated text.
+/// or while its disk is away — nil renders nothing. `full` is the tooltip
+/// the renderer hangs under its truncated text.
 enum RepositoryCaption: Equatable, Sendable {
-    /// The read failed and its first sentence is the missing drive's own
-    /// (`RunRecord.notConnected`); `full` is the whole message.
+    /// The disk is not connected (`SnapshotListingOutcome.notConnected`): a normal
+    /// state, said without a glyph.
     case notConnected(full: String)
     case failed(String, full: String)
 
@@ -109,7 +109,7 @@ enum PlanStatus {
             facts.append(retentionSkippedFact)
         }
         if !run.hookMessages.isEmpty {
-            facts.append(Format.plural(run.hookMessages.count, "failed hook"))
+            facts.append(Format.plural(run.hookMessages.count, "failed script"))
         }
         return facts
     }
@@ -195,27 +195,6 @@ enum PlanStatus {
             .max { $0.startedAt < $1.startedAt }
     }
 
-    /// The plan editor's Schedule tab: the Next backup tile of the plan as
-    /// Save would store it — the stored plan's run stamps and pause under
-    /// the draft's schedule (`merging(draft:)`) — so the editor cannot
-    /// promise a run the page will not show once saved. Nil where the tab
-    /// already speaks: a manual schedule, and a setup the footer says is
-    /// incomplete.
-    static func editorNextBackup(
-        draft: BackupPlan,
-        stored: BackupPlan?,
-        existingRepositoryIDs: Set<UUID>,
-        hold: ScheduleHold? = nil,
-        isBackingUp: Bool = false,
-        now: Date = .now
-    ) -> TileFace? {
-        let plan = stored?.merging(draft: draft) ?? draft
-        guard plan.runsOnSchedule else { return nil }
-        return nextBackupTile(
-            for: plan, existingRepositoryIDs: existingRepositoryIDs, hold: hold, isBackingUp: isBackingUp, now: now
-        )
-    }
-
     /// The plan page's Next backup value, from `Scheduler.upcomingRuns`, so
     /// the page cannot show a date nothing will fire at. A plan the scheduler
     /// skips (an incomplete setup, or a repository it cannot find) says it is
@@ -283,12 +262,12 @@ enum PlanStatus {
 
     /// A plan's sidebar caption. In rank: a run in flight's phase; a turn
     /// waited for behind another plan's run (`AppModel.runBackups`); a
-    /// standing problem, named for as long as it stands, seen or not; the
-    /// last backup; the schedule. The last backup is `lastBackupAt`'s one
-    /// moment, so history a plan arrived with counts here as well. A plan with
-    /// no backup that the scheduler skips (no folder or file, or a repository
-    /// it cannot find) reads "Not scheduled", as its Next backup value does,
-    /// rather than a schedule it will not keep.
+    /// standing problem, named for as long as it stands, seen or not;
+    /// overdue; "Not scheduled" when the scheduler skips the plan (no folder
+    /// or file, or a repository it cannot find), as its Next backup value
+    /// reads. Nil for a plan that needs nothing: its row stays one line.
+    /// Overdue counts from `lastBackupAt`'s one moment, so history a plan
+    /// arrived with counts here as well.
     ///
     /// The caption carries no next run: a plan's next run stays with the
     /// surfaces that act on it, the plan page's Next backup value, the tray
@@ -302,7 +281,7 @@ enum PlanStatus {
         existingRepositoryIDs: Set<UUID>,
         now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
-    ) -> PlanCaption {
+    ) -> PlanCaption? {
         if let activity {
             return PlanCaption(text: activity.phase.displayName)
         }
@@ -319,38 +298,25 @@ enum PlanStatus {
                 shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
             )
         }
-        if let lastBackupAt = lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time) {
-            if StaleAlert.isOverdue(plan, lastBackupAt: lastBackupAt, now: now) {
-                return PlanCaption(text: StaleAlert.overdueLine(since: lastBackupAt, now: now), outcome: .completedWithErrors)
-            }
-            return PlanCaption(text: "Last backup \(relative(lastBackupAt))")
+        let lastBackupAt = lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time)
+        if let lastBackupAt, StaleAlert.isOverdue(plan, lastBackupAt: lastBackupAt, now: now) {
+            return PlanCaption(text: StaleAlert.overdueLine(since: lastBackupAt, now: now), outcome: .completedWithErrors)
         }
-        if plan.isScheduled,
-           Scheduler.upcomingRuns(in: [plan], now: now, existingRepositoryIDs: existingRepositoryIDs).isEmpty
-        {
-            return PlanCaption(text: "Not scheduled")
+        if let willNotRun = willNotRunCaption(for: plan, existingRepositoryIDs: existingRepositoryIDs, now: now) {
+            return PlanCaption(text: willNotRun, outcome: .completedWithErrors)
         }
-        return PlanCaption(text: plan.schedule.summary())
+        return nil
     }
 
     /// The repository row's second line when its read failed (a wrong
     /// password, an unreachable server, a repository missing from its
-    /// location: restic exit 10, an unplugged disk); nil otherwise.
-    static func repositoryCaption(repository: Repository, outcome: SnapshotListingOutcome) -> RepositoryCaption? {
-        guard case let .failed(message, _) = outcome else { return nil }
-        let line = Format.firstSentence(message)
-        // Under the repository's own name, its drive's absence needs no name
-        // again: the sentence the listing wrote for it
-        // (`RunRecord.notConnected`, the volume's name), matched as that same
-        // derivation builds it — not the row's label, which names a twin by
-        // its path.
-        let away = repository.kind == .local
-            ? RunRecord.notConnected([repository.resolvedLocalPath])
-            : nil
-        if Format.withoutFinalPeriod(line) == away {
-            return .notConnected(full: message)
+    /// location: restic exit 10) or its disk is away; nil otherwise.
+    static func repositoryCaption(outcome: SnapshotListingOutcome) -> RepositoryCaption? {
+        if case let .notConnected(volume) = outcome {
+            return .notConnected(full: SnapshotListingOutcome.connectText(volume: volume))
         }
-        return .failed(line, full: message)
+        guard let message = outcome.failureMessage else { return nil }
+        return .failed(Format.firstSentence(message), full: message)
     }
 
     /// Searched among the trailing lines only, so an unreadable item's own
