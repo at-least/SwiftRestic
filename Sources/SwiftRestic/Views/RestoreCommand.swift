@@ -29,7 +29,7 @@ struct RestoreCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Divider()
-            Button("Restore…") { command?.run() }
+            Button("Restore") { command?.run() }
                 .disabled(command?.isEnabled != true)
         }
     }

@@ -65,6 +65,15 @@ struct RestoreSelection: Sendable, Equatable {
 
     var backupCount: Int { Set(sources.map(\.snapshotID)).count }
 
+    /// Whether every item comes from a backup this Mac made. Restore puts
+    /// only those back where they were without asking: another Mac's backup
+    /// holds that Mac's paths, and the same path here can be another folder.
+    /// A backup not in the listing (`hostname(of:)` nil) counts as another
+    /// Mac's.
+    func isMadeOnThisMac(hostname: (_ snapshotID: String) -> String?, localHostname: String) -> Bool {
+        sources.allSatisfy { hostname($0.snapshotID) == localHostname }
+    }
+
     /// The one backup's time; nil for items from several, which the sheet
     /// counts instead.
     var backupTime: Date? { backupCount == 1 ? sources[0].backupTime : nil }

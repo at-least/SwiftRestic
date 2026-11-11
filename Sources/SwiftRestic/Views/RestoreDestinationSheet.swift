@@ -2,13 +2,20 @@ import AppKit
 import SwiftUI
 
 /// One restore waiting for its destination: what, from which backup, and
-/// what to run once the sheet has an answer. Every Restore in the app
-/// builds one — the Restore pane's, Search All Backups' and the Files view's — so
-/// the destination and what to do with what is already there are asked in
-/// one place.
+/// what to run once it has one. Every Restore in the app builds one — the
+/// Restore pane's, Search All Backups' and the Files view's — and hands it
+/// to `restoreFlow`, so the destination and what to do with what is already
+/// there are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
     let subject: RestoreSubject
+    /// Restore To…, or some item from another Mac's backup
+    /// (`RestoreSelection.isMadeOnThisMac`): the sheet. Otherwise Restore
+    /// puts the items back without it.
+    let opensSheet: Bool
+    /// `restoreFlow`'s look at the original location, carried into the
+    /// sheet so it does not look again; nil until something looked.
+    var original: OriginalLocation?
     /// A line under the headline about how the selection became the
     /// subject: selected items inside a selected folder, which come with it
     /// (`RestoreBatch.coveredNote`).
@@ -33,14 +40,22 @@ struct RestoreDestinationRequest: Identifiable {
     /// of the same backup are left to it, and the sheet says so, or three
     /// selected rows would read as two. Nil when the picked rows restore
     /// nothing.
+    @MainActor
     static func picked(
         _ picked: [RestoreSource],
         repositoryID: UUID,
-        model: AppModel
+        model: AppModel,
+        choosingDestination: Bool = false
     ) -> RestoreDestinationRequest? {
         guard let selection = RestoreSelection(picked) else { return nil }
+        let listing = model.snapshots(for: repositoryID)
+        let madeOnThisMac = selection.isMadeOnThisMac(
+            hostname: { id in listing.first { $0.id == id }?.hostname },
+            localHostname: model.localHostname
+        )
         return RestoreDestinationRequest(
             subject: selection.subject,
+            opensSheet: choosingDestination || !madeOnThisMac,
             selectionNote: selection.note,
             backupTime: selection.backupTime,
             backupCount: selection.backupCount
@@ -50,25 +65,152 @@ struct RestoreDestinationRequest: Identifiable {
     }
 }
 
-/// Arq's "Restore to:" window, with our item-and-backup wording kept: a
-/// folder (the Desktop until another is chosen) or the item's original
-/// location, and a live line saying exactly where it lands. What is already
-/// there is asked about only when Restore finds something in the way, so
-/// Return, Return (the pane's default action, then this sheet's) never
-/// replaces anything: the question's Replace has no Return.
+extension RestoreDestinationRequest {
+    /// The policy for a restore whose landings `existing` already holds:
+    /// keep with nothing in the way — the mode that cannot clobber what
+    /// appears between the look and restic's run — else the question's
+    /// answer; nil is Cancel.
+    @MainActor
+    func overwritePolicy(existing: [URL]) -> RestoreOverwritePolicy? {
+        existing.isEmpty ? .keepExisting : askAboutExisting(existing)
+    }
+
+    /// What to do with what is already there; nil is Cancel. "Replace" is
+    /// not marked destructive (the user asked for this restore — the HIG's
+    /// Empty Trash case), yet no button is the default, the HIG's way to
+    /// make people read first. Escape keeps NSAlert's route to "Cancel".
+    /// A single file gets no Restore Missing Files Only: keeping it would
+    /// restore nothing.
+    @MainActor
+    private func askAboutExisting(_ existing: [URL]) -> RestoreOverwritePolicy? {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        let backupOf = backupTime.map { " of \(Format.timestamp($0))" } ?? ""
+        let neverRemoved = "Files that aren’t in the backup are never removed."
+        let offersMissingOnly: Bool
+        switch subject {
+        case let .item(name, _, isDirectory):
+            let landing = (existing[0].path as NSString).abbreviatingWithTildeInPath
+            if isDirectory {
+                alert.messageText = "“\(name)” already exists."
+                alert.informativeText = "“\(landing)” is already there. Replace puts back the backed-up versions\(backupOf) of files that differ; Restore Missing Files Only leaves the files there as they are. \(neverRemoved)"
+                offersMissingOnly = true
+            } else {
+                alert.messageText = "Replace “\(name)”?"
+                let version = backupTime.map { "the version from \(Format.timestamp($0))" } ?? "the backed-up version"
+                alert.informativeText = "“\(landing)” already exists and will be replaced with \(version)."
+                offersMissingOnly = false
+            }
+        case .items:
+            // What is already there, by name — a count alone would not say
+            // which of the selected items Replace is about to touch.
+            let names = existing.map { "“\($0.lastPathComponent)”" }
+            alert.messageText = existing.count == 1 ? "\(names[0]) already exists." : "\(Format.count(existing.count)) of the items already exist."
+            alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Replace puts back the backed-up versions\(backupOf) of files that differ; Restore Missing Files Only leaves the files there as they are. \(neverRemoved)"
+            offersMissingOnly = true
+        }
+        alert.addButton(withTitle: "Replace")
+        if offersMissingOnly { alert.addButton(withTitle: "Restore Missing Files Only") }
+        alert.addButton(withTitle: "Cancel")
+        // No Return: a folder's or several items' restore writes straight
+        // into its landing, so one cut short leaves files that are neither
+        // the user's nor the backup's. Keyboard focus starts on Cancel.
+        alert.buttons[0].keyEquivalent = ""
+        alert.window.initialFirstResponder = alert.buttons[alert.buttons.count - 1]
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .replaceExisting
+        case .alertSecondButtonReturn where offersMissingOnly: return .keepExisting
+        default: return nil
+        }
+    }
+}
+
+extension View {
+    /// Runs each request set in `request`: Restore puts the items back
+    /// where they were, Time Machine's way, asking only when something is in
+    /// the way; the sheet opens when that place is not on this Mac or not
+    /// writable, for another Mac's backup, and for Restore To….
+    func restoreFlow(_ request: Binding<RestoreDestinationRequest?>) -> some View {
+        modifier(RestoreFlow(request: request))
+    }
+}
+
+private struct RestoreFlow: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Binding var request: RestoreDestinationRequest?
+    @State private var sheetRequest: RestoreDestinationRequest?
+
+    func body(content: Content) -> some View {
+        content
+            // A request set while one is still being looked at replaces it:
+            // the task's id moves on and cancels the look.
+            .task(id: request?.id) {
+                guard let pending = request else { return }
+                await run(pending)
+                if request?.id == pending.id { request = nil }
+            }
+            .sheet(item: $sheetRequest) { request in
+                RestoreDestinationSheet(request: request)
+                    .environment(model)
+            }
+    }
+
+    /// The look off the main actor: the parent may sit on a stalled
+    /// network mount, which must not stall the window.
+    private func run(_ pending: RestoreDestinationRequest) async {
+        guard !pending.opensSheet else {
+            sheetRequest = pending
+            return
+        }
+        let subject = pending.subject
+        let (original, existing) = await Task.detached(priority: .userInitiated) {
+            let original = RestoreDestinationRules.originalLocation(
+                for: subject,
+                directoryExists: RestoreDestinationRules.directoryExists,
+                isWritable: RestoreDestinationRules.isWritable
+            )
+            guard case let .available(_, landings) = original else { return (original, [URL]()) }
+            return (original, RestoreDestinationRules.replaceConfirmationTargets(
+                landings: landings,
+                exists: RestoreDestinationRules.itemExists(at:)
+            ))
+        }.value
+        guard !Task.isCancelled else { return }
+        guard case let .available(directories, _) = original else {
+            var withOriginal = pending
+            withOriginal.original = original
+            sheetRequest = withOriginal
+            return
+        }
+        guard let policy = pending.overwritePolicy(existing: existing), !Task.isCancelled
+        else { return }
+        pending.perform(directories, policy)
+    }
+}
+
+/// Restore To…, and Restore when the items' own place is not available:
+/// Arq's "Restore to:" window, with our item-and-backup wording kept — a
+/// folder (the Desktop until another is chosen) or the items' original
+/// location, and a live line saying exactly where it lands. It opens on the
+/// folder: Restore is the way back to the original location. What is
+/// already there is asked about only when Restore finds something in the
+/// way, so Return, Return (the pane's default action, then this sheet's)
+/// never replaces anything: the question's Replace has no Return.
 struct RestoreDestinationSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     let request: RestoreDestinationRequest
-    /// Nil until the original-location check answers, unless the user picks
-    /// first: then Original location when it is available, else the folder.
-    /// No guess shown before the answer, which could flip under a Return.
-    @State private var kind: RestoreDestinationKind?
+    @State private var kind: RestoreDestinationKind = .folder
     @State private var folder: URL = .desktopDirectory
     /// Nil until the detached check answers: the parent may sit on a
     /// stalled network mount, which must not stall the main actor.
     @State private var original: OriginalLocation?
+
+    init(request: RestoreDestinationRequest) {
+        self.request = request
+        _original = State(initialValue: request.original)
+    }
     @State private var isConfirming = false
     /// The Replace pre-check, which Cancel and the sheet's closing stop: a
     /// look at a stalled mount can outlast the user's patience, and a
@@ -95,9 +237,9 @@ struct RestoreDestinationSheet: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Picker("Restore to", selection: $kind) {
                             Text(FileManager.default.displayName(atPath: folder.path))
-                                .tag(RestoreDestinationKind?.some(.folder))
+                                .tag(RestoreDestinationKind.folder)
                             Text("Original location")
-                                .tag(RestoreDestinationKind?.some(.originalLocation))
+                                .tag(RestoreDestinationKind.originalLocation)
                         }
                         .pickerStyle(.radioGroup)
                         .labelsHidden()
@@ -134,7 +276,7 @@ struct RestoreDestinationSheet: View {
         }
         .padding(20)
         .frame(width: 460)
-        .task { await checkOriginalLocation() }
+        .task { if original == nil { await checkOriginalLocation() } }
         .onDisappear { confirmation?.cancel() }
     }
 
@@ -179,12 +321,10 @@ struct RestoreDestinationSheet: View {
 
     private var directories: [URL]? {
         switch kind {
-        case nil:
-            return nil
-        case .folder?:
+        case .folder:
             guard collidingNames.isEmpty else { return nil }
             return Array(repeating: folder, count: request.subject.directoryCount)
-        case .originalLocation?:
+        case .originalLocation:
             if case let .available(directories, _) = original { return directories } else { return nil }
         }
     }
@@ -192,9 +332,7 @@ struct RestoreDestinationSheet: View {
     @ViewBuilder
     private var detailLine: some View {
         switch kind {
-        case nil:
-            caption("Checking…")
-        case .folder?:
+        case .folder:
             if !collidingNames.isEmpty {
                 // A sentence, not a path: what is in the way, and the two
                 // ways around it.
@@ -205,7 +343,7 @@ struct RestoreDestinationSheet: View {
                 let landing = RestoreDestinationRules.landings(for: request.subject, into: [folder])[0]
                 pathCaption("Will restore to \(Self.abbreviated(landing))", fullPath: landing.path)
             }
-        case .originalLocation?:
+        case .originalLocation:
             switch original {
             case nil:
                 caption("Checking…")
@@ -252,19 +390,16 @@ struct RestoreDestinationSheet: View {
         (url.path as NSString).abbreviatingWithTildeInPath
     }
 
-    /// Off the main actor, like the remembered folder's look below.
+    /// Off the main actor, as `restoreFlow`'s look is.
     private func checkOriginalLocation() async {
         let subject = request.subject
-        let answer = await Task.detached(priority: .userInitiated) {
+        original = await Task.detached(priority: .userInitiated) {
             RestoreDestinationRules.originalLocation(
                 for: subject,
                 directoryExists: RestoreDestinationRules.directoryExists,
                 isWritable: RestoreDestinationRules.isWritable
             )
         }.value
-        original = answer
-        guard kind == nil else { return }
-        if case .available = answer { kind = .originalLocation } else { kind = .folder }
     }
 
     private func chooseFolder() {
@@ -289,60 +424,9 @@ struct RestoreDestinationSheet: View {
             }.value
             defer { isConfirming = false }
             // Cancel pressed while the look ran: nothing starts.
-            guard !Task.isCancelled else { return }
-            // Nothing in the way: keep is the mode that cannot clobber what
-            // appears between the look and restic's run.
-            let policy: RestoreOverwritePolicy? = existing.isEmpty ? .keepExisting : askAboutExisting(existing)
-            guard let policy, !Task.isCancelled else { return }
+            guard !Task.isCancelled, let policy = request.overwritePolicy(existing: existing), !Task.isCancelled
+            else { return }
             commit(directories, policy)
-        }
-    }
-
-    /// What to do with what is already there; nil is Cancel. "Replace" is
-    /// not marked destructive (the user asked for this restore — the HIG's
-    /// Empty Trash case), yet no button is the default, the HIG's way to
-    /// make people read first. Escape keeps NSAlert's route to "Cancel".
-    /// A single file gets no Restore Missing Files Only: keeping it would
-    /// restore nothing.
-    private func askAboutExisting(_ existing: [URL]) -> RestoreOverwritePolicy? {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        let backupOf = request.backupTime.map { " of \(Format.timestamp($0))" } ?? ""
-        let neverRemoved = "Files that aren’t in the backup are never removed."
-        let offersMissingOnly: Bool
-        switch request.subject {
-        case let .item(name, _, isDirectory):
-            let landing = Self.abbreviated(existing[0])
-            if isDirectory {
-                alert.messageText = "“\(name)” already exists."
-                alert.informativeText = "“\(landing)” is already there. Replace puts back the backed-up versions\(backupOf) of files that differ; Restore Missing Files Only leaves the files there as they are. \(neverRemoved)"
-                offersMissingOnly = true
-            } else {
-                alert.messageText = "Replace “\(name)”?"
-                let version = request.backupTime.map { "the version from \(Format.timestamp($0))" } ?? "the backed-up version"
-                alert.informativeText = "“\(landing)” already exists and will be replaced with \(version)."
-                offersMissingOnly = false
-            }
-        case .items:
-            // What is already there, by name — a count alone would not say
-            // which of the selected items Replace is about to touch.
-            let names = existing.map { "“\($0.lastPathComponent)”" }
-            alert.messageText = existing.count == 1 ? "\(names[0]) already exists." : "\(Format.count(existing.count)) of the items already exist."
-            alert.informativeText = "\(names.joined(separator: ", ")) \(existing.count == 1 ? "is" : "are") already where \(existing.count == 1 ? "it" : "they") would be restored. Replace puts back the backed-up versions\(backupOf) of files that differ; Restore Missing Files Only leaves the files there as they are. \(neverRemoved)"
-            offersMissingOnly = true
-        }
-        alert.addButton(withTitle: "Replace")
-        if offersMissingOnly { alert.addButton(withTitle: "Restore Missing Files Only") }
-        alert.addButton(withTitle: "Cancel")
-        // No Return: a folder's or several items' restore writes straight
-        // into its landing, so one cut short leaves files that are neither
-        // the user's nor the backup's. Keyboard focus starts on Cancel.
-        alert.buttons[0].keyEquivalent = ""
-        alert.window.initialFirstResponder = alert.buttons[alert.buttons.count - 1]
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .replaceExisting
-        case .alertSecondButtonReturn where offersMissingOnly: return .keepExisting
-        default: return nil
         }
     }
 

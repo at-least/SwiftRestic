@@ -26,6 +26,9 @@ struct FilesPaneView: View {
     @State private var indexComplete = true
     /// Whether this Mac holds the item now, by one `lstat`; nil until read.
     @State private var isOnDisk: Bool?
+    /// A file's copy on this Mac beside its versions, from the versions
+    /// view (`FileVersionsView.diskLine`).
+    @State private var diskLine: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -35,7 +38,8 @@ struct FilesPaneView: View {
                     newestHolder: versions.first,
                     chainNewest: chainNewest,
                     notRead: notRead,
-                    isOnDisk: isOnDisk
+                    isOnDisk: isOnDisk,
+                    diskLine: diskLine
                 )
                 if !indexComplete {
                     HStack(spacing: 6) {
@@ -116,7 +120,8 @@ struct FilesPaneView: View {
                 node: node, versions: contentVersions, chosenID: choice,
                 diskPath: DiskFile.localPath(
                     of: node.path, newestBackup: chainNewest, localHostname: model.localHostname
-                )
+                ),
+                diskLine: $diskLine
             )
         }
     }
@@ -190,22 +195,23 @@ private struct FolderPaneActions: View {
                     .disabled(newest == nil)
                     .help("Open the newest backup at this folder on the Backups tab")
                 Spacer()
-                Button("Restore…") { restoreFolder() }
+                Button("Restore To…") { restoreFolder(choosingDestination: true) }
+                    .accessibilityIdentifier(AccessibilityID.FilesPane.restoreTo)
+                    .disabled(newest == nil || model.isRestoring)
+                    .help("Restore this whole folder as of the newest backup to a folder you choose")
+                Button("Restore") { restoreFolder() }
                     .accessibilityIdentifier(AccessibilityID.FilesPane.restore)
                     .buttonStyle(.borderedProminent)
                     .disabled(newest == nil || model.isRestoring)
-                    .help("Restore this whole folder as of the newest backup")
+                    .help("Put this whole folder back as of the newest backup")
             }
             .padding(12)
         }
         .restoreCommand(RestoreCommand(
             isEnabled: newest != nil && !model.isRestoring,
-            run: restoreFolder
+            run: { restoreFolder() }
         ))
-        .sheet(item: $destinationRequest) { request in
-            RestoreDestinationSheet(request: request)
-                .environment(model)
-        }
+        .restoreFlow($destinationRequest)
     }
 
     private func showInBackups() {
@@ -215,7 +221,7 @@ private struct FolderPaneActions: View {
 
     /// By its path, its kind in that backup read before it restores: the
     /// backup may hold the path as a file (`RestoreSource.node`).
-    private func restoreFolder() {
+    private func restoreFolder(choosingDestination: Bool = false) {
         guard let newest else { return }
         destinationRequest = RestoreDestinationRequest.picked(
             [RestoreSource(
@@ -223,7 +229,8 @@ private struct FolderPaneActions: View {
                 snapshotID: newest.id, backupTime: newest.time, node: nil
             )],
             repositoryID: node.repositoryID,
-            model: model
+            model: model,
+            choosingDestination: choosingDestination
         )
     }
 }
@@ -242,8 +249,8 @@ private struct FilesPaneLoadKey: Equatable {
 /// The pane's identity block: the kind's icon, the name, its path and, for a
 /// folder or an item the chain's newest backup no longer holds, when it was
 /// last backed up: the one fact of its standing the rows below do not
-/// already say. How many backups and versions hold it are the rows
-/// themselves; a file's own line says whether this Mac has it.
+/// already say — and, for a file, its copy on this Mac beside its versions.
+/// How many backups and versions hold it are the rows themselves.
 private struct FilesPaneHeader: View {
     let node: FileNode
     let newestHolder: IndexVersion?
@@ -253,6 +260,8 @@ private struct FilesPaneHeader: View {
     let notRead: String?
     /// Whether this Mac holds it now; nil until read.
     let isOnDisk: Bool?
+    /// A file's copy on this Mac beside its versions (`DiskFile.line`).
+    let diskLine: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -289,14 +298,22 @@ private struct FilesPaneHeader: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                if let diskLine {
+                    Text(diskLine)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(diskLine)
+                }
             }
             Spacer(minLength: 0)
         }
     }
 
     /// For a folder this Mac no longer holds, when it was last backed up —
-    /// a deleted row's tooltip, in the same words; a file's line over its
-    /// versions says "Not on this Mac" already. For an item the chain's
+    /// a deleted row's tooltip, in the same words; a file's disk line says
+    /// "Not on this Mac" already. For an item the chain's
     /// newest backup lacks, when it was last backed up and, when that
     /// backup could not read it, why. Any other folder: when it was last
     /// backed up, a file's rows saying that already.

@@ -21,6 +21,10 @@ struct FileVersionsView: View {
     /// folders by their own paths (`DiskFile.localPath`); nil says nothing
     /// of the disk.
     let diskPath: String?
+    /// The pane header's line about the copy on this Mac
+    /// (`DiskFile.line`), written here, where the versions' sizes and dates
+    /// are read.
+    @Binding var diskLine: String?
 
     /// Each version's newest backup's node of the file — size and
     /// modification time — by backup ID; empty until the answer lands.
@@ -41,22 +45,14 @@ struct FileVersionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let diskLine {
-                Label(diskLine, systemImage: "laptopcomputer")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .help(diskPath ?? "")
-                Divider()
-            }
             list
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             footer
         }
         .restoreCommand(restore)
+        .onChange(of: diskLineText, initial: true) { _, line in diskLine = line }
+        .onDisappear { diskLine = nil }
         // One find per file shown, again when the versions change under a
         // newer listing or a re-read of the index.
         .task(id: versions.map(\.id)) { await readDetails() }
@@ -75,10 +71,7 @@ struct FileVersionsView: View {
             guard !Task.isCancelled else { return }
             disk = read
         }
-        .sheet(item: $destinationRequest) { request in
-            RestoreDestinationSheet(request: request)
-                .environment(model)
-        }
+        .restoreFlow($destinationRequest)
         // The copy is user data in a temporary folder: it goes when the
         // preview closes, when another version is chosen — a preview must
         // show the version the list says — and when the pane goes.
@@ -120,7 +113,7 @@ struct FileVersionsView: View {
                 // folder pane's picker and the Backups tab's list are, so a year
                 // of hourly versions is not one flat scroll. Each version
                 // falls under the month of the first backup that held it —
-                // the backup after its change, so the month its "Modified"
+                // the backup after its change, so the month its modified
                 // date sits in, give or take one backup's interval; its
                 // newest backup could be months later for a file left alone.
                 if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time) {
@@ -136,8 +129,14 @@ struct FileVersionsView: View {
             .listStyle(.inset)
             .accessibilityIdentifier(AccessibilityID.FileVersions.list)
             .focusOnClick($listIsFocused)
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
+            // The clicked row's, which a right-click does not select.
+            .contextMenu(forSelectionType: String.self) { ids in
+                if let version = versions.first(where: { ids.contains($0.id) }) {
+                    Button("Restore") { restoreVersion(version) }
+                        .disabled(model.isRestoring)
+                    Button("Restore To…") { restoreVersion(version, choosingDestination: true) }
+                        .disabled(model.isRestoring)
+                }
             } primaryAction: { _ in
                 restoreChosen()
             }
@@ -192,11 +191,15 @@ struct FileVersionsView: View {
                 Button("Preview") { preview() }
                     .disabled(chosen == nil || blocked != nil || previewer.isCopying)
                     .help(blocked ?? "Look at the chosen version with Quick Look before restoring it")
-                Button("Restore…") { restoreChosen() }
+                Button("Restore To…") { chosen.map { restoreVersion($0, choosingDestination: true) } }
+                    .accessibilityIdentifier(AccessibilityID.FileVersions.restoreTo)
+                    .disabled(chosen == nil || model.isRestoring)
+                    .help("Restore the chosen version to a folder you choose")
+                Button("Restore") { restoreChosen() }
                     .accessibilityIdentifier(AccessibilityID.FileVersions.restore)
                     .buttonStyle(.borderedProminent)
                     .disabled(chosen == nil || model.isRestoring)
-                    .help("Restore the chosen version of this file (Return)")
+                    .help("Put the chosen version back where the file was (Return)")
             }
         }
         .padding(12)
@@ -211,7 +214,7 @@ struct FileVersionsView: View {
         )
     }
 
-    private var diskLine: String? {
+    private var diskLineText: String? {
         disk?.line(
             versions: versions.map { version in (detail(of: version)?.size, detail(of: version)?.mtime) },
             isReading: isReadingDetails
@@ -239,12 +242,17 @@ struct FileVersionsView: View {
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: backup.id, node: file)
     }
 
-    /// The chosen version through the destination sheet: the find's node
-    /// once it has answered, else the path, its kind in that backup read
-    /// before it restores: the versions span every backup holding the path,
-    /// and one may hold it as a folder (`RestoreSource.node`).
     private func restoreChosen() {
-        guard let chosen, let backup = chosen.snapshots.first else { return }
+        chosen.map { restoreVersion($0) }
+    }
+
+    /// A version, back where the file was or, choosing, through the
+    /// destination sheet (`restoreFlow`): the find's node once it has
+    /// answered, else the path, its kind in that backup read before it
+    /// restores: the versions span every backup holding the path, and one
+    /// may hold it as a folder (`RestoreSource.node`).
+    private func restoreVersion(_ version: ContentVersion, choosingDestination: Bool = false) {
+        guard let backup = version.snapshots.first else { return }
         let found = details[backup.id]
         var request = RestoreDestinationRequest.picked(
             [RestoreSource(
@@ -252,7 +260,8 @@ struct FileVersionsView: View {
                 snapshotID: backup.id, backupTime: backup.time, node: found
             )],
             repositoryID: node.repositoryID,
-            model: model
+            model: model,
+            choosingDestination: choosingDestination
         )
         // The row was picked by this time; the sheet says it back.
         request?.versionModified = found?.mtime
@@ -313,7 +322,7 @@ private struct FileVersionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modified)
                     .foregroundStyle(detail?.mtime == nil ? .secondary : .primary)
-                    .accessibilityLabel(detail?.mtime == nil ? missing("Modified date") : modified)
+                    .accessibilityLabel(detail?.mtime == nil ? missing("Modified date") : "Modified \(modified)")
                 if let heldBy {
                     Text(heldBy)
                         .font(.caption)
@@ -343,8 +352,8 @@ private struct FileVersionRow: View {
     /// backups and the change mark beside it are the index's, already
     /// shown; never a per-row "Reading…".
     private var modified: String {
-        if let mtime = detail?.mtime { return "Modified \(Format.timestamp(mtime))" }
-        return isReadingDetail ? "Modified …" : "Modified —"
+        if let mtime = detail?.mtime { return Format.timestamp(mtime) }
+        return isReadingDetail ? "…" : "—"
     }
 
     private var size: String {

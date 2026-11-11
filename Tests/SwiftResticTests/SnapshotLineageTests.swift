@@ -368,7 +368,7 @@ struct SnapshotLineageTests {
         let since = Format.timestamp(baseline.time)
         #expect(RestoreRecordHeading.columnHelp(for: .compared(baseline: baseline, changeCount: 2))
             == "Added or modified since the backup of \(since). Changes to permissions or timestamps alone are not marked")
-        #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == "First backup of these folders — nothing to compare with")
+        #expect(RestoreRecordHeading.columnHelp(for: .firstBackup) == nil)
         #expect(RestoreRecordHeading.columnHelp(for: .comparing(baseline: baseline)) == "Comparing with the backup of \(since)…")
         #expect(RestoreRecordHeading.columnHelp(for: .failed(baseline: baseline, reason: "Fatal: injected. More.")) == nil)
     }

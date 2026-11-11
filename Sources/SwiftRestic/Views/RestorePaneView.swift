@@ -107,12 +107,9 @@ struct RestorePaneView: View {
         // The copy belongs to the backup on screen.
         .onChange(of: snapshotID) { previewer.end() }
         .onChange(of: previewer.failure) { _, failure in
-            if let failure { model.post(Banner(title: failure.title, message: failure.message, isError: true)) }
+            if let failure { model.post(Banner(title: failure.title, message: failure.message, level: .error)) }
         }
-        .sheet(item: $destinationRequest) { request in
-            RestoreDestinationSheet(request: request)
-                .environment(model)
-        }
+        .restoreFlow($destinationRequest)
         .onDisappear {
             // The pane's listings must not keep running after the pane is gone.
             for (_, task) in fetchTasks { task.cancel() }
@@ -135,16 +132,16 @@ struct RestorePaneView: View {
             // Its own view, reading the run history itself: a new run
             // record re-renders the strip, never the tree below it.
             IncompleteSnapshotStrip(snapshotID: snapshotID, repositoryID: repositoryID)
-            changesBar(record: record, comparison: shown)
             // Filling, whatever stands in for the tree: a
             // ContentUnavailableView answers its own height, and without
             // this the pane floats mid-window.
             browser(shown: shown)
                 .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
             Divider()
-            footer(record: record)
+            footer(record: record, comparison: shown)
         }
         .restoreCommand(restore(record: record))
+        .onChange(of: showsChangesOnly) { selection = [] }
         // At most the narrowest detail column the window allows beside the
         // Backups tab's list. Still a minimum: it also bounds the split
         // view's zero-width sizing query.
@@ -152,27 +149,24 @@ struct RestorePaneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Show Changes Only, over a backup with one before it to compare with:
-    /// its count, and the data this backup added, answer why it grew.
+    /// Show Changes Only, in the footer's leading side as the Files tab
+    /// keeps Show Deleted Items, over a backup with one before it to
+    /// compare with: its count, and the data this backup added, answer why
+    /// it grew.
     @ViewBuilder
-    private func changesBar(record: Snapshot?, comparison: ChangeComparison?) -> some View {
+    private func changesToggle(record: Snapshot?, comparison: ChangeComparison?) -> some View {
         if let comparison, comparison.baseline != nil {
-            HStack(spacing: 12) {
-                Toggle("Show Changes Only", isOn: $showsChangesOnly)
-                    .toggleStyle(.checkbox)
-                if showsChangesOnly, !Self.isComparing(comparison) {
-                    Text(changeList.summary(dataAdded: record.flatMap { model.backupRun(forSnapshot: $0.id)?.dataAdded }))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .help(RestoreRecordHeading.columnHelp(for: comparison) ?? "")
-                }
-                Spacer(minLength: 0)
+            Toggle("Show Changes Only", isOn: $showsChangesOnly)
+                .toggleStyle(.checkbox)
+                .fixedSize()
+            if showsChangesOnly, !Self.isComparing(comparison) {
+                Text(changeList.summary(dataAdded: record.flatMap { model.backupRun(forSnapshot: $0.id)?.dataAdded }))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(RestoreRecordHeading.columnHelp(for: comparison) ?? "")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .onChange(of: showsChangesOnly) { selection = [] }
-            Divider()
         }
     }
 
@@ -224,16 +218,23 @@ struct RestorePaneView: View {
             VStack(spacing: 0) {
                 TreeColumnHeader(
                     rowContentWidth: rowContentWidth,
+                    hasChangeColumn: Self.hasChangeColumn(shown),
                     changeHelp: RestoreRecordHeading.columnHelp(for: shown),
                     isComparing: Self.isComparing(shown)
                 )
                 Divider()
-                treeList
+                treeList(hasChangeColumn: Self.hasChangeColumn(shown))
             }
         }
     }
 
-    private var treeList: some View {
+    /// No Change column for a first backup: nothing to compare with, and an
+    /// empty column would read as "unchanged".
+    private static func hasChangeColumn(_ comparison: ChangeComparison?) -> Bool {
+        comparison != .firstBackup
+    }
+
+    private func treeList(hasChangeColumn: Bool) -> some View {
         ScrollViewReader { proxy in
             List(tree.rows, selection: $selection) { row in
                 HStack(spacing: 6) {
@@ -250,7 +251,9 @@ struct RestorePaneView: View {
                     Text(row.node.name)
                         .lineLimit(1)
                     Spacer()
-                    changeBadge(for: row.node.path)
+                    if hasChangeColumn {
+                        changeBadge(for: row.node.path)
+                    }
                     // A synthesized top folder has no mtime: blank, not
                     // "—" — not applicable, where a file's unknown mtime
                     // keeps the dash, the app's unknown mark.
@@ -399,10 +402,10 @@ struct RestorePaneView: View {
             .contextMenu(forSelectionType: String.self) { ids in
                 let rows = changeList.rows.filter { ids.contains($0.id) }
                 if !rows.isEmpty {
-                    Button("Restore…") {
-                        restoreChanges(rows)
-                    }
-                    .disabled(model.isRestoring)
+                    Button("Restore") { restoreChanges(rows) }
+                        .disabled(model.isRestoring)
+                    Button("Restore To…") { restoreChanges(rows, choosingDestination: true) }
+                        .disabled(model.isRestoring)
                 }
                 if rows.count == 1, let row = rows.first, !row.change.isDirectory {
                     showVersionsItem(path: row.path, isDirectory: false)
@@ -439,12 +442,21 @@ struct RestorePaneView: View {
         return row.change.holder(newer: record, older: baseline)
     }
 
-    private func restoreChanges(_ rows: [BackupChanges.Row]) {
+    private func restoreChanges(_ rows: [BackupChanges.Row], choosingDestination: Bool = false) {
         let holders = Dictionary(rows.map { ($0.change.path, holder(of: $0)) }) { first, _ in first }
-        destinationRequest = RestoreDestinationRequest.picked(
+        restore(
             DiffRestoreSelection.sources(rows.map(\.change)) { holders[$0.path] ?? nil },
-            repositoryID: repositoryID,
-            model: model
+            choosingDestination: choosingDestination
+        )
+    }
+
+    /// Back where they were or, choosing, through the destination sheet
+    /// (`restoreFlow`), by the shared factory (`RestoreDestinationRequest.picked`):
+    /// the covering rule and the sheet's wording live there, one rule for
+    /// every selection restore.
+    private func restore(_ picked: [RestoreSource], choosingDestination: Bool) {
+        destinationRequest = RestoreDestinationRequest.picked(
+            picked, repositoryID: repositoryID, model: model, choosingDestination: choosingDestination
         )
     }
 
@@ -476,22 +488,20 @@ struct RestorePaneView: View {
         }
     }
 
-    /// Right-click Restore on the clicked rows — the menu's own ids, not
-    /// the ambient selection — as Search All Backups' rows offer it. The request is built exactly as `restoreSelection()`
-    /// builds the selection's.
+    /// Right-click Restore and Restore To… on the clicked rows — the menu's
+    /// own ids, not the ambient selection — as Search All Backups' rows
+    /// offer them, built exactly as `restoreSelection` builds the
+    /// selection's.
     @ViewBuilder
     private func restoreContextItem(_ ids: Set<String>, nodes: () -> [SnapshotNode]) -> some View {
         if let record, !ids.isEmpty {
             let clicked = nodes()
             if !clicked.isEmpty {
-                Button("Restore…") {
-                    destinationRequest = RestoreDestinationRequest.picked(
-                        clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
-                        repositoryID: repositoryID,
-                        model: model
-                    )
-                }
-                .disabled(model.isRestoring)
+                let picked = clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) }
+                Button("Restore") { restore(picked, choosingDestination: false) }
+                    .disabled(model.isRestoring)
+                Button("Restore To…") { restore(picked, choosingDestination: true) }
+                    .disabled(model.isRestoring)
             }
         }
     }
@@ -509,17 +519,22 @@ struct RestorePaneView: View {
         )
     }
 
-    /// The primary Restore for the selection. The drag out to Finder is the
-    /// tree's tooltip; the keep/replace decision lives in the destination
-    /// sheet, not as a permanent caption under every browse.
-    private func footer(record: Snapshot?) -> some View {
+    /// Show Changes Only on the leading side, the selection's Restore To…
+    /// and primary Restore on the trailing. The drag out to Finder is the
+    /// tree's tooltip; the keep/replace decision is asked when something is
+    /// in the way, not a permanent caption under every browse.
+    private func footer(record: Snapshot?, comparison: ChangeComparison?) -> some View {
         HStack(spacing: 12) {
+            changesToggle(record: record, comparison: comparison)
             Spacer(minLength: 12)
-            Button("Restore…") { restoreSelection() }
+            Button("Restore To…") { restoreSelection(choosingDestination: true) }
+                .disabled(!hasSelection || model.isRestoring || record == nil)
+                .help("Restore the selected items from this backup to a folder you choose")
+            Button("Restore") { restoreSelection() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!hasSelection || model.isRestoring || record == nil)
-                .help("Restore the selected items from this backup")
+                .help("Put the selected items back where they were, from this backup")
         }
         .padding(12)
     }
@@ -832,19 +847,15 @@ struct RestorePaneView: View {
         }
     }
 
-    /// The picked rows through the shared factory
-    /// (`RestoreDestinationRequest.picked`): the covering rule and the
-    /// sheet's wording live there, one rule for every selection restore.
-    private func restoreSelection() {
+    private func restoreSelection(choosingDestination: Bool = false) {
         if isListingChanges(comparison) {
-            restoreChanges(selectedChanges)
+            restoreChanges(selectedChanges, choosingDestination: choosingDestination)
             return
         }
         guard let record else { return }
-        destinationRequest = RestoreDestinationRequest.picked(
+        restore(
             selectedNodes.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) },
-            repositoryID: repositoryID,
-            model: model
+            choosingDestination: choosingDestination
         )
     }
 }
@@ -1020,6 +1031,7 @@ private final class RowContentWidth {
 /// tree.
 private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
+    let hasChangeColumn: Bool
     let changeHelp: String?
     /// The tree shows before its diff is in: until then a blank Change
     /// cell means "not compared yet", which the spinner says.
@@ -1034,12 +1046,14 @@ private struct TreeColumnHeader: View {
             Spacer().frame(width: 16)
             Text("Name")
             Spacer(minLength: 12)
-            HStack(spacing: 3) {
-                Text("Change")
-                if isComparing { ProgressView().controlSize(.mini) }
-            }
-            .frame(width: 56, alignment: .leading)
+            if hasChangeColumn {
+                HStack(spacing: 3) {
+                    Text("Change")
+                    if isComparing { ProgressView().controlSize(.mini) }
+                }
+                .frame(width: 56, alignment: .leading)
                 .modifier(TileHelp(help: changeHelp))
+            }
             Text("Date Modified")
                 .frame(width: 140, alignment: .trailing)
             Text("Size")

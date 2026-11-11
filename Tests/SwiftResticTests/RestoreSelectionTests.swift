@@ -73,4 +73,21 @@ struct RestoreSelectionTests {
     func empty() {
         #expect(RestoreSelection([]) == nil)
     }
+
+    @Test("Restore puts back in place only this Mac's own backups; another Mac's, or one not in the listing, asks where")
+    func madeOnThisMac() throws {
+        let hosts = ["aaaa1111": "my-mac", "bbbb2222": "other-mac"]
+        func hostname(_ id: String) -> String? { hosts[id] }
+        let own = try #require(RestoreSelection([source("/d/a.txt", "aaaa1111", oct1)]))
+        #expect(own.isMadeOnThisMac(hostname: hostname, localHostname: "my-mac"))
+        let other = try #require(RestoreSelection([source("/d/a.txt", "bbbb2222", oct1)]))
+        #expect(!other.isMadeOnThisMac(hostname: hostname, localHostname: "my-mac"))
+        let mixed = try #require(RestoreSelection([
+            source("/d/a.txt", "aaaa1111", oct1),
+            source("/d/b.txt", "bbbb2222", oct2),
+        ]))
+        #expect(!mixed.isMadeOnThisMac(hostname: hostname, localHostname: "my-mac"))
+        let unlisted = try #require(RestoreSelection([source("/d/a.txt", "cccc3333", oct1)]))
+        #expect(!unlisted.isMadeOnThisMac(hostname: hostname, localHostname: "my-mac"))
+    }
 }

@@ -6,7 +6,7 @@ import Foundation
 /// — never a re-derivation that could disagree with them.
 enum ChangeComparison: Equatable, Sendable {
     /// No earlier backup of these folders from this host: no diff runs, and
-    /// the Change column stays blank.
+    /// the restore pane shows no Change column.
     case firstBackup
     case comparing(baseline: Snapshot)
     /// The diff finished: `changeCount` of the items this backup holds
@@ -141,14 +141,13 @@ struct RestoreRecordHeading: Equatable, Sendable {
 
     /// The Change column title's tooltip: what the marks are measured
     /// against, and that what this backup no longer holds is not among
-    /// them — its tree has no row for it. nil when the comparison failed:
-    /// the line above the tree is that fact's carrier.
+    /// them — its tree has no row for it. nil for a first backup, which has
+    /// no Change column, and when the comparison failed: the line above the
+    /// tree is that fact's carrier.
     static func columnHelp(for comparison: ChangeComparison?) -> String? {
         switch comparison {
         case nil:
             "How each item changed since the previous backup of these folders from this Mac"
-        case .firstBackup:
-            "First backup of these folders — nothing to compare with"
         case let .comparing(baseline):
             "Comparing with the backup of \(Format.timestamp(baseline.time))…"
         case let .compared(baseline, _):
@@ -156,7 +155,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
             // changes, so a blank row can still hide a chmod or a touch.
             "Added or modified since the backup of \(Format.timestamp(baseline.time)). "
                 + "Changes to permissions or timestamps alone are not marked"
-        case .failed:
+        case .firstBackup, .failed:
             nil
         }
     }

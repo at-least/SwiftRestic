@@ -1,8 +1,8 @@
 import Foundation
 
 /// What a restore does with a file that is already where the backed-up one
-/// would land. Asked in the destination sheet only when something is in the
-/// way, never remembered, and required at every API on the way down: a defaulted
+/// would land. Asked only when something is in the way (`restoreFlow`, the
+/// destination sheet), never remembered, and required at every API on the way down: a defaulted
 /// destructive mode would be a silent overwrite.
 ///
 /// Two modes, not restic's four. `if-changed` trusts size and modification

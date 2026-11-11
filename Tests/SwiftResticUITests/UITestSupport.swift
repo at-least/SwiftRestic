@@ -54,7 +54,7 @@ enum UITest {
 
         // One disk on the Mac is the sheet's answer on its own, so the next
         // question is the password.
-        XCTAssertTrue(app.popUpButtons[AccessibilityID.FirstBackup.disk].waitForValue(folders.disk.lastPathComponent))
+        XCTAssertTrue(app.popUpButtons[AccessibilityID.FirstBackup.destination].waitForValue(folders.disk.lastPathComponent))
         XCTAssertTrue(requirement.waitForValue("Set a password to save it."))
 
         let password = app.secureTextFields[AccessibilityID.FirstBackup.password]
@@ -106,19 +106,26 @@ enum UITest {
     }
 
     /// The plan's folder as of its newest backup, restored from its Files tab
-    /// into `folder` (the destination sheet's folder choice). Returns once
-    /// the restore is over: Restore… is back on.
+    /// through Restore To… into `folder` (the destination sheet's folder
+    /// choice). Returns once the restore is over: Restore is back on.
     static func restorePlanFolder(into folder: URL, in app: XCUIApplication) {
         app.radioButtons["Files"].click()
         let restoreButton = app.buttons[AccessibilityID.FilesPane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
-        restoreButton.click()
+        restoreToButton(AccessibilityID.FilesPane.restoreTo, in: app).click()
         restoreInSheet(into: folder, in: app)
         XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
         XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
     }
 
-    /// The destination sheet a Restore… opens: Choose…, `folder` chosen,
+    /// A pane's Restore To…, by its identifier, once it can be clicked.
+    static func restoreToButton(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(button.waitForEnabled())
+        return button
+    }
+
+    /// The destination sheet a Restore To… opens: Choose…, `folder` chosen,
     /// Restore. Choose… selects the folder choice, whatever the sheet
     /// defaulted to. The restore itself runs on after the sheet closes.
     static func restoreInSheet(into folder: URL, in app: XCUIApplication) {

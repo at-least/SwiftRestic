@@ -81,7 +81,7 @@ extension AppModel {
             }
         } catch {
             let subject = selection.sources.count == 1 ? "“\(selection.sources[0].name)”" : "the selected items"
-            post(Banner(title: "Couldn’t restore \(subject)", message: error.localizedDescription, isError: true))
+            post(Banner(title: "Couldn’t restore \(subject)", message: error.localizedDescription, level: .error))
             return
         }
         guard items.count > 1 else {
@@ -168,14 +168,14 @@ extension AppModel {
             return Banner(
                 title: "Kept the existing “\(itemName)”",
                 message: "\(landing.path)\nA file with this name was already there, so nothing was restored.",
-                isError: false,
+                level: .notice,
                 revealPaths: [landing.path]
             )
         }
         return Banner(
             title: "Restored “\(itemName)”",
             message: [landing.path, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
-            isError: false,
+            level: .notice,
             revealPaths: [landing.path]
         )
     }
@@ -194,14 +194,14 @@ extension AppModel {
             return Banner(
                 title: "Kept the existing items",
                 message: "\(place)\nThey were already there, so nothing was restored.",
-                isError: false,
+                level: .notice,
                 revealPaths: reveal
             )
         }
         return Banner(
             title: "Restored \(Format.plural(landings.count, "item"))",
             message: [place, keptLine(kept)].compactMap { $0 }.joined(separator: "\n"),
-            isError: false,
+            level: .notice,
             revealPaths: reveal
         )
     }
@@ -223,14 +223,12 @@ extension AppModel {
     ) {
         guard !tasks.isOccupied(.restore) else {
             // Every other refused start says why; a restore request that
-            // silently does nothing reads as a broken drop. News, in a busy
-            // repository's clock: the click did nothing yet, which the
-            // success check would say it did.
+            // silently does nothing reads as a broken drop. News, not a
+            // success: the click did nothing yet.
             post(Banner(
                 title: "A restore is already running",
                 message: "Wait for it to finish, or stop it.",
-                isError: false,
-                symbolName: "clock"
+                level: .notice
             ))
             return
         }
@@ -336,8 +334,7 @@ extension AppModel {
                         // cancelled once, and BannerView hides an empty
                         // message.
                         message: partial ?? "",
-                        isError: false,
-                        symbolName: RunRecord.Outcome.cancelled.symbolName
+                        level: .notice
                     ))
                 }
             } else {
@@ -345,7 +342,7 @@ extension AppModel {
                 post(Banner(
                     title: title,
                     message: [record.failureMessage ?? "", partial].compactMap { $0 }.joined(separator: "\n"),
-                    isError: true
+                    level: .error
                 ))
             }
         }
@@ -430,7 +427,7 @@ extension AppModel {
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
                         let message = error.localizedDescription
-                        self.post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, isError: true))
+                        self.post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, level: .error))
                     }
                 }
             }
@@ -440,7 +437,7 @@ extension AppModel {
     }
 
     private func postDragImpossibleBanner(_ itemName: String, _ message: String) {
-        post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, isError: true))
+        post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, level: .error))
     }
 
     /// `nonisolated`, and handed everything it needs as values, because the

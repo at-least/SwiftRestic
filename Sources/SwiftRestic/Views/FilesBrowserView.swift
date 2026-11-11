@@ -306,14 +306,13 @@ struct FilesBrowserView: View {
                 VStack(spacing: 0) {
                     scopeBar
                     Divider()
+                    // No Search All Backups here: the scope bar above is it.
                     ContentUnavailableView {
                         Label("No matches", systemImage: "magnifyingglass")
                     } description: {
                         Text(answer.isComplete
                             ? "Nothing in this plan’s backups matches. Each word you type matches the start of a word in a name."
                             : FilesSearchAnswer.searchStillReading)
-                    } actions: {
-                        Button("Search All Backups") { searchAllBackups() }
                     }
                     .frame(maxHeight: .infinity)
                 }

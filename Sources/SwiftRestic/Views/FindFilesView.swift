@@ -18,14 +18,14 @@ struct FindFilesView: View {
     @State private var previewer = PreviewSession()
     /// The latest answer, with the query it answers: nil before one lands.
     @State private var answer: (query: String, search: AllBackupsSearch)?
-    /// Several at a time, as in a backup's tree: Restore Selected (Return)
+    /// Several at a time, as in a backup's tree: Restore (Return)
     /// restores them together, each from its row's backup.
     @State private var selection = Set<String>()
     /// The toolbar field, focused on arrival — the page exists to answer one
     /// question — and by ⌘F.
     @FocusState private var searchIsFocused: Bool
     /// Taken by a click in the results (`focusOnClick`): left in the field,
-    /// Return would go nowhere instead of reaching Restore Selected.
+    /// Return would go nowhere instead of reaching Restore.
     @FocusState private var resultsAreFocused: Bool
     @State private var destinationRequest: RestoreDestinationRequest?
 
@@ -75,10 +75,7 @@ struct FindFilesView: View {
         )
         .searchFocused($searchIsFocused)
         .previewSession(previewer)
-        .sheet(item: $destinationRequest) { request in
-            RestoreDestinationSheet(request: request)
-                .environment(model)
-        }
+        .restoreFlow($destinationRequest)
         .onChange(of: router.searchFocus, initial: true) { _, page in
             guard page == .findFiles else { return }
             router.searchFocus = nil
@@ -141,7 +138,7 @@ struct FindFilesView: View {
                     WarningLine(text: "Couldn’t search “\(name(of: failure.repositoryID))”.")
                         .help(failure.message)
                     Spacer(minLength: 8)
-                    Button("Rebuild Search Index") {
+                    Button("Try Again") {
                         model.rebuildIndex(repositoryID: failure.repositoryID)
                     }
                     .controlSize(.small)
@@ -170,8 +167,10 @@ struct FindFilesView: View {
     /// A repository out of reach is no longer being read: "still reading"
     /// would promise an end that needs the disk back.
     private func isReachable(_ repositoryID: UUID) -> Bool {
-        if case .failed = model.snapshotListingOutcome(for: repositoryID) { return false }
-        return true
+        switch model.snapshotListingOutcome(for: repositoryID) {
+        case .failed, .passwordRefused, .notConnected: false
+        case .idle, .loaded: true
+        }
     }
 
     private func readingLine(_ repositoryID: UUID) -> String {
@@ -238,32 +237,27 @@ struct FindFilesView: View {
             }
             .width(min: 130, ideal: 160)
 
+            // How many backups hold the path; double-click is the way to them.
             TableColumn("Versions") { row in
-                // How many backups hold the path, and the way to them.
-                if let open = showVersions(of: row) {
-                    Button("\(row.versionsCount)", action: open)
-                    .buttonStyle(.link)
+                Text("\(row.versionsCount)")
                     .monospacedDigit()
-                    .help("Show every backup that holds this file, on the Files tab")
-                    .accessibilityLabel("Show \(Format.plural(row.versionsCount, "version"))")
-                } else {
-                    Text("\(row.versionsCount)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(Format.plural(row.versionsCount, "version"))
             }
             .width(min: 60, ideal: 70)
         }
         .focusOnClick($resultsAreFocused)
         // An explicit right-click route to the restore the footer button
-        // offers. Double-click does nothing: an accidental double-tap must
-        // not start moving bytes.
+        // offers. Double-click shows a file's versions, which moves no data:
+        // an accidental double-tap must not start moving bytes.
         .contextMenu(forSelectionType: AllBackupsSearch.Row.ID.self) { ids in
             // The rows clicked are passed directly: a right-click on an
             // unselected row must not depend on selection state.
             let picked = rows.filter { ids.contains($0.id) }
             if picked.count == 1, let row = picked.first {
-                Button("Restore…") { restoreSelection(picked) }
+                Button("Restore") { restoreSelection(picked) }
+                    .disabled(model.isRestoring)
+                Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
                     .disabled(model.isRestoring)
                 if let open = showVersions(of: row) {
                     Button("Show Versions", action: open)
@@ -282,9 +276,24 @@ struct FindFilesView: View {
                     .disabled(!model.isResticAvailable || previewer.isCopying)
                 }
             } else if picked.count > 1, Self.oneRepository(picked) {
-                Button("Restore…") { restoreSelection(picked) }
+                Button("Restore") { restoreSelection(picked) }
+                    .disabled(model.isRestoring)
+                Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
                     .disabled(model.isRestoring)
             }
+        } primaryAction: { ids in
+            guard ids.count == 1, let row = rows.first(where: { ids.contains($0.id) }),
+                  let open = showVersions(of: row)
+            else { return }
+            open()
+        }
+        // The table hands Return to its double-click action too: spent here
+        // first, Return stays the footer's Restore.
+        .onKeyPress(.return, phases: .down) { press in
+            guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]), canRestoreSelection
+            else { return .ignored }
+            restoreSelection(selectedRows)
+            return .handled
         }
     }
 
@@ -312,11 +321,13 @@ struct FindFilesView: View {
                     .help(failure.message)
             }
             Spacer()
-            Button("Restore…") { restoreSelection(selectedRows) }
+            Button("Restore To…") { restoreSelection(selectedRows, choosingDestination: true) }
+                .disabled(!canRestoreSelection)
+                .help("Restore the selected items to a folder you choose")
+            Button("Restore") { restoreSelection(selectedRows) }
                 .buttonStyle(.borderedProminent)
-                // Same grammar as the Restore pane: Return offers the
-                // restore, always through the destination sheet, where the
-                // keep/replace choice lives.
+                // Same grammar as the Restore pane: Return restores, asking
+                // first when something is in the way.
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canRestoreSelection)
                 .help(Self.oneRepository(selectedRows)
@@ -369,11 +380,12 @@ struct FindFilesView: View {
         )
     }
 
-    /// Through the destination sheet — each from its row's backup, a folder
-    /// leaving to itself only the rows of its own backup
+    /// Back where they were or, choosing, through the destination sheet
+    /// (`restoreFlow`) — each from its row's backup, a folder leaving to
+    /// itself only the rows of its own backup
     /// (`RestoreDestinationRequest.picked`). A row's kind is its search hit's,
     /// read again for its backup before it restores (`RestoreSource.node`).
-    private func restoreSelection(_ picked: [AllBackupsSearch.Row]) {
+    private func restoreSelection(_ picked: [AllBackupsSearch.Row], choosingDestination: Bool = false) {
         guard let repositoryID = picked.first?.repositoryID else { return }
         destinationRequest = RestoreDestinationRequest.picked(
             picked.map { row in
@@ -387,7 +399,8 @@ struct FindFilesView: View {
                 )
             },
             repositoryID: repositoryID,
-            model: model
+            model: model,
+            choosingDestination: choosingDestination
         )
     }
 }
