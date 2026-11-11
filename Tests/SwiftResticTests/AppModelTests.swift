@@ -1348,8 +1348,8 @@ struct UpsertStampTests {
 
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
-        #expect(model.configuration.plans[0].schedule.frequency == .weekly)
-        #expect(model.configuration.plans[0].retention.isEnabled == false)
+        #expect(model.configuration.plans[0].schedule.frequency == .weekly, "the editor's save reverted How often from the plan page")
+        #expect(model.configuration.plans[0].retention.isEnabled == false, "the editor's save reverted Remove old backups automatically from the plan page")
         #expect(model.configuration.plans[0].excludePatterns == ["/tmp/cache"])
     }
 

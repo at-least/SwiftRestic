@@ -156,7 +156,7 @@ struct NotificationTests {
         #expect(monitor.wants(.started, notifyOnSuccess: false))
     }
 
-    @Test("a channel reads as its address's host; one with no address yet as a webhook")
+    @Test("a notification address reads as its host; one not typed yet as Address")
     func channelName() {
         #expect(channel(.slack, url: "https://hooks.slack.com/services/x").displayName == "hooks.slack.com")
         #expect(channel(.webhook, url: "").displayName == "Address")

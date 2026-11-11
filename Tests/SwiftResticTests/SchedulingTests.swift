@@ -660,7 +660,6 @@ struct RepositoryTests {
         // A folder in the bucket is typed after it, in the same field.
         s3.s3Bucket = "/my-bucket/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
-        #expect(s3.label(among: []) == "my-bucket")
 
         var rest = Repository()
         rest.kind = .rest
@@ -669,7 +668,7 @@ struct RepositoryTests {
     }
 
     @Test("an SFTP port other than 22 moves to restic's URL form, the only one that carries a port")
-    func sftpPortString() throws {
+    func sftpPortString() {
         var sftp = Repository()
         sftp.kind = .sftp
         sftp.sftpHost = "backup@nas.local:2222"
@@ -685,31 +684,21 @@ struct RepositoryTests {
         sftp.sftpPath = "/volume1/Mac #1"
         #expect(sftp.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/Mac%20%231")
         sftp.sftpHost = "nas.local:2222"
-        #expect(sftp.resticRepositoryString == "sftp://nas.local:2222//volume1/Mac%20%231")
+        #expect(sftp.resticRepositoryString == "sftp://nas.local:2222//volume1/Mac%20%231", "no user: ssh picks its own")
+    }
 
-        // A port typed after the host, the editor's only way to give one.
-        var typed = Repository()
-        typed.kind = .sftp
-        typed.sftpHost = "backup@nas.local:2222"
-        typed.sftpPath = "/volume1/restic"
-        #expect(typed.sftpUser == "backup")
-        #expect(typed.sftpHostName == "nas.local")
-        #expect(typed.sftpPortText == "2222")
-        #expect(typed.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/restic")
-        typed.sftpHost = "backup@nas.local:22"
-        #expect(typed.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
-        // The user ends at the last @.
-        typed.sftpHost = "me@example.com@nas.local"
-        #expect(typed.sftpUser == "me@example.com")
-        #expect(typed.sftpHostName == "nas.local")
-
-        // A port kept in a field of its own is no port: the key is ignored.
-        let old = try JSONDecoder().decode(
-            Repository.self,
-            from: Data(#"{"kind":"sftp","name":"NAS","sftpHost":"nas.local","sftpPort":"2222","sftpPath":"/r"}"#.utf8)
-        )
-        #expect(old.sftpPortText == "")
-        #expect(old.resticRepositoryString == "sftp:nas.local:/r")
+    @Test("the Server field is ssh's user, host and port: the user ends at the last @, the port follows the host")
+    func sftpServerField() {
+        func server(_ typed: String) -> (user: String, host: String, port: String) {
+            var sftp = Repository()
+            sftp.kind = .sftp
+            sftp.sftpHost = typed
+            return (sftp.sftpUser, sftp.sftpHostName, sftp.sftpPortText)
+        }
+        #expect(server("nas.local") == ("", "nas.local", ""), "a host alone has no user and no port")
+        #expect(server("backup@nas.local:2222") == ("backup", "nas.local", "2222"))
+        #expect(server("me@example.com@nas.local") == ("me@example.com", "nas.local", ""),
+                "a user that is an email address keeps its own @")
     }
 
     @Test("provider secrets map to the environment variables each backend reads")

@@ -564,6 +564,8 @@ struct RepositoryLabelTests {
         s3.kind = .s3
         s3.s3Bucket = "photos-archive"
         #expect(s3.label(among: []) == "photos-archive")
+        s3.s3Bucket = "/photos-archive/mac/"
+        #expect(s3.label(among: []) == "photos-archive", "a folder typed after the bucket is not part of its name")
         var rclone = Repository()
         rclone.kind = .rclone
         rclone.rcloneRemote = "gdrive:"
