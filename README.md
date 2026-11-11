@@ -62,7 +62,7 @@ and for the restic inside it.
   and is rebuilt from the location on request.
 - Each run's log: `Logs/` beside `config.json`, deleted with its run record.
   It holds the restic command lines and restic's messages, never a password
-  or a hook's output.
+  or a script's output.
 
 ## Good to know
 
@@ -80,12 +80,13 @@ and for the restic inside it.
 - *Back Up a Folder…* starts the plan's first backup as soon as it is
   created; the plan then backs up every day until its schedule is changed.
 - SFTP from a GUI app has no `SSH_AUTH_SOCK` and no terminal: use a key
-  without a passphrase, or an `~/.ssh/config` entry with an `IdentityFile`,
-  and connect once with `ssh` first so the host key is known.
-- Hooks run before or after a plan's backup, through `/bin/sh -c` with the
+  without a passphrase, or an `~/.ssh/config` entry with an `IdentityFile`.
+  A new server's host key is accepted on first connection
+  (`StrictHostKeyChecking=accept-new`); a key that changes later is refused.
+- Scripts run before or after a plan's backup, through `/bin/sh -c` with the
   app's privileges. They are told about the run through `SWIFTRESTIC_*`
   environment variables; `SWIFTRESTIC_OUTCOME` says how it ended. Only the
-  first line of a failing hook's output is kept, and it never leaves this
+  first line of a failing script's output is kept, and it never leaves this
   Mac.
 - The UI is English only.
 

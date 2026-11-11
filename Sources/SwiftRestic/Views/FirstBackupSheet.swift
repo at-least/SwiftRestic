@@ -12,7 +12,7 @@ struct FirstBackupSheet: View {
     let onCreated: (UUID) -> Void
     /// A server or cloud storage: the repository editor's kinds, carrying
     /// what the sheet already holds.
-    let onOtherLocation: (FirstBackupHandoff) -> Void
+    let onServerOrCloud: (FirstBackupHandoff) -> Void
 
     @State private var source: String
     @State private var destination: FirstBackupDestination?
@@ -28,7 +28,8 @@ struct FirstBackupSheet: View {
     private enum Choice: Hashable {
         case none
         case destination(FirstBackupDestination)
-        case other
+        case otherFolder
+        case serverOrCloud
     }
 
     /// `source` is the folder the open panel already answered: the sheet
@@ -38,12 +39,12 @@ struct FirstBackupSheet: View {
         source: String,
         destination: FirstBackupDestination?,
         onCreated: @escaping (UUID) -> Void,
-        onOtherLocation: @escaping (FirstBackupHandoff) -> Void
+        onServerOrCloud: @escaping (FirstBackupHandoff) -> Void
     ) {
         _source = State(initialValue: source)
         _destination = State(initialValue: destination)
         self.onCreated = onCreated
-        self.onOtherLocation = onOtherLocation
+        self.onServerOrCloud = onServerOrCloud
     }
 
     var body: some View {
@@ -67,14 +68,7 @@ struct FirstBackupSheet: View {
                     }
                 }
                 Section("Where should the backups go?") {
-                    destinationRow
-                    Button("Use a Server or Cloud Storage…") {
-                        onOtherLocation(FirstBackupHandoff(
-                            source: source, password: password, confirmPassword: confirmPassword
-                        ))
-                        dismiss()
-                    }
-                    .buttonStyle(.link)
+                    destinationPicker
                 }
                 passwordSection
                 if let notice = model.fullDiskAccessNotice(for: source) {
@@ -151,43 +145,28 @@ struct FirstBackupSheet: View {
         return nil
     }
 
-    @ViewBuilder
-    private var destinationRow: some View {
-        if repositories.isEmpty, disks.isEmpty {
-            // A menu of only Choose and Other… is one button.
-            LabeledContent("Disk") {
-                HStack {
-                    if let folder = chosenFolder {
-                        Text((folder as NSString).abbreviatingWithTildeInPath)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Button(chosenFolder == nil ? "Choose…" : "Change…") {
-                        if let url = FilePicker.chooseDirectory(message: Self.folderPanelMessage) {
-                            destination = .folder(url.path)
-                        }
-                    }
-                }
+    /// Every place the backups can go, in one pop-up: the locations set up
+    /// here, the disks, a folder chosen in a panel, and the repository
+    /// editor's servers and cloud storage.
+    private var destinationPicker: some View {
+        let newDisks = self.newDisks
+        return Picker("Back up to", selection: choice) {
+            if destination == nil { Text("Choose").tag(Choice.none) }
+            ForEach(repositories) { repository in
+                Text(model.label(of: repository)).tag(Choice.destination(.location(repository.id)))
             }
-        } else {
-            let newDisks = self.newDisks
-            Picker(repositories.isEmpty ? "Disk" : "Location", selection: choice) {
-                if destination == nil { Text("Choose").tag(Choice.none) }
-                ForEach(repositories) { repository in
-                    Text(model.label(of: repository)).tag(Choice.destination(.location(repository.id)))
-                }
-                if !repositories.isEmpty, !newDisks.isEmpty { Divider() }
-                ForEach(newDisks, id: \.path) { disk in
-                    Text(disk.name).tag(Choice.destination(.folder(disk.repositoryFolder)))
-                }
-                if let folder = chosenFolder, !newDisks.contains(where: { $0.repositoryFolder == folder }) {
-                    Text((folder as NSString).abbreviatingWithTildeInPath).tag(Choice.destination(.folder(folder)))
-                }
-                Divider()
-                Text("Other…").tag(Choice.other)
+            if !repositories.isEmpty, !newDisks.isEmpty { Divider() }
+            ForEach(newDisks, id: \.path) { disk in
+                Text(disk.name).tag(Choice.destination(.folder(disk.repositoryFolder)))
             }
-            .accessibilityIdentifier(AccessibilityID.FirstBackup.disk)
+            if let folder = chosenFolder, !newDisks.contains(where: { $0.repositoryFolder == folder }) {
+                Text((folder as NSString).abbreviatingWithTildeInPath).tag(Choice.destination(.folder(folder)))
+            }
+            Divider()
+            Text("Other Folder…").tag(Choice.otherFolder)
+            Text("Server or Cloud Storage…").tag(Choice.serverOrCloud)
         }
+        .accessibilityIdentifier(AccessibilityID.FirstBackup.destination)
     }
 
     /// None for a location set up here: it has its password. One field for
@@ -222,7 +201,7 @@ struct FirstBackupSheet: View {
             switch choice {
             case .none: break
             case let .destination(chosen): destination = chosen
-            case .other:
+            case .otherFolder:
                 // After the picker's menu has finished tracking: a panel run
                 // from inside it got no key at all (not Esc, not ⌘⇧G) while
                 // the menu stayed up behind it. Not a Task or
@@ -236,6 +215,11 @@ struct FirstBackupSheet: View {
                         }
                     }
                 }
+            case .serverOrCloud:
+                // No wait for the menu, unlike the panel: the editor opens
+                // in this sheet's onDismiss, after its closing animation.
+                onServerOrCloud(FirstBackupHandoff(source: source, password: password, confirmPassword: confirmPassword))
+                dismiss()
             }
         }
     }

@@ -45,7 +45,7 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
 
     /// The address's host: a person pastes a link, and names nothing.
     var displayName: String {
-        URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? "Webhook"
+        URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? "Address"
     }
 
     var hasUsableURL: Bool {

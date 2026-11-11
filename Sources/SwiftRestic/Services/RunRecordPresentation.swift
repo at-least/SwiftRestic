@@ -2,9 +2,11 @@ import Foundation
 
 /// The one action that fixes a failure whose cause the app knows, offered
 /// where the failure is read — the Activity drawer and the plan's problem
-/// row. Each title is a menu command's, under the menu's own word.
+/// row.
 enum RunFix: Equatable {
-    /// restic exit 12: the stored password does not open the repository.
+    /// The repository's password is missing, or restic exit 12: the stored
+    /// one does not open it. Its editor opens with the password field
+    /// showing (`AppModel.passwordRefused`).
     case editRepository(UUID)
     /// restic exit 10 on a server or in the cloud: no repository is at its
     /// location. Those locations are fixed, so where it is now takes a new
@@ -21,24 +23,26 @@ enum RunFix: Equatable {
     /// (`RunRecord.refusedShares`): its editor holds the share's password.
     case editRepositoryShare(UUID)
     /// A network share holding the plan's folder refused to reconnect: the
-    /// plan editor's Excluding tab holds the share's password.
+    /// plan editor holds the share's password.
     case editPlanShare(UUID)
     /// The repository's disk filled up during a backup
     /// (`RunRecord.repositoryFull`): a prune frees what the failed run
     /// uploaded.
     case pruneNow(UUID)
     /// The location refused to delete what the plan's retention chose
-    /// (`RunRecord.retentionRefused`): the plan editor's Retention tab
-    /// turns it off.
-    case editPlanRetention(UUID)
+    /// (`RunRecord.retentionRefused`): the plan page's Remove old backups
+    /// automatically switch turns it off.
+    case showPlan(UUID)
 
     var title: String {
         switch self {
-        case .editRepository, .editRepositoryShare: "Edit Backup Location…"
+        case .editRepository: "Enter Password…"
+        case .editRepositoryShare: "Edit Backup Location…"
         case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
         case .newPlan: "Back Up a Folder…"
-        case .editPlanShare, .editPlanRetention: "Edit Plan…"
+        case .editPlanShare: "Edit Plan…"
+        case .showPlan: "Show Plan"
         case .pruneNow: "Clean Up Now…"
         }
     }
@@ -47,9 +51,10 @@ enum RunFix: Equatable {
     /// nil where that message already says it.
     var help: String? {
         switch self {
-        case .editRepository, .addRepository, .locate, .newPlan, .pruneNow, .editPlanRetention: nil
+        case .editRepository, .addRepository, .locate, .newPlan, .pruneNow: nil
         case .editRepositoryShare: "The share’s saved password is in Edit Backup Location"
         case .editPlanShare: "The share’s saved password is in the plan editor, next to the folder"
+        case .showPlan: "Remove old backups automatically is on the plan page"
         }
     }
 }
@@ -61,16 +66,15 @@ struct UnreadableItemWords: Equatable {
 }
 
 /// A check or prune that did not end clean, run again from the drawer where
-/// its verdict is read — the Location menu's command, through the same
-/// confirmation.
+/// its verdict is read: a check at once, a prune through its confirmation.
 enum MaintenanceRetry: Equatable {
     case check(UUID)
     case prune(UUID)
 
     var title: String {
         switch self {
-        case .check: "Verify Again…"
-        case .prune: "Clean Up Again"
+        case .check: "Verify Again"
+        case .prune: "Clean Up Again…"
         }
     }
 
@@ -117,7 +121,7 @@ enum RunRecordPresentation {
         // A refused retention: after a backup the snapshot stands, so the run
         // is a warning, and the fix is offered all the same.
         if run.retentionRefused != nil, repositoryExists, let planID = run.planID {
-            return planExists ? .editPlanRetention(planID) : nil
+            return planExists ? .showPlan(planID) : nil
         }
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.missingSources != nil { return .newPlan(repositoryID) }
@@ -367,7 +371,7 @@ enum RunRecordPresentation {
     }
 
     /// Copy Details: the run as plain text for a forum post or an issue —
-    /// what ran, how it ended, restic's exit code and the versions. Hooks
+    /// what ran, how it ended, restic's exit code and the versions. Scripts
     /// appear as a count only: their output can carry secrets and stays on
     /// this Mac, in the drawer.
     static func detailsText(for run: RunRecord, repositoryName: String?, versionsNow: RunLogVersions) -> String {
@@ -429,7 +433,7 @@ enum RunRecordPresentation {
         // The decoding gap and the retention skip explain themselves.
         lines += run.trailingItemErrorsOnScreen
         if !run.hookMessages.isEmpty {
-            lines.append("Hooks: \(Format.count(run.hookMessages.count)) failed")
+            lines.append("Scripts: \(Format.count(run.hookMessages.count)) failed")
         }
         if let version = run.resticVersion { lines.append(version) }
         lines.append("Copied from \(versionsNow.app) on \(versionsNow.macOS)")

@@ -54,7 +54,7 @@ private extension BackupPlan {
 enum FirstBackupDestination: Hashable {
     /// A location already set up.
     case location(UUID)
-    /// A folder for a new location: a disk's, or one chosen with Other….
+    /// A folder for a new location: a disk's, or one chosen with Other Folder….
     case folder(String)
 
     /// What the sheet opens on with locations set up: the one whose page is
@@ -120,7 +120,7 @@ struct ExternalDisk: Equatable, Sendable {
             .map { ExternalDisk(name: $0.name, path: $0.path) }
     }
 
-    /// A volume whose facts macOS won't give is not offered: "Other…" still reaches it.
+    /// A volume whose facts macOS won't give is not offered: "Other Folder…" still reaches it.
     static func mounted() -> [ExternalDisk] {
         #if DEBUG
         // The UI tests' disk (SwiftResticUITests): a folder standing in for the

@@ -3,6 +3,15 @@ import Foundation
 extension AppModel {
     func repository(id: UUID?) -> Repository? { configuration.repository(id: id) }
 
+    /// The saved password is known not to open the repository: its last
+    /// listing was refused it (restic exit 12). A run refused it reads the
+    /// listing again, which says it too. The editor then opens on the
+    /// password field, not "Saved in Keychain".
+    func passwordRefused(repositoryID: UUID) -> Bool {
+        if case .passwordRefused? = snapshotListingOutcomes[repositoryID] { return true }
+        return false
+    }
+
     func upsert(repository: Repository, password: String?, providerSecret: String?) async {
         do {
             try await secrets.save(repository.id, password, providerSecret)
@@ -16,7 +25,7 @@ extension AppModel {
             post(Banner(
                 title: "Couldn’t save the password for “\(label(of: repository))”",
                 message: error.localizedDescription,
-                isError: true
+                level: .error
             ))
         }
         // The cache key compares the Repository value, which by design carries
@@ -139,7 +148,7 @@ extension AppModel {
                     title: "The removed location’s secrets are still in your Keychain",
                     message: error.localizedDescription
                         + " In Keychain Access they are named “\(KeychainStore.service)”, with accounts that start \(id.uuidString).",
-                    isError: true
+                    level: .error
                 ))
             }
         })
@@ -176,7 +185,7 @@ extension AppModel {
     /// The password rules live once, in the main-actor-free
     /// `AppModel.readContext` — this delegates to it, and caches
     /// the answer beside the repository value it was built from, which
-    /// holds everything but the secrets, rate limits included; secret
+    /// holds everything but the secrets; secret
     /// edits are covered by `upsert`'s explicit invalidation, and a stale
     /// credential by `noteAuthFailure`. Failures are never cached; only a
     /// fully resolved context is.

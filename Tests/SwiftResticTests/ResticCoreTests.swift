@@ -117,12 +117,11 @@ struct ResticErrorTests {
         #expect(result([]).failureMessage == fatal)
 
         let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
-        #expect(unknownText.hasPrefix("SSH does not know this server’s key yet"))
-        #expect(unknownText.contains("Connect to it once in Terminal with ssh"))
-        #expect(!unknownText.contains(fatal))
+        #expect(unknownText == "SSH refused this server’s key. Show Log has what SSH said.")
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
-        #expect(changedText.contains("ssh-keygen -R"))
+        #expect(changedText.contains("~/.ssh/known_hosts"))
+        #expect(!changedText.contains("restic") && !changedText.contains("Terminal"))
     }
 
     @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic couldn’t get from it")
@@ -480,18 +479,19 @@ struct PasswordPrecedenceTests {
 
 }
 
-@Suite("Rate limits")
-struct RateLimitTests {
-    @Test("a repository's own upload limit goes on every command against it; none add no flag")
-    func repositoryLimits() {
+@Suite("Global arguments")
+struct GlobalArgumentTests {
+    @Test("an SFTP location accepts a new server's key and nothing else adds a flag")
+    func sftpAcceptsNewHostKey() {
         var repository = Repository()
-        repository.kind = .s3
-        #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty)
-
-        repository.uploadLimitKiBps = 512
+        for kind in Repository.Kind.allCases where kind != .sftp {
+            repository.kind = kind
+            #expect(RepositoryContext(repository: repository, password: "p").globalArguments.isEmpty, "\(kind)")
+        }
+        repository.kind = .sftp
         #expect(
             RepositoryContext(repository: repository, password: "p").globalArguments
-                == ["--limit-upload", "512"]
+                == ["-o", "sftp.args=-o StrictHostKeyChecking=accept-new"]
         )
     }
 }

@@ -30,7 +30,6 @@ struct ConfigStoreTests {
         repository.kind = .sftp
         repository.sftpHost = "nas.local"
         repository.sftpPath = "/volume1/restic"
-        repository.uploadLimitKiBps = 512
 
         var plan = BackupPlan()
         plan.repositoryID = repository.id
@@ -46,7 +45,6 @@ struct ConfigStoreTests {
         let loaded = try await store.load().configuration
 
         #expect(loaded.repositories.first?.sftpHost == "nas.local")
-        #expect(loaded.repositories.first?.uploadLimitKiBps == 512)
         #expect(loaded.plans.first?.path == "/Users/someone/Documents")
         #expect(loaded.plans.first?.lastRunAt == plan.lastRunAt)
         #expect(loaded.runs.count == 1)

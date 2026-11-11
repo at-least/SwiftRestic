@@ -102,20 +102,13 @@ struct ContextCacheTests {
         #expect(loads.value == 2)
     }
 
-    @Test("changing a repository's rate limit invalidates and reaches its context; changing a setting does not invalidate")
-    func rateLimitAndSettingsChanges() async throws {
+    @Test("changing a setting does not invalidate")
+    func settingsChanges() async throws {
         let (model, loads, repository) = makeHarness()
         _ = try await model.context(for: repository)
-
-        var limited = repository
-        limited.uploadLimitKiBps = 512
-        let context = try await model.context(for: limited)
-        #expect(loads.value == 2, "a limit a context carries must invalidate it")
-        #expect(context.globalArguments == ["--limit-upload", "512"])
-
         model.configuration.settings.notifyOnSuccess.toggle()
-        _ = try await model.context(for: limited)
-        #expect(loads.value == 2, "a setting no context reads must not invalidate it")
+        _ = try await model.context(for: repository)
+        #expect(loads.value == 1, "a setting no context reads must not invalidate it")
     }
 
     @Test("an auth-class failure drops the entry; other failures do not")

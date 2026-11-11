@@ -26,12 +26,12 @@ struct RepositoryContext: Sendable {
         return env
     }
 
+    /// restic runs ssh without a terminal, so ssh cannot ask about a server
+    /// it has never seen: accept-new takes a new server's key on first
+    /// contact and still refuses one that changed (measured with restic
+    /// 0.19.1 against a fresh and a mismatched known_hosts).
     var globalArguments: [String] {
-        var args: [String] = []
-        if repository.uploadLimitKiBps > 0 {
-            args += ["--limit-upload", String(repository.uploadLimitKiBps)]
-        }
-        return args
+        repository.kind == .sftp ? ["-o", "sftp.args=-o StrictHostKeyChecking=accept-new"] : []
     }
 }
 
@@ -446,7 +446,7 @@ struct ResticService: ResticClient {
         var args = ["find", "--json", "--no-lock"]
         if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
-        // A typed pattern starting with "-" is a pattern, not a flag.
+        // A pattern starting with "-" is a pattern, not a flag.
         args.append("--")
         args += patterns
 

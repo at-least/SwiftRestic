@@ -11,15 +11,12 @@ struct RootView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
-    /// The tab `editingPlan` opens on: Files, except for a refused
-    /// retention's fix. Back to Files when the sheet goes.
-    @State private var editingPlanTab: PlanEditorTab = .files
     @State private var editingRepository: Repository?
     /// Back Up a Folder…'s folder, chosen: the first-run sheet's.
     @State private var firstBackupSource: FirstBackupSource?
-    /// The first-run sheet was left for the repository editor's other kinds:
-    /// set from the sheet's handoff until the editor closes, its Add then
-    /// creating the plan as the sheet's Back Up would.
+    /// The first-run sheet was left for the repository editor's server and
+    /// cloud kinds: set from the sheet's handoff until the editor closes,
+    /// its Back Up then creating the plan as the sheet's would.
     @State private var firstBackupHandoff: FirstBackupHandoff?
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
@@ -87,21 +84,21 @@ struct RootView: View {
     /// type doc.
     private func presented<V: View>(over content: V) -> some View {
         content
-        .sheet(item: $editingPlan, onDismiss: { editingPlanTab = .files }) { plan in
-            PlanEditorSheet(plan: plan, mode: .editing, initialTab: editingPlanTab)
+        .sheet(item: $editingPlan) { plan in
+            PlanEditorSheet(plan: plan, mode: .editing)
                 .environment(model)
         }
         // Not sheet(isPresented:) beside a separate source: its content kept
         // the source from before the panel, and the sheet opened on an empty
         // folder (seen in the UI tests).
-        .sheet(item: $firstBackupSource, onDismiss: continueWithOtherLocation) { firstBackup in
+        .sheet(item: $firstBackupSource, onDismiss: continueWithServerOrCloud) { firstBackup in
             FirstBackupSheet(
                 source: firstBackup.path,
                 destination: FirstBackupDestination.initial(
                     onScreen: firstBackup.repositoryID, among: model.configuration.repositories
                 ),
                 onCreated: { router.selection = .plan($0) },
-                onOtherLocation: { firstBackupHandoff = $0 }
+                onServerOrCloud: { firstBackupHandoff = $0 }
             )
             .environment(model)
         }
@@ -111,9 +108,9 @@ struct RootView: View {
             // first-run sheet lands on the plan made in it.
             RepositoryEditorSheet(
                 repository: repository,
+                firstBackupSource: firstBackupHandoff?.source,
                 password: firstBackupHandoff?.password ?? "",
                 confirmPassword: firstBackupHandoff?.confirmPassword ?? "",
-                offThisMac: firstBackupHandoff != nil,
                 onCreated: { id in
                     if let handoff = firstBackupHandoff {
                         router.selection = .plan(model.createFirstPlan(source: handoff.source, repositoryID: id))
@@ -247,7 +244,7 @@ struct RootView: View {
         }
     }
 
-    private func continueWithOtherLocation() {
+    private func continueWithServerOrCloud() {
         guard firstBackupHandoff != nil else { return }
         editingRepository = Repository()
     }
@@ -393,11 +390,9 @@ struct RootView: View {
         router.selection = .otherGroup(repositoryID: target.repositoryID, id: target.id)
         applyCaptureTab()
         guard case let .plan(planID) = target.id else { return }
-        // The adopt sheet over the page it adopts: `adopt` opens it on the
-        // Excluding tab, `adoptRetention` on the Retention tab, where the dry-run
-        // preview and the anchored count live.
+        // The adopt sheet over the page it adopts.
         let sheet = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SHEET"]
-        if pane == .adoptable, sheet == "adopt" || sheet == "adoptRetention" {
+        if pane == .adoptable, sheet == "adopt" {
             adoptGroup(repositoryID: target.repositoryID, planID: planID)
         }
     }
@@ -469,18 +464,18 @@ struct RootView: View {
             runSelectedPlan()
         case let .stopPlan(id):
             if model.planCommands(for: .plan(id)).canStop { model.cancelBackup(planID: id) }
-        case let .editPlan(id, tab):
-            // Only with a sheet to open: its dismissal is what resets the tab.
-            if let plan = model.plan(id: id) {
-                editingPlanTab = tab
-                editingPlan = plan
-            }
+        case let .editPlan(id):
+            editingPlan = model.plan(id: id)
         case let .editRepository(id):
             editingRepository = model.repository(id: id)
         case let .confirm(confirmation):
             if model.confirmationCopy(for: confirmation) != nil {
                 pendingConfirmation = confirmation
             }
+        case let .verifyBackups(id):
+            guard model.repositoryCommands(for: .repository(id)).canMaintain else { return }
+            model.runMaintenance(repositoryID: id, task: .check)
+            router.showMaintenance(of: id)
         }
     }
 

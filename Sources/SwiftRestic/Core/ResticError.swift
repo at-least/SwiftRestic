@@ -133,19 +133,19 @@ enum ResticError: Error, LocalizedError, Equatable {
         return first.isEmpty ? nil : first
     }
 
-    /// What to do when ssh refused the server's host key — the line ssh
-    /// prints both for a server it has never seen, which it cannot ask
-    /// about without a terminal, and for one whose key changed (checked
-    /// against restic 0.19.1 over sftp, run as the app runs it).
+    /// What to do when ssh refused the server's host key. A server never
+    /// seen is accepted (`RepositoryContext.globalArguments`), so the line
+    /// means a key that changed (checked against restic 0.19.1 over sftp,
+    /// run as the app runs it); once its old line is gone, the next run
+    /// accepts the new key.
     private static func sshHostKeyAdvice(_ message: String) -> String? {
         guard message.contains("Host key verification failed") else { return nil }
         if message.contains("has changed") {
-            return "This server’s SSH key has changed since this Mac last connected, and SSH refuses it: "
+            return "This server’s SSH key has changed since this Mac last connected: "
                 + "the server was reinstalled, or another computer is answering. If you expect the change, "
-                + "remove the old key with ssh-keygen -R and the server’s name in Terminal, then connect once with ssh."
+                + "remove the server’s line from ~/.ssh/known_hosts, then try again."
         }
-        return "SSH does not know this server’s key yet, and restic runs SSH without a terminal to confirm it. "
-            + "Connect to it once in Terminal with ssh and accept the key, then try again."
+        return "SSH refused this server’s key. Show Log has what SSH said."
     }
 
     static func rcloneWords(_ message: String) -> String? {

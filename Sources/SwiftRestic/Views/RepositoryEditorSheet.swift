@@ -35,9 +35,10 @@ struct RepositoryEditorSheet: View {
     @State private var confirmNewPassword = ""
     @State private var isConfirmingPasswordChange = false
     @State private var isConfirmingDiscard = false
-    /// Asked for by the saved-password row: the password was changed on
-    /// another Mac, so what the Keychain holds no longer opens it.
-    @State private var isReplacingSavedPassword = false
+    /// The saved password is known not to open the repository
+    /// (`AppModel.passwordRefused`), read once as the sheet opens: the
+    /// password field shows, empty, in place of "Saved in Keychain".
+    @State private var entersPassword = false
     @State private var rcloneSetup: RcloneSetup?
     /// Bumped when the app becomes active, so remotes set up in Terminal
     /// meanwhile appear without leaving the sheet.
@@ -52,9 +53,10 @@ struct RepositoryEditorSheet: View {
     @State private var holdsBackups = false
 
     private let isNew: Bool
-    /// Opened for a server or cloud storage: the Type picker leaves out
-    /// this Mac.
-    private let offThisMac: Bool
+    /// The folder the first-run sheet is backing up, when it handed off to
+    /// this editor for a server or cloud storage: the Type picker leaves
+    /// out this Mac, and the sheet is that folder's backup.
+    private let firstBackupSource: String?
     /// Told the new repository's id once it is created and saved — never on
     /// an edit, a cancel or a failed probe — so the window can open the
     /// page that offers its first plan.
@@ -75,24 +77,23 @@ struct RepositoryEditorSheet: View {
         Edit(draft: draft, password: password, providerSecret: providerSecret)
     }
 
-    /// `password` and `confirmPassword`: what the first-run sheet already
-    /// had typed when it handed off to this editor. `offThisMac`: a new
-    /// location opens on the first kind that is not on this Mac, and the
-    /// Type picker leaves this Mac out.
+    /// `firstBackupSource`, `password` and `confirmPassword`: what the
+    /// first-run sheet held when it handed off to this editor. A new
+    /// location then opens on the first kind that is not on this Mac.
     init(
         repository: Repository,
+        firstBackupSource: String? = nil,
         password: String = "",
         confirmPassword: String = "",
-        offThisMac: Bool = false,
         onCreated: @escaping (UUID) -> Void = { _ in }
     ) {
         // A new repository opens as `Repository()`: a local folder not yet
         // chosen. A saved one always has its location (Save requires it).
         isNew = repository.kind == .local && repository.localPath.isEmpty
-        precondition(isNew || !offThisMac, "offThisMac opens a new location only")
-        self.offThisMac = offThisMac
+        precondition(isNew || firstBackupSource == nil, "a first backup opens a new location only")
+        self.firstBackupSource = firstBackupSource
         var repository = repository
-        if offThisMac { repository.kind = .sftp }
+        if firstBackupSource != nil { repository.kind = .sftp }
         _draft = State(initialValue: repository)
         _password = State(initialValue: password)
         _confirmPassword = State(initialValue: confirmPassword)
@@ -134,7 +135,7 @@ struct RepositoryEditorSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if isNew {
-                Text("Add Backup Location")
+                Text(firstBackupSource.map { "Back Up “\(($0 as NSString).lastPathComponent)”" } ?? "Add Backup Location")
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], 20)
@@ -189,7 +190,7 @@ struct RepositoryEditorSheet: View {
                     Button("Save Anyway") { Task { await save(verifying: false) } }
                         .disabled(isWorking)
                 }
-                Button(isNew ? "Add Backup Location" : "Save") { Task { await save() } }
+                Button(isNew ? (firstBackupSource != nil ? "Back Up" : "Add Backup Location") : "Save") { Task { await save() } }
                     .accessibilityIdentifier(AccessibilityID.RepositoryEditor.save)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -204,6 +205,7 @@ struct RepositoryEditorSheet: View {
             // Snapshot before the keychain await: an edit typed during the
             // load must already register as a change.
             initial = draft
+            entersPassword = !isNew && model.passwordRefused(repositoryID: draft.id)
             await loadExistingSecrets()
             // The stored secrets are the sheet's baseline, not edits to be
             // warned about.
@@ -278,12 +280,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    private var firstContact: String {
-        guard !draft.sftpHostName.isEmpty else { return "connect once in Terminal with ssh and accept it." }
-        let port = draft.sftpCustomPort.map { "-p \($0) " } ?? ""
-        return "connect once in Terminal (ssh \(port)\(draft.sftpUserHost)) and accept it."
-    }
-
     private var settingsForm: some View {
         Form {
             Section {
@@ -306,11 +302,11 @@ struct RepositoryEditorSheet: View {
             Section("Where") { locationFields }
 
             Section("Encryption") {
-                // The Keychain's password stays out of sight until it needs
-                // replacing: this field is not how a password is changed.
-                if hasStoredPassword == true, !isReplacingSavedPassword {
+                // The Keychain's password stays out of sight until it stops
+                // opening the repository: this field is not how a password
+                // is changed.
+                if hasStoredPassword == true, !entersPassword {
                     LabeledContent("Password", value: "Saved in Keychain")
-                    Button("Password Changed on Another Mac…") { isReplacingSavedPassword = true }
                 } else if !isNew, storedSecrets == nil, !secretsReadFailed {
                     LabeledContent("Password") { ProgressView().controlSize(.small) }
                 } else {
@@ -337,10 +333,7 @@ struct RepositoryEditorSheet: View {
             if draft.secretFieldLabel != nil || draft.kind == .sftp {
                 Section("Credentials") {
                     if draft.kind == .sftp {
-                        Text(
-                            "SSH is authenticated with your keys, and restic runs without a terminal, so it can’t ask for a key’s passphrase or use ssh-agent: use a key without one, set in ~/.ssh/config. "
-                                + "It can’t accept a new server’s key either — \(firstContact)"
-                        )
+                        Text("Use an SSH key without a passphrase, set in ~/.ssh/config.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -354,12 +347,6 @@ struct RepositoryEditorSheet: View {
                             SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         }
                     }
-                }
-            }
-
-            if draft.usesNetwork(shares: model.configuration.settings.networkShares) {
-                Section("Bandwidth") {
-                    uploadLimitField
                 }
             }
         }
@@ -434,7 +421,7 @@ struct RepositoryEditorSheet: View {
 
     private var kindPicker: some View {
         Picker("Type", selection: $draft.kind) {
-            if !offThisMac {
+            if firstBackupSource == nil {
                 Section("On this Mac") {
                     Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
                 }
@@ -496,13 +483,11 @@ struct RepositoryEditorSheet: View {
                 }
             }
         case .sftp:
-            TextField("User", text: $draft.sftpUser, prompt: Text("backup"))
-            TextField("Host", text: $draft.sftpHost, prompt: Text("nas.local or nas.local:2222"))
+            TextField("Server", text: $draft.sftpHost, prompt: Text("backup@nas.local or backup@nas.local:2222"))
             TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/SwiftRestic Backups"))
         case .s3:
             TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
-            TextField("Bucket", text: $draft.s3Bucket, prompt: Text("Required"))
-            TextField("Prefix", text: $draft.s3Prefix, prompt: Text("Optional"))
+            TextField("Bucket", text: $draft.s3Bucket, prompt: Text("my-bucket or my-bucket/mac"))
             Text("For Backblaze B2, use the bucket’s endpoint, such as s3.us-west-004.backblazeb2.com, and an application key.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -565,7 +550,8 @@ struct RepositoryEditorSheet: View {
     private var canSubmit: Bool { missingRequirement == nil }
 
     private var missingRequirement: String? {
-        EditorRequirements.repository(
+        if entersPassword, password.isEmpty { return "Enter the password to save it." }
+        return EditorRequirements.repository(
             draft,
             password: password,
             confirmPassword: confirmPassword,
@@ -587,6 +573,9 @@ struct RepositoryEditorSheet: View {
         if opensExistingBackups { return nil }
         if isNew {
             return PasswordWords.recoveryWarning
+        }
+        if entersPassword, hasStoredPassword == true {
+            return "The saved password doesn’t open “\(draftLabel)”. Enter the one that does."
         }
         if secretsReadFailed {
             return "Leave this blank to keep whatever password the Keychain holds, or enter the password to replace it."
@@ -618,7 +607,9 @@ struct RepositoryEditorSheet: View {
             // anything typed into the fields while the Keychain answered is
             // already the user's edit, and overwriting it would not even
             // register as a change against the baseline taken above.
-            if password.isEmpty {
+            // A refused password is not put back in the field it is to be
+            // replaced in.
+            if password.isEmpty, !entersPassword {
                 password = secrets.password ?? ""
                 confirmPassword = password
             }
@@ -703,20 +694,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// Stored in KiB/s, restic's unit; said in MB/s. Empty is no limit (0),
-    /// shown as the prompt. Clamped on commit, never mid-keystroke.
-    private var uploadLimitField: some View {
-        TextField(
-            "Upload limit (MB/s)",
-            value: Binding<Double?>(
-                get: { draft.uploadLimitKiBps == 0 ? nil : Double(draft.uploadLimitKiBps) / 1024 },
-                set: { draft.uploadLimitKiBps = min(1_000_000, max(0, Int((($0 ?? 0) * 1024).rounded()))) }
-            ),
-            format: .number.precision(.fractionLength(0 ... 1)).grouping(.never),
-            prompt: Text("Unlimited")
-        )
-    }
-
     private func save(verifying: Bool = true) async {
         guard !isWorking else { return }
         isWorking = true
@@ -762,7 +739,7 @@ struct RepositoryEditorSheet: View {
                 model.post(Banner(
                     title: "Couldn’t save the password for “\(share.url)”",
                     message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
-                    isError: true
+                    level: .error
                 ))
             }
             sharePassword = ""

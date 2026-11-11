@@ -499,7 +499,7 @@ struct ResticIntegrationTests {
     }
 
     @MainActor
-    @Test("the adopt sheet's dry run answers with the draft's own rules, over the unsaved plan")
+    @Test("a dry run answers with the plan it is given, unsaved, and removes nothing")
     func adoptDraftPreviewAnswersForTheDraft() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -522,9 +522,8 @@ struct ResticIntegrationTests {
         let model = try await adoptableModel(fixture: fixture, repository: repository)
 
         var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: plan.id))
-        // Retention starts off; the sheet's preview turns a policy on in the
-        // draft alone — the plan is not saved, so the draft itself travels to
-        // restic.
+        // The policy is on in the draft alone: the plan is not saved, so the
+        // draft itself travels to restic.
         #expect(!draft.retention.isEnabled)
         draft.retention = RetentionPolicy(
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
@@ -533,7 +532,7 @@ struct ResticIntegrationTests {
         let preview = try await model.previewRetention(plan: draft)
         #expect(preview.kept.count == 1)
         #expect(preview.removed.count == 1)
-        #expect(preview.outcomeLine == "With these rules, 2 backups would become 1.")
+        #expect(preview.outcomeLine == "At the next backup, 2 backups become 1.")
         // A dry run over an unsaved plan removed nothing.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
     }
@@ -627,9 +626,7 @@ struct ResticIntegrationTests {
 
         var repository = Repository()
         repository.kind = .sftp
-        repository.sftpUser = "backup"
-        repository.sftpHost = "nas.example"
-        repository.sftpPort = "2222"
+        repository.sftpHost = "backup@nas.example:2222"
         // A space and a `#`: unencoded, restic 0.19.1 reads the `#` as the
         // URL's fragment and the path ends before it (probed).
         repository.sftpPath = root.path + "/Mac #1"

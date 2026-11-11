@@ -450,11 +450,8 @@ struct MaintenanceSchedulingTests {
         #expect(saved.scheduledDataSubset(for: .s3) == nil)
         let added = utcDate("2026-10-09 00:00:00")
         #expect(saved.nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
-        #expect(CheckDataSubset.slice(3, of: 12).words == "part 3 of 12")
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
-        #expect(CheckDataSubset.percent(5).words == "5% of the data")
         #expect(CheckDataSubset.percent(5).argument == "5%")
-        #expect(CheckDataSubset.percent(100).words == "all of the data")
     }
 
     @Test("a hand-edited slice outside 1 to 12 checks the nearest slice there is, never one restic has no group for")
@@ -483,38 +480,21 @@ struct MaintenanceSchedulingTests {
         #expect(merged.maintenance.nextCheckDataSlice == 4)
     }
 
-    @Test("Last check names what the newest check read")
-    func lastCheckNamesItsDepth() {
+    @Test("Last verified after a clean check is its time alone, whatever part of the data it read")
+    func lastCheckIsItsTimeAlone() {
         let repository = repository { $0.maintenance.lastCheckAt = utcDate("2026-09-08 12:00:00") }
         let now = utcDate("2026-09-10 12:00:00")
         var check = RunRecord(kind: .check, planName: "repo", repositoryID: repository.id, startedAt: utcDate("2026-09-08 12:00:00"))
         check.outcome = .succeeded
-        check.checkRead = "part 3 of 12"
-        #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
-            == "\(Format.ago(utcDate("2026-09-08 12:00:00"), now: now)) · part 3 of 12")
-        check.checkRead = "structure only"
-        #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now)
-            == "\(Format.ago(utcDate("2026-09-08 12:00:00"), now: now)) · structure only")
-        // A check recorded before the depth was: its time alone.
-        check.checkRead = nil
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [check], now: now) == Format.ago(utcDate("2026-09-08 12:00:00"), now: now))
     }
 
-    @Test("a check recorded in the old words reads in today's")
-    func oldCheckWordsReadAnew() throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        for (old, new) in [
-            ("data slice 3 of 12", "part 3 of 12"), ("5% of data", "5% of the data"),
-            ("all data", "all of the data"), ("structure only", "structure only"),
-        ] {
-            var check = RunRecord(kind: .check, planName: "repo")
-            check.checkRead = old
-            let decoded = try decoder.decode(RunRecord.self, from: encoder.encode(check))
-            #expect(decoded.checkRead == new)
-        }
+    @Test("a check recorded with what it read, a key no longer kept, still decodes")
+    func storedCheckReadStillDecodes() throws {
+        let stored = Data(#"{"kind":"check","outcome":"succeeded","checkRead":"part 3 of 12"}"#.utf8)
+        let decoded = try JSONDecoder().decode(RunRecord.self, from: stored)
+        #expect(decoded.kind == .check)
+        #expect(decoded.outcome == .succeeded)
     }
 
     @Test("a busy repository is skipped entirely")
@@ -609,25 +589,6 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.lastMaintenanceText(.check, of: repository, runs: [waited, failed], now: now)
             == "\(Format.ago(utcDate("2026-09-02 12:00:00"), now: now)) · failed")
     }
-
-    @Test("the schedule summarises itself for the plan list")
-    func scheduleSummary() {
-        var manual = Schedule()
-        manual.frequency = .manual
-        #expect(manual.summary() == "Manually")
-
-        var hourly = Schedule()
-        hourly.frequency = .hourly
-        #expect(hourly.summary() == "Every hour")
-
-        var daily = Schedule()
-        daily.frequency = .daily
-        #expect(daily.summary() == "Every day")
-
-        var weekly = Schedule()
-        weekly.frequency = .weekly
-        #expect(weekly.summary() == "Every week")
-    }
 }
 
 @Suite("Retention policy")
@@ -663,44 +624,6 @@ struct RetentionPolicyTests {
         ])
         #expect(policy.isSafeToRun)
     }
-
-    @Test("the summary spells out what is kept, or why nothing will be")
-    func summaries() {
-        var disabled = RetentionPolicy()
-        disabled.isEnabled = false
-        #expect(disabled.summary == "Keep everything")
-
-        var empty = RetentionPolicy()
-        empty.keepHourly = 0
-        empty.keepDaily = 0
-        empty.keepWeekly = 0
-        empty.keepMonthly = 0
-        empty.keepYearly = 0
-        #expect(empty.summary == "No rules set")
-
-        var mixed = RetentionPolicy()
-        mixed.keepLast = 3
-        mixed.keepHourly = 24
-        mixed.keepDaily = 0
-        mixed.keepWeekly = 0
-        mixed.keepMonthly = 12
-        mixed.keepYearly = 0
-        #expect(mixed.summary == "Keep the latest 3, 24 hourly and 12 monthly backups")
-
-        // Counts of backups, never "24h": a daily plan's 24 hourly backups
-        // reach back 24 days, not 24 hours.
-        #expect(RetentionPolicy().summary == "Keep 24 hourly, 7 daily, 4 weekly, 12 monthly and 3 yearly backups")
-
-        var single = empty
-        single.keepYearly = 1
-        #expect(single.summary == "Keep 1 yearly backup")
-
-        var latest = empty
-        latest.keepLast = 1
-        #expect(latest.summary == "Keep the latest backup")
-        latest.keepDaily = 7
-        #expect(latest.summary == "Keep the latest one and 7 daily backups")
-    }
 }
 
 @Suite("Repository configuration")
@@ -722,20 +645,22 @@ struct RepositoryTests {
 
         var sftp = Repository()
         sftp.kind = .sftp
-        sftp.sftpUser = "backup"
-        sftp.sftpHost = "nas.local"
+        sftp.sftpHost = "backup@nas.local"
         sftp.sftpPath = "/volume1/restic"
         #expect(sftp.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
         // ssh's own port keeps the colon form, byte for byte.
-        sftp.sftpPort = "22"
+        sftp.sftpHost = "backup@nas.local:22"
         #expect(sftp.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
 
         var s3 = Repository()
         s3.kind = .s3
         s3.s3Endpoint = "s3.eu-central-1.amazonaws.com"
         s3.s3Bucket = "my-bucket"
-        s3.s3Prefix = "/macs/laptop/"
+        #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket")
+        // A folder in the bucket is typed after it, in the same field.
+        s3.s3Bucket = "/my-bucket/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
+        #expect(s3.label(among: []) == "my-bucket")
 
         var rest = Repository()
         rest.kind = .rest
@@ -747,9 +672,7 @@ struct RepositoryTests {
     func sftpPortString() throws {
         var sftp = Repository()
         sftp.kind = .sftp
-        sftp.sftpUser = "backup"
-        sftp.sftpHost = "nas.local"
-        sftp.sftpPort = "2222"
+        sftp.sftpHost = "backup@nas.local:2222"
         // The first slash ends the connection settings: an absolute path
         // keeps its own after it.
         sftp.sftpPath = "/volume1/restic"
@@ -761,26 +684,31 @@ struct RepositoryTests {
         // would end the path.
         sftp.sftpPath = "/volume1/Mac #1"
         #expect(sftp.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/Mac%20%231")
-        sftp.sftpUser = ""
+        sftp.sftpHost = "nas.local:2222"
         #expect(sftp.resticRepositoryString == "sftp://nas.local:2222//volume1/Mac%20%231")
 
         // A port typed after the host, the editor's only way to give one.
         var typed = Repository()
         typed.kind = .sftp
-        typed.sftpUser = "backup"
-        typed.sftpHost = "nas.local:2222"
+        typed.sftpHost = "backup@nas.local:2222"
         typed.sftpPath = "/volume1/restic"
+        #expect(typed.sftpUser == "backup")
         #expect(typed.sftpHostName == "nas.local")
+        #expect(typed.sftpPortText == "2222")
         #expect(typed.resticRepositoryString == "sftp://backup@nas.local:2222//volume1/restic")
-        typed.sftpHost = "nas.local:22"
+        typed.sftpHost = "backup@nas.local:22"
         #expect(typed.resticRepositoryString == "sftp:backup@nas.local:/volume1/restic")
+        // The user ends at the last @.
+        typed.sftpHost = "me@example.com@nas.local"
+        #expect(typed.sftpUser == "me@example.com")
+        #expect(typed.sftpHostName == "nas.local")
 
-        // A configuration saved before the field existed has none.
+        // A port kept in a field of its own is no port: the key is ignored.
         let old = try JSONDecoder().decode(
             Repository.self,
-            from: Data(#"{"kind":"sftp","name":"NAS","sftpHost":"nas.local","sftpPath":"/r"}"#.utf8)
+            from: Data(#"{"kind":"sftp","name":"NAS","sftpHost":"nas.local","sftpPort":"2222","sftpPath":"/r"}"#.utf8)
         )
-        #expect(old.sftpPort == "")
+        #expect(old.sftpPortText == "")
         #expect(old.resticRepositoryString == "sftp:nas.local:/r")
     }
 
@@ -809,13 +737,12 @@ struct RepositoryTests {
         s3.s3Endpoint = "s3.us-west-004.backblazeb2.com"
         s3.s3Bucket = "photos"
         #expect(s3.displayLocation == "photos on s3.us-west-004.backblazeb2.com")
-        s3.s3Prefix = "/mac/"
+        s3.s3Bucket = "photos/mac/"
         #expect(s3.displayLocation == "photos/mac on s3.us-west-004.backblazeb2.com")
 
         var sftp = Repository()
         sftp.kind = .sftp
-        sftp.sftpUser = "backup"
-        sftp.sftpHost = "nas.local:2222"
+        sftp.sftpHost = "backup@nas.local:2222"
         sftp.sftpPath = "/volume1/SwiftRestic Backups"
         #expect(sftp.displayLocation == "backup@nas.local:/volume1/SwiftRestic Backups")
 

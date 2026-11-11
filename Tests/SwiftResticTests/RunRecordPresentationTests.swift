@@ -207,7 +207,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: other, repositoryExists: true) == nil)
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true) == nil)
-        #expect(RunFix.editRepository(repository).title == "Edit Backup Location…")
+        #expect(RunFix.editRepository(repository).title == "Enter Password…")
         #expect(RunFix.addRepository.title == "Add Backup Location…")
         // The failure message beside the button already says the cause.
         #expect(RunFix.editRepository(repository).help == nil)
@@ -238,7 +238,7 @@ struct RunRecordPresentationTests {
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
-    @Test("a retention the repository refused offers the plan's editor on its Retention tab, a warning's as a failure's")
+    @Test("a retention the repository refused offers the plan page, a warning's as a failure's")
     func refusedRetentionFix() {
         let repository = UUID()
         let plan = UUID()
@@ -250,20 +250,19 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.retentionRefused = 1
         }
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .editPlanRetention(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .showPlan(plan))
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, planExists: false) == nil)
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false) == nil)
         // Apply Retention Now's own run, failed for it.
         refused.kind = .forget
         refused.outcome = .failed
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .editPlanRetention(plan))
+        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .showPlan(plan))
         // Any other warning still offers nothing.
         refused.retentionRefused = nil
         refused.kind = .backup
         refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == nil)
-        #expect(RunFix.editPlanRetention(plan).title == "Edit Plan…")
-        #expect(RunFix.editPlanRetention(plan).help == nil)
+        #expect(RunFix.showPlan(plan).title == "Show Plan")
     }
 
     @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")
@@ -321,8 +320,8 @@ struct RunRecordPresentationTests {
         // A check that found damage: its verdict, not a crash, is the news.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
-        #expect(MaintenanceRetry.check(repository).title == "Verify Again…")
-        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again")
+        #expect(MaintenanceRetry.check(repository).title == "Verify Again")
+        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again…")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
@@ -399,7 +398,7 @@ struct RunRecordPresentationTests {
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
             $0.hookMessages = ["Hook “notify” exited 1"]
-        }) == "1 failed hook")
+        }) == "1 failed script")
 
         #expect(detail(backup {
             $0.filesNew = 2
@@ -425,7 +424,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.exitCode = 3
             $0.hookMessages = ["Hook “notify” exited 1"]
-        }) == "Some source data couldn’t be read · 1 failed hook")
+        }) == "Some source data couldn’t be read · 1 failed script")
 
         // A reporting gap alone: nothing was unreadable, and the line itself
         // is the explanation.
@@ -590,7 +589,7 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("restic exit: 3"))
         #expect(lines.contains("Unreadable items (1):"))
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
-        #expect(lines.contains("Hooks: 1 failed"))
+        #expect(lines.contains("Scripts: 1 failed"))
         #expect(lines.contains("restic 0.19.1 compiled with go1.26.5 on darwin/arm64"))
         #expect(lines.last == "Copied from SwiftRestic 0.1.0 (1) on macOS 26.6.2 (Build 25G83)")
         // A hook's output stays on this Mac: counted, never quoted.

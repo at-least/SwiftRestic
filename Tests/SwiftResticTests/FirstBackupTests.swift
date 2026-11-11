@@ -498,24 +498,9 @@ struct LocateRepositoryTests {
         #expect(RunFix.locate(UUID()).title == "Locate…")
     }
 
-    @Test("a drive away says what comes next, truthfully for a Manually plan")
-    func driveAwayWords() {
-        let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticLocateWords-\(UUID().uuidString)")), secrets: .inMemory())
-        var repository = Repository()
-        repository.localPath = "/Volumes/Archive SSD/restic"
-        var plan = BackupPlan()
-        plan.path = "/a"
-        plan.repositoryID = repository.id
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [plan]
-        #expect(model.driveAwayOutcome(repository) == .failed(
-            "“Archive SSD” is not connected. Connect it and backups continue on their own.", fix: .locate(repository.id)
-        ))
-        model.configuration.plans[0].schedule.frequency = .manual
-        #expect(model.driveAwayOutcome(repository) == .failed(
-            "“Archive SSD” is not connected. Connect it to read its backups.", fix: .locate(repository.id)
-        ))
+    @Test("a disk not connected asks for the disk by its name")
+    func notConnectedWords() {
+        #expect(SnapshotListingOutcome.connectText(volume: "Archive SSD") == "Connect “Archive SSD” to see its backups.")
     }
 }
 

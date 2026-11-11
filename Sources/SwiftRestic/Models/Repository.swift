@@ -35,16 +35,15 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var localPath: String = ""
 
-    var sftpUser: String = ""
+    /// The Server field as typed: `nas.local`, `backup@nas.local` or
+    /// `backup@nas.local:2222` (`sftpHostParts`).
     var sftpHost: String = ""
-    /// The port an older build kept in a field of its own; a port is now
-    /// typed after the host (`sftpHostParts`).
-    var sftpPort: String = ""
     var sftpPath: String = ""
 
     var s3Endpoint: String = "s3.amazonaws.com"
+    /// The Bucket field as typed: `my-bucket`, or `my-bucket/mac` for a
+    /// folder in it.
     var s3Bucket: String = ""
-    var s3Prefix: String = ""
     var s3AccessKeyID: String = ""
 
     var restURL: String = ""
@@ -58,11 +57,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     /// Extra `KEY=value` pairs handed to the restic child process verbatim.
     var extraEnvironment: [String: String] = [:]
-
-    /// KiB/s, 0 for unlimited: `--limit-upload` on every restic command against
-    /// this repository. restic 0.19.1 holds a local disk to it too (measured:
-    /// at 1024 KiB/s an 8 MiB backup took 7.8 s against 0.8 s).
-    var uploadLimitKiBps: Int = 0
 
     var maintenance = MaintenancePolicy()
 
@@ -79,20 +73,16 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         kind = c.value(.kind, default: .local)
         createdAt = c.value(.createdAt, default: .now)
         localPath = c.value(.localPath, default: "")
-        sftpUser = c.value(.sftpUser, default: "")
         sftpHost = c.value(.sftpHost, default: "")
-        sftpPort = c.value(.sftpPort, default: "")
         sftpPath = c.value(.sftpPath, default: "")
         s3Endpoint = c.value(.s3Endpoint, default: "s3.amazonaws.com")
         s3Bucket = c.value(.s3Bucket, default: "")
-        s3Prefix = c.value(.s3Prefix, default: "")
         s3AccessKeyID = c.value(.s3AccessKeyID, default: "")
         restURL = c.value(.restURL, default: "")
         restUser = c.value(.restUser, default: "")
         rcloneRemote = c.value(.rcloneRemote, default: "")
         rclonePath = c.value(.rclonePath, default: "")
         extraEnvironment = c.value(.extraEnvironment, default: [:])
-        uploadLimitKiBps = c.value(.uploadLimitKiBps, default: 0)
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
         resticID = c.optional(.resticID)
     }
@@ -100,7 +90,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     init() {}
 
     /// ssh's `user@host`, or the host alone without a user.
-    var sftpUserHost: String {
+    private var sftpUserHost: String {
         sftpUser.isEmpty ? sftpHostName : "\(sftpUser)@\(sftpHostName)"
     }
 
@@ -124,8 +114,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return "sftp://\(user)\(sftpHostName):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
-            let suffix = s3Prefix.isEmpty ? "" : "/\(Self.trimSlashes(s3Prefix))"
-            return "s3:\(endpoint)/\(s3Bucket)\(suffix)"
+            return "s3:\(endpoint)/\(Self.trimSlashes(s3Bucket))"
         case .rest:
             return restURL.hasPrefix("rest:") ? restURL : "rest:\(restURL)"
         case .rclone:
@@ -143,24 +132,35 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         value.addingPercentEncoding(withAllowedCharacters: allowed)!
     }
 
-    /// The Host field split at its first colon: `nas.local:2222`. restic's
-    /// `sftp:` form cuts the host there too, so a port left in the host
-    /// would start the path and ssh would dial 22.
-    private var sftpHostParts: (name: String, port: String?) {
-        let parts = sftpHost.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-        return parts.count == 2 ? (String(parts[0]), String(parts[1])) : (sftpHost, nil)
+    /// The Server field split into ssh's user, host and port: the user ends
+    /// at the last `@`, the host at the next colon. restic's `sftp:` form
+    /// cuts the host at a colon too, so a port left in the host would start
+    /// the path and ssh would dial 22.
+    private var sftpHostParts: (user: String, name: String, port: String) {
+        var user = ""
+        var rest = sftpHost
+        if let at = sftpHost.lastIndex(of: "@") {
+            user = String(sftpHost[..<at])
+            rest = String(sftpHost[sftpHost.index(after: at)...])
+        }
+        let parts = rest.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.count == 2 ? (user, String(parts[0]), String(parts[1])) : (user, rest, "")
     }
+
+    /// ssh's user, empty for ssh's own choice (~/.ssh/config, else the
+    /// Mac's user name).
+    var sftpUser: String { sftpHostParts.user }
 
     var sftpHostName: String { sftpHostParts.name }
 
-    /// The port typed after the host, else the one an older build stored;
-    /// empty for none. The editor refuses one that is not a port.
-    var sftpPortText: String { sftpHostParts.port ?? sftpPort }
+    /// The port typed after the host; empty for none. The editor refuses
+    /// one that is not a port.
+    var sftpPortText: String { sftpHostParts.port }
 
     /// The SFTP port when it is not ssh's own: nil for none and for 22, so
     /// a repository without one keeps the `sftp:` form, which reads
     /// ~/.ssh/config's Port.
-    var sftpCustomPort: Int? {
+    private var sftpCustomPort: Int? {
         guard let port = Int(sftpPortText), port != 22 else { return nil }
         return port
     }
@@ -229,8 +229,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             return "\(sftpUserHost):\(sftpPath)"
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
-            let prefix = s3Prefix.isEmpty ? "" : "/\(Self.trimSlashes(s3Prefix))"
-            return "\(s3Bucket)\(prefix) on \(endpoint)"
+            return "\(Self.trimSlashes(s3Bucket)) on \(endpoint)"
         case .rest:
             return Self.splittingRESTCredentials(restServerURL)?.url ?? restServerURL
         case .rclone:
@@ -247,7 +246,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .sftp: return sftpHostName
         case .rest:
             return URL(string: restServerURL)?.host ?? restServerURL
-        case .s3: return s3Bucket
+        case .s3: return String(Self.trimSlashes(s3Bucket).prefix { $0 != "/" })
         case .rclone: return rcloneRemoteName
         }
     }
