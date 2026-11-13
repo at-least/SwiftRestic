@@ -87,6 +87,42 @@ struct ServerAwayTests {
         await model.shutdown()
     }
 
+    @Test("a network change reads a server location again whose password was refused")
+    func networkChangeRereadsARefusedPassword() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticRefusedReread-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let root = base.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = try StubRestic.install(in: root)
+
+        var repository = Repository()
+        repository.kind = .rest
+        // Never dialled: the probe below answers for it.
+        repository.restURL = "http://127.0.0.1:9/app"
+        repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default"]
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        let store = ConfigStore(directory: root.appendingPathComponent("config"))
+        try await store.save(configuration)
+
+        let model = AppModel(
+            store: store,
+            secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
+            serverProbe: ServerProbe { _, _ in .reachable },
+            resticExecutable: stub.url
+        )
+        await model.bootstrap()
+        #expect(await eventually(within: 10) { model.snapshotListingOutcomes[repository.id] == .loaded })
+
+        model.snapshotListingOutcomes[repository.id] = .passwordRefused(repositoryName: "NAS")
+        await model.networkPathChanged()
+        #expect(
+            await eventually(within: 10) { model.snapshotListingOutcomes[repository.id] == .loaded },
+            "a network change left the refused location unread"
+        )
+        await model.shutdown()
+    }
+
     @Test("a location whose listing hangs at launch delays no other location's due plan, and its own plan waits for its listing")
     func hungListingHoldsOnlyItsOwnPlan() async throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticLaunchHang-\(UUID().uuidString)")

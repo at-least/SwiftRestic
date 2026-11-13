@@ -161,6 +161,7 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Removing old backups…")
+        #expect(MenuBarStatus.progressText(activity: activity(phase: .runningHooks), progress: progress(fraction: 1)) == "Running scripts…")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Stopping…")
     }
 

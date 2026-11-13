@@ -786,6 +786,9 @@ struct TolerantDecodingTests {
             from: Data(#"{"retention":{"isEnabled":true,"keepLast":1,"keepDaily":30,"keepYearly":500}}"#.utf8)
         )
         #expect(plan.retention == RetentionPolicy())
+        // Keep rules saved with no switch were in force, so they read as on.
+        let unswitched = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"retention":{"keepDaily":30}}"#.utf8))
+        #expect(unswitched.retention == RetentionPolicy())
         let kept = try JSONDecoder().decode(
             BackupPlan.self,
             from: Data(#"{"retention":{"isEnabled":false,"keepDaily":365}}"#.utf8)

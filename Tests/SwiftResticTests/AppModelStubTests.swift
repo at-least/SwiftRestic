@@ -2144,6 +2144,7 @@ struct AppModelStubTests {
         #expect(outcome == .passwordRefused(repositoryName: "Stub Repo"))
         #expect(outcome.failureMessage == "This password doesn’t open “Stub Repo”.")
         #expect(outcome.failureFix(repositoryID: harness.repository.id) == .editRepository(harness.repository.id), "trying again can't help")
+        #expect(harness.model.resolvedContexts[harness.repository.id] == nil, "the refused password stays cached instead of being read from the Keychain again")
 
         await harness.model.shutdown()
     }

@@ -542,6 +542,8 @@ struct RepositoryLabelTests {
         sftp.sftpHost = "nas.local"
         sftp.sftpPath = "/volume1/restic"
         #expect(sftp.label(among: []) == "nas.local")
+        sftp.sftpHost = "nas.local:2222"
+        #expect(sftp.label(among: []) == "nas.local", "a port typed after the host is not part of its name")
         var rest = Repository()
         rest.kind = .rest
         rest.restURL = "rest:https://backup.example.com:8000/me/"

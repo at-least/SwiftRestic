@@ -9,6 +9,8 @@ struct NotificationTests {
         #expect(Kind(address: "https://hooks.slack.com/services/T/B/x") == .slack)
         #expect(Kind(address: "  https://discord.com/api/webhooks/1/x ") == .discord)
         #expect(Kind(address: "https://discordapp.com/api/webhooks/1/x") == .discord)
+        // A host is the same in any case; Foundation keeps it as typed.
+        #expect(Kind(address: "https://Hooks.Slack.com/services/T/B/x") == .slack)
         #expect(Kind(address: "https://hc-ping.com/6f1c2a3b-0000-4000-8000-000000000001") == .healthchecks)
         #expect(Kind(address: "https://hc-ping.com/ping-key/backups") == .healthchecks)
         // Self-hosted: PING_ENDPOINT defaults to the site root's /ping/,

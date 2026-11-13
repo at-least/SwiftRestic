@@ -859,39 +859,37 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a saved password is refused once its listing says exit 12, and not for another failure")
+    @Test("a saved password is refused once its listing says exit 12, whatever the latest run said, and not for another failure")
     @MainActor
     func passwordRefused() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticRefused-\(UUID().uuidString)")
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         let id = UUID()
-        #expect(!model.passwordRefused(repositoryID: id))
+        var refusedRun = RunRecord(kind: .backup, planName: "Docs")
+        refusedRun.repositoryID = id
+        refusedRun.exitCode = ResticError.wrongPasswordCode
+        model.configuration.runs = [refusedRun]
+        model.snapshotListingOutcomes[id] = .loaded
+        #expect(!model.passwordRefused(repositoryID: id), "a listing that reads fine is no refusal, though a run was refused before")
 
         model.snapshotListingOutcomes[id] = .passwordRefused(repositoryName: "NAS")
         #expect(model.passwordRefused(repositoryID: id))
         model.snapshotListingOutcomes[id] = .failed("Away.", fix: .locate(id))
-        #expect(!model.passwordRefused(repositoryID: id))
+        #expect(!model.passwordRefused(repositoryID: id), "another failed read is no refusal")
     }
 
-    @Test("a listing that reads fine, or a password never saved, is no refusal, whatever the latest run said")
-    @MainActor
-    func passwordRefusedFollowsTheListing() {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticRefusedListing-\(UUID().uuidString)")
-        let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
+    @Test("a failed read offers the fix it was given")
+    func failedReadKeepsItsFix() {
         let id = UUID()
-        var refused = RunRecord(kind: .backup, planName: "Docs")
-        refused.repositoryID = id
-        refused.exitCode = ResticError.wrongPasswordCode
-        model.configuration.runs = [refused]
+        let outcome = SnapshotListingOutcome.failed("“Archive” isn’t where it was saved.", fix: .locate(id))
+        #expect(outcome.failureFix(repositoryID: id) == .locate(id), "a failed read lost its Locate… fix")
+    }
 
-        model.snapshotListingOutcomes[id] = .loaded
-        #expect(!model.passwordRefused(repositoryID: id), "the right password entered after the run")
-        model.snapshotListingOutcomes[id] = .failed(
-            "No password is saved for “NAS”. Add it to read its backups.", fix: .editRepository(id)
-        )
-        #expect(!model.passwordRefused(repositoryID: id), "a missing password is not a refused one")
-        model.snapshotListingOutcomes[id] = .passwordRefused(repositoryName: "NAS")
-        #expect(model.passwordRefused(repositoryID: id))
+    @Test("a disk not connected is no failed read: it has no failure words and no fix")
+    func notConnectedIsNoFailure() {
+        let outcome = SnapshotListingOutcome.notConnected(volume: "Archive SSD")
+        #expect(outcome.failureMessage == nil, "a disk not connected read as a failed read")
+        #expect(outcome.failureFix(repositoryID: UUID()) == nil)
     }
 
     @Test("the launch sweep empties its own configuration's staging folder of drag and preview copies, and nothing else")
@@ -1232,6 +1230,16 @@ struct BannerQueueTests {
         #expect(model.banners.map(\.title) == ["same"])
         model.post(Banner(title: "same", message: "two", level: .error))
         #expect(model.banners.count == 2)
+    }
+
+    @Test("a warning stays until dismissed, as an error does, so the same one is not posted twice")
+    func warningStaysLikeAnError() {
+        let model = makeModel("SwiftResticBanners").model
+        let warning = Banner(title: "Couldn’t send a notification", message: "Offline.", level: .warning)
+        #expect(warning.staysUntilDismissed, "a warning would expire unread")
+        model.post(warning)
+        model.post(Banner(title: "Couldn’t send a notification", message: "Offline.", level: .warning))
+        #expect(model.banners.map(\.title) == ["Couldn’t send a notification"], "the same warning stacked a second copy")
     }
 }
 

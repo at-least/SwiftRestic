@@ -180,6 +180,7 @@ struct EditorRequirementTests {
         }
         draft.sftpHost = ":2222"
         #expect(requirement() == "Enter the server and path to save it.")
+        #expect(!draft.isConfigurationComplete, "a port alone names no server")
     }
 
     @Test("a new location at a folder that already holds backups asks for their password once, with no confirmation")

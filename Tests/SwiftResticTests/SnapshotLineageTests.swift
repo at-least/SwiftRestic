@@ -305,8 +305,8 @@ struct SnapshotLineageTests {
         let baseline = try snapshot("73d9b51de71d34eb", time: "2026-09-24T02:00:00Z", paths: ["/Data/Documents"])
         let record = try snapshot("abf72899aaaaaaaa", time: "2026-09-26T02:00:00Z", paths: ["/Data/Documents"])
         let since = Format.timestamp(baseline.time)
-        func heading(_ comparison: ChangeComparison?) -> RestoreRecordHeading {
-            RestoreRecordHeading(record: record, label: nil, comparison: comparison)
+        func heading(_ comparison: ChangeComparison?, label: SnapshotLineage.Label? = nil) -> RestoreRecordHeading {
+            RestoreRecordHeading(record: record, label: label, comparison: comparison)
         }
 
         #expect(heading(nil).caption == "")
@@ -332,6 +332,8 @@ struct SnapshotLineageTests {
         #expect(heading(nil).detail == "/Data/Documents\nBacked up \(made)")
         #expect(heading(.compared(baseline: baseline, changeCount: 1)).detail == "/Data/Documents\nBacked up \(made)")
         #expect(!failed.detail.contains("abf72899") && !failed.detail.contains("restic"))
+        let label = SnapshotLineage.Label(title: "Documents", qualifier: nil, caption: nil, detail: "/Data/Documents — from mac")
+        #expect(heading(nil, label: label).detail == "/Data/Documents — from mac\nBacked up \(made)")
     }
 
     @Test("the Change column marks only what this backup holds, so a folder's tally counts only rows it has")

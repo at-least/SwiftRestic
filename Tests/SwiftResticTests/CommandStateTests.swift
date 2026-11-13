@@ -186,6 +186,7 @@ struct CommandStateTests {
         model.runBackup(planID: documents.id)
         model.runBackup(planID: documents.id)
         #expect(model.banners.first?.title == "“Documents” waits")
+        #expect(model.banners.first?.level == .notice, "a wait is news that goes by itself, not a warning")
         #expect(!model.isRunning(planID: documents.id))
         #expect(model.backupQueue[repository.id]?.map(\.planID) == [documents.id])
     }
@@ -201,6 +202,7 @@ struct CommandStateTests {
 
         model.runMaintenance(repositoryID: repository.id, task: .check)
         #expect(model.banners.map(\.title) == ["“Home NAS” is busy"])
+        #expect(model.banners.first?.level == .notice, "a busy location is news that goes by itself, not a warning")
         #expect(model.maintenance[repository.id] == nil, "a check started beside the running backup")
     }
 
@@ -267,6 +269,7 @@ struct CommandStateTests {
 
         model.runBackup(planID: draft.id)
         #expect(model.banners.map(\.title) == ["Plan is incomplete"])
+        #expect(model.banners.first?.level == .error, "an incomplete plan's Back Up Now did not run, and the banner must stay until read")
         #expect(model.activity.isEmpty)
     }
 
