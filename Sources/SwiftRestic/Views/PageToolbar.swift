@@ -34,8 +34,8 @@ extension View {
     /// toolbar for many common uses"): the plan's files across every backup.
     /// Typed on Overview, the page turns to Backups, where the hits list. ⌘F
     /// focuses it (`AppRouter.searchFocus`).
-    func pageSearch(page: SidebarItem, roots: FileNode?, prompt: String) -> some View {
-        modifier(PageSearch(page: page, roots: roots, prompt: prompt))
+    func pageSearch(page: SidebarItem, roots: FileNode?) -> some View {
+        modifier(PageSearch(page: page, roots: roots))
     }
 
     /// The toolbar's field on a page other than a plan's: its first keystroke
@@ -68,12 +68,11 @@ private struct PageSearch: ViewModifier {
     /// The chain the tab lists; nil for a plan with no repository, which has
     /// nothing to search.
     let roots: FileNode?
-    let prompt: String
     @FocusState private var isFocused: Bool
 
     func body(content: Content) -> some View {
         content
-            .searchable(text: text, placement: .toolbar, prompt: Text(verbatim: prompt))
+            .searchable(text: text, placement: .toolbar, prompt: Text(verbatim: "Search this plan’s backups"))
             .searchFocused($isFocused)
             .onChange(of: router.searchFocus, initial: true) { _, asked in
                 guard asked == page else { return }

@@ -373,8 +373,7 @@ private enum Indent {
 /// An Other backups group's second line. The count and the kind always read
 /// whole; the qualifiers between them are the piece that yields — all of
 /// them when the line fits, none of them when it does not, never a
-/// mid-word fragment (the row's tooltip keeps the folders and the Mac), as
-/// FilesTreeRow yields its tag to the name.
+/// mid-word fragment (the row's tooltip keeps the folders and the Mac).
 private struct GroupCaptionLine: View {
     let caption: SnapshotLineage.Label.Caption
 

@@ -32,8 +32,7 @@ struct PlanDetailView: View {
         .onChange(of: planID) { showsRetentionPreview = false }
         .pageSearch(
             page: .plan(planID),
-            roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) },
-            prompt: "Search this plan’s backups"
+            roots: plan?.repositoryID.map { FileNode.roots(repositoryID: $0, chainKey: ResticService.planTag(planID)) }
         )
     }
 

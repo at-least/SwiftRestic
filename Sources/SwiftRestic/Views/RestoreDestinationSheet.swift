@@ -16,7 +16,7 @@ struct RestoreDestinationRequest: Identifiable {
     /// A line under the headline about how the selection became the
     /// subject: selected items inside a selected folder, which come with it
     /// (`RestoreBatch.coveredNote`).
-    var selectionNote: String?
+    fileprivate var selectionNote: String?
     let backupTime: Date?
     /// How many backups the items come from: Search All Backups restores each row
     /// from the backup it was found in.
@@ -62,7 +62,7 @@ struct RestoreDestinationRequest: Identifiable {
     }
 
     /// The folder panel's message: the item and the backup it comes from.
-    var panelMessage: String {
+    fileprivate var panelMessage: String {
         let what = switch subject {
         case let .item(name, _, _): "Restore “\(name)”"
         case let .items(items): "Restore \(Format.plural(items.count, "item"))"
@@ -78,7 +78,7 @@ extension RestoreDestinationRequest {
     /// Names that would land on each other in the one folder chosen, said;
     /// true when there are none and the restore may go on.
     @MainActor
-    func namesFit(into directories: [URL]) -> Bool {
+    fileprivate func namesFit(into directories: [URL]) -> Bool {
         let colliding = RestoreDestinationRules.collidingNames(subject, into: directories)
         guard !colliding.isEmpty else { return true }
         let alert = NSAlert()
@@ -94,7 +94,7 @@ extension RestoreDestinationRequest {
     /// landings, looked at off the main actor, then `overwritePolicy`. Nil
     /// is Cancel, the asker's included.
     @MainActor
-    func overwritePolicy(into directories: [URL]) async -> RestoreOverwritePolicy? {
+    fileprivate func overwritePolicy(into directories: [URL]) async -> RestoreOverwritePolicy? {
         let landings = RestoreDestinationRules.landings(for: subject, into: directories)
         let existing = await Task.detached(priority: .userInitiated) {
             RestoreDestinationRules.replaceConfirmationTargets(landings: landings, exists: RestoreDestinationRules.itemExists(at:))
@@ -108,7 +108,7 @@ extension RestoreDestinationRequest {
     /// appears between the look and restic's run — else the question's
     /// answer; nil is Cancel.
     @MainActor
-    func overwritePolicy(existing: [URL]) -> RestoreOverwritePolicy? {
+    fileprivate func overwritePolicy(existing: [URL]) -> RestoreOverwritePolicy? {
         existing.isEmpty ? .keepExisting : askAboutExisting(existing)
     }
 
@@ -262,7 +262,7 @@ private struct RestoreFlow: ViewModifier {
 /// already there is asked about only when Restore finds something in the
 /// way, so Return, Return (the pane's default action, then this sheet's)
 /// never replaces anything: the question's Replace has no Return.
-struct RestoreDestinationSheet: View {
+private struct RestoreDestinationSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 

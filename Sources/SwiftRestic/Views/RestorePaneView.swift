@@ -367,7 +367,10 @@ struct RestorePaneView: View {
         Button {
             expand(path: row.node.path)
         } label: {
-            FoldChevron(isExpanded: row.expanded)
+            Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
         }
@@ -1199,16 +1202,4 @@ private struct PresenceKey: Equatable {
     let rows: [String]
     let loaded: String?
     let diskGeneration: UInt64
-}
-
-/// The row around it is the button.
-private struct FoldChevron: View {
-    let isExpanded: Bool
-
-    var body: some View {
-        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-    }
 }
