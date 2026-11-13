@@ -214,6 +214,25 @@ struct RunRecordPresentationTests {
         #expect(RunFix.addRepository.help == nil)
     }
 
+    @Test("a backup whose folder is gone offers Choose New Location… for its plan, and nothing once the plan is gone")
+    func goneFolderFix() {
+        let plan = UUID()
+        let gone = backup {
+            $0.repositoryID = UUID()
+            $0.planID = plan
+            $0.outcome = .failed
+            $0.missingSources = ["/Users/me/Documents"]
+        }
+        #expect(RunRecordPresentation.fix(for: gone, repositoryExists: true) == .chooseNewLocation(planID: plan))
+        #expect(
+            RunRecordPresentation.fix(for: gone, repositoryExists: true, planExists: false) == nil,
+            "a removed plan has no folder left to move"
+        )
+        // The failure message tells the user to press it by this name.
+        #expect(RunFix.chooseNewLocation(planID: plan).title == "Choose New Location…")
+        #expect(RunFix.chooseNewLocation(planID: plan).help == nil)
+    }
+
     @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")
     func refusedShareFixes() {
         let repository = UUID()
@@ -235,6 +254,10 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: "NAS")
             == .editRepositoryShare(repository))
         #expect(RunFix.editRepositoryShare(repository).title == "Edit Location…")
+        #expect(
+            RunFix.editRepositoryShare(repository).help == "The share’s saved password is in Edit Location",
+            "Edit Location…'s tooltip says the share's password is in the location editor"
+        )
         #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
     }
 
@@ -463,6 +486,11 @@ struct RunRecordPresentationTests {
         var failedCheck = RunRecord(kind: .check, planName: "Home NAS")
         failedCheck.outcome = .completedWithErrors
         #expect(detail(failedCheck) == "Completed with warnings")
+
+        // A cleanup's is what it freed, as a retention run's is what it removed.
+        var cleanup = RunRecord(kind: .prune, planName: "Home NAS")
+        cleanup.detailText = "Freed 3 MB."
+        #expect(detail(cleanup) == "Freed 3 MB.", "a cleanup's Detail names what it freed")
     }
 
     @Test("an unreadable item reads as its name, where it is and why — from the path the run stored, not restic's words taken apart")
@@ -598,6 +626,19 @@ struct RunRecordPresentationTests {
         let lines = text.components(separatedBy: "\n")
         #expect(lines.first == "Removing old backups of “Documents” — Succeeded")
         #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
+    }
+
+    @Test("Copy Details for a cleanup says what it freed")
+    func copyDetailsForACleanup() {
+        var record = RunRecord(kind: .prune, planName: "Home NAS")
+        record.outcome = .succeeded
+        record.detailText = "Freed 3 MB."
+        let lines = RunRecordPresentation.detailsText(
+            for: record,
+            repositoryName: "Home NAS",
+            versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
+        ).components(separatedBy: "\n")
+        #expect(lines.contains("Result: Freed 3 MB."), "details were \(lines)")
     }
 
     @Test("Copy Details for a restore names the backup, the item and where it landed")

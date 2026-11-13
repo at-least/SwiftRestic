@@ -969,10 +969,19 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log.contains("refresh-scheduled"))
     }
 
+    @Test("a prune's freed amount reads restic's binary units, to the byte")
+    func pruneFreedBytesUnits() {
+        let freed = { (amount: String) in ResticService.pruneFreedBytes(in: "removed 2 of 3 packs\ntotal prune:          3 blobs / \(amount)\nremaining:  1 blobs / 4 KiB") }
+        #expect(freed("0 B") == 0)
+        #expect(freed("512 B") == 512)
+        #expect(freed("4.144 KiB") == 4243, "KiB is 1024 bytes")
+        #expect(freed("2.864 MiB") == 3_003_122, "MiB is 1024² bytes, rounded to the nearest byte")
+        #expect(freed("1.500 GiB") == 1_610_612_736, "GiB is 1024³ bytes")
+        #expect(freed("2.000 TiB") == 2_199_023_255_552, "TiB is 1024⁴ bytes")
+    }
+
     @Test("a prune whose output names no amount says nothing about it")
     func pruneWithoutAmount() async throws {
-        #expect(ResticService.pruneFreedBytes(in: "total prune:          0 blobs / 0 B") == 0)
-        #expect(ResticService.pruneFreedBytes(in: "total prune:          3 blobs / 1.500 GiB") == 1_610_612_736)
         #expect(ResticService.pruneFreedBytes(in: "removed 2 of 3 packs") == nil)
         #expect(ResticService.pruneFreedBytes(in: "total prune:          3 blobs / 1.5 parsecs") == nil)
         let sink = RecordingSink()
