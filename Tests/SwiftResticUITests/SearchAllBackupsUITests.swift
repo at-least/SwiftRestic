@@ -20,13 +20,13 @@ final class SearchAllBackupsUITests: XCTestCase {
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.typeText("hello")
-        let hit = app.tables[AccessibilityID.FindFiles.results].staticTexts["hello.txt"].firstMatch
+        let hit = app.outlines[AccessibilityID.FindFiles.results].staticTexts["hello.txt"].firstMatch
         XCTAssertTrue(hit.waitForExistence(timeout: 30))
 
         field.typeKey("a", modifierFlags: [.command])
         field.typeText("ello")
         XCTAssertTrue(app.staticTexts["No matches"].waitForExistence(timeout: 30))
-        XCTAssertFalse(app.tables[AccessibilityID.FindFiles.results].exists)
+        XCTAssertFalse(app.outlines[AccessibilityID.FindFiles.results].exists)
         attachScreenshot()
     }
 }

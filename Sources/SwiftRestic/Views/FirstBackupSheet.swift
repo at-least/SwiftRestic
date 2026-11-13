@@ -240,8 +240,12 @@ struct FirstBackupSheet: View {
     /// A question still open shows as itself (None, an empty Required
     /// field) and the greyed Back Up as its tooltip; the line beside the
     /// button is for what a glance can't see.
+    /// A folder inside the source outranks the empty password: that reason
+    /// is not visible in any field.
     private var isAwaitingAnswer: Bool {
-        source.isEmpty || destination == nil || (chosenFolder != nil && password.isEmpty)
+        if source.isEmpty || destination == nil { return true }
+        guard let chosenFolder, password.isEmpty else { return false }
+        return EditorRequirements.backupsInside(source: source, folder: chosenFolder) == nil
     }
 
     private func readDisks() {
