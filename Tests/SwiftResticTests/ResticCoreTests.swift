@@ -5,7 +5,7 @@ import Testing
 struct ResticErrorTests {
     /// The exit codes restic documents, per `man restic` — the mapping the error
     /// banners are built on.
-    @Test("restic's \"Fatal:\" stays out of what a person reads; the reason after it stays, and Copy Details keeps the line whole")
+    @Test("restic's \"Fatal:\" stays out of what a person reads; the reason after it stays, and the copied details keep the line whole")
     func fatalPrefixOffScreen() {
         let line = "Fatal: config cannot be loaded: open /Volumes/A/config: permission denied"
         let error = ResticError.commandFailed(exitCode: 1, message: line)
@@ -25,8 +25,8 @@ struct ResticErrorTests {
 
     @Test("a known code prefixes restic's message; an unknown code gets the raw text")
     func commandFailedDescriptions() {
-        // Retry can never succeed here, so the failure carries its fix, and
-        // restic's own words go to Copy Details.
+        // Retry can never succeed here, so restic's own words go to the
+        // copied details.
         let wrongPassword = ResticError.commandFailed(
             exitCode: 12,
             message: "Fatal: wrong password"
@@ -34,14 +34,6 @@ struct ResticErrorTests {
         #expect(wrongPassword == "The password doesn’t open this backup location.")
         #expect(ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password").resticDetail == "Fatal: wrong password")
         #expect(ResticError.commandFailed(exitCode: 12, message: "").resticDetail == nil)
-        // A run knows its location: the refused password names it, and a
-        // disk's missing backups ask after the disk.
-        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 12, message: ""), location: ("NAS", .sftp))
-            == "The password doesn’t open “NAS”.")
-        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 10, message: ""), location: ("Backup", .local))
-            == "Backups not found. Is the disk connected? If it moved, locate it.")
-        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 10, message: ""), location: ("NAS", .sftp))
-            == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
 
         // A missing repository and a lock carry their fix the same way: the
         // banner and the notification repeat this message.
@@ -81,6 +73,19 @@ struct ResticErrorTests {
             ResticError.commandFailed(exitCode: 99, message: "")
                 .errorDescription == "It stopped unexpectedly. Show Log has the details."
         )
+    }
+
+    @Test("a run's failure names its location: a refused password names it, and a disk's missing backups ask after the disk")
+    func wordsForALocation() {
+        func words(_ code: Int32, _ location: (name: String, kind: Repository.Kind)?) -> String {
+            ResticError.words(for: ResticError.commandFailed(exitCode: code, message: ""), location: location)
+        }
+        #expect(words(12, ("NAS", .sftp)) == "The password doesn’t open “NAS”.", "a refused password should name the location")
+        #expect(words(10, ("Backup", .local)) == "Backups not found. Is the disk connected? If it moved, locate it.",
+                "a disk's missing backups should ask after the disk")
+        #expect(words(10, ("NAS", .sftp))
+            == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.",
+            "a server's missing backups are not a disk to connect")
     }
 
     @Test("an SFTP host-key refusal names its fix, from the line ssh printed beside restic's fatal one")
@@ -203,6 +208,14 @@ struct ResticBinaryTests {
         for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
             #expect(path.contains(directory), "\(directory) missing from \(path)")
         }
+    }
+
+    @Test("the PATH the app inherited leads restic's, so a person's own ssh wins")
+    func inheritedPathLeads() throws {
+        let inherited = try #require(ProcessInfo.processInfo.environment["PATH"]).split(separator: ":").map(String.init)
+        try #require(!inherited.isEmpty, "the premise: the test runner has a PATH")
+        let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
+        #expect(Array(path.prefix(inherited.count)) == inherited, "restic's PATH \(path) does not start with the inherited \(inherited)")
     }
 
     @Test("the app runs restic from where the build phase puts it")
