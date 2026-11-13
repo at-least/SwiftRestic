@@ -584,6 +584,15 @@ struct OverviewMetricsTests {
             == "Can’t read backups — Repository /nas is not reachable")
     }
 
+    @Test("an unreadable listing's line ends without a period, a one-sentence message as a longer one")
+    func listingFailureDropsTheFinalPeriod() {
+        #expect(
+            OverviewMetrics.listingFailureText("This password doesn’t open “NAS”.")
+                == "Can’t read backups — This password doesn’t open “NAS”",
+            "a one-sentence failure keeps its period where a longer one and the not-connected row drop it"
+        )
+    }
+
     @Test("the Status line waits for a succeeded listing")
     func protectionLineWaitsForTheListing() {
         let rows = [protectionRow("Fine", isKnown: true, isUpToDate: true, lastBackupAt: utcDate("2026-09-05 10:00:00"))]
