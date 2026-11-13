@@ -117,9 +117,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// parent is the newest of the same host whose paths cover its own, and
     /// retention groups by `host,paths`; restic 0.19.1), so another path is
     /// another plan, and a list of folders that lost one for a run would
-    /// split its history and retention. Older builds saved a list
-    /// (`sources`), split into one plan per entry at load
-    /// (`AppConfiguration`).
+    /// split its history and retention.
     var path: String = ""
 
     var resolvedPath: String { ResticService.expandTilde(path) }
@@ -131,7 +129,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
-    var hooks: [BackupHook] = []
     var lastRunAt: Date?
     var lastSuccessAt: Date?
     /// The last backup the quiet-plan alert last named this plan for
@@ -152,14 +149,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, repositoryID, path, excludePatterns, tags, schedule, retention
-        case hooks, lastRunAt, lastSuccessAt, staleAlertedFor
+        case lastRunAt, lastSuccessAt, staleAlertedFor
         case skipsDeveloperFiles, skipsMachines, announcesFirstBackup
     }
-
-    /// Read, never written. `isEnabled`: a plan an older build switched off
-    /// stays stopped. `skipDeveloperGroups`: older builds ticked each language
-    /// on its own; any group turns on the switch that now holds it.
-    private enum LegacyKeys: String, CodingKey { case isEnabled, skipDeveloperGroups }
 
     init() {}
 
@@ -171,22 +163,14 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         tags = c.value(.tags, default: [])
         schedule = c.value(.schedule, default: Schedule())
         retention = c.value(.retention, default: RetentionPolicy())
-        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
-        if !legacy.value(.isEnabled, default: true) {
-            schedule.frequency = .manual
-        }
-        hooks = c.value(.hooks, default: [StoredHook]()).compactMap(\.hook)
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         announcesFirstBackup = c.value(.announcesFirstBackup, default: false)
         // A plan saved without either key asked for neither, so its backups
         // do not change under a switch it never turned on.
-        let groups = legacy.value(.skipDeveloperGroups, default: [String]())
-        skipsDeveloperFiles = c.value(.skipsDeveloperFiles, default: !groups.isEmpty)
-        skipsMachines = c.value(.skipsMachines, default: groups.contains {
-            ExcludeCategory(rawValue: $0).map(ExcludeCategory.machineGroups.contains) ?? false
-        })
+        skipsDeveloperFiles = c.value(.skipsDeveloperFiles, default: false)
+        skipsMachines = c.value(.skipsMachines, default: false)
         // A duplicate here means a hand-edited config, and duplicates would
         // give the list's rows colliding identities. First occurrence wins.
         // Older builds kept the rules the app now passes itself among these.

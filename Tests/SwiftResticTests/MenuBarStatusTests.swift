@@ -161,7 +161,6 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 0.418)) == "42%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .backingUp), progress: progress(fraction: 1)) == "100%")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .applyingRetention), progress: progress(fraction: 1)) == "Removing old backups…")
-        #expect(MenuBarStatus.progressText(activity: activity(phase: .runningHooks), progress: progress(fraction: 1)) == "Running scripts…")
         #expect(MenuBarStatus.progressText(activity: activity(phase: .cancelling), progress: nil) == "Stopping…")
     }
 
@@ -886,9 +885,9 @@ struct MenuBarStatusTests {
         #expect(running[0] == MenuBarStatus.PlanRow(planID: nightly.id, title: "Stop “Nightly” Backup", action: .stop, isEnabled: true))
         #expect(running[1].title == "Back Up “Photos” Now")
         #expect(running[1].isEnabled)
-        // A stop is a stop whatever the run is doing — a hook, retention.
-        let hooks = MenuBarStatus.planRows(plans: [nightly], activity: [nightly.id: activity(phase: .runningHooks)], isResticDamaged: false)
-        #expect(hooks.first?.action == .stop)
+        // A stop is a stop whatever the run is doing — retention too.
+        let retention = MenuBarStatus.planRows(plans: [nightly], activity: [nightly.id: activity(phase: .applyingRetention)], isResticDamaged: false)
+        #expect(retention.first?.action == .stop)
 
         let stopping = MenuBarStatus.planRows(
             plans: [nightly],

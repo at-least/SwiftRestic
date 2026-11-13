@@ -12,8 +12,7 @@ import Foundation
 /// snapshot refresh or the index walks, which run restic too but are not
 /// part of the run. Any `Task {}` started inside a bound scope inherits the
 /// binding and could append after the run has ended; `Task.detached` does
-/// not. `HookRunner` shields itself with `withValue(nil)`, so a
-/// hook's command and output — which can carry secrets — never land here.
+/// not.
 ///
 /// Memory is capped rather than streamed to disk: the first `headByteLimit`
 /// bytes of text are kept, then only the last `tailEntryLimit` entries, and
@@ -35,7 +34,7 @@ final class RunTranscript: @unchecked Sendable {
             case command
             case output(Stream)
             case exit(Int32)
-            /// An app-authored line: a hook's verdict, retention's result, a
+            /// An app-authored line: retention's result, a
             /// stop that ended the child before it could exit.
             case note
         }

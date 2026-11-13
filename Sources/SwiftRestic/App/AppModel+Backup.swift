@@ -217,10 +217,6 @@ extension AppModel: BackupRunEngine.Sink {
         await broadcast(record: record, plan: plan)
     }
 
-    func makeHookRunner() -> HookRunner {
-        HookRunner(runner: runner)
-    }
-
     /// A Back Up Now that was skipped, answered in the window: it ends in
     /// milliseconds, the strip's flash saying nothing, and no surface but
     /// Activity records a skip. How every other run went is the sidebar's

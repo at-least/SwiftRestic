@@ -118,7 +118,6 @@ struct AdoptTests {
         // No switch's rule was recorded: both switches read off.
         #expect(!draft.skipsDeveloperFiles && !draft.skipsMachines)
         #expect(draft.tags == ["travel"])
-        #expect(draft.hooks.isEmpty)
         // The app has never run this plan; its stamps say so.
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
@@ -218,8 +217,8 @@ struct AdoptTests {
         #expect(await model.adoptDraft(repositoryID: repository.id, planID: planID)?.schedule.frequency == .manual)
     }
 
-    @Test("retention starts off — the history is the point of adopting")
-    func retentionStartsOff() async throws {
+    @Test("an adopted plan removes old backups by a new plan's rules")
+    func retentionIsANewPlans() async throws {
         let planID = UUID()
         let snapshot = try snapshot("a", time: "2026-10-02T11:45:00Z", tags: [ResticService.planTag(planID)])
         let model = makeModel()
@@ -227,7 +226,8 @@ struct AdoptTests {
         loadModel(model, repository: repository, listing: [snapshot])
 
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(!draft.retention.isEnabled)
+        #expect(draft.retention == BackupPlan().retention)
+        #expect(draft.retention.isEnabled)
     }
 
     @Test("a UUID that names a configured plan is its moved history, never adoptable")

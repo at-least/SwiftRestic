@@ -46,9 +46,6 @@ extension AppModel {
         // actor, as every presence read: a stalled share holds it.
         let isHere = await Task.detached { Self.sourceExists(path) }.value
         draft.schedule.frequency = isHere ? .daily : .manual
-        // The history is the point of adopting: nothing thins it until a
-        // policy is chosen with the dry run's answer in view.
-        draft.retention.isEnabled = false
         return draft
     }
 

@@ -26,9 +26,8 @@ extension RunRecord {
     /// volumes (`refusedShares`); any other failure by restic's exit and
     /// first sentence. A warning by its unreadable items, exactly — two files are
     /// two problems — then its other lines (the decoding gap, a skipped
-    /// retention) and hook complaints. The sentence, the other lines and the
-    /// complaints lose their digits: a lock's PID and age, an address, a
-    /// count, a hook's timing change from run to run.
+    /// retention). The sentence and the other lines lose their digits: a
+    /// lock's PID and age, an address, a count change from run to run.
     private var problemCause: String {
         func withoutDigits(_ text: String) -> String { text.filter { !$0.isNumber } }
         if outcome == .failed {
@@ -37,7 +36,7 @@ extension RunRecord {
             let sentence = failureMessage.map(Format.firstSentence) ?? ""
             return "\(exitCode.map(String.init) ?? "-") " + withoutDigits(sentence)
         }
-        let rest = (trailingItemErrors + hookMessages).map(withoutDigits)
+        let rest = trailingItemErrors.map(withoutDigits)
         return (Array(unreadableItems) + rest).joined(separator: "\n")
     }
 
