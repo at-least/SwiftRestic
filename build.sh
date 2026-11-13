@@ -85,30 +85,60 @@ if [ "$ACTION" = "test" ]; then
     refuse_concurrent_test_session
 fi
 
-# The full log goes to a temporary file, the interesting lines to the
-# terminal; the exit status is xcodebuild's own, not grep's.
+# The suites that drive the real restic: ~614 of the suite's ~740 seconds,
+# measured 2026-11-14. `test` runs every other suite first and these only
+# once the rest pass, so a unit failure answers in about two minutes. A
+# suite left off this list still runs, in the first phase.
+end_to_end_suites=(
+    AppModelTests ResticIntegrationTests ResticFindTests ResticMaintenanceTests
+    ResticCheckDamageTests ResticDiffTests ResticFilesTreeTests LocateRepositoryTests
+    PreviewSessionTests IndexBackfillTests FirstBackupTests
+)
+
+# One xcodebuild run: the full log to a temporary file, the interesting
+# lines to the terminal; the status is xcodebuild's own, not grep's.
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-status=0
-xcodebuild "${xcodebuild_arguments[@]}" "$ACTION" 2>&1 \
-  | tee "$log" \
-  | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
-  || status=${PIPESTATUS[0]}
-
-# The filtered stream above does not show a restarted runner.
-if [ "$ACTION" = "test" ] && runner_restarted "$log"; then
-    echo "error: the test runner restarted mid-run (a test crash or timeout, or a concurrent xcodebuild session) — inspect the newest xcresult before re-running" >&2
-    status=1
-fi
-
-# xcodebuild exits 0 when a filter or a stale project file selects zero
-# tests; the swift-testing summary line is then absent. Checked only after
-# success, so a compile failure is not reported as an empty run.
-if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
-    if ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
-        echo "error: test run reported success without executing any tests" >&2
-        status=1
+run_xcodebuild() {
+    local action="$1"
+    shift
+    local result=0
+    xcodebuild "${xcodebuild_arguments[@]}" "$action" "$@" 2>&1 \
+      | tee "$log" \
+      | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
+      || result=${PIPESTATUS[0]}
+    if [ "$action" != build ]; then
+        # The filtered stream above does not show a restarted runner.
+        if runner_restarted "$log"; then
+            echo "error: the test runner restarted mid-run (a test crash or timeout, or a concurrent xcodebuild session) — inspect the newest xcresult before re-running" >&2
+            result=1
+        fi
+        # xcodebuild exits 0 when a filter or a stale project file selects
+        # zero tests; the swift-testing summary line is then absent. Checked
+        # only after success, so a compile failure is not an empty run.
+        if [ "$result" -eq 0 ] && ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
+            echo "error: test run reported success without executing any tests" >&2
+            result=1
+        fi
     fi
+    return "$result"
+}
+
+status=0
+if [ "$ACTION" = "test" ]; then
+    skip=() only=()
+    for suite in "${end_to_end_suites[@]}"; do
+        skip+=("-skip-testing:SwiftResticTests/$suite")
+        only+=("-only-testing:SwiftResticTests/$suite")
+    done
+    echo "== unit tests (end-to-end suites wait for these)"
+    run_xcodebuild test "${skip[@]}" || status=$?
+    if [ "$status" -eq 0 ]; then
+        echo "== end-to-end tests against the bundled restic"
+        run_xcodebuild test-without-building "${only[@]}" || status=$?
+    fi
+else
+    run_xcodebuild "$ACTION" || status=$?
 fi
 
 # The built app must carry the pinned restic under a seal that holds.
