@@ -594,6 +594,10 @@ struct RepeatedProblemNotificationTests {
         var gapBefore = warned(0)
         gapBefore.itemErrors.append("5 restic messages could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete.")
         #expect(gap.isSameProblem(as: gapBefore))
+        var retentionSkipped = warned(60)
+        retentionSkipped.itemErrors.append(RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242")
+        #expect(!retentionSkipped.isSameProblem(as: warned(0)),
+                "the same unreadable items with old backups not removed this time read as the same problem")
         #expect(!warned(60, items: ["/a/IMG_0002.jpg: open /a/IMG_0002.jpg: permission denied"])
             .isSameProblem(as: warned(0, items: ["/a/IMG_0001.jpg: open /a/IMG_0001.jpg: permission denied"])))
         // A merged repeat (a standing failure for the same folders gone)

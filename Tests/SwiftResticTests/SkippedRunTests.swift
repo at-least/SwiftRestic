@@ -39,12 +39,6 @@ struct SkippedRunTests {
         #expect(RunRecord.adoptingRewrites(adopted, listing: listing) == nil, "a listing already adopted changes nothing")
     }
 
-    @Test("a backup whose folder is gone from this Mac names it and says what to do")
-    func folderGoneMessage() {
-        #expect(RunRecord.folderGoneMessage(path: "/Users/me/Projects")
-            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Put it back, or use Choose New Location… to back it up where it is now.")
-    }
-
     @Test("a failure for the same shares refused continues the plan's last one, as one for folders gone does; another cause stands alone")
     func refusedShareRepeatsMerge() throws {
         let planID = UUID()

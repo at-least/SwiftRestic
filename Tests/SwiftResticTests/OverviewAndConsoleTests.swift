@@ -743,6 +743,18 @@ struct RunRecordTests {
         record.finishedAt = record.startedAt.addingTimeInterval(-10)
         #expect(record.duration == 0)
     }
+
+    @Test("a run refused by the password says the password doesn't open the location, by its name")
+    func refusedPasswordNamesTheLocation() {
+        var record = RunRecord(kind: .backup, planName: "Docs")
+        record.setOutcome(
+            from: ResticError.commandFailed(exitCode: ResticError.wrongPasswordCode, message: "Fatal: wrong password or no key found"),
+            cancellationMessage: "Stopped",
+            location: (name: "NAS", kind: .sftp)
+        )
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == "The password doesn’t open “NAS”.", "the failure said restic's words, not the location's")
+    }
 }
 
 @Suite("Console command parsing")

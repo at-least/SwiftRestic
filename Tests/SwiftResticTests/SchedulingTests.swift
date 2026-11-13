@@ -694,18 +694,21 @@ struct RepositoryTests {
                 "a user that is an email address keeps its own @")
     }
 
-    @Test("provider secrets map to the environment variables each backend reads")
-    func credentialEnvironment() {
+    @Test("only an S3 location has a provider secret: its field, and the variables restic reads it from")
+    func providerSecret() {
         var s3 = Repository()
         s3.kind = .s3
         s3.s3AccessKeyID = "AKIA"
-        let s3Env = s3.credentialEnvironment(secret: "shhh")
-        #expect(s3Env["AWS_ACCESS_KEY_ID"] == "AKIA")
-        #expect(s3Env["AWS_SECRET_ACCESS_KEY"] == "shhh")
+        #expect(s3.secretFieldLabel == "Secret access key")
+        #expect(s3.credentialEnvironment(secret: "shhh") == ["AWS_ACCESS_KEY_ID": "AKIA", "AWS_SECRET_ACCESS_KEY": "shhh"])
 
-        var local = Repository()
-        local.kind = .local
-        #expect(local.credentialEnvironment(secret: nil).isEmpty)
+        for kind in [Repository.Kind.local, .sftp] {
+            var repository = Repository()
+            repository.kind = kind
+            repository.s3AccessKeyID = "AKIA"
+            #expect(repository.secretFieldLabel == nil, "the \(kind.displayName) editor asks for a secret")
+            #expect(repository.credentialEnvironment(secret: "shhh").isEmpty, "restic for a \(kind.displayName) location gets S3 credentials")
+        }
     }
 
     @Test("a location reads in the reader's words, not restic's repository string")

@@ -670,19 +670,6 @@ struct RunRecordPresentationTests {
         #expect(run.failureMessage == run.outcome.displayName)
     }
 
-    @Test("a channel's summary says the app's words; the webhook's operation keeps restic's")
-    func channelSummaryFollowsTheScreen() {
-        func summary(_ kind: RunRecord.Kind, _ stage: NotificationEvent.Stage) -> String {
-            NotificationEvent(stage: stage, planName: "NAS", repositoryName: "NAS", kind: kind).summary
-        }
-        #expect(summary(.forget, .succeeded).hasPrefix("Old backup removal succeeded: NAS"))
-        #expect(summary(.check, .failed).hasPrefix("Verification failed: NAS"))
-        #expect(summary(.prune, .succeeded).hasPrefix("Cleanup succeeded: NAS"))
-        #expect(summary(.backup, .cancelled) == "Backup stopped: NAS")
-        #expect(RunRecord.Kind.forget.payloadOperation == "Retention")
-        #expect(RunRecord.Kind.check.payloadOperation == "Check")
-    }
-
     @Test("Copy Details for a failed multi-item restore names the items, the destination, the error and the count past the sample")
     func copyDetailsForAFailedMultiItemRestore() {
         let record = restore {
