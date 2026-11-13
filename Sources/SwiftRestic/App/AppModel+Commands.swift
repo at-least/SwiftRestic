@@ -1,12 +1,10 @@
 import Foundation
 
-/// Derived on every read, never stored: the menu bar, the sidebar's plan
-/// menu and the plan page read the same answers, so one surface cannot
-/// enable what another refuses.
+/// Derived on every read, never stored, so no surface can enable what
+/// another refuses.
 struct PlanCommandState: Equatable {
     var planID: UUID?
-    /// On a repository's page: the plans Back Up Now starts. Empty on a plan's,
-    /// where `planID` says.
+    /// Empty on a plan's page, where `planID` says.
     var repositoryPlanIDs: [UUID] = []
     var canBackUp = false
     var backUpDisabledReason: String?
@@ -20,13 +18,10 @@ struct PlanCommandState: Equatable {
 
 struct RepositoryCommandState: Equatable {
     var repositoryID: UUID?
-    /// A new repository's Save asks restic, so neither form opens without it:
-    /// a plan needs a repository to go in.
+    /// A new repository's Save asks restic.
     var canAddRepository = false
     var canNewPlan = false
     var canFind = false
-    /// Check, Clean Up: restic work that must not collide with a backup
-    /// or another job on it.
     var canMaintain = false
     var canEdit = false
     /// Never busy-gated: the removal dialog names the work it will cancel.
@@ -41,7 +36,7 @@ struct ConfirmationCopy: Equatable {
 extension AppModel {
     func planCommands(for selection: SidebarItem?) -> PlanCommandState {
         var state = PlanCommandState()
-        // One rule for every Back Up Now and every Stop: the tray's.
+        // The tray's rule, for every Back Up Now and Stop.
         let rows = MenuBarStatus.planRows(
             plans: configuration.plans,
             activity: activity,
@@ -88,13 +83,8 @@ extension AppModel {
         return state
     }
 
-    /// The repository the Location menu acts on: the selected one, the
-    /// selected plan's, or the one a selected Other-backups group sits
-    /// under (which is where
-    /// that menu acts even for a moved plan's group: the plan's own
-    /// repository is the other one). Nil for a target that no longer exists
-    /// and for every other pane. A group is no plan, so the Backup menu stays
-    /// grey over its selection.
+    /// A group acts on the repository it sits under, even when its plan
+    /// moved to another one.
     func commandRepositoryID(for selection: SidebarItem?) -> UUID? {
         let id: UUID? = switch selection {
         case let .repository(id): id
@@ -106,26 +96,20 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
-    /// The Backups tab ⌘F searches on this selection, by the roots its search
-    /// hangs from: a plan's with a repository set, the one page whose
-    /// search lists one chain. Nil on every other pane, where it opens Search All
-    /// Backups.
+    /// Nil where ⌘F opens Search All Backups instead.
     func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
         guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
         return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
     }
 
-    /// A confirmation's title and message, naming its target — the dialog
-    /// is raised from the sidebar's row menus and the menu bar, where an
-    /// unnamed "this" would say nothing. Nil once the target is gone.
+    /// Names its target: raised from row menus and the menu bar, where
+    /// "this" says nothing.
     func confirmationCopy(for confirmation: CommandConfirmation) -> ConfirmationCopy? {
         switch confirmation {
         case let .deletePlan(id):
             guard let plan = plan(id: id) else { return nil }
             let name = label(of: plan)
-            // Where the snapshots land, said when there are some. Deleting is
-            // the main source of adoptable groups — Continue Backups… restores this
-            // same UUID.
+            // Continue Backups… later restores this same UUID.
             let landing: String
             if let repositoryID = plan.repositoryID,
                let repository = repository(id: repositoryID),
@@ -144,8 +128,6 @@ extension AppModel {
             guard let repository = repository(id: id) else { return nil }
             return ConfirmationCopy(
                 title: "Remove “\(label(of: repository))” from SwiftRestic?",
-                // From the model, so the disclosed consequences cannot drift
-                // from what removal does.
                 message: removalConsequences(for: id)
             )
         }

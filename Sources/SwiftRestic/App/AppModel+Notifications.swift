@@ -2,14 +2,12 @@ import Foundation
 import UserNotifications
 
 extension AppModel {
-    /// The outcome of a Settings › Notifications test, reported inline where the
-    /// user clicked rather than as a global banner on another window.
+    /// Shown inline beside Send Test, not as a banner on another window.
     enum TestNotificationOutcome: Equatable, Sendable {
         case delivered
         case failed(String)
     }
 
-    /// Sends one channel a sample event so the user can confirm it is wired up.
     func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
         precondition(channel.hasUsableURL, "Send Test is disabled for an unusable URL")
         let event = NotificationEvent(
@@ -34,9 +32,8 @@ extension AppModel {
         Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil
     }
 
-    /// Asked once there is a plan to notify about: at launch with plans,
-    /// and when the first plan arrives (`followPlans`). macOS shows the prompt
-    /// only while the answer is undetermined. Not awaited:
+    /// Asked once there is a plan to notify about (launch, `followPlans`);
+    /// macOS prompts only while the answer is undetermined. Not awaited:
     /// `requestAuthorization` suspends until the user answers.
     func requestNotificationPermission() {
         guard Self.supportsNotifications else { return }
@@ -45,11 +42,9 @@ extension AppModel {
         }
     }
 
-    /// The quiet-plan alert's tick (`StaleAlert`): names each plan that
-    /// has gone quiet past its window, once per stretch — the mark is saved
-    /// on the plan, so a relaunch does not name it again. Marked even when
-    /// local notifications are off or not allowed: the alert is the
-    /// notification, and a later permission must not bring back old news.
+    /// Once per quiet stretch: the mark is saved on the plan, so a relaunch
+    /// does not repeat it. Marked even when notifications are not allowed,
+    /// so a later permission does not bring back old news.
     @discardableResult
     func alertQuietPlans(now: Date) -> [StalePlanAlert] {
         var latest: [UUID: Date] = [:]
@@ -97,8 +92,7 @@ extension AppModel {
         return alerts
     }
 
-    /// A quiet-plan notification's identifier: this prefix and the plan's
-    /// ID, which a click opens; a run notification's is the run's ID.
+    /// Read back by `NotificationRoute`.
     nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
 
     private func announcesFirstBackup(_ record: RunRecord) -> Bool {
@@ -143,8 +137,7 @@ extension AppModel {
             await NotificationPoster.broadcast(event, to: channels, notifyOnSuccess: notifyOnSuccess)
         }.value
         if !failures.isEmpty {
-            // The queue is global: the title names the run the
-            // undelivered alert was about.
+            // The banner queue is global: the title names the run.
             let subject = RunRecordPresentation.displayName(
                 for: record,
                 plans: configuration.plans,
@@ -159,8 +152,6 @@ extension AppModel {
         }
     }
 
-    /// Static so the mapping (outcome → stage, the sampled excerpts, the
-    /// full warning count) is testable without driving a whole run.
     static func notificationEvent(for record: RunRecord, repositoryName: String) -> NotificationEvent {
         let stage: NotificationEvent.Stage
         switch record.outcome {
@@ -178,11 +169,10 @@ extension AppModel {
             snapshotID: record.snapshotID,
             // A skipped run's reason is its detail, not a failure.
             errorMessage: record.failureMessage ?? (record.outcome == .skipped ? record.detailText : nil),
-            // restic's own warnings only. The excerpts are for the message
-            // body; the count is what the summary announces.
+            // restic's own warnings only: excerpts for the body, the full
+            // count for the summary.
             warnings: Array((record.unreadableItems + record.trailingItemErrorsOnScreen).prefix(5)),
             warningCount: record.itemErrorCount > 0 ? record.itemErrorCount : nil,
-            // Diagnosed from restic's item errors too.
             hint: ItemErrorDiagnosis.headline(for: record),
             filesNew: record.filesNew,
             bytesProcessed: record.bytesProcessed,
@@ -229,11 +219,9 @@ extension AppModel {
 
     private func deliver(_ request: UNNotificationRequest, onAccepted: @escaping @MainActor () -> Void = {}) {
         Task {
-            // A notification that silently never arrives is the failure mode
-            // a backup app most cannot afford: external channels banner their
-            // delivery errors, and the local one must too. Denied permission
-            // is the common way this happens — say it once per stretch, the
-            // same transition-signal rule the stats banner follows.
+            // A notification that silently never arrives is the failure a
+            // backup app most cannot afford, so it banners, once per stretch
+            // of failures. Denied permission is the common cause.
             do {
                 try await notificationPoster(request)
                 notificationsProblemNoted = false
@@ -241,9 +229,8 @@ extension AppModel {
             } catch {
                 guard !notificationsProblemNoted else { return }
                 notificationsProblemNoted = true
-                // A warning, not an error: the run itself is unharmed. The
-                // permission's fix is a place, so the banner opens it rather
-                // than describing where it is (the HIG's Writing).
+                // A warning: the run itself is unharmed. The banner links to
+                // the setting rather than describing where it is.
                 if let problem = error as? NotificationProblem, problem == .permissionDenied {
                     post(Banner(
                         title: "Couldn’t send a notification",
@@ -291,11 +278,9 @@ extension AppModel {
         return name.isEmpty ? "SwiftRestic" : name
     }
 
-    /// The local notification's text. A warning counts restic's unreadable
-    /// items and names the fix when the app knows one; a warning with none —
-    /// a skipped retention step, an unnamed exit 3 — says
-    /// what Activity's Detail column says, never "0 unreadable items", and
-    /// never counts the retention line as one.
+    /// A warning with no unreadable items (a skipped retention step, an
+    /// unnamed exit 3) says what Activity's Detail column says, never
+    /// "0 unreadable items".
     static func notificationBody(for record: RunRecord) -> String {
         switch record.outcome {
         case .succeeded:
@@ -320,11 +305,9 @@ extension AppModel {
     }
 }
 
-/// Where a notification's identifier sends a click: a quiet-plan alert's
-/// is `quietPlanNotificationPrefix` and the plan's ID, a run notification's
-/// is the run's ID alone, and anything else — a foreign or stale
-/// identifier — routes nowhere. Kept beside the two writers above, the
-/// only guarantee `AppDelegate.openNotification` reads them by.
+/// Identifiers: a quiet-plan alert is `quietPlanNotificationPrefix` plus
+/// the plan's ID, a run notification the run's ID alone. Kept beside the
+/// two writers above (`alertQuietPlans`, `notify`): nothing else ties them.
 enum NotificationRoute: Equatable {
     case plan(UUID)
     case run(UUID)

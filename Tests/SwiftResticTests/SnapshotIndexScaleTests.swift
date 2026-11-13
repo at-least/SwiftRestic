@@ -16,8 +16,8 @@ import Testing
 /// threshold pays a burst far above its own bound. A mean alone would hide
 /// one population-sized write among many cheap ones, so every write's rows
 /// also stay under a ceiling of a fifth of a chain's paths — far above any
-/// burst, far below a rewrite of the chain. The WAL has no such ceiling
-/// yet: at the default shape a merge burst writes about as much as the
+/// burst, far below a rewrite of the chain. The WAL has no such ceiling:
+/// at the default shape a merge burst writes about as much as the
 /// whole population does.
 ///
 /// The default shape keeps `./build.sh test` quick. Pass
@@ -659,7 +659,6 @@ private final class ScaleRun {
         #expect(history.fulls.count == shape.chains)
         #expect(history.reverse.count == listedAtOnce - shape.chains)
         #expect(history.forward.isEmpty)
-        // S-3: a reverse delta is change-sized.
         expectChangeSized("S-3 reverse deltas", history.reverse)
         try await sampleReads("after the history, \(listedAtOnce) indexed")
 
@@ -697,9 +696,7 @@ private final class ScaleRun {
             tickSeconds.append(Date().timeIntervalSince(start))
             tickWAL.append(Double((try index.writeCounters() - before).walBytes))
         }
-        // S-1: a forward delta is change-sized.
         expectChangeSized("S-1 forward deltas", forward)
-        // S-2: a backup that changed nothing.
         #expect(quiet.count == shape.chains)
         for record in quiet {
             #expect(record.added == 0 && record.removed == 0)
@@ -766,9 +763,9 @@ private final class ScaleRun {
             + "for \(total) versions")
     }
 
-    /// A one-letter search, the Restore pane's worst keystroke — and its
-    /// second question, answered in the same read, against the two reads
-    /// it replaced.
+    /// A one-letter search, the Restore pane's worst keystroke, and its
+    /// second question answered in the same read, checked against the same
+    /// answers from two separate reads.
     func search() async throws {
         let limit = await MainActor.run { AppModel.indexSearchLimit }
         let hits = try await index.searchPaths(matching: "i", limit: limit)

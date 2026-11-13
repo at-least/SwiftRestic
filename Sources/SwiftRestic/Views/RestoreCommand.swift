@@ -1,11 +1,8 @@
 import SwiftUI
 
-/// What Restore does on the page in view — a backup's tree on a Backups
-/// tab, a file's or a search's folder under it, Search All Backups' results — published
-/// by the pane that holds it for File ▸ Restore: the menu bar's way to the
-/// pane's own restore, its bottom bar's prominent button. Not in the window
-/// toolbar's trailing side, the HIG's place for a page's primary action:
-/// the user chose the bottom bar.
+/// File ▸ Restore: the restore of the pane in view, the same as its bottom
+/// bar's prominent button. Not in the window toolbar's trailing side, the
+/// HIG's place for a page's primary action: the user chose the bottom bar.
 struct RestoreCommand {
     let isEnabled: Bool
     let run: () -> Void

@@ -1,21 +1,17 @@
 import Foundation
 
-/// The disabled-Save reasons the editor sheets show beside their buttons.
-///
-/// Pure and view-free so the test target compiles them: the caption is the
-/// same chain the disabled state checks, spelled in field order, and a test
-/// pins the ordering — a reordering that makes the footer name a later gap
-/// while an earlier one exists is a regression.
+/// The disabled-Save reasons the editor sheets show beside their buttons:
+/// the same chain the disabled state checks, in field order, which a test
+/// pins — the footer must never name a later gap while an earlier one exists.
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
     /// does not name, in the order the plan sheet's header presents them —
     /// Folder or file, Repository — then the one a configuration checks: a
     /// repository holds one plan per path (`plans`, every configured plan,
     /// the draft's own saved entry among them), its history being restic's
-    /// for that path. That one binds a plan being added — new, or adopted
-    /// — alone: a saved plan's path is fixed, so in an edit it could only
-    /// catch twins an older build's configuration holds, and keep
-    /// their Save grey with nothing in the sheet to change.
+    /// for that path. That one binds only a plan being added — new, or
+    /// adopted: a saved plan's path is fixed, so in an edit it could only
+    /// grey Save with nothing in the sheet to change.
     static func plan(_ draft: BackupPlan, isNew: Bool, among plans: [BackupPlan]) -> String? {
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Choose a folder or file to back up."
@@ -157,12 +153,10 @@ enum EditorRequirements {
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
         }
-        // Without a name of their own, two entries for one place would be
-        // two identical rows — and two schedulers' checks and prunes on one
-        // repository. A new one's rule alone: a saved repository's location
-        // is fixed, so in an edit it could only catch twins an older
-        // build's configuration holds, and keep their Save grey — a
-        // password this Mac lacks never entered.
+        // Two entries for one place would be two identical rows, and two
+        // schedulers' checks and prunes on one repository. A new one's rule
+        // alone: a saved repository's location is fixed, so in an edit it
+        // could only grey Save with nothing in the sheet to change.
         let location = comparableLocation(draft)
         if isNew, let other = repositories.first(where: { $0.id != draft.id && comparableLocation($0) == location }) {
             return "“\(other.label(among: repositories))” is already at this location."

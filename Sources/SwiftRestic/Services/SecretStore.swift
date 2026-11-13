@@ -1,15 +1,12 @@
 import Foundation
 
-/// The real implementation is the login Keychain. It is injectable so the backup
-/// path can be exercised in tests without a Keychain prompt, and so a test never
-/// writes to the developer's own login keychain.
+/// The login Keychain, injectable so a test never prompts for or writes to
+/// the developer's own login keychain.
 struct SecretStore: Sendable {
-    /// Failures throw rather than read as `nil`: a Keychain failure (an
-    /// authorisation prompt the user declined, `errSecInteractionNotAllowed`
-    /// while the Mac is still locked) must not wear the "no password stored"
-    /// costume — the app would say "add a password in the repository
-    /// settings" about a password that is sitting right there, and a
-    /// scheduled backup's diagnosis would point nowhere near the truth.
+    /// Failures throw rather than read as `nil`: a declined authorisation
+    /// prompt or `errSecInteractionNotAllowed` on a locked Mac is not "no
+    /// password stored", and reading it as one sends the user to add a
+    /// password that is already there.
     var load: @Sendable (UUID) async throws -> (password: String?, providerSecret: String?)
     var save: @Sendable (UUID, String?, String?) async throws -> Void
     var remove: @Sendable (UUID) async throws -> Void
@@ -63,17 +60,12 @@ struct SecretStore: Sendable {
     }
 
     #if DEBUG
-    /// A capture run's password from the environment in the Keychain's
-    /// place — `SWIFTRESTIC_REPO_PASSWORD`, with `SWIFTRESTIC_REPO_SECRET` —
-    /// only while `SWIFTRESTIC_CONFIG_DIR` points the run at a throwaway
-    /// configuration, so a stale variable in a developer's shell cannot
-    /// silently feed the wrong password to a normal debug run; nil
-    /// otherwise. One store for every reader of "what password this
-    /// repository has" — the run path and the repository editor — which
-    /// would otherwise disagree about whether a password exists. A network
-    /// share's password is `SWIFTRESTIC_SHARE_PASSWORD`, none when unset.
-    /// Saves and removals go nowhere: a scratch run never touches the login
-    /// Keychain.
+    /// A capture run's secrets from the environment in the Keychain's place,
+    /// only while `SWIFTRESTIC_CONFIG_DIR` points at a throwaway
+    /// configuration, so a stale variable in a developer's shell cannot feed
+    /// a normal debug run. One store for every reader — the run path and the
+    /// repository editor — so they agree on whether a password exists.
+    /// Saves and removals go nowhere.
     private static var injectedForCapture: SecretStore? {
         let environment = ProcessInfo.processInfo.environment
         guard let password = environment["SWIFTRESTIC_REPO_PASSWORD"], !password.isEmpty,
@@ -117,8 +109,7 @@ private actor InMemorySecrets {
     func save(_ id: UUID, _ password: String?, _ providerSecret: String?) {
         var entry = storage[id] ?? (nil, nil)
         if let password, !password.isEmpty { entry.password = password }
-        // Empty removes, as `KeychainStore.write` does — the double answers
-        // what the Keychain answers.
+        // Empty removes, as `KeychainStore.write` does.
         if let providerSecret { entry.providerSecret = providerSecret.isEmpty ? nil : providerSecret }
         storage[id] = entry
     }

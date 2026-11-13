@@ -17,17 +17,14 @@ extension SnapshotIndex {
     /// `snapID` is the target's `snap.id` when the stream began: AUTOINCREMENT
     /// never reuses it, so a snapshot that died and returned between two
     /// chunks is a different id, and the continuation is refused rather than
-    /// finalised over a partial stage. Any throw poisons the stream: later
-    /// chunks are dropped and the final is refused until `beginFull` starts
-    /// over. The walk caches node ids across transactions, so it is replaced
-    /// only after its chunk commits, and dropped where node ids go stale:
-    /// `collectNodes`, the one path that deletes nodes, drops it whichever
-    /// write collects. A throw poisons the stream and its walk with it (that
-    /// chunk's new ids rolled back); the next `beginFull` replaces the
-    /// session. A delta between chunks may give a directory the walk
-    /// believes new a child, which the walk's `created` hint tolerates (see
-    /// `Walk`), so a delta keeps it. The whole session ends when its target
-    /// is set aside as unreadable.
+    /// finalised over a partial stage. Any throw poisons the stream and drops
+    /// its walk (that chunk's new ids rolled back): later chunks are dropped
+    /// and the final is refused until `beginFull` starts over. The walk caches
+    /// node ids across transactions, so it is replaced only after its chunk
+    /// commits, and dropped by `collectNodes`, the one path that deletes
+    /// nodes. A delta between chunks may give a directory the walk believes
+    /// new a child, which the walk's `created` hint tolerates (see `Walk`),
+    /// so a delta keeps it.
     struct Session {
         fileprivate let hash: String
         fileprivate let snapID: Int64
@@ -280,8 +277,8 @@ extension SnapshotIndex {
         }
     }
 
-    /// Sets a pending snapshot aside (state 2) when the backfill cannot read
-    /// it. The planner and the adjacency check see only state 0, so the
+    /// Sets a pending snapshot aside when the backfill cannot read it. The
+    /// planner and the adjacency check see only `State.pending`, so the
     /// window moves past it; no read claims it; `isComplete` stays false
     /// while it is listed. It leaves with the listing like any death, or
     /// through `releaseUnreadable` at the next launch, and a return is a new

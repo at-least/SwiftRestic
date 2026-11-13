@@ -8,26 +8,19 @@ struct RootDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
 
-    /// Debug-capture state: `SWIFTRESTIC_CAPTURE_PANE=restore` — the record
-    /// rows the pane needs land with the first listing, so the selection
-    /// waits for it. Read and written only by the DEBUG capture paths, which
-    /// own the flag in `RootView`; the unconditional declaration keeps the
-    /// call site free of `#if` argument-list gymnastics.
+    /// `SWIFTRESTIC_CAPTURE_PANE=restore`: the selection waits for the first
+    /// listing. Used only by the DEBUG capture paths; declared
+    /// unconditionally so the call site needs no `#if` in its argument list.
     @Binding var pendingCaptureRestore: Bool
 
     let onAddPlan: (_ repositoryID: UUID?) -> Void
-    /// Opens the adopt sheet for an Other backups group — its page or the
-    /// location page — the root owns the presenting state, as for
-    /// every sheet a pane raises.
+    /// Opens the adopt sheet for an Other backups group; the root owns the
+    /// presenting state, as for every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            // A restore outlives the pane that started it, so its progress is
-            // an app-level fact: this strip sits above every pane, and the
-            // menu bar line covers the window-closed case. Switching panes
-            // hands the progress over to this strip.
             RestoreProgressStrip()
             // The one disabled-state whose cause the user cannot see from the
             // panes themselves: every restic-backed control is grey, and this
@@ -113,12 +106,11 @@ struct RootDetailView: View {
     }
 }
 
-/// The banner queue, once, above every pane — a plan's Backups tab and the
-/// console included, where each page had carried its own copy and some
-/// none: a restore started from a Backups tab finished out of sight. Its own
-/// view, so a banner never re-renders the pane. Never height-pinned
-/// (BannerView's rule); newer banners claim height first, so when the
-/// column runs short the oldest is the one cut, never the news just in.
+/// The banner queue, once, above every pane, so a banner posted for work
+/// started on another pane is still seen. Its own view, so a banner never
+/// re-renders the pane. Never height-pinned (BannerView's rule); newer
+/// banners claim height first, so when the column runs short the oldest is
+/// the one cut.
 private struct BannerQueue: View {
     @Environment(AppModel.self) private var model
 
@@ -164,10 +156,9 @@ private struct WelcomeView: View {
     }
 }
 
-/// The restore strip: while a restore runs, its progress is a fact above
-/// whatever surface is on screen, wired to the model's cancel. A restore
-/// outlives the pane that started it, so the strip's home is the window's
-/// detail column, above every pane; the panes add no copy of their own.
+/// A restore outlives the pane that started it, so its progress sits above
+/// every pane; the panes add no copy of their own, and the menu bar line
+/// covers the window-closed case.
 private struct RestoreProgressStrip: View {
     @Environment(AppModel.self) private var model
 

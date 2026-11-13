@@ -2,10 +2,9 @@ import Foundation
 import Testing
 import UniformTypeIdentifiers
 
-/// The Restore pane's drag-to-Finder restore when the drop can never land:
-/// the provider must promise nothing — Finder then refuses the drop — and
-/// the reason is named at drag start, since a refused drop explains nothing.
-/// No restic needed: both failures happen before anything would run.
+/// An empty provider makes Finder refuse the drop, and a refused drop explains
+/// nothing, so the reason is named at drag start. No restic needed: both
+/// failures happen before anything would run.
 @MainActor
 @Suite("drag restore provider")
 struct DragRestoreProviderTests {

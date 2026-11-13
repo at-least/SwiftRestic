@@ -70,7 +70,7 @@ final class AppRouter {
     private var restoreFocus: RestoreFocus?
 
     /// The toolbar's Overview | Backups, one choice for every page
-    /// (the user's call, 2026-10-24): switching plans keeps the view. Read
+    /// (the user's call): switching plans keeps the view. Read
     /// through `tab(of:)`, never directly — a page without the chosen view
     /// shows another. Transient: every page opens on its overview after a
     /// launch, where "is it backing up" is answered.
@@ -153,14 +153,11 @@ final class AppRouter {
     /// would otherwise keep its version.
     private(set) var filesPaneOpenings = 0
 
-    /// The chosen view where `page` offers it.
     func tab(of page: SidebarItem) -> PageTab {
         page.pageTabs.contains(pageTab) ? pageTab : .overview
     }
 
-    /// Sets the view for every page. Only a tab `page` offers
-    /// (`SidebarItem.pageTabs`): a route that asks a page without it is a bug
-    /// to hear about.
+    /// Sets the view for every page.
     func setTab(_ tab: PageTab, of page: SidebarItem) {
         precondition(page.pageTabs.contains(tab), "\(page) has no \(tab.menuTitle) tab")
         pageTab = tab
@@ -184,8 +181,6 @@ final class AppRouter {
     /// captured in. See TrayStatusItem.openMainWindow.
     @ObservationIgnored var openMainWindowAction: OpenWindowAction?
 
-    /// Records an intent for the root view to consume. Naming it `request`
-    /// keeps call sites reading as what they are — asks, not commands.
     func request(_ intent: Intent) {
         pendingIntent = intent
     }
@@ -249,16 +244,13 @@ final class AppRouter {
             return landing
         case let .orphanPlan(repositoryID, planID)
             where shelves(repositoryID).orphanPlanGroup(planID) == nil:
-            // The group is gone — adopted, its plan moved by the editor, or
-            // refreshed away. Its repository's page is where it lived; the
-            // landing pane when the repository went with it.
+            // The landing pane when the repository went with the group.
             return repositories.contains { $0.id == repositoryID }
                 ? .repository(repositoryID)
                 : landing
         case let .lineage(repositoryID, key)
             where shelves(repositoryID).lineageGroup(key) == nil:
-            // The same for a lineage — forgotten, given a plan tag by the
-            // console, or refreshed away.
+            // Gone also when forgotten or given a plan tag by the console.
             return repositories.contains { $0.id == repositoryID }
                 ? .repository(repositoryID)
                 : landing

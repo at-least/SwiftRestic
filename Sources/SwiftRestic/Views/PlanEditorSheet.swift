@@ -61,9 +61,6 @@ struct PlanEditorSheet: View {
         // Resizable, not fixed. The form scrolls, its exclude list a fixed
         // band that scrolls on its own.
         .frame(minWidth: 600, idealWidth: 640, minHeight: 560, idealHeight: 620)
-        // The path's network share and presence, read off the main actor: a
-        // stalled share can hold the read for seconds. The path notices read
-        // them.
         .task(id: draft.path) {
             let path = draft.path
             let (share, missing) = await Task.detached {
@@ -127,15 +124,10 @@ struct PlanEditorSheet: View {
         EditorRequirements.plan(draft, isNew: false, among: model.configuration.plans)
     }
 
-    /// The plan's identity, above the form — Arq's place for it: the sheet
-    /// often opens over a
-    /// repository's page or Activity, where nothing else names the plan
-    /// being edited. A saved plan is its path in its repository — restic keeps one history
-    /// per path, and the plan sits under its repository in the sidebar,
-    /// where that history is — so it reads as its page does, with no rows:
-    /// its label over its path, the repository beside the label as every
-    /// surface away from the tree names a plan, since one folder can have a
-    /// plan in two repositories.
+    /// The plan's identity above the form (Arq's place for it): the sheet
+    /// often opens over a location's page or Activity, where nothing else
+    /// names the plan. Its label over its path, the repository beside the
+    /// label, since one folder can have a plan in two repositories.
     private var identityHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {

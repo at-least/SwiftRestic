@@ -288,10 +288,9 @@ struct TolerantDecodingTests {
 
     @Test("each developer group's rules, pinned in order")
     func developerExcludesArePinned() {
-        // The whole list, pinned group by group in the list's own order —
-        // each group's folder patterns, then the home folder's: a pattern
-        // typoed or dropped here fails this test instead of only a real
-        // backup.
+        // Pinned group by group in the list's own order, each group's folder
+        // patterns before the home folder's, so a typoed or dropped pattern
+        // fails here instead of only in a real backup.
         let groups: [(ExcludeCategory, folders: [String], home: [String])] = [
             (.python,
              ["**/.venv", "**/venv", "**/__pycache__", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", "**/.tox", "**/.nox"],
@@ -408,7 +407,7 @@ struct TolerantDecodingTests {
             [],
             // A switch's rules leave the list too.
             ["*.iso"],
-            // Now passed by every plan, so a typed copy leaves the list.
+            // Passed by every plan, so a typed copy leaves the list.
             [],
         ])
         #expect(plans[5].skipsDeveloperFiles)
@@ -554,7 +553,7 @@ struct TolerantDecodingTests {
         #expect(on.schedule.interval == 3600)
         #expect(on.runsOnSchedule)
 
-        // `retention` keeps an `isEnabled` of its own, so the plan's top-level keys.
+        // Top-level keys only: `retention` keeps an `isEnabled` of its own.
         let written = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(on)) as? [String: Any])
         #expect(written["isEnabled"] == nil && written["pausedUntil"] == nil)
         let schedule = try #require(written["schedule"] as? [String: Any])

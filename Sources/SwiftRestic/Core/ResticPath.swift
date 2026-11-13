@@ -1,12 +1,6 @@
-/// How restic spells a path in its JSON — the one owner of the directory
-/// marker, of the key form without it, and of the last component the
-/// snapshot index and its browse cache re-derive from a path.
-///
-/// `restic diff` ends a directory's path with `/` (`/src/sub/`); `restic
-/// ls` never does, and neither lists the root itself. The browser's tree,
-/// the Change column's marks, the browse cache and the snapshot index all
-/// key a path without the marker, and strip it here rather than each
-/// carrying a copy that can drift.
+/// How restic spells a path in its JSON. `restic diff` ends a directory's
+/// path with `/` (`/src/sub/`); `restic ls` never does, and neither lists
+/// the root. Every path key is without the marker.
 ///
 /// The rules read UTF-8 bytes — unicode scalars for a cut — never
 /// Characters. `/` is one byte that no other scalar's encoding contains, so
@@ -22,49 +16,39 @@
 enum ResticPath {
     private static let separator = UInt8(ascii: "/")
 
-    /// The spelling a path is keyed by: every trailing `/` stripped, except
-    /// that the root stays "/" (and "" stays ""). A path with no trailing
-    /// `/` — every `ls` path, every file in a diff — comes back as it is.
+    /// Every trailing `/` stripped; the root stays "/" and "" stays "".
     static func normalized(_ path: String) -> String {
         guard path.utf8.count > 1, path.utf8.last == separator else { return path }
         return String(decoding: normalizedBytes(path), as: UTF8.self)
     }
 
-    /// `normalized` as bytes, for a caller that keys by bytes — the index's
-    /// full-listing ingest — so the key is not decoded into a String only to
-    /// be encoded again.
+    /// For the index's ingest, which keys by bytes.
     static func normalizedBytes(_ path: String) -> [UInt8] {
         var bytes = Array(path.utf8)
         while bytes.count > 1, bytes.last == separator { bytes.removeLast() }
         return bytes
     }
 
-    /// Whether restic's spelling marks a directory: its last byte is `/`.
-    /// The root "/" is one too, though restic never lists it.
     static func isDirectorySpelling(_ path: String) -> Bool {
         path.utf8.last == separator
     }
 
-    /// The last component: what follows the last separator ("" for the
-    /// root), or the whole path when there is none. Cut in the scalar view,
-    /// for the reason above, and because a String subscript would re-align
-    /// the cut to a grapheme boundary and round it into the cluster.
+    /// "" for the root; the whole path when it has no separator. A String
+    /// subscript would round the cut to a grapheme boundary, so it is cut in
+    /// the scalar view.
     static func basename(of path: String) -> String {
         guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
         return String(path.unicodeScalars[last...].dropFirst())
     }
 
-    /// What precedes the last separator: "/" for a child of the root, the
-    /// path itself when it has no separator. Cut in the scalar view, as
-    /// `basename` is.
+    /// "/" for a child of the root; the path itself when it has no
+    /// separator.
     static func parent(of path: String) -> String {
         guard let last = path.unicodeScalars.lastIndex(of: "/") else { return path }
         return last == path.unicodeScalars.startIndex ? "/" : String(path.unicodeScalars[..<last])
     }
 
-    /// The folders above `path`, nearest first, up to the root: "/a/b/c" →
-    /// ["/a/b", "/a", "/"]; none for the root or a bare name. `parent`'s
-    /// byte-exact steps, so "/src/data2" is never inside "/src/data".
+    /// "/a/b/c" → ["/a/b", "/a", "/"]; none for the root or a bare name.
     static func ancestors(of path: String) -> [String] {
         var ancestors: [String] = []
         var current = path
@@ -75,8 +59,8 @@ enum ResticPath {
         return ancestors
     }
 
-    /// Whether `path` is `folder` or inside it, byte for byte, as the index
-    /// compares paths: "/Data2" is not inside "/Data".
+    /// `path` is `folder` or inside it, byte for byte, as the index compares
+    /// paths: "/Data2" is not inside "/Data".
     static func holds(_ folder: String, _ path: String) -> Bool {
         if path.utf8.elementsEqual(folder.utf8) { return true }
         return path.utf8.starts(with: insidePrefix(of: folder).utf8)
@@ -86,15 +70,14 @@ enum ResticPath {
         folder == "/" ? "/" : folder + "/"
     }
 
-    /// What follows `folder` in `path`, cut by bytes; nil unless `path` is
-    /// strictly inside `folder`.
+    /// nil unless `path` is strictly inside `folder`.
     static func relative(_ path: String, below folder: String) -> String? {
         path.removingBytePrefix(insidePrefix(of: folder))
     }
 }
 
-/// Prefix and suffix tests and cuts by bytes, for a restic line that carries a path:
-/// the Character forms join a Prepend character ending the path to the
+/// For a restic line that carries a path: the Character forms join a
+/// Prepend character ending the path to the
 /// ": " or " " after it (`ResticPath`'s header), so "x\u{0600}: open …"
 /// has the Character prefix "x\u{0600}: " but one Character fewer than
 /// `count` says, and "x\u{0600} does not exist, skipping" has no Character
@@ -104,8 +87,7 @@ extension String {
         utf8.count >= suffix.utf8.count && utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8)
     }
 
-    /// The string after `prefix`, cut by bytes; nil when it does not start
-    /// with it. One call, so the test and the cut cannot disagree.
+    /// One call, so the test and the cut cannot disagree.
     func removingBytePrefix(_ prefix: String) -> String? {
         guard utf8.starts(with: prefix.utf8) else { return nil }
         return String(decoding: utf8.dropFirst(prefix.utf8.count), as: UTF8.self)

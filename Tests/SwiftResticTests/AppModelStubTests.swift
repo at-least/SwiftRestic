@@ -614,8 +614,7 @@ struct AppModelStubTests {
             overwrite: .replaceExisting
         )
 
-        // The hang is what guarantees the cancel lands mid-run, so wait for it
-        // in the process table rather than betting on a fixed delay.
+        // Wait for the hang, not a fixed delay, so the cancel lands mid-run.
         await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
         harness.model.cancelRestore()
         await waitUntilRestoreFinishes(in: harness.model)
@@ -712,12 +711,10 @@ struct AppModelStubTests {
         firstRefresh.cancel()
         await firstRefresh.value
 
-        // The remembered request runs to completion after the in-flight one
-        // unwinds: the listing answers (the hang is spent) and freshness
-        // advances past the bootstrap stamp. The re-run is on the registry's
-        // background lane, so the test awaits it, as a quit does, rather
-        // than a wall clock. Everything else on this harness's lane is
-        // one-shot, so the wait is bounded.
+        // The remembered request runs after the in-flight one unwinds. It is
+        // on the registry's background lane, so drain it, as a quit does,
+        // rather than wait on a wall clock; everything else on this lane is
+        // one-shot, so the drain is bounded.
         await harness.model.tasks.drain()
         #expect(
             harness.model.snapshotsLoadedAt(for: harness.repository.id) != loadedAtStart,
@@ -993,8 +990,8 @@ struct AppModelStubTests {
         let loadedAt = try #require(harness.model.snapshotsLoadedAt(for: harness.repository.id))
         #expect(harness.model.snapshots(for: harness.repository.id).count == 1)
 
-        // Flip the stub to failing and refresh again through the same path a
-        // Retry button takes.
+        // Flip the stub to failing and refresh again through the same path
+        // Try Again takes.
         var broken = harness.repository
         broken.extraEnvironment["SWIFTRESTIC_STUB"] = "plainfail"
         await harness.model.upsert(repository: broken, password: nil, providerSecret: nil)
@@ -2000,12 +1997,10 @@ struct AppModelStubTests {
         harness.model.deleteRepository(id: harness.repository.id)
         await harness.model.waitForRun(planID: harness.plan.id)
 
-        // The repository is gone…
         #expect(harness.model.configuration.repositories.isEmpty)
         #expect(harness.model.isRunning(planID: harness.plan.id) == false)
-        // …and the interrupted run is recorded as what it was — a cancelled
-        // run — rather than completing silently against a repository the app
-        // no longer lists.
+        // The interrupted run is recorded as cancelled, never as completing
+        // against a repository the app does not list.
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.outcome == .cancelled)
         #expect(record.failureMessage == "Stopped")

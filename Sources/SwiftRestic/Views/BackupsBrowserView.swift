@@ -1,20 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// A page's Backups tab: the page's backups, newest first, on the leading
-/// side — a section per month once the history passes one — and the open
-/// one's files on the trailing side (`RestorePaneView`), with the versions
-/// of the file picked in them under the tree (`FilesPaneView`): Time
-/// Machine's way, one moment's folders beside the moments. While a plan's
-/// search field holds a query, its hits stand in the tree's place
-/// (`FilesSearchView`). Not the sidebar's, folded under their plan: the
-/// HIG's Sidebars ("In general, show no more than two levels of hierarchy in a sidebar.
-/// When a data hierarchy is deeper than two levels, consider using a split
-/// view interface that includes a content list between the sidebar items
-/// and detail view") — this list is that content list, and its edge drags.
+/// A page's Backups tab: the page's backups on the leading side, the open
+/// one's files on the trailing side (`RestorePaneView`), and the versions of
+/// the file picked there under the tree (`FilesPaneView`): Time Machine's
+/// way, one moment's folders beside the moments. While a plan's search field
+/// holds a query, its hits stand in the tree's place (`FilesSearchView`).
+/// The backups are not folded under their plan in the sidebar: the HIG's
+/// Sidebars asks for no more than two levels there and a content list
+/// between sidebar and detail beyond that, which this list is.
 ///
 /// Which backup is open is the router's, per page, so leaving the page and
-/// coming back finds it as it was left; a page opens on its newest backup.
+/// coming back finds it as it was left.
 struct BackupsBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -151,11 +148,10 @@ struct BackupsBrowserView: View {
                     }
                 }
                 .listStyle(.inset)
-                // A backup a route opened — a search hit, Search All Backups, a
-                // run's Browse — may sit a year down the list: brought into
-                // view, a turn later because the list may gain its row in
-                // this update. A click's row is in view already, and the
-                // minimal scroll leaves it where it is.
+                // A backup a route opened may sit a year down the list:
+                // brought into view a turn later, because the list may gain
+                // its row in this update. A click's row is in view already,
+                // and the minimal scroll leaves it where it is.
                 .onChange(of: openID, initial: true) { _, id in
                     guard let id else { return }
                     Task { @MainActor in proxy.scrollTo(id) }
@@ -188,9 +184,7 @@ struct BackupsBrowserView: View {
                 // @State resets with the identity.
                 .id(page)
         } else {
-            // Blank behind the list's own empty row — "Reading backups…",
-            // its failure, or the empty words — which state the fact
-            // already; a second empty pane said it twice.
+            // Blank: the list's own empty row already states the fact.
             Color.clear
         }
     }
@@ -237,12 +231,9 @@ private struct BackupRow: View {
     private static let markWidth: CGFloat = 14
 }
 
-/// What a page's Backups tab says while it lists no backup, once a
-/// listing has succeeded: "No backups yet", or — a plan's page whose
-/// repository holds others — PlanStatus.noneFromThisPlanFact. Before that
-/// it is still being read, and after a failure it says why. A plan's page offers its verb
-/// under the words — the pane would otherwise hold nothing to do; a
-/// group's page has no plan to run, so the words stand alone.
+/// What a page's Backups tab says while it lists no backup. A plan's page
+/// offers Back Up Now under the words, or the pane would hold nothing to
+/// do; a group's page has no plan to run.
 private struct BackupsStatusRow: View {
     @Environment(AppModel.self) private var model
     let repositoryID: UUID
@@ -273,7 +264,6 @@ private struct BackupsStatusRow: View {
                 .foregroundStyle(.secondary)
                 if let planID {
                     Button("Back Up Now") { model.runBackup(planID: planID) }
-                        // The rule every Back Up Now follows.
                         .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
                         .controlSize(.small)
                 }

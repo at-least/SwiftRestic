@@ -1,29 +1,20 @@
 import SwiftUI
 
-/// The split view's sidebar: Activity, then each repository with its plans
-/// always in view beneath it — two levels, the HIG's most for a sidebar
-/// ("When a data hierarchy is deeper than two levels, consider using a
-/// split view interface that includes a content list between the sidebar
-/// items and detail view"). The repository's row opens its page, which is
-/// its overview, and never collapses; beneath it sit its plans, "Back Up a
-/// Folder" while it has none, and — under an Other backups caption while the
-/// repository holds backups none of its plans made (`BackupShelves`) — their
-/// groups, by the plan that made them when a plan tag says which, by folders
-/// and Mac otherwise. A plan's or a group's row is a page whose Backups tab
-/// lists its backups beside the one open: the content list, not a fold
-/// here a year of rows deep. The context menus and the Add footer ride
-/// along.
+/// The split view's sidebar: Activity, then each repository with its
+/// children always in view beneath it — two levels, the HIG's most for a
+/// sidebar. A plan's or a group's backups are listed on its page's Backups
+/// tab (the HIG's content list), not folded here a year of rows deep.
 ///
 /// Every row is a top-level List row, and a repository's children are
-/// leading indentation (`Indent`). Only places carry a tag — a repository,
-/// a plan, a group under Other backups — so selection stays unique; the
-/// Other backups caption is text, and "Back Up a Folder" is an action.
+/// leading indentation (`Indent`), not a fold. Only places carry a tag — a
+/// repository, a plan, a group under Other backups — so selection stays
+/// unique; the Other backups caption is text, and "Back Up a Folder" is an
+/// action.
 ///
-/// The sidebar's list is its own view so it type-checks on its own: the
+/// Its own view, and each row kind its own function, so it type-checks: the
 /// root's modifier chain sits at the compiler's type-check budget. The
-/// sheet and deletion intents the sidebar raises are passed back as
-/// closures — the presenting state stays in `RootView` — and, for the same
-/// budget, each row kind is its own function.
+/// presenting state for the sheets and confirmations it raises stays in
+/// `RootView`, reached through the closures.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -55,11 +46,9 @@ struct SidebarView: View {
             // repository's news and must not scroll away under a long tree.
             Section {
                 Label("Activity", systemImage: "list.bullet.rectangle")
-                    // The window's unread badge (`activityBadgeCount`). It
-                    // yields to the unconfigured state like the tray's problem
-                    // face does —
-                    // a removed repository's old failures must not summon
-                    // setup-bound attention — and stays silent when clean.
+                    // None with no repository set up, as the tray's problem
+                    // face: a removed repository's old failures must not
+                    // summon attention.
                     .badge(
                         problemCount > 0 && !model.configuration.repositories.isEmpty
                             ? Text(verbatim: "\(problemCount)")
@@ -96,10 +85,9 @@ struct SidebarView: View {
     }
 
     /// Arq's bare + in the corner; actions only, every page is a row. A
-    /// missing restic is not repeated here: the
-    /// banner above every pane (RootDetailView) already says it, with the
-    /// install instruction a cursor-only triangle could not show. The bar
-    /// background stays — a long list scrolls under it.
+    /// damaged restic is not repeated here: the banner above every pane
+    /// (RootDetailView) says it. The bar background stays: a long list
+    /// scrolls under it.
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
@@ -129,10 +117,8 @@ struct SidebarView: View {
     @ViewBuilder
     private func planContextMenu(_ plan: BackupPlan) -> some View {
         let commands = model.planCommands(for: .plan(plan.id))
-        // The plan page's swap, worded as the Backup menu's: a running plan's
-        // row offers the Stop that matters now, not a second backup.
-        // A context menu leaves out what can't run (HIG: "Hide unavailable
-        // menu items, don't dim them"); the Backup menu keeps its dimmed
+        // A running plan's row offers Stop, not a second backup. A context
+        // menu hides what can't run (HIG); the Backup menu keeps its dimmed
         // items, a regular menu's place to say why.
         if model.isRunning(planID: plan.id) {
             if commands.canStop {
@@ -171,9 +157,8 @@ struct SidebarView: View {
                 Spacer(minLength: 4)
             }
         } icon: {
-            // The sidebar's own icon tint, as on Activity: it turns white
-            // under the selection, where an explicit accent vanished into
-            // the selection's blue.
+            // The sidebar's own icon tint: it turns white under the
+            // selection, where an explicit accent vanishes into its blue.
             Image(systemName: repository.kind.symbolName)
         }
         .tag(SidebarItem.repository(repository.id))
@@ -210,10 +195,9 @@ struct SidebarView: View {
         switch child {
         case let .plan(id):
             if let plan = model.plan(id: id) {
-                // The newest snapshot from the plan's own shelf — one
-                // dictionary hit — rather than re-filtering the repository's
-                // whole listing inside the row, whose body re-runs on every
-                // minute tick and selection change.
+                // From the shelf, not a filter of the whole listing in the
+                // row, whose body re-runs every minute and on every
+                // selection change.
                 planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
             }
         case .addPlan:
@@ -225,11 +209,9 @@ struct SidebarView: View {
     }
 
     /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag, its title tinted, no icon — buttons
-    /// wear none (the user's call). The hidden symbol
-    /// holds the icon column, so its title starts where plan names do. It
-    /// leaves once a plan exists; the footer's + and the row's menu keep
-    /// offering the next one.
+    /// action, not a place: no tag, its title tinted, no icon — buttons wear
+    /// none (the user's call). The hidden symbol holds the icon column, so
+    /// its title starts where plan names do.
     private func addPlanRow(_ repository: Repository) -> some View {
         Button { onNewPlan(repository.id) } label: {
             HStack(spacing: 4) {
@@ -252,11 +234,7 @@ struct SidebarView: View {
         .accessibilityLabel("Back Up a Folder to “\(model.label(of: repository))”")
     }
 
-    /// A plan: the row opens its page, whose Backups tab lists what it
-    /// made here. A plan is its folder and wears one; a file wears it too,
-    /// decoration whose SF label ("Move") would only mislead. The row pads
-    /// by `child` and the folder fills the icon column, so the plan's title
-    /// starts where every repository child's does.
+    /// A plan wears a folder, a file's plan too.
     private func planRow(_ plan: BackupPlan, latestSnapshot: Snapshot?) -> some View {
         // A Label, so the folder takes the sidebar's icon tint as the
         // repository's icon does: grey in an inactive window, white under
@@ -273,11 +251,8 @@ struct SidebarView: View {
     }
 
     /// The caption over the backups in the repository none of its plans
-    /// made — another Mac's, the console's, a deleted plan's, or a plan's
-    /// that now backs up elsewhere. Only there while it holds some, so it
-    /// never reads as empty. Text, not a level: no tag, no fold — the
-    /// groups under it sit at the plans' level, as a list's month captions
-    /// stand over its rows.
+    /// made. Text, not a level: no tag, no fold; the groups under it sit at
+    /// the plans' level, as a list's month captions stand over its rows.
     private func otherBackupsCaption(_ repository: Repository, shelves: BackupShelves) -> some View {
         let title = SidebarTree.otherBackupsTitle(repositoryHasPlans: !shelves.plans.isEmpty)
         // The count stays for VoiceOver; on screen each group's row says
@@ -295,18 +270,12 @@ struct SidebarView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// Both kinds of group, interleaved newest-first: a plan's history here
-    /// that none of the repository's plans owns, and the backups no plan
-    /// made — which, unlike a plan's, have no name above them to say what
-    /// they are.
     @ViewBuilder
     private func otherBackups(_ repository: Repository, shelves: BackupShelves) -> some View {
         let labels = shelves.otherLabels(
             repositories: model.configuration.repositories, localHost: model.localHostname
         )
         ForEach(shelves.others) { group in
-            // One factory for either kind's page; the switch is only about
-            // the menus, which need the kind's own pieces.
             let page = SidebarItem.otherGroup(repositoryID: repository.id, id: group.id)
             switch group {
             case let .plan(id, _):
@@ -327,13 +296,9 @@ struct SidebarView: View {
         }
     }
 
-    /// One group under Other backups, either kind — a plan's history in
-    /// this repository that none of its plans owns, or the backups of one
-    /// Mac's folders that no plan made. A page, a plan row's grammar: the
-    /// row selects, and its page lists the group's backups. Its box sits in
-    /// the icon column, so its title starts where plan names do; the
-    /// label's caption says which kind it is, and its tooltip keeps the
-    /// folders and the Mac.
+    /// One group under Other backups, as a plan row is: the row selects, and
+    /// its page lists the group's backups. The tooltip keeps the folders and
+    /// the Mac.
     private func groupRow(
         page: SidebarItem,
         label: SnapshotLineage.Label,
@@ -362,10 +327,8 @@ struct SidebarView: View {
 
 }
 
-/// A repository's children, as the leading indentation of top-level List
-/// rows: plans, "Back Up a Folder", the Other backups caption and its
-/// groups all start one step in, their icons under the repository's icon
-/// and their titles where its title starts.
+/// A repository's children's leading indentation: their icons under the
+/// repository's icon, their titles where its title starts.
 private enum Indent {
     static let child: CGFloat = 12
 }
@@ -405,16 +368,11 @@ private struct PlanSidebarRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.now) private var now
     let plan: BackupPlan
-    /// The plan's newest snapshot, from the plan's own shelf. It is what
-    /// the moment falls back to when the app never ran the plan: history
-    /// adopted with the repository counts as its last backup.
+    /// The plan's newest snapshot: history adopted with the repository counts
+    /// as its last backup when the app never ran the plan.
     let latestSnapshot: Snapshot?
 
     var body: some View {
-        // As of the window's minute clock, and counting from the one moment
-        // every surface's "Last backup" reads (PlanStatus.lastBackupAt) —
-        // the repository page's Status line and the plan page agree
-        // with this row by construction.
         let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: model.activity[plan.id],

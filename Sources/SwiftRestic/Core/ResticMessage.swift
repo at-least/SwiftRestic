@@ -1,18 +1,14 @@
 import Foundation
 
-/// A single NDJSON line emitted by `restic --json`.
-///
-/// restic's JSON stream is a union discriminated only by `message_type`, and the
-/// same discriminator is reused across commands with different payloads (a
-/// `status` line from `backup` carries `files_done`, one from `restore` carries
-/// `files_restored`). We therefore decode into permissive union structs that try
-/// both spellings, instead of demanding a per-command decoder.
+/// One NDJSON line of `restic --json`. The same `message_type` carries
+/// different payloads per command (`backup`'s `status` has `files_done`,
+/// `restore`'s `files_restored`), so the payload structs accept both
+/// spellings instead of a decoder per command.
 enum ResticMessage: Sendable, Equatable {
     case status(ResticStatus)
     case summary(ResticSummary)
-    /// Per-item progress from `--verbose`, which the app's own commands
-    /// never pass (the console's raw stdout shows them as text). Carried
-    /// without a payload: nothing reads one, and the log drops these lines.
+    /// Per-item progress from `--verbose`, which only the console passes.
+    /// No payload: nothing reads one, and the log drops these lines.
     case verboseStatus
     case error(ResticErrorMessage)
     case exitError(ResticExitError)
@@ -21,18 +17,15 @@ enum ResticMessage: Sendable, Equatable {
     case node(SnapshotNode)
     case change(ResticDiffChange)
     case statistics(ResticDiffStatistics)
-    /// A `message_type` newer restic invented — restic growing, fine to
-    /// ignore. Its raw line still reaches the log and the console.
+    /// A `message_type` a newer restic added: ignored. The raw line still
+    /// reaches the log and the console.
     case unknown
-    /// A line carrying a `message_type` we know whose payload failed to
-    /// decode — restic's schema moved under us. Kept apart from `unknown`:
-    /// an unrecognised type is restic growing (fine to ignore), a malformed
-    /// known type is a reporting gap, and callers count these to say so
-    /// instead of dropping the line silently.
+    /// A known `message_type` whose payload failed to decode: a reporting
+    /// gap, which callers count, unlike `unknown`.
     case malformed(type: String, reason: String)
 }
 
-/// Periodic progress line (`backup` and `restore` both emit `message_type: status`).
+/// `backup` and `restore` both emit it.
 struct ResticStatus: Sendable, Equatable {
     var percentDone: Double
     var totalFiles: Int?
@@ -72,8 +65,8 @@ extension ResticStatus: Decodable {
     }
 }
 
-/// Terminal line of a command. `backup`, `restore` and `check` all use
-/// `message_type: summary` with disjoint field sets, so every field is optional.
+/// `backup`, `restore` and `check` share `message_type: summary` with
+/// disjoint fields, so every field is optional.
 struct ResticSummary: Sendable, Equatable, Decodable {
     // backup
     var filesNew: Int?
@@ -107,11 +100,8 @@ struct ResticSummary: Sendable, Equatable, Decodable {
     }
 }
 
-/// A non-fatal error line.
-///
-/// `backup` and `restore` nest the text under `error.message` with `item`
-/// alongside it; `check` emits a flat `message` instead. Accept both, or
-/// every `check` error would be silently dropped as an unknown message type.
+/// A non-fatal error line. `backup` and `restore` nest the text under
+/// `error.message` beside `item`; `check` writes a flat `message`.
 struct ResticErrorMessage: Sendable, Equatable, Decodable {
     private struct Payload: Sendable, Equatable, Decodable { var message: String }
 
@@ -131,20 +121,18 @@ struct ResticErrorMessage: Sendable, Equatable, Decodable {
     }
 }
 
-/// Fatal error line: `{"message_type":"exit_error","code":12,"message":"..."}`.
+/// `{"message_type":"exit_error","code":12,"message":"..."}`
 struct ResticExitError: Sendable, Equatable, Decodable {
     var code: Int32
     var message: String
 }
 
-/// Emitted by `restic init --json`.
+/// `restic init --json`
 struct ResticInitialized: Sendable, Equatable, Decodable {
     var id: String
     var repository: String
 }
 
-/// One `message_type: change` line from `restic diff --json`.
-///
 /// The modifier is a string of flags, not a single letter: `+` added, `-`
 /// removed, `M` content changed, `T` type changed, `U` metadata changed (only
 /// with `--metadata`) and `?` bitrot. restic concatenates them when more than
@@ -172,8 +160,7 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
     /// inside the path's last Character, where `hasSuffix("/")` misses it.
     var isDirectory: Bool { ResticPath.isDirectorySpelling(path) }
 
-    /// The last component, without the directory marker; the root reads as
-    /// "/".
+    /// The root reads as "/".
     var name: String {
         let normalized = ResticPath.normalized(path)
         let last = ResticPath.basename(of: normalized)
@@ -187,8 +174,6 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
         return .metadataOnly
     }
 
-    /// The backup of the two compared that holds this path: the older for
-    /// a removal, the newer for every other change.
     func holder(newer: Snapshot, older: Snapshot) -> Snapshot {
         category == .removed ? older : newer
     }
@@ -206,9 +191,8 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
         return phrase.prefix(1).uppercased() + phrase.dropFirst()
     }
 
-    /// The diff row's one-letter sign. A removal's is U+2212, not a hyphen:
-    /// beside the monospaced path the two are easy to confuse by eye, and
-    /// "fixing" it to "-" would be the change.
+    /// A removal's sign is U+2212, not a hyphen: beside the monospaced path
+    /// a hyphen is easy to misread.
     var glyph: String {
         switch category {
         case .added: "+"
@@ -219,10 +203,9 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
     }
 }
 
-/// The closing `message_type: statistics` line of `restic diff --json`.
-/// Every key is required: restic 0.19.1 writes them all, zeros included, so
-/// a missing one is a format change, decoded as `.malformed` — never a
-/// "0 files" read as fact.
+/// The closing line of `restic diff --json`. Every key is required: restic
+/// 0.19.1 writes them all, zeros included, so a missing one decodes as
+/// `.malformed`, never as "0 files".
 struct ResticDiffStatistics: Sendable, Equatable, Decodable {
     struct Counts: Sendable, Equatable, Decodable {
         var files: Int
@@ -241,8 +224,7 @@ struct ResticDiffStatistics: Sendable, Equatable, Decodable {
 }
 
 enum ResticMessageDecoder {
-    /// restic answers an empty line — or a bare `null` — where a JSON list
-    /// command has nothing to report, so both spellings decode as no entries.
+    /// restic answers an empty line or a bare `null` for an empty list.
     static func decodeArray<T: Decodable>(_ type: T.Type, from stdout: String) throws -> [T] {
         let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != "null", let data = trimmed.data(using: .utf8) else { return [] }
@@ -256,8 +238,8 @@ enum ResticMessageDecoder {
         return d
     }()
 
-    /// Decodes one NDJSON line. Returns `nil` for blank lines or lines that are
-    /// not JSON objects at all (restic occasionally writes plain text to stdout).
+    /// `nil` for blank lines and lines that are not JSON objects (restic
+    /// sometimes writes plain text to stdout).
     static func decode(line: String) -> ResticMessage? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("{"), let data = trimmed.data(using: .utf8) else { return nil }
@@ -293,11 +275,9 @@ enum ResticMessageDecoder {
         }
     }
 
-    /// One short line about why decoding failed — enough to name the field
-    /// and the problem, never the whole dumped context, so a run record line
-    /// or an error detail stays readable.
-    /// An empty coding path is the whole answer failing; a missing key's
-    /// path ends at the object that lacks it, so the key names the field.
+    /// One short line naming the field, never the dumped context, so a run
+    /// record stays readable. An empty coding path is the whole answer
+    /// failing; a missing key's path ends at the object that lacks it.
     static func briefFailure(_ error: Error) -> String {
         guard let decoding = error as? DecodingError else {
             return String(describing: type(of: error))
@@ -325,8 +305,8 @@ enum ResticMessageDecoder {
     }
 }
 
-/// restic emits RFC3339 timestamps whose fractional part varies in length, which
-/// `ISO8601DateFormatter` handles inconsistently. Parse both shapes explicitly.
+/// restic's RFC 3339 timestamps come with and without a fractional part,
+/// each needing its own `ISO8601DateFormatter`.
 enum ResticDateFormat {
     nonisolated(unsafe) private static let withFraction: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -348,9 +328,8 @@ enum ResticDateFormat {
         return withFraction.date(from: string) ?? plain.date(from: string)
     }
 
-    /// `date` in the fractional form `parse` reads. The parser keeps
-    /// milliseconds ("…25.22662+08:00" reads as …25.226), and so does this,
-    /// so a time restic gave survives a write and a read exactly.
+    /// Milliseconds, as `parse` keeps them ("…25.22662+08:00" reads as
+    /// …25.226), so a time restic gave survives a write and a read exactly.
     static func string(from date: Date) -> String {
         lock.lock()
         defer { lock.unlock() }

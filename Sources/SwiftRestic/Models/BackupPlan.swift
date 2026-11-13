@@ -32,7 +32,7 @@ struct Schedule: Codable, Sendable, Hashable {
         }
     }
 
-    /// How far behind the moment the window's now can be: its minute clock.
+    /// The window's now is the minute's start (TimelineView(.everyMinute)).
     static let windowClockLag: TimeInterval = 60
 
     /// An interval after the last run, never a time of day (user decision):
@@ -40,11 +40,9 @@ struct Schedule: Codable, Sendable, Hashable {
     /// as the app is running again.
     func nextRunDate(after lastRun: Date?, now: Date) -> Date? {
         guard let interval else { return nil }
-        // A stamp after now comes from a clock that was set ahead; kept, it
-        // would hold the plan back until that date. Within a minute of now it
-        // is a run of this minute: the window's now is the minute's start
-        // (TimelineView(.everyMinute)), and dropping the stamp made the page
-        // say Due now until the minute turned.
+        // A stamp after now comes from a clock set ahead and would hold the
+        // plan back until that date. Within a minute of now it is a run of
+        // this minute; dropping it would show Due now until the minute turns.
         guard let lastRun, lastRun <= now.addingTimeInterval(Self.windowClockLag) else { return now }
         return lastRun.addingTimeInterval(interval)
     }
@@ -54,9 +52,9 @@ struct Schedule: Codable, Sendable, Hashable {
 struct RetentionPolicy: Codable, Sendable, Hashable {
     /// Off is Keep everything.
     var isEnabled: Bool = true
-    /// Recommended's rules. Never stored: a configuration's own rules read
-    /// as Recommended. Variables so tests can keep fewer, which makes restic
-    /// remove a backup made seconds before.
+    /// Recommended's rules. Never stored: stored rules read as Recommended.
+    /// Variables so tests can keep fewer, which makes restic remove a
+    /// backup made seconds before.
     var keepLast: Int = 0
     var keepHourly: Int = 24
     var keepDaily: Int = 7
@@ -104,15 +102,15 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
     }
 
     /// restic refuses `forget` with no `--keep-*` rule (it would delete every
-    /// snapshot). Guarded here rather than at each call site.
+    /// snapshot).
     var isSafeToRun: Bool { isEnabled && !forgetArguments.isEmpty }
 }
 
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var repositoryID: UUID?
-    /// The folder or file the plan backs up, as typed or picked (a tilde
-    /// expands at run time). Fixed once the plan is saved, like its
+    /// As typed or picked; a tilde expands at run time. Fixed once the plan
+    /// is saved, like its
     /// repository: restic keeps one history per set of paths (a backup's
     /// parent is the newest of the same host whose paths cover its own, and
     /// retention groups by `host,paths`; restic 0.19.1), so another path is
@@ -122,22 +120,19 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     var resolvedPath: String { ResticService.expandTilde(path) }
 
-    /// The patterns the user added, as typed or picked: the editor's
-    /// *Also skip* list. What the switches and the fixed rules leave out is
-    /// not among them — a run passes those beside them (`excludesToPass`).
+    /// The editor's *Also skip* list. The switches' and the fixed rules are
+    /// not stored here; a run adds them (`excludesToPass`).
     var excludePatterns: [String] = []
     var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
     var lastRunAt: Date?
     var lastSuccessAt: Date?
-    /// The last backup the quiet-plan alert last named this plan for
-    /// (`StaleAlert`): one notification per stretch, re-armed by a newer
-    /// success.
+    /// The last backup the quiet-plan alert (`StaleAlert`) named this plan
+    /// for: one notification per stretch, re-armed by a newer success.
     var staleAlertedFor: Date?
     /// Created here and not yet backed up: its first success is announced
-    /// whatever `notifyOnSuccess` says. Off for an adopted plan and a plan
-    /// saved before this existed, whose first backup is long past.
+    /// whatever `notifyOnSuccess` says. Off for an adopted plan.
     var announcesFirstBackup = false
     /// What developer tools download or build again
     /// (`ExcludeCategory.rebuildableGroups`). On for new plans.
@@ -171,9 +166,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         // do not change under a switch it never turned on.
         skipsDeveloperFiles = c.value(.skipsDeveloperFiles, default: false)
         skipsMachines = c.value(.skipsMachines, default: false)
-        // A duplicate here means a hand-edited config, and duplicates would
-        // give the list's rows colliding identities. First occurrence wins.
-        // Older builds kept the rules the app now passes itself among these.
+        // A duplicate means a hand-edited config and would give the list's
+        // rows colliding identities. A switch's rule is passed by the switch.
         excludePatterns = withoutSwitchRules(Self.withoutDuplicates(c.value(.excludePatterns, default: [])))
     }
 
@@ -192,9 +186,9 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         skipsDeveloperFiles ? ExcludeRule.developerMarkers.map(\.pattern) : []
     }
 
-    /// The rules the app passes itself, whatever the path, since a rule naming
-    /// nothing under it matches nothing. A plan stores the switches, not their
-    /// rules, so a rule a later build adds reaches every plan with its switch on.
+    /// Whatever the path: a rule naming nothing under it matches nothing. A
+    /// plan stores the switches, not their rules, so a rule added to a
+    /// switch reaches every plan with it on.
     private var switchExcludes: [String] {
         Self.defaultExcludes
             + (skipsDeveloperFiles ? Self.developerExcludes : [])
@@ -236,16 +230,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     static let busyRepositoryReason = "This location is in use. Try again when the work finishes."
 
-    /// The same words on a plan's page, a repository's Status row and
-    /// the menu bar's summary: every surface's name for a plan with none.
     static let noBackupLocationReason = "No backup location set"
 
-    /// What every surface calls the plan — it has no name of its own: the
-    /// last component of its path, the folder's or file's name. When
-    /// another of `plans` backs up, to the same repository, a path ending
-    /// in the same name, each reads as its path, tilde-abbreviated, so the
-    /// two never look alike. "Untitled Plan" while it has no path. Older
-    /// builds stored a name; a configuration's key is ignored.
+    /// A plan has no name of its own: every surface calls it by its path's
+    /// last component. When another of `plans` in the same repository ends
+    /// in the same name, each reads as its tilde-abbreviated path.
     func label(among plans: [BackupPlan]) -> String {
         let name = Self.lastComponent(of: path)
         guard !name.isEmpty else { return "Untitled Plan" }
@@ -260,8 +249,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
-    /// The scheduler owns this plan's timing, complete or not — distinct
-    /// from `runsOnSchedule`, which also asks that the plan can run.
+    /// Complete or not, unlike `runsOnSchedule`.
     var isScheduled: Bool {
         schedule.frequency != .manual
     }
@@ -274,12 +262,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         schedule.nextRunDate(after: lastRunAt, now: now).flatMap { $0 <= now ? $0 : nil }
     }
 
-    /// The stored plan wins over the editor's draft for the fields the
-    /// editor does not edit and the draft may hold stale: the run stamps
-    /// (`markPlanRun`), the quiet-plan alert's mark, and the schedule and
-    /// retention the plan page saves as they change while the editor is open.
-    /// A new field written outside the editor joins this list, or the next
-    /// save reverts it to the draft.
+    /// The fields the editor does not edit come from the stored plan: the
+    /// run stamps, the quiet-plan alert's mark, and the schedule and
+    /// retention the plan page saves while the editor is open. A new field
+    /// written outside the editor joins this list, or the next save reverts
+    /// it to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt

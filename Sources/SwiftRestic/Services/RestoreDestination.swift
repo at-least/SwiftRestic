@@ -1,9 +1,9 @@
 import Foundation
 
 /// What a restore does with a file that is already where the backed-up one
-/// would land. Asked only when something is in the way (`restoreFlow`, the
-/// destination sheet), never remembered, and required at every API on the way down: a defaulted
-/// destructive mode would be a silent overwrite.
+/// would land. Asked only when something is in the way, never remembered,
+/// and required at every API on the way down: a defaulted destructive mode
+/// would be a silent overwrite.
 ///
 /// Two modes, not restic's four. `if-changed` trusts size and modification
 /// time, so it keeps a same-size, same-time file with different bytes — the
@@ -36,8 +36,7 @@ enum RestoreDestinationKind: String, Sendable, CaseIterable {
 enum RestoreSubject: Sendable, Equatable {
     case item(name: String, path: String, isDirectory: Bool)
     /// Two or more items, with any item inside a selected folder already
-    /// dropped
-    /// (`RestoreBatch.covering`).
+    /// dropped (`RestoreBatch.covering`).
     case items([RestoreItem])
 
     /// One directory per item, in order — the shape the destination sheet

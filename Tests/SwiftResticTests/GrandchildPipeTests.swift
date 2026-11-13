@@ -1,13 +1,13 @@
 import Foundation
 import Testing
 
-/// The grandchild-pipe hang: a shell hook that backgrounds a long-lived
-/// command (`curl ... &`) leaves the command holding the pipes' write end
-/// after the shell itself is gone, and no signal of ours reaches it — so
-/// `run` must answer on the child's own death, never wait on the reader's
-/// EOF for the grandchild's whole lifetime (the hook's timeout, a cancel
-/// and quit's `terminateAll` all hang without that). Raw scripts rather
-/// than `StubRestic` — the pipe inheritance is the behaviour under test.
+/// The grandchild-pipe hang: a child that backgrounds a long-lived command
+/// leaves the command holding the pipes' write end after the child itself
+/// is gone, and no signal of ours reaches it — so `run` must answer on the
+/// child's own death, never wait on the reader's EOF for the grandchild's
+/// whole lifetime (the run's timeout, a cancel and quit's `terminateAll`
+/// all hang without that). Raw scripts rather than `StubRestic` — the pipe
+/// inheritance is the behaviour under test.
 @Suite("restic runner grandchild pipes", .serialized)
 struct GrandchildPipeTests {
     /// Each case gets its own sleep duration so the deferred cleanup kills
@@ -27,11 +27,11 @@ struct GrandchildPipeTests {
         pkill.waitUntilExit()
     }
 
-    /// The hook shape: the shell earns its exit immediately, but the
-    /// backgrounded command holds the pipe for `sleep 291` seconds. The run
-    /// must still answer — promptly, with the exit the shell earned — not
-    /// ride along with the grandchild.
-    @Test("a backgrounded grandchild cannot outlive a finished hook's answer")
+    /// The shell earns its exit immediately, but the backgrounded command
+    /// holds the pipe for `sleep 291` seconds. The run must still answer —
+    /// promptly, with the exit the shell earned — not ride along with the
+    /// grandchild.
+    @Test("a backgrounded grandchild cannot outlive a finished child's answer")
     func finishedChildIsNotHeldByGrandchild() async throws {
         let script = try installScript("""
             echo '{"message_type":"status","percent_done":0}'

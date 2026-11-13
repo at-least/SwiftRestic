@@ -1,19 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The restore pane: one backup record's file tree, beside a page's Backups
-/// tab's list. The app's one browser of what the backups hold — the run
-/// drawer's Browse, Activity's Show in Backups, a search's hit and Search
-/// All Backups' rows all land here (`AppRouter.showBackup`) — so the Change
-/// column, Show Changes Only and drag-to-Finder never depend on which
-/// button you came through. A file picked in it is handed to `onPick`,
-/// whose versions the tab shows under the tree.
+/// One backup record's file tree, beside a page's Backups tab's list. The
+/// app's one browser of what the backups hold: every route lands here
+/// (`AppRouter.showBackup`), so the Change column, Show Changes Only and
+/// drag-to-Finder never depend on the route. A file picked in it is handed
+/// to `onPick`, whose versions the tab shows under the tree.
 ///
-/// The list beside it owns the timeline; a record is identified, not
-/// chosen, here. Switching records keeps the folder you are in, and the
-/// restore progress strip lives on the window above every pane, so it
-/// outlives a pane switch. The window's title is the page's, its subtitle
-/// the open backup's moment: the pane sets neither.
+/// The list beside it chooses the record. Switching records keeps the
+/// folder open. The window's title is the page's, its subtitle the open
+/// backup's moment: the pane sets neither.
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -92,9 +88,8 @@ struct RestorePaneView: View {
     }
 
     var body: some View {
-        // One snapshot-list scan per render: the nil-test and the footer's
-        // restore button both need the record, and the computed property
-        // re-scans the repository's whole snapshot list at every access.
+        // One read per render: each read of `record` scans the repository's
+        // whole snapshot list.
         let currentRecord = record
         return Group {
             if currentRecord != nil {
@@ -132,9 +127,7 @@ struct RestorePaneView: View {
     }
 
     private func browserPane(record: Snapshot?) -> some View {
-        // One comparison read per render: every header below takes the same
-        // answer, and each read of `record` re-scans the repository's whole
-        // snapshot list.
+        // One comparison read per render, for every header below.
         let shown = shownComparison(for: record)
         return VStack(spacing: 0) {
             // Only a failed comparison takes a line: a blank Change column
@@ -164,10 +157,8 @@ struct RestorePaneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Show Changes Only, on the footer’s leading side, over a backup with
-    /// one before it to
-    /// compare with: its count, and the data this backup added, answer why
-    /// it grew.
+    /// Show Changes Only, over a backup with one before it to compare with:
+    /// its count, and the data this backup added, answer why it grew.
     @ViewBuilder
     private func changesToggle(record: Snapshot?, comparison: ChangeComparison?) -> some View {
         if let comparison, comparison.baseline != nil {
@@ -307,9 +298,6 @@ struct RestorePaneView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                     if rowContentWidth.value != width { rowContentWidth.value = width }
                 }
-                // Drag straight out of the tree into Finder, as from the
-                // search's hits below.
-                //
                 // The list's own drag, not `.onDrag`, and no gesture on the
                 // row: a SwiftUI gesture claims every click inside what it
                 // covers, so a click on a row's name or icon would never
@@ -386,8 +374,8 @@ struct RestorePaneView: View {
 
     /// What the backup changed, flat, so a change deep in a folder needs no
     /// walking down to — deletions too, which the tree of this backup cannot
-    /// hold. Each row restores from the backup that holds it. Double-click
-    /// opens, never restores: a double-tap must not move bytes.
+    /// hold. Each row restores from the backup that holds it. No double-click
+    /// restore: a double-tap must not move bytes.
     @ViewBuilder
     private func changesList(shown: ChangeComparison?) -> some View {
         if Self.isComparing(shown) {
@@ -464,9 +452,7 @@ struct RestorePaneView: View {
     }
 
     /// Back where they were or, choosing, through the destination sheet
-    /// (`restoreFlow`), by the shared factory (`RestoreDestinationRequest.picked`):
-    /// the covering rule and the sheet's wording live there, one rule for
-    /// every selection restore.
+    /// (`RestoreDestinationRequest.picked`).
     private func restore(_ picked: [RestoreSource], choosingDestination: Bool) {
         destinationRequest = RestoreDestinationRequest.picked(
             picked, repositoryID: repositoryID, model: model, choosingDestination: choosingDestination
@@ -525,10 +511,8 @@ struct RestorePaneView: View {
         return RestorePanePick(path: node.path, backupID: loadedSnapshotID)
     }
 
-    /// Right-click Restore and Restore To… on the clicked rows — the menu's
-    /// own ids, not the ambient selection — as Search All Backups' rows
-    /// offer them, built exactly as `restoreSelection` builds the
-    /// selection's.
+    /// Right-click Restore and Restore To… on the clicked rows: the menu's
+    /// own ids, not the ambient selection.
     @ViewBuilder
     private func restoreContextItem(_ ids: Set<String>, nodes: () -> [SnapshotNode]) -> some View {
         if let record, !ids.isEmpty {
@@ -543,11 +527,10 @@ struct RestorePaneView: View {
         }
     }
 
-    /// What the pane restores, for File ▸ Restore: the selected items, the
-    /// bottom bar's Restore. No whole-backup restore (the user's call,
-    /// 2026-10-24: Restore Entire Backup rebuilt the full original paths
-    /// under the landing and could not go back to the original location):
-    /// the tree's top rows are the backed-up folders, so selecting them
+    /// What the pane restores, for File ▸ Restore: the selected items. No
+    /// whole-backup restore (the user's call: it rebuilt the full original
+    /// paths under the landing and could not go back to the original
+    /// location): selecting the tree's top rows, the backed-up folders,
     /// restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
@@ -609,9 +592,8 @@ struct RestorePaneView: View {
                     .frame(width: 56, alignment: .leading)
             } else if let inside = changesInside[PathKey(path)], inside.total > 0 {
                 // A folder the diff never names, whose subtree it does: the
-                // count leads the expansion toward the leaves, and the
-                // root's equals the header's — a collapsed root under
-                // "1 change since …" no longer reads as unchanged.
+                // count leads the expansion toward the leaves, so a
+                // collapsed root does not read as unchanged.
                 Text("\(Format.count(inside.total)) inside")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -722,9 +704,8 @@ struct RestorePaneView: View {
 
     /// Where ⌫ and ⌘↑ go: from the selected row — or, with none, the folder
     /// in focus — to the folder holding it, when that folder is a row of the
-    /// tree. The tree on screen holds every loaded row, so going up selects
-    /// that row: a step the eye can follow, where a focus change alone
-    /// showed nothing but a cleared selection.
+    /// tree. Going up selects that row, a step the eye can follow; a focus
+    /// change alone shows nothing but a cleared selection.
     private var upStep: (from: String, parent: String)? {
         let selected = selection.first.flatMap { tree.row(id: $0)?.node.path }
         guard let from = selection.count == 1 ? selected : currentPath,
@@ -921,8 +902,8 @@ struct RestorePaneView: View {
     }
 }
 
-/// The toolbar's leading side, shown while the comparison failed: what the
-/// Change column could not be compared with, and why. Its own view because it reads the plans and the
+/// Shown while the comparison failed: what the Change column could not be
+/// compared with, and why. Its own view because it reads the plans and the
 /// lineages: a run-record or settings write re-renders this line, never the
 /// tree beside it.
 private struct RestoreRecordHeader: View {

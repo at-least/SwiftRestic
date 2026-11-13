@@ -26,14 +26,10 @@ settings:
     GCC_WARN_UNDECLARED_SELECTOR: YES
     CLANG_ENABLE_MODULES: YES
   configs:
-    # Debug is signed with the developer's Apple Development certificate, not
-    # ad hoc: an ad-hoc signature's designated requirement is the build's
-    # cdhash, so every rebuild was a new app to the Keychain and asked for
-    # the repository passwords again. A certificate's requirement survives
-    # rebuilds. Release stays ad hoc with the hardened runtime off;
-    # distribution needs a Developer ID, the hardened runtime and
-    # notarization, and re-signing changes which Keychain items the app
-    # can read.
+    # Debug uses the Apple Development certificate, not ad hoc: an ad-hoc
+    # designated requirement is the build's cdhash, so each rebuild is a new
+    # app to the Keychain and asks for the passwords again. Re-signing
+    # Release (Developer ID) changes which Keychain items the app can read.
     Debug:
       CODE_SIGN_IDENTITY: "Apple Development: Mengyi Chen (VANHGVZ28R)"
       DEVELOPMENT_TEAM: 9683UUUF28
@@ -70,14 +66,10 @@ targets:
       - path: Sources/SwiftRestic/Core
       - path: Sources/SwiftRestic/Models
       - path: Sources/SwiftRestic/Services
-      # The model layer only — the app entry point (and every view but the one
-      # below) stays out, so the tests never pull in the UI. New AppModel domain files under
-      # App/ are picked up automatically; add deliberate exceptions to
-      # `excludes` below.
+      # App/ without the entry point and the capture scaffolding that extends
+      # its AppDelegate; Views/ stays out.
       - path: Sources/SwiftRestic/App
         excludes:
-          # The entry point, and the debug-capture scaffolding that extends
-          # its AppDelegate — neither belongs in the test bundle.
           - SwiftResticApp.swift
           - CaptureSupport.swift
     dependencies:
@@ -87,8 +79,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests
         GENERATE_INFOPLIST_FILE: YES
 
-  # Drives the real app's windows: run in a VM by Tools/ui-test.sh, never by
-  # ./build.sh test, which runs on the host desktop.
+  # Drives the real app's windows: run in a VM by Tools/ui-test.sh, not by
+  # ./build.sh test on the host.
   SwiftResticUITests:
     type: bundle.ui-testing
     platform: macOS

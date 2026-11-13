@@ -17,9 +17,8 @@ final class AppModel {
             if oldValue.runs != configuration.runs {
                 backupRunsBySnapshot = RunRecord.backupRunsBySnapshot(configuration.runs)
             }
-            // A plan added, adopted or removed moves backups between shelves,
-            // or relabels one: two plans whose folders share a name are
-            // labelled by path.
+            // A plan change moves backups between shelves, or relabels one
+            // (two plans whose folders share a name are labelled by path).
             if oldValue.plans != configuration.plans {
                 for id in snapshots.keys { reshelve(id) }
             }
@@ -29,9 +28,9 @@ final class AppModel {
             scheduleSave()
         }
     }
-    /// Derived once per history write rather than by every row that shows a
-    /// snapshot. A snapshot whose run was trimmed from the history, or never
-    /// recorded here, is simply absent — unknown, never complete.
+    /// Derived once per history write, not per row. A snapshot whose run
+    /// left the history, or was never recorded here, is absent: unknown,
+    /// never complete.
     private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
 
     func backupRun(forSnapshot id: String) -> RunRecord? {
@@ -47,88 +46,66 @@ final class AppModel {
         return items
     }
 
-    /// `checkRestic` writes it whole.
     var resticState: ResticState = .checking
     var activity: [UUID: PlanActivity] = [:]
-    /// Live backup progress per plan, in its own observable storage: a
-    /// restic status tick (~1/sec) lands here and invalidates only the views
-    /// that read progress — the running strip and nothing else. `activity`
-    /// keeps the phase strip, the sidebar's rows and the Status line's
-    /// rows, which must not re-render per tick; the pair is installed and
-    /// retired together by `installPlanActivity` and the run's unwind.
+    /// Apart from `activity` so a restic status tick (~1/sec) invalidates
+    /// only the running strip, not the sidebar and Status rows that read
+    /// `activity`. Installed and retired with it (`installPlanActivity`,
+    /// `unwindPlanRun`).
     var planProgress: [UUID: OperationProgress] = [:]
     var maintenance: [UUID: MaintenanceActivity] = [:]
-    /// Plans waiting for their turn, keyed by the repository another
-    /// plan's run holds, first in line first (`runBackups`).
+    /// Keyed by the repository another plan's run holds; first in line first.
     var backupQueue: [UUID: [QueuedBackup]] = [:]
     var snapshots: [UUID: [Snapshot]] = [:] {
         didSet {
-            // Array `!=` short-circuits on shared storage, so only the
-            // repository whose listing was written regroups.
             for id in Set(oldValue.keys).union(snapshots.keys) where oldValue[id] != snapshots[id] {
                 reshelve(id)
             }
         }
     }
-    /// `snapshots` sorted to where the sidebar shows them, derived once per
-    /// listing or plan write: the sidebar's body re-runs on every selection
-    /// change, and grouping thousands of snapshots there is too slow.
+    /// Derived once per listing or plan write: the sidebar's body re-runs on
+    /// every selection change, and grouping thousands of snapshots there is
+    /// too slow.
     private(set) var backupShelves: [UUID: BackupShelves] = [:]
     var repositoryStats: [UUID: RepositoryStats] = [:]
     var loadingSnapshots: Set<UUID> = []
-    /// Refreshes that arrived while one was already in flight. Each is run
-    /// once the in-flight refresh lands — dropped, the snapshot a just-
-    /// finished backup wrote would stay invisible until some unrelated
-    /// refresh happened along.
+    /// Refreshes asked for while one was in flight, run once it lands.
+    /// Dropping them would hide a just-finished backup's snapshot until some
+    /// unrelated refresh.
     @ObservationIgnored var pendingSnapshotRefreshes: Set<UUID> = []
     /// Kept apart from the rows themselves: a failed refresh must read as
     /// "unknown", never as an empty list.
     var snapshotListingOutcomes: [UUID: SnapshotListingOutcome] = [:]
-    /// A freshness stamp the surfaces show so a number can always be traced
-    /// to the moment it was read.
     var snapshotsLoadedAt: [UUID: Date] = [:]
-    /// The last listing generation handed out, one counter for every
-    /// repository — see `nextListingGeneration`. Only the index reads these
-    /// numbers, and it compares them only within one repository.
+    /// One counter for every repository; the index compares generations
+    /// only within one repository.
     @ObservationIgnored var listingGeneration: UInt64 = 0
-    /// The generation `snapshots` was read under, per repository, so a
-    /// rebuild of the index re-sends the held listing under its own number.
+    /// So an index rebuild re-sends the held listing under its own number.
     @ObservationIgnored var snapshotsGeneration: [UUID: UInt64] = [:]
-    /// The newest generation the index has taken, per repository — set as
-    /// its reconcile returns, whatever it decided. Until it is the
-    /// generation `snapshots` was read under, the index answers for an
-    /// older listing (`indexIsComplete`). Observed by the Backups tab, which
-    /// reads again the moment it moves, rather than at their next recheck.
+    /// Set as the index's reconcile returns, whatever it decided. Until it
+    /// equals `snapshotsGeneration`, the index answers for an older listing
+    /// (`indexIsComplete`). Observed, so the file views read again the
+    /// moment it moves rather than at their next recheck.
     var indexTakenGeneration: [UUID: UInt64] = [:]
-    /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
-    /// for these: there is nothing to run, and stamping a "last checked" time for
-    /// a check that never happened would be a lie on the repository screen.
+    /// No upkeep is scheduled for these: a "last checked" stamp for a check
+    /// that never ran would be false on the repository page.
     var repositoriesMissingPassword: Set<UUID> = []
-    /// Repositories whose check or prune found their drive away
-    /// (`markDriveAway`): unstamped, the task stays due, and the scheduler
-    /// leaves it alone while the drive is still away — then it runs on the
-    /// next tick.
+    /// Check or prune found the drive away (`markDriveAway`): the task stays
+    /// due, unstamped, and runs on the first tick the drive is back.
     var maintenanceAwaitingDrive: Set<UUID> = []
-    /// Network repositories whose check or prune found their server out of
-    /// reach (`markServerAway`): unstamped, the task stays due, and the
-    /// scheduler leaves it alone until the network changes
+    /// Check or prune found the server out of reach (`markServerAway`): the
+    /// task stays due, unstamped, until the network changes
     /// (`networkPathChanged`) or a listing reads the repository again.
     var maintenanceAwaitingServer: Set<UUID> = []
-    /// Locations whose first listing since launch has not ended. Their due
-    /// work waits, because the listing is what says a password is missing, a
-    /// drive is away or a share needs reconnecting; other locations don't wait.
+    /// Their due work waits for the first listing: it is what says a
+    /// password is missing, a drive is away or a share needs reconnecting.
     @ObservationIgnored var repositoriesAwaitingLaunchListing: Set<UUID> = []
-    /// How long the first tick gives every location's listing, so a launch
-    /// with all of them readable starts its due work in that one tick.
     @ObservationIgnored var launchListingGrace: Duration = .seconds(10)
-    /// Whether `configuration` holds what bootstrap loaded. Until then no
-    /// save runs: an edit made during the load would write the defaults
-    /// over the file.
+    /// No save runs before this: it would write the defaults over the file.
     var isLoaded = false
-    /// True while `bootstrap` is still reading the configuration and locating
-    /// restic. The views show a loading state instead of the empty states:
-    /// on a slow disk the default (empty) configuration otherwise reads as a
-    /// fresh install — or as breakage — for the first seconds.
+    /// Views show a loading state meanwhile: on a slow disk the empty
+    /// default configuration otherwise reads as a fresh install, or as
+    /// breakage, for the first seconds.
     var isBootstrapping = false
     /// The login item as the daemon last answered: `LoginItem.state` is not
     /// observable on its own.
@@ -138,63 +115,49 @@ final class AppModel {
     /// An init parameter and never configuration, so nothing on disk can
     /// point the app at another restic. Only tests pass one.
     @ObservationIgnored let resticExecutable: URL
-    /// Whether SwiftRestic — and so its restic — may read what Full Disk
-    /// Access guards. Probed, not asked: see `refreshFullDiskAccess()`.
+    /// Probed (`refreshFullDiskAccess()`); macOS offers no query.
     var fullDiskAccess: FullDiskAccessStatus = .unknown
-    /// The probe behind `fullDiskAccess`. Injectable because the real one
-    /// answers for whatever process macOS holds responsible — under
-    /// xcodebuild that is Xcode, not the terminal — so a test asserting on
-    /// it would pass or fail by machine.
+    /// Injectable: the real probe answers for whatever process macOS holds
+    /// responsible (under xcodebuild, Xcode), so a test on it would pass or
+    /// fail by machine.
     @ObservationIgnored var fullDiskAccessProbe: @Sendable () -> FullDiskAccessStatus = { FullDiskAccess.probe() }
     /// Injectable: a test host has no notification center, and permission
     /// cannot be turned off from a test.
     @ObservationIgnored var notificationPoster: @MainActor (UNNotificationRequest) async throws -> Void = AppModel.addToNotificationCenter
-    /// The login-item daemon read behind `reconcileLoginItem` and
-    /// `refreshLoginItemStatus`. Injectable for the same reason the probe
-    /// is: `SMAppService` answers for whatever process macOS holds
+    /// Injectable: `SMAppService` answers for whatever process macOS holds
     /// responsible, and a test must not register anything with it.
     @ObservationIgnored var loginItemStateReader: @Sendable () -> LoginItemState = { LoginItem.state }
     @ObservationIgnored var loginItemApplier: @Sendable (Bool) throws -> Void = { try LoginItem.setEnabled($0) }
-    /// The location gate in `reconcileLoginItem`. Injectable because
-    /// Bundle.main in a test is the xctest runner inside Xcode, which the live
-    /// check counts as installed when Xcode sits in /Applications.
+    /// Injectable: in a test Bundle.main is the xctest runner inside Xcode,
+    /// which the live check counts as installed when Xcode is in
+    /// /Applications.
     @ObservationIgnored var installableLocationProbe: @Sendable () -> Bool = { LoginItem.isInInstallableLocation }
-    /// Whether the network is one macOS reports as expensive or
-    /// constrained (`startNetworkMonitor`), written only when it changes so
-    /// the tray's observation does not fire needlessly.
+    /// Expensive or constrained, as macOS reports it. Write only on change:
+    /// the tray observes it.
     var isOnMeteredNetwork = false
     @ObservationIgnored var networkMonitor: NWPathMonitor?
-    /// The last network path seen — whether it is up, through which
-    /// interfaces — so only a change calls `networkPathChanged`.
+    /// So only a change calls `networkPathChanged`.
     @ObservationIgnored var networkSignature: String?
     @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
     /// How many runs Activity keeps; a standing problem is kept past it.
     @ObservationIgnored var activityHistoryLimit = 300
-    /// Transient messages shown at the top of the detail panes, newest first.
-    /// A queue rather than a single slot: an unread error must not be erased
-    /// by the next message — a failing-repository refresh, a finished restore
-    /// and a notification failure can land minutes apart.
+    /// Newest first. A queue, not a single slot: an unread error must not be
+    /// erased by the next message.
     var banners: [Banner] = []
 
     /// When Activity was last open with a problem it had not shown.
     var activitySeenAt: Date?
 
-    /// Progress of a picker-started restore, of which there is at most one
-    /// (drag restores track no progress — their feedback is the drop itself).
+    /// At most one restore runs. Drag restores track no progress: their
+    /// feedback is the drop itself.
     var restoreActivity: OperationProgress?
     var restoreDescription: String = ""
-    /// The repository the running restore reads from. Deleting it cancels the
-    /// restore; kept beside the task because the task alone cannot be asked
+    /// Deleting this repository cancels the restore; a Task cannot be asked
     /// what it is working on.
     var restoreRepositoryID: UUID?
-    /// Which run each slot's progress strip belongs to — the one late-hop
-    /// guard for the plan strips, the maintenance lines and the restore
-    /// strip. A runner's reader thread builds its writer
-    /// (`hopWriter(for:write:)`) and captures the token; the token rotates
-    /// when a strip is installed and retires when it unwinds, so a hop still
-    /// in flight when run N unwinds drops instead of writing into run N+1's
-    /// strip, which nothing else would ever clear. Restore alone rotates at
-    /// its unwind: its reporter is built before the strip is installed.
+    /// The late-hop guard for every progress strip (`hopWriter`). Rotates
+    /// when a strip is installed and retires when it unwinds. Restore alone
+    /// rotates at its unwind: its reporter is built before its strip.
     @ObservationIgnored var runTokens: [TaskRegistry.Slot: UUID] = [:]
 
     let store: ConfigStore
@@ -202,92 +165,64 @@ final class AppModel {
     let shareMounter: ShareMounter
     let serverProbe: ServerProbe
     let volumeProbe: VolumeProbe
-    /// Each share's reconnect in flight, by volume name: a second run that
-    /// needs it at the same tick awaits the first's answer rather than
-    /// mounting it twice.
+    /// By volume name: a second run needing the share awaits the first's
+    /// reconnect rather than mounting it twice.
     @ObservationIgnored var shareReconnects: [String: Task<ShareReconnect, Never>] = [:]
-    /// Resolved restic contexts per repository (repo string + credentials),
-    /// so a restic call does not re-read the Keychain. Entries
-    /// are rebuilt when the repository value changes (`AppModel.context(for:)`
-    /// keeps the value it was built from), and dropped on secret edits
-    /// (`upsert`), repository removal, and auth-class failures
-    /// (`noteAuthFailure`). Holds secrets no longer than the app already
-    /// holds them in each child's environment.
+    /// So a restic call does not re-read the Keychain. Rebuilt when the
+    /// repository value changes, dropped on secret edits, repository removal
+    /// and auth failures (`noteAuthFailure`).
     @ObservationIgnored var resolvedContexts:
         [UUID: (repository: Repository, context: RepositoryContext)] = [:]
     /// Bumped by every `forgetContext`: a secret read that began before a
     /// password save may answer the old password, and must not cache it.
     @ObservationIgnored var contextGenerations: [UUID: Int] = [:]
-    /// What `fileHistory` has read of a file in a backup — its node, with
-    /// the size and modification time the Backups tab's version row shows —
-    /// for the session; the index keeps it across launches. A backup ID is
-    /// restic's hash of the snapshot, so an answer never goes stale while
-    /// its backup lives, and a forgotten backup is never asked about again.
+    /// For the session; the index keeps it across launches. A backup ID is
+    /// restic's hash of the snapshot, so an answer never goes stale.
     @ObservationIgnored var fileHistoryAnswers: [FileHistoryKey: SnapshotNode] = [:]
-    /// The find a folder's read-ahead (`warmFileHistory`) runs, by each file
-    /// it asks about, while it runs: another read-ahead then leaves those
-    /// files to it.
+    /// Each file a running read-ahead (`warmFileHistory`) asks about, so
+    /// another read-ahead leaves it alone.
     @ObservationIgnored var fileHistoryReadAheads: [FileHistoryFile: Task<Void, any Error>] = [:]
-    /// Where view-state stamps (the seen-problem marks) persist. Injectable
-    /// so tests never touch the real defaults, the same way secrets never
-    /// touch the login Keychain.
+    /// The seen-problem marks. Injectable so tests never touch the real
+    /// defaults.
     let viewDefaults: UserDefaults
     let runner = ResticRunner()
-    /// The per-repository snapshot indexes and their upkeep. A cache with a
-    /// rebuild path: its failures are its own, never the refresh's or the
-    /// backup's. See `IndexCoordinator`. Lives in the configuration's folder
-    /// under `index/` (`ConfigStore.defaultDirectory()`,
-    /// `SWIFTRESTIC_CONFIG_DIR` included); a test pointing the store
-    /// elsewhere gets its own folder.
+    /// A cache with a rebuild path: its failures are its own, never the
+    /// refresh's or the backup's. Lives under the configuration folder, so a
+    /// test's store gets its own.
     let indexCoordinator: IndexCoordinator
-    /// Where drag restores and previews copy files out, and the only folder
-    /// the launch sweep empties (`stagingDirectory(for:)`).
+    /// Drag restores and previews copy files here; the only folder the
+    /// launch sweep empties.
     let stagingDirectory: URL
-    /// Its two injected closures are set at the end of `init`.
     let console = ConsoleModel()
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
-    /// Serializes every login-item read and change, so `loginItemState`
-    /// always lands in the order the daemon answered.
+    /// So `loginItemState` lands in the order the daemon answered.
     @ObservationIgnored let loginItemChanges = TaskChain()
-    /// Repositories whose last refresh already announced a stats failure.
-    /// The banner is a transition signal, not a nag: a repository whose stats
-    /// keep failing says it once, and says it again only after a success in
-    /// between proved the failure was gone.
+    /// The stats-failure banner shows once per failing stretch, not on every
+    /// refresh.
     @ObservationIgnored var statsFailureNoted: Set<UUID> = []
-    /// A local-notification delivery problem (denied permission, a rejected
-    /// add) already announced. Same transition-signal rule as the stats
-    /// banner: once per failing stretch, so a denial does not nag on every
-    /// failed run.
+    /// Once per failing stretch, as `statsFailureNoted`.
     @ObservationIgnored var notificationsProblemNoted = false
     @ObservationIgnored var sleepActivity: (any NSObjectProtocol)?
-    /// The configuration writes, one at a time in call order — see
-    /// `flushSave`.
     @ObservationIgnored private let saves = TaskChain()
-    /// Set when bootstrap could not read the configuration from any
-    /// generation. Every save from here on is refused: the live file that is
-    /// on disk is corrupt in unknown ways, and the rotation behind each save
-    /// would shuffle it over the good generations — two saves and every
-    /// backup copy is gone. The user's way out is fixing the file externally
-    /// and restarting; the banner tells them so.
+    /// No generation of the configuration could be read. Every save is
+    /// refused: each save's rotation would push the corrupt live file over
+    /// the good generations, and two saves would lose every backup copy.
     @ObservationIgnored var isConfigurationUnreadable = false
-    /// Set while `shutdown` is unwinding, so a run it cancels is recorded as
-    /// interrupted by quitting rather than "Cancelled".
+    /// So a run `shutdown` cancels is recorded as interrupted by quitting,
+    /// not "Cancelled".
     var isShuttingDown = false
-    /// Silences the debounced save for one assignment — bootstrap writing back
-    /// what it just loaded. The `configuration` didSet would otherwise
-    /// schedule a save right after launch: a rewrite the user never asked
-    /// for, and one that makes tolerant decoding's substituted defaults
-    /// permanent before the banner explaining them has even been read.
+    /// For bootstrap's write-back of what it loaded: a save then would make
+    /// tolerant decoding's substituted defaults permanent before the user
+    /// read the banner explaining them.
     @ObservationIgnored var suppressConfigurationSave = false
 
-    /// The hostname this Mac's backups carry, which the names under Other
-    /// backups leave out (`OtherBackupsGroup.labels`). Tests name their own.
+    /// Labels under Other backups leave this host out
+    /// (`OtherBackupsGroup.labels`).
     let localHostname: String
 
-    /// Each loaded repository's `extraEnvironment`, by its id: how tests
-    /// steer the stub restic, since config.json does not carry it.
+    /// How tests steer the stub restic; config.json does not carry it.
     let repositoryEnvironment: [UUID: [String: String]]
 
     init(
@@ -313,18 +248,15 @@ final class AppModel {
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
         self.activitySeenAt = ActivitySeenStore.loadActivitySeenAt(from: defaults)
-        // A gone owner is the quit unwinding: the pane says so in
-        // the words the rest of the app uses for a cancel.
+        // A gone owner is the quit unwinding.
         console.runCommand = { [weak self] repositoryID, arguments in
             await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
                 ?? ResticError.cancelled.localizedDescription
         }
     }
 
-    /// Re-derives one repository's `backupShelves` from its listing, its own
-    /// plans and every configured plan (which tells a moved plan's group
-    /// under Other backups from an adoptable one); a repository without a
-    /// listing has none.
+    /// Every configured plan goes in: it tells a moved plan's group under
+    /// Other backups from an adoptable one.
     private func reshelve(_ repositoryID: UUID) {
         backupShelves[repositoryID] = snapshots[repositoryID].map {
             BackupShelves(listing: $0, plans: plans(in: repositoryID), allPlans: configuration.plans)
@@ -347,11 +279,9 @@ final class AppModel {
     func flushSave() async {
         guard isLoaded else { return }
         guard !isConfigurationUnreadable else { return }
-        // Another write is in progress: this one runs after it and writes
-        // the newer state. Skipping instead would drop the latest edit for
-        // good — nothing else would save it, including the single flush at
-        // shutdown. Each write reads the configuration when its turn comes,
-        // so the newest state is what lands last.
+        // Queued behind a write in progress, not skipped: skipping would
+        // drop the latest edit for good, shutdown's flush included. Each
+        // write reads the configuration when its turn comes.
         await saves.run { [weak self] in
             guard let self else { return }
             let snapshot = self.configuration
@@ -369,24 +299,17 @@ final class AppModel {
 }
 
 extension AppModel {
-    /// Gives a slot's new strip its own run identity, so writers built for
-    /// the previous run (`hopWriter`) drop from here on.
     func rotateRunToken(for slot: TaskRegistry.Slot) {
         runTokens[slot] = UUID()
     }
 
-    /// Retires the slot's identity with its strip. A late hop's captured
-    /// token then matches nothing.
     func retireRunToken(for slot: TaskRegistry.Slot) {
         runTokens[slot] = nil
     }
 
-    /// The one late-hop guard for progress writes: a runner's reader thread
-    /// gets this closure, the write hops to the main actor, and it drops
-    /// unless the slot still runs the run that built it. The token, not the
-    /// strip's existence, is the guard: after run N unwinds, a hop from
-    /// run N must drop even though run N+1 has already installed its own
-    /// strip.
+    /// The write drops unless the slot still runs the run that built it.
+    /// The token, not the strip's existence, is the guard: a hop from run N
+    /// must drop even after run N+1 installed its own strip.
     func hopWriter<Value: Sendable>(
         for slot: TaskRegistry.Slot,
         write: @escaping @MainActor (AppModel, Value) -> Void

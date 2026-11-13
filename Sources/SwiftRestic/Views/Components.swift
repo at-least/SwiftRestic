@@ -4,12 +4,8 @@ import UniformTypeIdentifiers
 
 
 /// Banners built in place (rather than posted to the queue) have nothing to
-/// dismiss, so they hide the close button.
-///
-/// Only an error and a warning carry a glyph: they are the ones that need
-/// the reader. A success or a notice is its title and message alone. The
-/// glyph is bare: colouring a plate behind it is the one ornament the
-/// interface grammar elsewhere refuses.
+/// dismiss, so they hide the close button. Only an error and a warning carry
+/// a glyph, bare, with no coloured plate behind it.
 struct BannerView: View {
     @Environment(AppModel.self) private var model
     let banner: Banner
@@ -44,10 +40,9 @@ struct BannerView: View {
                         // Never fixedSize(vertical:): the split view asks its
                         // detail column for a minimum size at zero width, where
                         // a height-pinned message wraps to about a character
-                        // per line, and the non-scrolling hosts (Activity, the
-                        // console, the Restore pane, the damaged-install strip)
-                        // then lay out thousands of points taller than the
-                        // window and render blank.
+                        // per line, and the non-scrolling hosts then lay out
+                        // thousands of points taller than the window and
+                        // render blank.
                         Text(banner.message)
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -137,8 +132,7 @@ struct NetworkSharePasswordRows: View {
 
 
 /// A form caption whose teaching text sits behind an info button: the
-/// summary line is always visible, the rest for whoever wants it — the
-/// same on-demand depth the app gives diff metadata.
+/// summary line is always visible, the rest for whoever wants it.
 struct ExpandableCaption: View {
     let summary: String
     /// What reveals on demand; written to read continuously after the summary.
@@ -211,9 +205,8 @@ struct OperationProgressView: View {
                     .accessibilityLabel(Text(title))
             }
 
-            // Once restic has reported any numbers: before that — restic
-            // starting up — the title already
-            // says what is happening.
+            // Before restic reports numbers the title already says what is
+            // happening.
             if let caption = Self.caption(progress) {
                 Text(caption)
                     .font(.caption)
@@ -261,12 +254,10 @@ struct WarningLine: View {
 }
 
 
-/// Why a Snapshots value may read "—", in visible text: under the plan page's
-/// Backups section, as the repository page's Status section body, and in a
-/// Backups tab's empty list. The tooltips carry the same
-/// lines, but a reason only a hovering mouse user can reach is no reason at
-/// all for a keyboard or VoiceOver user. A failed read's one way forward
-/// sits under its words: the known fix, or Try Again.
+/// Why a Snapshots value may read "—", in visible text: a reason only a
+/// hovering mouse user can reach is no reason at all for a keyboard or
+/// VoiceOver user. A failed read's one way forward sits under its words:
+/// the known fix, or Try Again.
 struct SnapshotListingCaveat: View {
     @Environment(AppModel.self) private var model
     let outcome: SnapshotListingOutcome
@@ -320,24 +311,20 @@ struct SnapshotListingCaveat: View {
     }
 }
 
-/// A snapshot's completeness, where snapshots are named (a page's
-/// Backups tab, Activity's run drawer). Only trouble wears a glyph — the rule
-/// Activity's outcome column follows — and it is the completed-with-errors
-/// triangle, because that is what the run behind it was. A known-complete
-/// snapshot keeps an invisible "Complete" for VoiceOver; one with no run
-/// record here makes no claim at all. The caller's fixed-width slot lines
-/// neighbouring text up whether or not a glyph shows.
+/// A snapshot's completeness. Only trouble wears a glyph: the
+/// completed-with-errors triangle, because that is what the run behind it
+/// was. A known-complete snapshot keeps an invisible "Complete" for
+/// VoiceOver; one with no run record here makes no claim. The caller's
+/// fixed-width slot lines neighbouring text up whether or not a glyph shows.
 ///
-/// The invisible label is clear ink, as in Activity's outcome column: on
-/// macOS 26 a zero-opacity Text or Image is dropped from the accessibility
-/// tree in both a List row and a Table cell, and in a sidebar row it
-/// folds into the timestamp beside it, label lost. A clear Text survives
-/// as its own static text in both.
+/// The invisible label is clear ink: on macOS 26 a zero-opacity Text or
+/// Image is dropped from the accessibility tree in both a List row and a
+/// Table cell, and in a sidebar row it folds into the timestamp beside it.
+/// A clear Text survives as its own static text in both.
 struct SnapshotCompletenessMark: View {
     let run: RunRecord?
     /// A list of backups draws the triangle in `.secondary`: orange on every
-    /// incomplete row read as alarm down the whole list. The open backup's
-    /// strip keeps the orange.
+    /// incomplete row reads as alarm down the whole list.
     var isMuted = false
 
     private static let outcome = RunRecord.Outcome.completedWithErrors
@@ -420,7 +407,7 @@ extension SnapshotNode {
 /// exclusions do, a drop from Finder adds them, − removes the selected rows.
 /// Every entry is an item's own path, glob characters escaped
 /// (`ResticService.globEscaped`): "a[1].txt" would otherwise match "a1.txt"
-/// and not itself. A pattern saved earlier still lists and removes.
+/// and not itself. A pattern not added here still lists and removes.
 struct PathListEditor: View {
     @Binding var paths: [String]
 
@@ -526,16 +513,15 @@ private struct ListBarButton: View {
 }
 
 extension View {
-    /// The editors' on/off settings: mini switches in a grouped form,
-    /// the HIG's "consider using a mini switch to control the setting in a
-    /// single row", the same on every tab.
+    /// On/off settings: mini switches in a grouped form, the HIG's "consider
+    /// using a mini switch to control the setting in a single row".
     func editorSwitches() -> some View {
         toggleStyle(.switch).controlSize(.mini)
     }
 }
 
-/// Thin wrapper over `NSOpenPanel`, which SwiftUI's `fileImporter` cannot fully
-/// replace here (we need multi-select across both files and folders).
+/// `NSOpenPanel`, not SwiftUI's `fileImporter`: the exclude list needs
+/// multi-select across both files and folders.
 enum FilePicker {
     @MainActor
     fileprivate static func chooseFoldersAndFiles(message: String, prompt: String) -> [URL]? {
@@ -582,17 +568,11 @@ struct FullDiskAccessButton: View {
     }
 }
 
-/// What to do about a run's unreadable items: macOS's privacy protection,
-/// with the grant's button while it is still missing, then the files' own
-/// permissions, which the grant does not change. Nothing for a run whose
-/// items say neither. The words are `ItemErrorDiagnosis`'s, the same the
-/// banner, the notification and the channels carry; the hints take the
-/// current access state, so a fresh grant turns "grant it" into "back up
-/// again". The two the grant does not fix carry Exclude These Items when it
-/// covers every item they count (`ItemErrorDiagnosis.excludablePaths`),
-/// acting at once as a line's Exclude does. No Back Up Now on "back up again":
-/// the plan page's Backups section and the drawer's footer hold it wherever
-/// the plan can back up.
+/// What to do about a run's unreadable items, in `ItemErrorDiagnosis`'s
+/// words. The hints take the current access state, so a fresh grant turns
+/// "grant it" into "back up again". No Back Up Now on "back up again": the
+/// plan page's Backups section and the drawer's footer hold it wherever the
+/// plan can back up.
 struct ItemErrorHintsView: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord
@@ -644,13 +624,10 @@ struct ItemErrorHintsView: View {
     }
 }
 
-/// One unreadable item's line — in Activity's drawer and on the plan
-/// page's problem row — with the two fixes the diagnosis above it names,
-/// Show in Finder and Exclude from the plan, in a menu at its end and in
-/// its context menu. Only where restic named the
-/// item's path and the run stored it (`RunRecord.unreadableItemPaths`); older
-/// records' lines stay plain text. Exclude acts at once; the plan editor's
-/// Exclude list takes it back.
+/// One unreadable item's line, with Show in Finder and Exclude from the plan
+/// in a menu at its end and in its context menu, where the run stored the
+/// item's path (`RunRecord.unreadableItemPaths`). Exclude acts at once; the
+/// plan editor's Excluded Items list takes it back.
 struct UnreadableItemLine: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord

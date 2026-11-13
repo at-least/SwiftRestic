@@ -22,10 +22,8 @@ import Foundation
 /// and arrowhead proportions are tuned for the 18pt status item and may
 /// diverge from the generator's weights.
 ///
-/// MainActor-isolated: the caches are AppKit bitmaps drawn once and consumed
-/// only by the menu bar. CI's Swift flags the unisolated
-/// statics as shared mutable non-Sendable state; the annotation turns that
-/// real constraint into a compiler-enforced one.
+/// MainActor-isolated: the cached faces are AppKit images used only by the
+/// menu bar, and unisolated they are shared mutable non-Sendable statics.
 @MainActor
 enum MenuBarLogo {
     /// A standard status item's canvas.
@@ -38,10 +36,6 @@ enum MenuBarLogo {
     /// roughly 0.7–0.9pt of margin on every side.
     static let impliedSize: CGFloat = 28
 
-    /// At rest, both plates sit at their own settled alpha — no motion, just
-    /// the stack. While running, the two plates take turns being the bright
-    /// one — the brightness reads as climbing from the bottom plate to the
-    /// top and back, in step with data moving up into the newest snapshot.
     private static let restingAlphas: [CGFloat] = [0.60, 1.0]
     /// Not a literal mirror pair: resting pins the top plate at 1.0, so a
     /// running frame topping out at 1.0 there would differ from rest in one
@@ -61,14 +55,14 @@ enum MenuBarLogo {
     /// stroke's width standing from a touch above the top plate's place to
     /// just below the centre, and its dot beneath, one stroke's gap between.
     /// It sits where the plates sit, so the ring, the head and the ink
-    /// footprint are the idle face's. The tests read the bar's ends and the dot's centre.
+    /// footprint are the idle face's. Tests read the bar's ends and the
+    /// dot's centre.
     static let exclamationBarTop: CGFloat = 0.170
     static let exclamationBarBottom: CGFloat = -0.030
     static let exclamationDotCenter: CGFloat = -0.135
     private static let exclamationDotRadius: CGFloat = 0.040
 
-    /// Which running frame is showing at a given moment. Pure so the cadence
-    /// can be tested without a live timer or view.
+    /// Which running frame is showing at a given moment.
     static func phase(at date: Date) -> Int {
         let step = Int((date.timeIntervalSinceReferenceDate / frameInterval).rounded(.down))
         return ((step % runningAlphaFrames.count) + runningAlphaFrames.count) % runningAlphaFrames.count
@@ -127,8 +121,7 @@ enum MenuBarLogo {
     /// Same ring-and-arrowhead construction as the icon generator, minus the
     /// tile, plus the snapshot stack, settled or pulsing, or the exclamation
     /// mark in its place — template rendering tints from the alpha channel
-    /// alone, so a faded plate survives as gray. The construction fills the
-    /// canvas proportionally, so the mark scales with it (the hero).
+    /// alone, so a faded plate survives as gray.
     private static func draw(in rect: CGRect, into context: CGContext, content: Content) {
         let s = impliedSize * rect.width / canvasSize
         let stroke = s * 0.068

@@ -66,8 +66,8 @@ struct PlanStatusTests {
     func runStampedWithinTheWindowsMinute() throws {
         // The window's now is TimelineView(.everyMinute)'s: the current
         // minute's start. A run that began 20 s into it stamps lastRunAt after
-        // that now; the page read the stamp as one from a clock set ahead and
-        // said Due now until the minute turned (seen in the VM, 7:49 PM).
+        // that now, which must not read as a stamp from a clock set ahead
+        // (Due now until the minute turns).
         let minute = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / 60).rounded(.down) * 60)
         var plan = completeDailyPlan()
         plan.lastRunAt = minute.addingTimeInterval(20)

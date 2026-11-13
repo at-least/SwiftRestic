@@ -14,17 +14,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     }
 }
 
-/// The app stays resident behind its menu bar item, so quitting is the only
-/// moment we are guaranteed to get — pending saves must be flushed and any
-/// running restic terminated before the process goes away.
+/// Quitting is the one moment the resident app is guaranteed: pending saves
+/// are flushed and running restic terminated before the process goes away.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var model: AppModel?
     var router: AppRouter?
 
-    /// The tray is AppKit-owned (see TrayStatusItem for why); it is created
-    /// once, when the model and router first reach the delegate together —
-    /// the scene's `task` hands both over as a pair.
+    /// The tray (AppKit-owned, see TrayStatusItem) is created once, when the
+    /// scene's `task` hands over the model and router.
     fileprivate func wireAppSurface(model: AppModel, router: AppRouter) {
         guard tray == nil else { return }
         self.model = model
@@ -41,8 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// waits here for `wireAppSurface`.
     private var notificationAwaitingWiring: String?
 
-    /// A quiet plan's notification opens the plan — while it still exists;
-    /// a run's, the run.
     private func openNotification(_ identifier: String) {
         guard let model, let router else {
             notificationAwaitingWiring = identifier
@@ -63,12 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// launched the app is delivered to the delegate set by then. Without
     /// one the click only brings the app forward.
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Tooltips show at once, without AppKit's resting pause (the user's
-        // call, 2026-10-23): the editor's language checkboxes list their
-        // patterns in theirs. 50 ms, not 0: with 0, a pointer gliding onto a
-        // checkbox raised no tooltip at all (0 of 5, macOS 26), where 50 ms
-        // raised them in about 0.09 s. In the registration domain, so a
-        // value the defaults domain holds still wins.
+        // Tooltips show at once, without AppKit's resting pause: the user's
+        // call. 50 ms, not 0: with 0, a pointer gliding onto a checkbox
+        // raised no tooltip at all (0 of 5, macOS 26), where 50 ms raised
+        // them in about 0.09 s. In the registration domain, so a value the
+        // defaults domain holds still wins.
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 50])
         EditMenuTrim.install()
         if AppModel.supportsNotifications {
@@ -77,20 +72,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var tray: TrayStatusItem?
-    /// Set while the quit confirmation's modal loop is up. The modal run loop
-    /// keeps the app alive, so a second ⌘Q re-enters `applicationShouldTerminate`
-    /// mid-dialog; answering it again would stack a second alert on the first.
+    /// A second ⌘Q re-enters `applicationShouldTerminate` mid-dialog; this
+    /// keeps it from stacking a second alert.
     private var isConfirmingQuit = false
-    /// Set once quit is accepted and `shutdown` is unwinding — that takes
-    /// seconds (cancelled restic children are awaited), and during it a second
-    /// ⌘Q must not raise a second alert whose Cancel would be a lie, nor run
-    /// a second shutdown against tasks already being awaited.
+    /// `shutdown` takes seconds (cancelled restic children are awaited);
+    /// a second ⌘Q meanwhile must not raise an alert whose Cancel would be a
+    /// lie, nor run a second shutdown.
     private var isTerminating = false
-    /// Set when macOS announces a logout, restart or shutdown, and never
-    /// reset. A second guard behind the Apple-event test in
-    /// `applicationShouldTerminate`: it can only keep the schedule question
-    /// away, never hold a logout. After a logout another app cancelled, a
-    /// later ⌘Q skips that question — a missed warning, not a blocked logout.
+    /// Set on a logout, restart or shutdown, and never reset. It can only
+    /// keep the schedule question away, never hold a logout: after a logout
+    /// another app cancelled, a later ⌘Q skips that question.
     private var sessionIsEnding = false
     private var powerOffObserver: NSObjectProtocol?
 
@@ -116,13 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Coming back from System Settings is the only sign that Full Disk
-    /// Access was granted or taken away, or that the login item was approved
-    /// or removed under Login Items, so every activation asks again — here
-    /// rather than in Settings, so the plan editor catches
-    /// up while no Settings window exists. Separate tasks, so no answer
-    /// waits on another's round trip. The model arrives with the scene's
-    /// task; an activation before that is covered by bootstrap's own reads.
-    /// Listings read a while ago are read again here too.
+    /// Access or the login item changed, so every activation asks again —
+    /// here rather than in Settings, so the plan editor catches up while no
+    /// Settings window exists. An activation before the model arrives is
+    /// covered by bootstrap's own reads.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
         Task { await model?.refreshLoginItemStatus() }
@@ -133,27 +121,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let model else { return .terminateNow }
         if isConfirmingQuit { return .terminateCancel }
         if isTerminating {
-            // Shutdown is already unwinding, and it awaits cancelled restic
-            // children. A second ⌘Q is the user's force-quit escape hatch —
-            // without it, a hung child would make the app unquittable.
+            // A second ⌘Q during shutdown is the force-quit escape hatch:
+            // without it, a hung restic child would make the app unquittable.
             return .terminateNow
         }
 
-        // Whether the user chose this quit here — the app menu, ⌘Q, the
-        // tray. Those call terminate: directly and arrive with no Apple
-        // event; the Dock's, AppleScript's and loginwindow's quit arrives as
-        // a quit Apple event, current while this runs. The event's reason
-        // is not trusted to tell a logout from the Dock: AppleEvents.h says
-        // only that a quit "may include" kAEQuitReason, and a wrong guess
-        // would put a question in front of a logout. So every quit event
-        // counts as not chosen here.
+        // The app menu, ⌘Q and the tray call terminate: with no Apple event;
+        // the Dock's, AppleScript's and loginwindow's quit arrives as a quit
+        // Apple event. Its kAEQuitReason is not trusted to tell a logout from
+        // the Dock (AppleEvents.h: a quit "may include" it), and a wrong
+        // guess would put a question in front of a logout, so every quit
+        // event counts as not chosen here.
         let userChoseQuit = NSAppleEventManager.shared().currentAppleEvent == nil && !sessionIsEnding
 
-        // A backup app that silently cancels its own work on quit is breaking
-        // its promise, so restic work in flight gets one confirmation, on
-        // every path. A quit the user chose also names the scheduled run it
-        // will miss while the app will not start at login. The words come
-        // from the model, where they are testable.
+        // Restic work in flight gets one confirmation, on every quit path: a
+        // backup app must not silently cancel its own work.
         if let confirmation = model.quitConfirmation(userChoseQuit: userChoseQuit) {
             isConfirmingQuit = true
             // The tray's Quit can be chosen while another app is in front;
@@ -168,18 +150,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.addButton(withTitle: "Cancel")
                 alert.buttons[0].hasDestructiveAction = true
                 // No button owns Return: quitting must be a deliberate click,
-                // never the key a reflex hits while typing elsewhere, and the
-                // HIG keeps Cancel from being the default ("avoid making any
-                // button the default button"). Escape keeps its built-in
-                // route to the "Cancel" button.
+                // and the HIG keeps Cancel from being the default ("avoid
+                // making any button the default button"). Escape still
+                // reaches Cancel.
                 alert.buttons[0].keyEquivalent = ""
                 // Full Keyboard Access presses the focused button with Space:
                 // focus starts on Cancel, not Quit Anyway.
                 alert.window.initialFirstResponder = alert.buttons[1]
             } else {
-                // Nothing is in progress and the user just asked to quit:
-                // the alert informs, so Quit keeps NSAlert's Return and
-                // Cancel its Escape.
+                // Nothing in progress: the alert only informs, so Quit keeps
+                // Return.
                 alert.alertStyle = .informational
                 alert.addButton(withTitle: "Quit")
                 alert.addButton(withTitle: "Cancel")
@@ -216,12 +196,11 @@ struct SwiftResticApp: App {
     static let consoleWindowID = "console"
 
     var body: some Scene {
-        // `Window`, not `WindowGroup`: a group is multi-instance, so the menu
-        // bar's "Open SwiftRestic" would add a second identical window every time
-        // instead of bringing the existing one forward.
+        // `Window`, not `WindowGroup`: a group is multi-instance, so opening
+        // the window would add a second one instead of bringing it forward.
         Window("SwiftRestic", id: Self.mainWindowID) {
-            // One minute clock for the whole window (MinuteClock.swift), so
-            // every relative time in it moves on, and moves on together.
+            // One minute clock for the whole window, so every relative time
+            // in it moves on together.
             TimelineView(.everyMinute) { context in
                 RootView()
                     .environment(\.now, context.date)
@@ -236,36 +215,26 @@ struct SwiftResticApp: App {
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
-            // ⌘N is macOS's reflex for "new thing" — an emptied group would
-            // make adding a repository a mouse trip to the sidebar footer.
+            // Replaced, not emptied: ⌘N is macOS's reflex for "new thing".
             CommandGroup(replacing: .newItem) {
-                // The folder panel, then the first-run sheet when it still
-                // has something to ask (`RootView.startBackUpAFolder`).
                 let commands = model.repositoryCommands(for: router.selection)
                 Button("Back Up a Folder…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!commands.canNewPlan)
 
                 Button("Add Backup Location…") {
-                    // Through the router's pending intent: the ask survives
-                    // the window being closed, and a menu command that
-                    // visibly does nothing is a dead key.
                     ask(.newRepository)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!commands.canAddRepository)
             }
-            // The menu's first item is the app's own help, as the HIG's Help
-            // menu has it. With no Help Book, macOS's own item only said
-            // "Help isn't available for SwiftRestic."; this one opens the
-            // concepts in a window of their own — not a sheet, so they read
-            // beside an open editor — and asks nothing of the main window.
+            // With no Help Book, macOS's own item only said "Help isn't
+            // available for SwiftRestic." A window, not a sheet, so the help
+            // reads beside an open editor.
             CommandGroup(replacing: .help) {
                 Button("SwiftRestic Help") { openWindow(id: Self.helpWindowID) }
                     .keyboardShortcut("?", modifiers: .command)
             }
-            // A plan's page searches its own files, and every other page all
-            // backups; both are the toolbar field's (`AppRouter.Intent.showFind`).
             CommandGroup(after: .textEditing) {
                 Button("Find…") { ask(.showFind) }
                     .keyboardShortcut("f", modifiers: .command)
@@ -273,9 +242,8 @@ struct SwiftResticApp: App {
             }
             RestoreCommands()
             CommandGroup(replacing: .importExport) {}
-            // View ▸ Show/Hide Sidebar (⌃⌘S): with the sidebar hidden, its
-            // toolbar button had been the one way back (the HIG's Split
-            // views: "Provide multiple ways to reveal hidden panes").
+            // The HIG's Split views: "Provide multiple ways to reveal hidden
+            // panes".
             SidebarCommands()
             viewMenu
             backupMenu
@@ -303,28 +271,25 @@ struct SwiftResticApp: App {
         .commandsRemoved()
     }
 
-    /// An ask for the root view, which also opens the window: an intent
-    /// parked while no window exists would otherwise ambush a later open.
-    /// RootView refuses it, with a beep, while any sheet is up.
+    /// Also opens the window: an intent parked while no window exists would
+    /// otherwise ambush a later open.
     private func ask(_ intent: AppRouter.Intent) {
         router.request(intent)
         openWindow(id: Self.mainWindowID)
     }
 
-    /// Backups: the selected plan's, then pausing every plan's. Items
-    /// acting on the selection grey out when it is anything else — an enabled
-    /// item over an action that does nothing is a menu that lies. Titles stay
-    /// put, so Help-menu search and muscle memory find them; only the state
-    /// toggles change. Direct calls for every plan's, as the tray's: no editor
-    /// holds a draft of them.
+    /// Items acting on the selected plan grey out on any other selection
+    /// rather than doing nothing. Titles stay put for Help-menu search; only
+    /// the state toggles change. Pausing calls the model directly, as the
+    /// tray does: no editor holds a draft of it.
     private var backupMenu: some Commands {
         CommandMenu("Backup") {
             let p = model.planCommands(for: router.selection)
             Button("Back Up Now") { ask(.runSelectedPlan) }
                 .keyboardShortcut("b", modifiers: .command)
                 .disabled(!p.canBackUp)
-            // The Mac's Stop key. Routed like the rest, so under a sheet it
-            // can at worst be swallowed, never stop a run nobody sees.
+            // Routed, so under a sheet it can at worst be swallowed, never
+            // stop a run nobody sees.
             Button(p.stopTitle) {
                 if let id = p.planID { ask(.stopPlan(id)) }
             }
@@ -357,12 +322,9 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// The View menu's own items, after the sidebar's: what the toolbar
-    /// switches, each a command too (the HIG's Toolbars: "Make every
-    /// toolbar item available as a command in the menu bar") — a page's
-    /// Overview | Backups with ⌘1–⌘2, Finder's keys for its views, and
-    /// Activity's problems filter. Greyed where the page has none: every
-    /// tab on a page with no tabs.
+    /// What the toolbar switches, each a command too (the HIG's Toolbars:
+    /// "Make every toolbar item available as a command in the menu bar"),
+    /// greyed where the page has none.
     private var viewMenu: some Commands {
         CommandGroup(after: .sidebar) {
             let page = router.selection
@@ -388,10 +350,9 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// A submenu of the pause lengths. `.disabled` on a Menu in the menu
-    /// bar greys only its items: the submenu's own row stays enabled — an
-    /// item that opens onto nothing it can do — so a submenu that cannot
-    /// act is a plain disabled item of the same title.
+    /// `.disabled` on a Menu in the menu bar greys only its items, leaving
+    /// the submenu's own row enabled, so a submenu that cannot act is a
+    /// plain disabled item of the same title.
     @ViewBuilder
     private func lengthsMenu(
         _ title: String,
@@ -410,11 +371,9 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// Acts on `commandRepositoryID(for:)`. Verify Backups also starts from
-    /// the repository page's Maintenance header and the sidebar row's menu.
-    /// Clean Up is no command: retention's own cleanup runs on its schedule,
-    /// and a full location's fix and Activity's retry ask for one. Nothing
-    /// destructive has a key.
+    /// Clean Up is no command: it runs on its schedule, and a full
+    /// location's fix and Activity's retry ask for one. Nothing destructive
+    /// has a key.
     private var locationMenu: some Commands {
         CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)

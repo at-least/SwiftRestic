@@ -6,7 +6,6 @@ import Testing
 /// never flagged as fully read — and stop every flush after it, and a
 /// cancelled buffer must flush nothing.
 struct IndexBackfillBufferTests {
-    /// Lock-guarded flush spy: records every call, optionally failing them.
     /// `recorded` holds the calls that landed; `attempted` holds every call,
     /// failed ones included — the only way to see a flush the buffer should
     /// never have made once a failure is injected.

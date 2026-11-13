@@ -1,21 +1,17 @@
 import Foundation
 
-/// One line of backups in a repository: the snapshots of the same folders
-/// from the same host — exactly one group of restic's default
-/// `--group-by host,paths`.
+/// The snapshots of the same folders from the same host: one group of
+/// restic's default `--group-by host,paths`, and the app's one answer to
+/// "the same backup, over time". Under Other backups it groups the
+/// snapshots no plan tag marks (tagged ones group by plan,
+/// `OtherBackupsGroup`); the Change column and Show Changes Only compare
+/// with the previous snapshot in it.
 ///
-/// The app's single answer to "the same backup, over time". Under a
-/// repository's Other backups it groups the records no plan tag marks (a
-/// plan's own, tagged ones group by their plan instead — see
-/// `OtherBackupsGroup`), and both the restore pane's Change column and the
-/// Show Changes Only compare with the previous snapshot in it. Retention is
-/// narrower: `forget` runs per plan (`--tag <plan>`), and restic
-/// groups that plan's snapshots by host+paths — so a lineage two plans share
-/// is thinned as two separate groups, and snapshots without a plan tag are
-/// never thinned by the app. The consequence the rule accepts: a plan whose
-/// folders change starts a new lineage, and the older one stays behind as a
-/// group of its own, of which `forget` keeps a full policy's worth
-/// indefinitely.
+/// Retention is narrower: `forget` runs per plan (`--tag <plan>`), so a
+/// lineage two plans share is thinned as two groups, and untagged snapshots
+/// are never thinned by the app. Accepted: a plan whose folders change
+/// leaves the older lineage behind, of which `forget` keeps a full
+/// policy's worth indefinitely.
 struct SnapshotLineage: Identifiable, Sendable, Equatable {
     struct Key: Hashable, Sendable {
         var hostname: String?
@@ -28,16 +24,13 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
     let key: Key
     /// Newest first.
     let snapshots: [Snapshot]
-    /// Every `swiftrestic-plan-` tag on the lineage's snapshots, and whether
-    /// any snapshot carries none — who wrote it, read once at grouping time
-    /// so naming it never rescans the snapshots.
+    /// Who wrote it, read once at grouping time so naming never rescans.
     private let planTags: Set<String>
     private let hasSnapshotsWithoutPlan: Bool
 
     var id: Key { key }
 
-    /// The lineages in `snapshots`, the one holding the newest backup first,
-    /// each lineage's snapshots newest first. Input order does not matter.
+    /// The lineage holding the newest backup first, each newest first.
     static func grouping(_ snapshots: [Snapshot]) -> [SnapshotLineage] {
         var buckets: [Key: [Snapshot]] = [:]
         for snapshot in snapshots {
@@ -62,9 +55,6 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
             .sorted { SnapshotLineage.newestFirst($0.snapshots[0], $1.snapshots[0]) }
     }
 
-    /// The backup the restore pane's Change column compares `snapshotID`
-    /// against: the previous one in its lineage, never merely the row above
-    /// in a repository several plans share.
     static func changeBaseline(for snapshotID: String, in listing: [Snapshot]) -> Snapshot? {
         listing.first { $0.id == snapshotID }?.previousComparable(in: listing)
     }
@@ -77,47 +67,34 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
 extension SnapshotLineage {
     struct Label: Equatable, Sendable {
         var title: String
-        /// What tells two groups apart when the title alone cannot: the
-        /// host — among a plan's own backups when several Macs made them,
-        /// under Other backups when it isn't this Mac — the folders when two
-        /// groups share a title, the tag's last four hex digits when the
-        /// caption still matches. Nil when the title is enough.
+        /// What tells two groups apart when the title cannot: the host, the
+        /// folders, the tag's last four hex digits. Nil when the title is
+        /// enough.
         var qualifier: String?
-        /// The group row's whole second line — the count, the qualifier's
-        /// pieces and which kind of group it is (`OtherBackupsGroup`
-        /// derives it). Nil where no row shows the label: a plan's records
-        /// sit under a plan row whose caption is `PlanStatus`'s.
+        /// Nil where no row shows the label: a plan's records sit under a
+        /// plan row whose caption is `PlanStatus`'s.
         var caption: Caption?
-        /// Every folder and the host — the row tooltip's identity line,
-        /// here and under Other backups; who wrote a group there is said by
-        /// its caption's kind and, as a sentence, on the group's page.
+        /// Every folder and the host: the row tooltip.
         var detail: String
 
-        /// A group row's second line in the pieces the row lays out: the
-        /// count and the kind always read whole, and the qualifiers between
-        /// them — a long hostname, a folder list — give way first.
+        /// The count and the kind always read whole; the qualifiers between
+        /// them give way first.
         struct Caption: Equatable, Sendable {
             var count: String
             var qualifiers: [String] = []
-            /// Which kind of group it is, then the tag's last four hex digits
-            /// when another group's caption still matches. Empty for a
-            /// configured plan that names no repository.
+            /// Empty for a configured plan that names no repository.
             var kind: [String] = []
 
-            /// The whole line, for VoiceOver and for comparing captions.
+            /// For VoiceOver and for comparing captions.
             var text: String { ([count] + qualifiers + kind).joined(separator: " · ") }
         }
     }
 
-    /// Names for `lineages`, all of one plan's own backups and shown
-    /// together: the plan's label when one existing plan wrote every
-    /// snapshot in the lineage, otherwise the folders' names, with who
-    /// wrote them in the tooltip. A lineage another plan's tag also
-    /// marks — only an outside `restic tag` can do that — must not wear
-    /// one plan's label, which would claim the other's backups. A plan
-    /// whose folders changed — a list an earlier build let it hold — leaves
-    /// two lineages with one label, so a shared title brings the folders
-    /// into the qualifier.
+    /// `lineages`: one plan's own backups, shown together. The plan's label
+    /// only when one existing plan wrote every snapshot; a lineage another
+    /// plan's tag also marks (only an outside `restic tag` can do that)
+    /// would otherwise claim the other's backups. A shared title brings the
+    /// folders into the qualifier.
     static func labels(for lineages: [SnapshotLineage], plans: [BackupPlan]) -> [Key: Label] {
         let titles = Dictionary(uniqueKeysWithValues: lineages.map { ($0.key, title(of: $0, plans: plans)) })
         var titleCounts: [String: Int] = [:]
@@ -150,10 +127,7 @@ extension SnapshotLineage {
         return labels
     }
 
-    /// The one way a backup is named outside the sidebar's group rows — the
-    /// restore pane's header and any prompt that says which backup it acts
-    /// on: its group's title, qualified exactly as the sidebar qualifies
-    /// the group, so the two never disagree.
+    /// Qualified exactly as the sidebar qualifies the group.
     static func displayName(of record: Snapshot, label: Label?) -> String {
         if let label {
             return [label.title, label.qualifier].compactMap { $0 }.joined(separator: " · ")
@@ -164,9 +138,8 @@ extension SnapshotLineage {
         return folders.isEmpty ? "Backup" : folders.joined(separator: ", ")
     }
 
-    /// A restic-sourced path's last component, cut by bytes
-    /// (`ResticPath.basename`): an NSString cut re-aligns at a grapheme and
-    /// can swallow the separator behind a Prepend character such as U+0600.
+    /// Not an NSString cut, which can swallow the separator behind a
+    /// Prepend character such as U+0600 (`ResticPath`).
     static func component(of path: String) -> String {
         let normalized = ResticPath.normalized(path)
         let last = ResticPath.basename(of: normalized)
@@ -185,8 +158,7 @@ extension SnapshotLineage {
         return names.isEmpty ? "Untitled backup" : names.joined(separator: ", ")
     }
 
-    /// The one existing plan every snapshot in the lineage carries the tag
-    /// of, or nil when the lineage mixes writers or its plan is gone.
+    /// nil when the lineage mixes writers or its plan is gone.
     private static func soleWriter(of lineage: SnapshotLineage, plans: [BackupPlan]) -> BackupPlan? {
         guard lineage.planTags.count == 1, !lineage.hasSnapshotsWithoutPlan,
               let tag = lineage.planTags.first
@@ -195,17 +167,13 @@ extension SnapshotLineage {
     }
 }
 
-/// One group among a repository's Other backups: every backup carrying one
-/// plan's tag (`swiftrestic-plan-<uuid>`), or — for the backups no plan tag
-/// marks — one (host, folders) lineage.
+/// One group under a repository's Other backups: every backup carrying one
+/// plan's tag, or for untagged backups one lineage.
 ///
-/// A plan-tagged group is one plan's whole history in this repository, one
-/// flat newest-first list exactly like a plan's own shelf, even when it spans
-/// several hosts or sets of folders: the Change column still compares within
-/// each snapshot's own lineage (`Snapshot.previousComparable`), not by row.
-/// Whether the plan is still configured — a plan that now backs up to
-/// another repository, against a deleted one no configuration sets up — is
-/// what the labels say, not what the grouping depends on.
+/// A plan group is one flat newest-first list even when it spans several
+/// hosts or sets of folders; the Change column still compares within each
+/// snapshot's lineage. Whether the plan is still configured changes the
+/// labels, not the grouping.
 enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
     enum ID: Hashable, Sendable {
         case plan(UUID)
@@ -222,7 +190,7 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
         }
     }
 
-    /// The group's backups, newest first — a plan's own shelf's shape.
+    /// Newest first.
     var snapshots: [Snapshot] {
         switch self {
         case let .plan(_, snapshots): snapshots
@@ -230,9 +198,8 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
         }
     }
 
-    /// The groups of `snapshots` — the rest, once every backup a live plan
-    /// of the repository made is shelved under it — the one holding the
-    /// newest backup first. Input order does not matter.
+    /// `snapshots`: what is left once each live plan of the repository took
+    /// its own. The group holding the newest backup first.
     static func grouping(_ snapshots: [Snapshot]) -> [OtherBackupsGroup] {
         var byPlan: [UUID: [Snapshot]] = [:]
         var rest: [Snapshot] = []
@@ -254,16 +221,9 @@ enum OtherBackupsGroup: Identifiable, Sendable, Equatable {
 }
 
 extension OtherBackupsGroup {
-    /// Names for `groups`, all of one repository's Other backups and shown
-    /// together: the plan's label when the group is a configured plan's (that
-    /// plan backs up to another repository now), the newest backup's folders
-    /// otherwise — the newest member decides when a group spans several sets
-    /// of them. The caption counts the backups and says which kind of group
-    /// it is; the qualifier names the Mac the newest backup came from when it
-    /// isn't `localHost`, a title another group shares brings the folders in,
-    /// and a caption another group still matches brings the tag's last four
-    /// hex digits — the one identifier left. `plans` is every configured
-    /// plan, not just the repository's own.
+    /// The plan's label for a configured plan's group (it backs up to
+    /// another repository), else the newest backup's folders. `plans` is
+    /// every configured plan, not just the repository's own.
     static func labels(
         for groups: [OtherBackupsGroup],
         plans: [BackupPlan],
@@ -282,40 +242,27 @@ extension OtherBackupsGroup {
         for group in groups {
             let newest = group.snapshots[0]
             let title = titles[group.id]!
-            // The lineage key's sorted paths: the one order every folder
-            // list reads, whatever order the snapshot lists them in.
             let folders = newest.lineageKey.folderList
             let host = newest.hostname ?? "Unknown Mac"
             var qualifiers: [String] = []
-            // Another Mac's backups are what a name here must warn about;
-            // this Mac's own name said nothing, and a long hostname crowds
-            // the line.
+            // This Mac's own name says nothing and crowds the line.
             if newest.hostname != localHost { qualifiers.append(host) }
             if titleCounts[title, default: 0] > 1 { qualifiers.append(folders) }
             var caption = SnapshotLineage.Label.Caption(
                 count: Format.plural(group.snapshots.count, "backup"),
                 qualifiers: qualifiers
             )
-            // The tooltip is the identity line only — folders and host. The
-            // kind's story sits on the group's page
-            // (`OtherGroupPageSummary.explanation`), where there is room for
-            // it; no quotes around a destination a cut can strand — the
-            // short spelling still truncates its tail when even the count
-            // and kind overflow.
+            // The kind's story is on the group's page
+            // (`OtherGroupPageSummary.explanation`).
             let detail = "\(folders) — from \(host)"
             if case let .plan(id, _) = group {
                 let plan = plans.withID(id)
-                // A configured plan: it backs up elsewhere now, which is why
-                // these backups are not under it. Its repository can be read
-                // whenever the configuration is one of the app's own flows —
-                // removing a repository takes its plans — so a plan that
-                // names none says no destination rather than a wrong one.
+                // A plan naming no repository says no destination rather
+                // than a wrong one.
                 if let plan, let destination = repositories.withID(plan.repositoryID) {
                     caption.kind = ["now backs up to \(destination.label(among: repositories))"]
                 } else if plan == nil {
-                    // No configuration holds this plan: it was deleted here,
-                    // or is still running on another Mac — the two cannot be
-                    // told apart, so the row asserts neither.
+                    // Deleted here or running on another Mac: indistinguishable.
                     caption.kind = ["not set up here"]
                 }
             } else {
@@ -333,12 +280,10 @@ extension OtherBackupsGroup {
         return labels
     }
 
-    /// A caption another group still matches gets the tag's last four hex
-    /// digits. Only plan groups can get this far: two untagged groups with
-    /// the same folders from the same host would be one lineage, and the
-    /// kind word always tells an untagged group from a plan one. Two UUIDs
-    /// that share their last four digits would still read alike — the one
-    /// collision the rule accepts.
+    /// Only plan groups can collide: two untagged groups with the same
+    /// folders and host would be one lineage, and the kind word tells
+    /// untagged from plan. Two UUIDs sharing their last four digits still
+    /// read alike; accepted.
     private static func disambiguateCollidingCaptions(
         _ labels: inout [ID: SnapshotLineage.Label],
         groups: [OtherBackupsGroup]
@@ -368,10 +313,7 @@ extension OtherBackupsGroup {
 }
 
 extension SnapshotLineage.Key {
-    /// The folders as every folder list reads them — the one order (sorted,
-    /// as restic's own grouping compares them), tilde-abbreviated and
-    /// joined. `SnapshotLineage.labels` qualifies with it, a group's page
-    /// lists a set of them, and nowhere spells it a second way.
+    /// Every folder list's one spelling.
     var folderList: String {
         paths.map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: ", ")
     }
@@ -382,12 +324,9 @@ extension Snapshot {
         SnapshotLineage.Key(hostname: hostname, paths: paths.sorted())
     }
 
-    /// The plan this snapshot's tag names: the lexicographically first
-    /// `swiftrestic-plan-` tag that parses — the snapshot index's own rule
-    /// for a backup several plans' tags claim, which only an outside
-    /// `restic tag` can produce (restic's listing already sorts tags;
-    /// sorting again keeps other writers' in step). Nil when no plan tag
-    /// marks it.
+    /// The lexicographically first plan tag that parses: the snapshot
+    /// index's rule for a backup several plans' tags claim (only an outside
+    /// `restic tag` can do that).
     var planID: UUID? {
         planTags
             .sorted()
@@ -396,8 +335,6 @@ extension Snapshot {
             .first
     }
 
-    /// The tags the app stamps to name a snapshot's plan
-    /// (`ResticService.planTag`) — the "who wrote this backup" test.
     var planTags: [String] {
         tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }
     }
@@ -406,9 +343,7 @@ extension Snapshot {
         tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
     }
 
-    /// The group under Other backups that holds this snapshot — the rule
-    /// `OtherBackupsGroup.grouping` groups by, read where one record's group
-    /// is looked up without regrouping.
+    /// `OtherBackupsGroup.grouping`'s rule, without regrouping.
     var otherGroupID: OtherBackupsGroup.ID {
         planID.map(OtherBackupsGroup.ID.plan) ?? .lineage(lineageKey)
     }

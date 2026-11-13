@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The refresh members genuinely differ per engine and stay per-subclass.
+/// The refresh members differ per engine, so each subclass declares its own.
 @MainActor
 class EngineRecordingSink {
     var log: [String] = []
@@ -524,11 +524,10 @@ struct BackupRunEngineTests {
 
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.unreadableItemPaths == ["/src/a.pdf: permission denied": "/src/a.pdf"])
-        // A record written before the field existed has no paths, not empty ones.
+        // A record without the field has no paths, not empty ones.
         let old = try JSONDecoder().decode(RunRecord.self, from: Data(#"{"kind":"backup","itemErrors":["/x: permission denied"],"itemErrorCount":1}"#.utf8))
         #expect(old.unreadableItemPaths == nil)
         let encoded = try JSONEncoder().encode(record)
-        // Stored as an object keyed by the line, as a [String: String] map was.
         #expect(String(decoding: encoded, as: UTF8.self).contains(#""unreadableItemPaths":{"\/src\/a.pdf: permission denied":"\/src\/a.pdf"}"#))
         let roundTrip = try JSONDecoder().decode(RunRecord.self, from: encoded)
         #expect(roundTrip.unreadableItemPaths == record.unreadableItemPaths)

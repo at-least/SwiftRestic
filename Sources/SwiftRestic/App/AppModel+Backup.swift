@@ -1,11 +1,9 @@
 import Foundation
 
 extension AppModel {
-    /// `askedByUser` is false for the scheduler's and a mount's runs, which
-    /// a check or prune drops without a banner: no one clicked, and the
-    /// next slot or mount brings them back. One the user asked for waits in
-    /// the repository's queue, as its banner says, and starts as the job
-    /// holding the lock unwinds (`startQueuedBackups`).
+    /// A held lock drops a run nobody asked for (scheduler, mount) without a
+    /// banner: the next slot or mount brings it back. One the user asked for
+    /// waits in the repository's queue (`startQueuedBackups`).
     func runBackup(planID: UUID, askedByUser: Bool = true) {
         guard !isShuttingDown else { return }
         guard !tasks.isOccupied(.plan(planID)) else { return }
@@ -39,11 +37,10 @@ extension AppModel {
         }, in: .plan(planID))
     }
 
-    /// The unwind of every run in the plan's slot (backup and Apply
-    /// Retention Now alike) calls this, so the copies cannot drift. Call
-    /// only from the run's own task: `clear` while a cancelled
+    /// Every run in the plan's slot (backup, Apply Retention Now) unwinds
+    /// here. Call only from the run's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
-    /// `tasks.drain()` would no longer wait for its record.
+    /// `tasks.drain()` would not wait for its record.
     func unwindPlanRun(_ planID: UUID) {
         tasks.clear(.plan(planID))
         // The token retires with the strip, so a hop from this run drops
@@ -55,15 +52,10 @@ extension AppModel {
         startQueuedBackups()
     }
 
-    /// Starts several plans' backups — a mount's catch-up —
-    /// one at a time per repository, the scheduler's rule
-    /// (`Scheduler.duePlans`): started together, the first to finish ran
-    /// its retention while the other's backup still held the repository,
-    /// and lost the lock (restic's exit 11, "Retention skipped"). A plan
-    /// whose repository another plan's run holds waits in that
-    /// repository's queue — its sidebar row says so — and starts when the
-    /// runs ahead of it are done (`startQueuedBackups`). A plan already
-    /// running or waiting is left as it is.
+    /// One at a time per repository, as `Scheduler.duePlans`: started
+    /// together, the first to finish ran its retention while the other's
+    /// backup held the repository, and lost the lock (restic exit 11,
+    /// "Retention skipped").
     func runBackups(planIDs: [UUID], askedByUser: Bool = true) {
         for planID in planIDs where activity[planID] == nil && !isQueued(planID) {
             if let repositoryID = plan(id: planID)?.repositoryID, planRunHolds(repositoryID) {
@@ -94,13 +86,9 @@ extension AppModel {
         }
     }
 
-    /// Starts the next plan in each queue whose repository no plan's run or
-    /// check or prune holds now — called as every run and every check or
-    /// prune unwinds. A plan that does not start
-    /// (removed meanwhile, the app quitting, its repository locked) gives
-    /// its turn to the next. A catch-up nobody asked for waits out a hold as
-    /// the scheduler's runs do, and is dropped meanwhile:
-    /// a later mount or its next slot brings it back.
+    /// Called as every run, check and prune unwinds. A queued run nobody
+    /// asked for is dropped while a schedule hold stands, as the
+    /// scheduler's runs are.
     func startQueuedBackups() {
         // Not `runBackup`'s lock test alone: a plan it re-queues behind a
         // held lock would come straight back to the front of this loop.
@@ -114,13 +102,10 @@ extension AppModel {
         }
     }
 
-    /// Installs a fresh run strip — activity for the phase, a zeroed
-    /// progress entry — plus a new run token, so a progress hop still in
-    /// flight from the plan's previous run drops instead of writing into
-    /// this one. The engine's own writes (`setActivityPhase`) need no token:
-    /// they run inside `perform`, sequenced on the main actor before the
-    /// unwind clears the strip — only the runner-invoked reporter runs on a
-    /// background thread and hops over unsequenced.
+    /// The new run token drops a progress hop still in flight from the
+    /// previous run. The engine's own writes (`setActivityPhase`) need no
+    /// token: they are sequenced on the main actor before the unwind; only
+    /// the reporter hops over from a background thread.
     func installPlanActivity(
         plan: BackupPlan,
         repository: Repository,
@@ -136,12 +121,10 @@ extension AppModel {
         reconcileSleepAssertion()
     }
 
-    /// Holds off idle system sleep while any backup or maintenance job runs,
-    /// and lets go when the last one ends — a Mac that idles to sleep
-    /// mid-run suspends restic, and a long first backup otherwise never
-    /// finishes overnight. Called wherever a run strip is installed or
-    /// retired, so every way out of a run (done, failed, stopped) passes
-    /// here. The display may still sleep; a closed lid still sleeps.
+    /// A Mac that idles to sleep mid-run suspends restic, and a long first
+    /// backup never finishes overnight. Call wherever a run strip or
+    /// maintenance entry is installed or retired. The display and a closed
+    /// lid still sleep.
     func reconcileSleepAssertion() {
         let working = !activity.isEmpty || !maintenance.isEmpty
         if working, sleepActivity == nil {
@@ -217,15 +200,11 @@ extension AppModel: BackupRunEngine.Sink {
         await broadcast(record: record, plan: plan)
     }
 
-    /// A Back Up Now that was skipped, answered in the window: it ends in
-    /// milliseconds, the strip's flash saying nothing, and no surface but
-    /// Activity records a skip. How every other run went is the sidebar's
-    /// caption, the plan page's problem row, Activity's badge and the menu
-    /// bar's — where a banner over every page said it again.
-    /// A skip nobody asked for — a drive away at every slot of an hourly
-    /// plan — stays in Activity, and the quiet-plan alert speaks if the
-    /// drive stays away. The queue is global, so the title names the plan
-    /// with its repository.
+    /// Only a skipped Back Up Now gets a banner: it ends in milliseconds and
+    /// nothing but Activity records a skip. Other outcomes already show in
+    /// the sidebar, plan page, Activity badge and menu bar; a skip nobody
+    /// asked for (a drive away at every hourly slot) stays in Activity.
+    /// The banner queue is global, so the title names the repository too.
     private func announceInApp(record: RunRecord) {
         // A removed plan's run outlives it (`deletePlan`): no banner for it.
         guard record.outcome == .skipped, let planID = record.planID,

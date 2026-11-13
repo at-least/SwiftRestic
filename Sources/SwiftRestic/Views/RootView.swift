@@ -20,8 +20,8 @@ struct RootView: View {
     /// cloud kinds: set from the sheet's handoff until the editor closes,
     /// its Back Up then creating the plan as the sheet's would.
     @State private var firstBackupHandoff: FirstBackupHandoff?
-    /// The one confirmation up, from whichever surface asked — the menu
-    /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
+    /// The one confirmation up, from whichever surface asked
+    /// (`CommandPresentations`).
     @State private var pendingConfirmation: CommandConfirmation?
     /// The disk's turn every page's Backups tab reads this Mac by.
     @State private var diskWatch = DiskWatch()
@@ -81,8 +81,6 @@ struct RootView: View {
         .clipped()
     }
 
-    /// Its own chain for the type-check limit, like the others — see the
-    /// type doc.
     private func presented<V: View>(over content: V) -> some View {
         content
         .sheet(item: $editingPlan) { plan in
@@ -124,8 +122,8 @@ struct RootView: View {
             PasswordPromptSheet(repository: repository)
                 .environment(model)
         }
-        // Adopt's landing is the new plan's own page on its Backups tab —
-        // the click's whole result in one place: the history, now the plan's.
+        // Adopt lands on the new plan's Backups tab: the history, now the
+        // plan's.
         .sheet(item: $adoptingPlan) { plan in
             AdoptPlanSheet(
                 draft: plan,
@@ -136,18 +134,15 @@ struct RootView: View {
             )
             .environment(model)
         }
-        // The destructive confirmations and the retention sheet, in a
-        // modifier of their own: this chain sits at the type-check limit.
+        // A modifier of its own: this chain sits at the type-check limit.
         .modifier(CommandPresentations(
             pendingConfirmation: $pendingConfirmation
         ))
     }
 
-    /// The intents from the menu bar and the tray. The menu commands and the
-    /// tray have no direct way to reach this view, so they ask the router;
-    /// this is the consumption half, on the same appear-or-change rule that
-    /// keeps an ask alive while the window is closed. Its own chain for the
-    /// type-check limit.
+    /// The intents the menu bar and the tray park on the router, which cannot
+    /// reach this view. Consumed on appear (`revalidate`) and on change, so
+    /// an ask stays alive while the window is closed.
     private func observed<V: View>(over content: V) -> some View {
         content
         .onChange(of: router.pendingIntent) {
@@ -345,9 +340,7 @@ struct RootView: View {
         case "restore":
             pendingCaptureRestore = true
         // The group pages need group rows, which the listing builds: the
-        // ask parks and the backupShelves onChange consumes it — the same
-        // wait as the restore pane's. The adoptable group is the adopt
-        // flow's landing, so it gets its own value.
+        // ask parks and the backupShelves onChange consumes it.
         case "orphanGroup":
             pendingCaptureGroupPane = .adoptable
         case "movedGroup":
@@ -424,13 +417,12 @@ struct RootView: View {
     }
 
     /// Applies one consumed intent. An ask arriving while a sheet is up is
-    /// dropped with a beep — macOS's "not now" — since two sheets cannot
-    /// present at once, and because the main menu stays live under a sheet:
-    /// a Remove Location would leave the editor saving against a repository
-    /// that is gone. The panes' own sheets (a restore's destination) are
-    /// invisible from here, so AppKit is asked: SwiftUI
+    /// dropped with a beep (macOS's "not now"): two sheets cannot present at
+    /// once, and the main menu stays live under a sheet, so a Remove Location
+    /// would leave the editor saving against a repository that is gone. The
+    /// panes' own sheets are invisible from here, so AppKit is asked: SwiftUI
     /// presents every sheet as the window's attached sheet. Each ask is
-    /// checked again against the model — it may have waited for a window
+    /// checked again against the model: it may have waited for a window
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }

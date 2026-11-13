@@ -158,8 +158,8 @@ struct RestorePaneLoadTests {
         #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: []) == ["/a", "/b"])
         #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: ["/a", "/a/x"]) == ["/b"])
         #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/a", "/b"], walk: ["/b"]) == ["/a"])
-        // NFC and NFD: one String to Swift's ==, two roots to restic. Failed
-        // with String comparison (the NFD root was dropped).
+        // NFC and NFD: one String to Swift's ==, two roots to restic; a
+        // String comparison drops the NFD root.
         #expect(RestorePaneLoad.rootsBesideWalk(roots: ["/Caf\u{E9}", "/Cafe\u{301}"], walk: ["/Caf\u{E9}"])
             .map { PathKey($0) } == [PathKey("/Cafe\u{301}")])
     }

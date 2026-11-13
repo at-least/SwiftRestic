@@ -92,8 +92,7 @@ struct MenuBarStatusTests {
             MenuBarStatus.headline(activity: [:], hasNoRepositories: true, plans: [], repositories: [], nextRun: nil)
                 == "No backup location set"
         )
-        // Running work still holds the headline back even with no repository —
-        // the same rule as every other running state.
+        // Running work holds the headline back even with no repository.
         let nightly = plan(name: "Nightly")
         #expect(
             MenuBarStatus.headline(
@@ -302,9 +301,8 @@ struct MenuBarStatusTests {
         let next = Date.now.addingTimeInterval(86_400)
         let whileRunning = MenuBarStatus.headline(activity: [nightly.id: activity()], plans: [], repositories: [], nextRun: nil)
         #expect(whileRunning == nil)
-        // Back to the next-run line — not the running line and not the
-        // empty-state text. (The relative-date suffix has its own pins; the
-        // prefix is what distinguishes this state from its neighbours.)
+        // The relative-date suffix has its own pins; the prefix is what tells
+        // this state from its neighbours.
         let restored = MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (plan: nightly, date: next))
         #expect(restored?.hasPrefix("Next: Nightly — ") == true)
     }
@@ -592,8 +590,8 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: true) == nil)
         #expect(MenuBarStatus.problemLine(runs: [failed], hasNoRepositories: false) != nil)
 
-        // The icon's own ordering is unchanged: unconfigured still beats
-        // problem, so both channels now answer setup the same way.
+        // The icon's order: unconfigured beats problem, so the icon and the
+        // problem line both answer setup.
         #expect(
             MenuBarStatus.iconState(
                 activity: [:],
@@ -701,8 +699,8 @@ struct MenuBarStatusTests {
     func holdLeadsAndHeadlineStepsAside() throws {
         let future = Date.now.addingTimeInterval(3600)
         let nightly = plan(name: "Nightly")
-        // On battery with the setting on, a "Next:" headline would lie: the
-        // scheduler will not fire it.
+        // While held, a "Next:" headline would lie: the scheduler will not
+        // fire it.
         #expect(MenuBarStatus.headline(activity: [:], hold: .onMeteredNetwork, plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(
@@ -963,8 +961,8 @@ struct MenuBarStatusTests {
         #expect(paused.hasPrefix("SwiftRestic"))
         let problemHeld = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onMeteredNetwork)
         #expect(problemHeld.contains("attention") && problemHeld.contains("metered"), "was \(problemHeld)")
-        // No hold: today's words, spelled out so a default argument cannot
-        // make the comparison trivially true.
+        // No hold: the words spelled out, so a default argument cannot make
+        // the comparison trivially true.
         #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil) == "SwiftRestic")
         #expect(MenuBarStatus.accessibilityDescription(for: .problem, hold: nil) == "SwiftRestic, needs attention")
         #expect(MenuBarStatus.accessibilityDescription(for: .running, hold: nil) == "SwiftRestic, work in progress")

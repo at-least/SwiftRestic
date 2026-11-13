@@ -1,12 +1,10 @@
 import Foundation
 
 /// A backup problem's stretch: how many of a plan's backups in a row ended
-/// the same way for the same cause (`isSameProblem(as:)`). A local
-/// notification speaks for the first of them only
-/// (`AppModel.wantsNotification(for:)`), and the plan page's problem row
-/// counts them ("3 times in a row"). A success ends it — the outcome that
-/// heals the row — as does another outcome or cause. A backup skipped or
-/// stopped ran nothing, and passes over it (`passesOverProblems`).
+/// the same way for the same cause. A local notification speaks for the
+/// first only (`AppModel.wantsNotification(for:)`); the plan page's problem
+/// row counts them ("3 times in a row"). Any other outcome or cause ends it;
+/// a backup skipped or stopped ran nothing and passes over it.
 extension RunRecord {
     private var isBackupProblem: Bool {
         kind == .backup && outcome.isProblem
@@ -20,14 +18,11 @@ extension RunRecord {
         isBackupProblem && other.isBackupProblem && outcome == other.outcome && problemCause == other.problemCause
     }
 
-    /// What a problem is about. A failure for folders gone from this Mac by
-    /// their paths (`missingSources`: its message names only each one's
-    /// last component), one for network shares that refused by their
-    /// volumes (`refusedShares`); any other failure by restic's exit and
-    /// first sentence. A warning by its unreadable items, exactly — two files are
-    /// two problems — then its other lines (the decoding gap, a skipped
-    /// retention). The sentence and the other lines lose their digits: a
-    /// lock's PID and age, an address, a count change from run to run.
+    /// Missing sources by their paths (the message names only each last
+    /// component); refused shares by their volumes; any other failure by
+    /// restic's exit and first sentence. A warning by its unreadable items
+    /// exactly, then its other lines. Sentences and other lines lose their
+    /// digits: a lock's PID and age, an address, a count change between runs.
     private var problemCause: String {
         func withoutDigits(_ text: String) -> String { text.filter { !$0.isNumber } }
         if outcome == .failed {
@@ -40,11 +35,9 @@ extension RunRecord {
         return (Array(unreadableItems) + rest).joined(separator: "\n")
     }
 
-    /// This backup's stretch, `previous` being its plan's backup before it
-    /// that did not pass over, or nil when there is none: the runs it stands
-    /// for (`skipCount` — a failure merged into a standing one counts them
-    /// all), plus `previous`'s stretch when that is the same problem. Nil for
-    /// a backup that is not a problem.
+    /// `previous`: the plan's backup before this one that did not pass over.
+    /// A failure merged into a standing one counts all it stands for
+    /// (`skipCount`).
     func stretchFollowing(_ previous: RunRecord?) -> Int? {
         guard isBackupProblem else { return nil }
         let own = skipCount ?? 1
@@ -55,12 +48,8 @@ extension RunRecord {
         return own + before
     }
 
-    /// The history, newest first as stored, with each backup problem's
-    /// stretch filled in from its plan's backup before it — the record just
-    /// appended (`AppModel.append(record:)`), and at load any written before
-    /// stretches were stored. A stored stretch stands: what it counted may
-    /// have been trimmed by the history cap since, so it cannot be counted
-    /// again.
+    /// `runs` newest first, as stored. A stored stretch stands: what it
+    /// counted may have been trimmed by the history cap since.
     static func fillingProblemStretches(_ runs: [RunRecord]) -> [RunRecord] {
         var runs = runs
         var previous: [UUID: RunRecord] = [:]

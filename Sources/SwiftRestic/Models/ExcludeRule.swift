@@ -1,6 +1,5 @@
 import Foundation
 
-/// The kind of thing a rule the app passes leaves out.
 enum ExcludeCategory: Sendable {
     case finder
     case appState
@@ -38,13 +37,12 @@ enum ExcludeCategory: Sendable {
     static let machineGroups: [ExcludeCategory] = [.simulators, .machines]
 }
 
-/// One rule the app passes, with what it leaves out and why that is safe.
 struct ExcludeRule: Hashable, Sendable {
-    /// What restic is passed: an `--exclude` pattern, or for a marker the
-    /// file name `--exclude-if-present` takes.
+    /// An `--exclude` pattern, or for a marker the file name
+    /// `--exclude-if-present` takes.
     let pattern: String
     let category: ExcludeCategory
-    /// What the rule leaves out, a short noun phrase.
+    /// A short noun phrase.
     let what: String
     /// Who puts it back, or why nothing has to.
     let why: String
@@ -56,11 +54,10 @@ struct ExcludeRule: Hashable, Sendable {
         self.why = why
     }
 
-    /// Noise the Finder, package managers and caches regenerate on their
-    /// own. Nothing here may be the only copy of anything — a restored Git
+    /// Nothing here may be the only copy of anything — a restored Git
     /// working copy without its object store is "not a git repository".
-    /// Every plan passes them all, whatever its path; one naming the path or
-    /// a folder above it is not passed (`ResticService.pattern(_:covers:)`).
+    /// Every plan passes them all, except one naming the plan's path or a
+    /// folder above it (`ResticService.pattern(_:covers:)`).
     static let defaults: [ExcludeRule] = [
         ExcludeRule(".DS_Store", .finder, "Finder’s window settings", "Finder writes them again"),
         ExcludeRule("~/Library/Caches", .appState, "Apps’ caches", "apps fill them again"),
@@ -107,10 +104,9 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("/Library/Logs", .startupDisk, "System-wide logs", "written afresh"),
     ]
 
-    /// What developer tools rebuild, one group per language or tool
-    /// (`ExcludeCategory`). Each pattern belongs to one group. For the
-    /// rebuildable groups the defaults' bar holds — nothing there may be the
-    /// only copy of anything; the machine groups do not meet it, so their
+    /// What developer tools rebuild, one group per language or tool. For
+    /// the rebuildable groups the defaults' bar holds — nothing there may be
+    /// the only copy of anything; the machine groups do not meet it, so their
     /// switch is off for new plans. Where a
     /// tool folder also holds the user's own words, the disposable
     /// subfolder is named, never the folder: `~/.gradle`'s

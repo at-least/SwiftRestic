@@ -44,12 +44,9 @@ struct IdleWatchdogTests {
 
     @Test("a child that keeps reporting is never stopped by the stall cap")
     func idleCapSparesChattyChild() async throws {
-        // ~6 s of a line every 0.25 s under a 5 s cap: each line resets the
-        // clock with 20x margin, so the run must outlive the cap and finish
-        // on its own. The margin is the point — the clock starts at the
-        // spawn, and a loaded test host delays the shell's first line and
-        // stretches its gaps: smaller margins have tripped the cap under
-        // load.
+        // ~6 s of a line every 0.25 s under a 5 s cap: 20x margin per line.
+        // The clock starts at the spawn, and a loaded host delays the first
+        // line and stretches the gaps: smaller margins tripped the cap.
         let script = try installScript("""
             i=0
             while [ $i -lt 24 ]; do

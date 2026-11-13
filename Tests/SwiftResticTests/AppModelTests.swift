@@ -42,10 +42,9 @@ struct AppModelTests {
         var repository = Repository()
         repository.kind = .local
         repository.localPath = root.appendingPathComponent("repo").path
-        // In stub mode the model runs a fake restic whose `backup` hangs until
-        // killed, reached through the same override the Settings screen uses —
-        // timing tests become deterministic instead of betting on restic's
-        // speed against a fixed sleep.
+        // In stub mode the model runs a fake restic (AppModel's
+        // `resticExecutable`) whose `backup` hangs until killed, so timing
+        // tests do not bet on restic's speed against a fixed sleep.
         var stub: StubRestic?
         if let stubMode {
             stub = try StubRestic.install(in: root)
@@ -985,7 +984,7 @@ struct AppModelTests {
         let model = AppModel(store: ConfigStore(directory: root), secrets: .inMemory())
         let staging = model.stagingDirectory
         // Another configuration's — another SwiftRestic's, running — and the
-        // shared temporary folder's own, which earlier builds staged in.
+        // shared temporary folder's own.
         let otherStaging = AppModel.stagingDirectory(for: root.appendingPathComponent("other"))
         #expect(otherStaging != staging)
         let temp = FileManager.default.temporaryDirectory
@@ -1296,8 +1295,9 @@ struct ListingGenerationTests {
     }
 }
 
-/// "The chain's newest backup" for the Files views, read from the listing
-/// they show: its first backup of the chain, the listing being newest first.
+/// "The chain's newest backup" for the Backups tab's pane, read from the
+/// listing it shows: its first backup of the chain, the listing being newest
+/// first.
 @Suite("Newest backup of a chain")
 @MainActor
 struct NewestChainSnapshotTests {
@@ -2512,7 +2512,7 @@ struct RestoreBannerTests {
 /// The index answers for the last listing it took. A listing the model
 /// already shows but whose reconcile has not returned is not one of those:
 /// read then, an index complete for the listing before answers "complete"
-/// for this one too, and the Files view shows an empty folder — or a backup
+/// for this one too, and the Backups tab shows an empty folder — or a backup
 /// already forgotten — without reading again.
 @MainActor
 @Suite("Index completeness")

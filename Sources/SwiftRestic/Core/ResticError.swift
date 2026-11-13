@@ -1,7 +1,7 @@
 import Foundation
 
 enum ResticError: Error, LocalizedError, Equatable {
-    /// The restic inside the app is missing or broken: nothing on the Mac stands in.
+    /// The bundled restic is missing or broken; no restic on the Mac stands in.
     case damagedInstall
     /// `message` is restic's own text when it gave one.
     case commandFailed(exitCode: Int32, message: String)
@@ -10,45 +10,34 @@ enum ResticError: Error, LocalizedError, Equatable {
     case itemNotListed(name: String)
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
-    /// The child outlived its timeout and was terminated. `cause` is what
-    /// restic was retrying when it was stopped — "connection refused" —
-    /// or empty (`ResticRunResult.retryCause`).
+    /// `cause`: what restic was retrying ("connection refused"), or empty.
     case timedOut(seconds: TimeInterval, cause: String)
-    /// The child produced no output at all for `seconds` and was terminated
-    /// as hung. The distinction from `timedOut` matters to the reader: a
-    /// total-runtime cap kills work that was merely slow, an idle cap only
-    /// kills work that had stopped reporting — so the message can promise
-    /// more than "timed out".
+    /// Separate from `timedOut` so the message can say nothing moved, which
+    /// a total-runtime cap cannot claim.
     case idleStalled(seconds: TimeInterval)
-    /// restic exited successfully but its output was not the JSON the command
-    /// promises — a schema change, not a command failure. Reported rather
-    /// than papered over: a backup app's numbers must be right or absent,
-    /// never silently zero.
+    /// restic exited 0 but its output was not the promised JSON. Reported,
+    /// never read as zero: a backup app's numbers are right or absent.
     case malformedOutput(detail: String)
-    /// A single file's restore ran to completion but the file restic wrote
-    /// beside the landing could not be moved into place. The staged copy is
-    /// gone; whatever the destination held before is untouched.
+    /// A single file's restore: the file restic wrote beside the landing
+    /// could not be moved into place. The staged copy is gone; the
+    /// destination is untouched.
     case stagedFileMoveFailed(path: String, reason: String)
-    /// A folder stands where a Replace restore would put a file — one item
-    /// or several. Left to restic, several items fail on it ("directory not
-    /// empty") after restic puts the file's mode on the folder, taking its
-    /// execute bits away; its contents stay. A single file is transferred
-    /// whole and only then cannot replace the folder. So the restore is
-    /// refused before restic runs.
+    /// A folder stands where a Replace restore would put a file, so the
+    /// restore is refused before restic runs. Left to restic, several items
+    /// fail on it ("directory not empty") after restic puts the file's mode
+    /// on the folder, taking its execute bits; a single file is transferred
+    /// whole and only then fails.
     case folderInTheWay(path: String)
-    /// Something other than a folder stands where a restored folder goes.
     /// restic would delete it, under Keep too, so the restore is refused
     /// before restic runs.
     case fileInTheWay(path: String)
-    /// Items of a several-item restore that restic did not write. It exits 0
-    /// when an --include matches nothing.
+    /// restic exits 0 when an --include matches nothing.
     case notRestored(paths: [String])
-    /// `forget` could not delete every snapshot retention chose: restic's
-    /// exit 3, "failed to remove one or more snapshots", one "unable to
-    /// remove snapshot/<id>" line per snapshot the repository kept (restic
+    /// `forget`'s exit 3, "failed to remove one or more snapshots", with one
+    /// "unable to remove snapshot/<id>" line per snapshot kept (restic
     /// 0.19.1). An append-only server or a locked bucket refuses them all.
-    /// `reason` is the end of restic's first "Remove(…) failed:" line —
-    /// "403 Forbidden", "permission denied".
+    /// `reason`: the end of restic's first "Remove(…) failed:" line, such as
+    /// "403 Forbidden".
     case snapshotsNotRemoved(removed: Int, refused: Int, reason: String)
 
     var errorDescription: String? {
@@ -59,16 +48,14 @@ enum ResticError: Error, LocalizedError, Equatable {
             let base: String?
             switch code {
             case Self.wrongPasswordCode:
-                // Not restic's diagnosis, which leaves Retry as the only next
-                // step: Retry can never succeed here. A run names the
-                // location (`words(for:location:)`).
+                // Not restic's words, which leave Retry, which cannot
+                // succeed, as the next step. A run names the location
+                // (`words(for:location:)`).
                 base = "The password doesn’t open this backup location."
             case Self.repositoryMissingCode, Self.repositoryLockedCode:
-                // Exit 10's are the Add Backup Location button's own words, so
-                // the banner and the notification say what the drawer's button
-                // does. Exit 11's reach the user only where nothing unlocked
-                // first: a run unlocks and retries (`unlockingStaleLocks`)
-                // and names the location itself.
+                // Exit 10 uses the Add Backup Location button's words. Exit
+                // 11's words show only where nothing unlocked first: a run
+                // unlocks and retries (`unlockingStaleLocks`).
                 base = code == Self.repositoryMissingCode
                     ? Self.noRepositoryAtLocation + "."
                     : "The backup location is in use by another Mac or app."
@@ -80,8 +67,8 @@ enum ResticError: Error, LocalizedError, Equatable {
             let known = Self.exitCodeWords(code)
             if message.isEmpty { return "\(known ?? "It stopped unexpectedly"). Show Log has the details." }
             let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
-            // Exit 1 is restic's every fatal error: the reason alone, as a
-            // sentence. The copied details keep restic's line (`resticDetail`).
+            // Exit 1 is every restic fatal error: the reason alone, as a
+            // sentence.
             if code == 1 { return reason.prefix(1).uppercased() + reason.dropFirst() }
             return known.map { "\($0) — \(reason)" } ?? reason
         case .cancelled:
@@ -124,19 +111,17 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     private static let fatalWord = "Fatal: "
 
-    /// restic's own first sentence behind a failure whose `errorDescription`
-    /// says the fix instead: kept on the run for the copied details
-    /// (`RunRecord.resticDetail`). The log has the whole of it.
+    /// restic's first sentence behind an `errorDescription` that says the fix
+    /// instead, for the run's details text.
     var resticDetail: String? {
         guard case let .commandFailed(_, message) = self else { return nil }
         let first = Format.firstSentence(message)
         return first.isEmpty ? nil : first
     }
 
-    /// What to do when ssh refused the server's host key. A server never
-    /// seen is accepted (`RepositoryContext.globalArguments`), so the line
-    /// means a key that changed (checked against restic 0.19.1 over sftp,
-    /// run as the app runs it); once its old line is gone, the next run
+    /// A server never seen is accepted (`RepositoryContext.globalArguments`),
+    /// so a refusal means a changed key (restic 0.19.1 over sftp, run as the
+    /// app runs it); once its old known_hosts line is gone, the next run
     /// accepts the new key.
     private static func sshHostKeyAdvice(_ message: String) -> String? {
         guard message.contains("Host key verification failed") else { return nil }
@@ -148,9 +133,8 @@ enum ResticError: Error, LocalizedError, Equatable {
         return "SSH refused this server’s key. Show Log has what SSH said."
     }
 
-    /// A failure said about one location — what a run's record shows: a
-    /// refused password names the location, and a disk's missing backups
-    /// ask after the disk, Locate beside them (`RunFix.locate`).
+    /// A run record's words: a refused password names the location, and a
+    /// disk's missing backups ask after the disk, beside `RunFix.locate`.
     static func words(for error: any Error, location: (name: String, kind: Repository.Kind)?) -> String {
         if let location, case let .commandFailed(code, _)? = error as? ResticError {
             if code == wrongPasswordCode { return wrongPassword(location: location.name) }
@@ -163,16 +147,13 @@ enum ResticError: Error, LocalizedError, Equatable {
         "The password doesn’t open “\(location)”."
     }
 
-    /// Exit 10 on a disk: the listing's words too
-    /// (`AppModel.missingRepositoryReason`).
+    /// Exit 10 on a disk; `AppModel.missingRepositoryReason` shares it.
     static let diskBackupsMissing = "Backups not found. Is the disk connected? If it moved, locate it."
 
-    /// Exit 10's cause and fix on a server or in the cloud, and wherever
-    /// the location is not known.
+    /// Exit 10 on a server or in the cloud, or where the location is unknown.
     private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
-    /// A failure's words on screen, for the codes whose console line names
-    /// restic as the actor; the console keeps `knownExitCodeDescription`.
+    /// Replaces the console's words where they name restic as the actor.
     private static func exitCodeWords(_ code: Int32) -> String? {
         switch code {
         case 1: "It stopped with an error"
@@ -196,10 +177,8 @@ enum ResticError: Error, LocalizedError, Equatable {
         }
     }
 
-    /// `backup` returns 3 when it finished but could not read some source
-    /// data (an unreadable file, say). That is a warning, not a failure, and
-    /// must not abort a scheduled run. `forget`'s 3 is another matter: it
-    /// could not delete snapshots (`snapshotsNotRemoved`).
+    /// A warning for `backup` (some source unreadable), not a failure.
+    /// `forget`'s 3 is a failure (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
     static let repositoryMissingCode: Int32 = 10
     private static let repositoryLockedCode: Int32 = 11
@@ -210,11 +189,6 @@ enum ResticError: Error, LocalizedError, Equatable {
         return code == repositoryLockedCode
     }
 
-    /// Whether an error is a stop — Swift's task cancellation or restic's
-    /// own `cancelled` — rather than a failure. The reading the run records
-    /// and the index backfill share (the backfill adds only its own task's
-    /// cancellation). Call sites that stop on one of the two by name — a
-    /// refresh, the diff view — still catch it themselves.
     static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? ResticError) == .cancelled
     }

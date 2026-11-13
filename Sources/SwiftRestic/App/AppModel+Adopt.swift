@@ -59,8 +59,7 @@ extension AppModel {
               let group = shelves(for: repositoryID).orphanPlanGroup(draft.id),
               let prefill = BackupShelves.prefillSnapshot(among: group.snapshots, localHost: localHostname)
         else { return nil }
-        // The group's snapshots, newest first — a group exists only around
-        // backups, so both ends are always there.
+        // Newest first, and never empty: a group exists only around backups.
         let snapshots = group.snapshots
         let newest = snapshots[0]
 
@@ -69,8 +68,7 @@ extension AppModel {
         let hosts = Snapshot.distinctHosts(of: snapshots)
         let madeFrom = hosts.count == 1 ? hosts[0] : "\(hosts.count) Macs"
 
-        // The host every "this Mac / another Mac" decision in the sheet
-        // reads: `localHostname`, which restic itself records for this Mac.
+        // `localHostname` is the hostname restic records for this Mac.
         let hasForeignHost = snapshots.contains { $0.hostname != localHostname }
         let isRecent = now.timeIntervalSince(newest.time) < 48 * 3600
 
@@ -79,8 +77,6 @@ extension AppModel {
             let lead = foreign == newest ? "The newest backup" : "The newest backup from another Mac"
             warnings.append("\(lead) was made on “\(foreign.hostname ?? "Unknown Mac")”, \(Format.timestamp(foreign.time)).")
         }
-        // The adopt sheet shows the path, it does not change it: the folder
-        // came from another Mac, or — this Mac's own — it is gone.
         if prefill.hostname != localHostname {
             warnings.append("The folder comes from another Mac and may not exist here.")
         } else if !sourceExists {
@@ -117,9 +113,7 @@ extension AppModel {
     /// call, no index change, no run record. Reshelve is tag-driven, so the
     /// records move under the new plan on their own.
     func adopt(draft: BackupPlan) {
-        // `upsert` is keyed by id alone, so a draft whose UUID already names
-        // a plan would silently *replace* it — fail loudly if the two ever
-        // disagree.
+        // `upsert` is keyed by id alone: it would replace that plan silently.
         precondition(plan(id: draft.id) == nil, "adopting a UUID that already names a plan")
         guard let repositoryID = draft.repositoryID else {
             preconditionFailure("an adopt draft always names its repository")

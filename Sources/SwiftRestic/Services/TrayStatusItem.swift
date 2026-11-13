@@ -4,15 +4,14 @@ import Foundation
 import Observation
 
 /// Not SwiftUI's `MenuBarExtra`: a `.menu`-style label updates its image only
-/// through a `TimelineView`, and any `TimelineView` in its structure — even
-/// one in a branch that is not rendered — pegs the main thread at 100%
-/// forever in a SwiftUI-internal requestUpdate → setImage loop, while
-/// label-side state, timers, observed writes and identity changes never
-/// reach the button. `NSStatusItem` has no such trade: the image is set
-/// directly, the menu is rebuilt on open, nothing spins.
+/// through a `TimelineView`, and any `TimelineView` in its structure, even in
+/// a branch not rendered, pegs the main thread at 100% forever in a
+/// SwiftUI-internal requestUpdate → setImage loop, while label-side state,
+/// timers, observed writes and identity changes never reach the button.
+/// `NSStatusItem` sets the image directly and rebuilds the menu on open.
 ///
-/// Faces, lines and pulse math all stay in `MenuBarStatus`/`MenuBarLogo`,
-/// the pure, tested core this controller merely renders.
+/// Faces, lines and pulse math stay in `MenuBarStatus`/`MenuBarLogo`, where
+/// tests reach them; this controller only renders.
 @MainActor
 final class TrayStatusItem: NSObject, NSMenuDelegate {
     private let model: AppModel
@@ -27,15 +26,13 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         statusItem.autosaveName = "SwiftResticTray"
         super.init()
         let menu = NSMenu()
-        // The status lines are `isEnabled = false` with no action, and the
-        // plan rows carry their own running/complete state — AppKit's
-        // auto-enabling would re-enable all of them and lie.
+        // Status lines have no action and plan rows carry their own state:
+        // AppKit's auto-enabling would re-enable them all and lie.
         menu.autoenablesItems = false
         menu.delegate = self
         statusItem.menu = menu
-        // Every face is a template image, so the bar's ink is the bar's
-        // business: no theme observer, and the observation loop below
-        // watches model state only.
+        // Every face is a template image, so no theme observer: the
+        // observation loop watches model state only.
         refresh()
     }
 
@@ -52,12 +49,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         )
     }
 
-    /// The observed inputs are the ones `iconState`, the hold and the
-    /// VoiceOver words read, the clock aside: a problem ageing out of the
-    /// attention window waits for the next configuration write, and a plan
-    /// going overdue is that write, the quiet-plan alert's mark on the plan.
-    /// A pause running out is cleared by the scheduler's tick, and that write
-    /// brings the face back.
+    /// Observes what `iconState`, the hold and the VoiceOver words read,
+    /// except the clock: a problem ageing out of the attention window waits
+    /// for the next configuration write; a plan going overdue is such a
+    /// write (the quiet-plan alert marks the plan), and so is the
+    /// scheduler's tick clearing a pause that ran out.
     private func refresh() {
         let state = currentState()
         applyFace(for: state, hold: model.overallScheduleHold, isResticDamaged: model.isResticDamaged)
@@ -88,9 +84,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 button?.image = MenuBarLogo.image(phase: MenuBarLogo.phase(at: .now))
             }
         }
-        // The held face: the same glyph, dimmed — AppKit's own "off but
-        // still functional" look for a status item — so a problem's
-        // exclamation mark stays readable under it. The words go to VoiceOver.
+        // The held face is the same glyph dimmed, AppKit's "off but still
+        // functional" look, so a problem's exclamation mark stays readable.
         button?.appearsDisabled = MenuBarStatus.appearsHeld(state: state, hold: hold)
         button?.setAccessibilityLabel(MenuBarStatus.accessibilityDescription(
             for: state, hold: hold, isResticDamaged: isResticDamaged,
@@ -101,8 +96,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         ))
     }
 
-    /// The pulse timer lives only while the running face is up, and checks
-    /// nothing itself — `refresh` creates and destroys it with the state.
+    /// `refresh` creates and destroys the timer with the state; the timer
+    /// checks nothing itself.
     private func armPulse(for state: MenuBarStatus.IconState) {
         let shouldPulse = state == .running && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if shouldPulse, pulseTimer == nil {
@@ -115,7 +110,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             }
             timer.tolerance = MenuBarLogo.frameInterval / 6
             // `.common`, not the default mode: the pulse must keep stepping
-            // while the menu itself is open in the tracking run-loop mode.
+            // while the menu is open in the tracking run-loop mode.
             RunLoop.main.add(timer, forMode: .common)
             pulseTimer = timer
         } else if !shouldPulse, let pulseTimer {
@@ -124,18 +119,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Rebuilt on every open, so the lines are always the current state —
-    /// no background menu maintenance at all.
+    /// Rebuilt on every open, so there is no background menu maintenance.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
         let hasNoRepositories = model.configuration.repositories.isEmpty
         let hold = model.overallScheduleHold
-        // The failure line leads, unless nothing is set up yet and
-        // an old failure from a since-removed repository would talk over the
-        // setup question — the same yield MenuBarStatus defines. The subject
-        // names the repository, so a failure from one repository cannot read
-        // as another's.
+        // The failure line yields while nothing is set up (the rule
+        // `MenuBarStatus.problemLine` defines): an old failure of a removed
+        // repository must not talk over the setup question.
         var newsTheTopLineRepeats: Set<String> = []
         var problemLine: String?
         var problemRunID: UUID?
@@ -185,8 +177,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 problemID: problemRunID
             ),
             holdSummary: hold?.summary(),
-            // With no submenu to carry it, the one Status line joins the
-            // status lines, named.
+            // With no submenu to carry it, the Status line joins the status
+            // lines, named.
             labeledStatus: showsSubmenus ? nil : groups.first?.labeledStatus,
             headline: MenuBarStatus.headline(
                 activity: model.activity,
@@ -205,8 +197,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             case .status(let text):
                 menu.addItem(disabledItem(text))
             case .problem(let text, let runID):
-                // The one status line that goes somewhere: the run it names,
-                // in Activity — the plan page's Show in Activity route.
+                // The plan page's Show in Activity route.
                 let item = NSMenuItem(title: text, action: #selector(showProblem(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = runID.uuidString
@@ -218,9 +209,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         if hasNoRepositories {
-            // The icon's `unconfigured` face sent the user here; the menu it
-            // opens must answer, not just say "nothing scheduled": Welcome's
-            // own button.
+            // The `unconfigured` face sent the user here, so the menu must
+            // answer with Welcome's own button.
             let start = NSMenuItem(
                 title: "Back Up a Folder…",
                 action: #selector(backUpAFolder),
@@ -229,9 +219,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             start.target = self
             menu.addItem(start)
         } else if showsSubmenus {
-            // One submenu per repository, in configuration order, so the
-            // tray names each plan's repository. App-wide items stay
-            // outside: they act on every repository at once.
+            // App-wide items stay outside the submenus: they act on every
+            // repository at once.
             for group in groups {
                 let submenu = NSMenu(title: group.title)
                 submenu.autoenablesItems = false
@@ -242,8 +231,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
                 addRowsAndNews(of: group, to: submenu)
                 let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
                 item.submenu = submenu
-                // Enabled even with every row disabled, like the pause
-                // submenu: the rows carry their own state.
+                // Enabled with every row disabled, like the pause submenu:
+                // the rows carry their own state.
                 item.isEnabled = true
                 menu.addItem(item)
             }
@@ -281,11 +270,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// The rows, then the group's news under a separator. `skippingNews`
-    /// holds the line the menu's top problem line already says — skipped
-    /// only in the flat menu, where the two sit either side of one
-    /// separator and would say the one fact twice; inside a submenu the top
-    /// line is off-screen while it is open, so a submenu keeps every line.
+    /// `skippingNews` is the line the menu's top problem line already says,
+    /// skipped only in the flat menu, where both sit either side of one
+    /// separator; inside a submenu the top line is off-screen, so a submenu
+    /// keeps every line.
     private func addRowsAndNews(
         of group: MenuBarStatus.PlanGroup,
         to menu: NSMenu,
@@ -299,8 +287,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             }
             let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
             item.target = self
-            // Explicit, not auto-enabled: every menu here sets
-            // `autoenablesItems = false`.
+            // Every menu here sets `autoenablesItems = false`.
             item.isEnabled = row.isEnabled
             item.toolTip = row.disabledReason
             item.representedObject = row.planID.uuidString
@@ -315,11 +302,9 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         }
     }
 
-    /// The plan's news caption the top problem line says again — the line
-    /// `MenuBarStatus.newsLines` puts first, derived from the same inputs
-    /// `planGroups` built the group's lines from. The pause note that may
-    /// follow it is another fact and stays; empty when the run names no
-    /// plan (a check, a prune) or is not the plan's standing problem.
+    /// The news line the top problem line repeats, built from the same
+    /// inputs `planGroups` uses. Empty when the run names no plan (a check,
+    /// a prune) or is not the plan's standing problem.
     private func newsLineRepeating(_ run: RunRecord) -> Set<String> {
         guard let plan = model.plan(id: run.planID),
               let problem = model.currentProblem(for: plan.id),
@@ -366,7 +351,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         model.runBackup(planID: planID)
     }
 
-    /// A plain Stop: recorded as cancelled and stamped, like the plan page's.
+    /// Recorded as cancelled and stamped, like the plan page's Stop.
     @objc private func stopBackup(_ sender: NSMenuItem) {
         guard let planID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
         model.cancelBackup(planID: planID)
@@ -387,12 +372,11 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         model.resumeBackups()
     }
 
-    /// Brings the window back, or recreates it after it was closed — the
-    /// tray is the only way in once the window is gone. Three bridges in
+    /// The tray is the only way in once the window is gone. Three bridges in
     /// order of reliability: the `openWindow` action the main window's root
     /// view parked on the router, an existing window made key, and the
-    /// reopen Apple event — the path a Dock click takes, which SwiftUI's
-    /// own delegate answers by rebuilding the `Window` scene.
+    /// reopen Apple event (a Dock click's path), which SwiftUI's own
+    /// delegate answers by rebuilding the `Window` scene.
     @objc func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         if let open = router.openMainWindowAction {
@@ -412,9 +396,8 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         )
         if let aeDesc = event.aeDesc {
             var desc = aeDesc.pointee
-            // The copied descriptor's storage belongs to `event`; the send
-            // must finish before that storage can go away. No reply is
-            // requested, so nothing reads the send's status.
+            // The descriptor's storage belongs to `event`, which must outlive
+            // the send. No reply is requested, so the status goes unread.
             _ = withExtendedLifetime(event) {
                 AESendMessage(&desc, nil, AESendMode(kAENoReply), kAEDefaultTimeout)
             }
@@ -423,15 +406,15 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
     }
 
     @objc private func backUpAFolder() {
-        // The intent travels through the router *before* the window opens, so
+        // The intent goes through the router before the window opens, so
         // nothing depends on how many run-loop turns the window takes to
-        // appear — the same rule the File command follows.
+        // appear; the File command follows the same rule.
         router.request(.newPlan)
         openMainWindow()
     }
 
-    /// Goes through the app delegate, which flushes pending saves and stops
-    /// any running restic first — never a bare exit.
+    /// Through the app delegate, which flushes pending saves and stops any
+    /// running restic first.
     @objc private func quit() {
         NSApp.terminate(nil)
     }

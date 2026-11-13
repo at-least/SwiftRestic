@@ -128,8 +128,8 @@ struct RepositoryEditorSheet: View {
 
             Divider()
 
-            // Save's or Change Password's answer, beside the buttons: at the end
-            // of the scrolled form it landed below the fold.
+            // Save's or Change Password's answer, beside the buttons: at the
+            // end of the scrolled form it would sit below the fold.
             if let status {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     // A failure alone carries a glyph: an answer that worked
@@ -149,8 +149,8 @@ struct RepositoryEditorSheet: View {
             }
 
             HStack {
-                // A greyed Save owes the user the reason at the button — a mismatched confirm password must not be
-                // a hunt across fields.
+                // A greyed Save owes the user the reason at the button: a
+                // mismatched confirm password must not be a hunt across fields.
                 if let reason = missingRequirement {
                     Text(reason)
                         .font(.caption)
@@ -467,12 +467,9 @@ struct RepositoryEditorSheet: View {
     }
 
     /// The Encryption section's caption, nil when the field's prompt already
-    /// says what a blank field means. For an existing repository the
-    /// blank field means "unchanged" only while a password is stored; when
-    /// none is — a configuration carried to another Mac, a Keychain item
-    /// removed — the caption says so in the words every run and the
-    /// listing already use (`ResticError.passwordMissing`), and the footer
-    /// asks for the password before Save.
+    /// says what a blank field means. With no password stored (a
+    /// configuration carried to another Mac, a Keychain item removed) it uses
+    /// the words every run and the listing use (`ResticError.passwordMissing`).
     private var encryptionHint: String? {
         if opensExistingBackups { return nil }
         if isNew {
@@ -507,12 +504,9 @@ struct RepositoryEditorSheet: View {
         guard !isNew else { return }
         do {
             let secrets = try await model.storedSecrets(for: draft.id)
-            // The prefill must not clobber what arrived during the await:
-            // anything typed into the fields while the Keychain answered is
-            // already the user's edit, and overwriting it would not even
-            // register as a change against the baseline taken above.
-            // A refused password is not put back in the field it is to be
-            // replaced in.
+            // Not over what was typed while the Keychain answered: that is
+            // already the user's edit. A refused password is not put back in
+            // the field it is to be replaced in.
             if password.isEmpty, !entersPassword {
                 password = secrets.password ?? ""
                 confirmPassword = password
@@ -522,9 +516,7 @@ struct RepositoryEditorSheet: View {
             }
             storedSecrets = secrets
         } catch {
-            // Prefill failed — say so. Blank fields would read as "no
-            // password stored" and a save would silently keep whatever the
-            // Keychain actually holds, hiding the failure either way.
+            // Blank fields alone would read as "no password stored".
             status = .failure("Couldn’t read the password from your Keychain: \(error.localizedDescription)")
             secretsReadFailed = true
         }
@@ -575,8 +567,8 @@ struct RepositoryEditorSheet: View {
         guard !isWorking else { return }
         isWorking = true
         defer { isWorking = false }
-        // Creating the repository has to happen before we persist it, so a failed
-        // init does not leave an unusable entry in the sidebar.
+        // Created before it is saved, so a failed init leaves no unusable
+        // entry in the sidebar.
         if isNew {
             guard await probe(initializeIfMissing: true) else { return }
         } else if verifying, model.isResticAvailable, let initial,
@@ -617,10 +609,9 @@ struct RepositoryEditorSheet: View {
         dismiss()
     }
 
-    /// The repository is saved by now: a share password that
-    /// does not save is said by the app, and the sheet closes as saved —
-    /// kept open, it would offer Add Repository and ask to discard a
-    /// repository the sidebar already shows.
+    /// The repository is saved by now: a share password that does not save
+    /// is a banner, and the sheet closes as saved. Kept open, it would offer
+    /// Add Backup Location again for a repository the sidebar already shows.
     private func saveSharePassword() async {
         guard !sharePassword.isEmpty, let share = folderShare?.share else { return }
         do {

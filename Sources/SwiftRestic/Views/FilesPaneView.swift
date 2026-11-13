@@ -1,13 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The pane under a Backups tab's tree for the file picked in it, or the
-/// folder or file picked in a plan's search: what it is and where it lives
-/// — and when it was last backed up: always for a folder, for a file once
-/// the newest backup has dropped it or this Mac no longer holds it — then a
-/// file by each content it had (`FileVersionsView`), a folder by its way
-/// back (`FolderPaneActions`), or, for an item on this Mac no backup holds,
-/// that it is not backed up.
+/// The pane under a Backups tab's tree for the item picked in the tree or
+/// in a plan's search: its header (`FilesPaneHeader`), then a file's
+/// versions (`FileVersionsView`), a folder's restore (`FolderPaneActions`),
+/// or, for an item on this Mac no backup holds, that it is not backed up.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -302,12 +299,9 @@ private struct FilesPaneHeader: View {
         }
     }
 
-    /// For a folder this Mac no longer holds, when it was last backed up —
-    /// a deleted row's tooltip, in the same words; a file's disk line says
-    /// "Not on this Mac" already. For an item the chain's
-    /// newest backup lacks, when it was last backed up and, when that
-    /// backup could not read it, why. Any other folder: when it was last
-    /// backed up, a file's rows saying that already.
+    /// Nil for a file the chain's newest backup holds: its rows and disk
+    /// line say it already. A folder gone from this Mac uses a deleted row's
+    /// tooltip words.
     private var standing: String? {
         guard let newestHolder else { return nil }
         if node.isDirectory, isOnDisk == false {

@@ -21,7 +21,7 @@ struct NotificationTests {
         #expect(Kind(address: "https://example.com/hooks/backup") == .webhook)
         #expect(Kind(address: "not a url") == .webhook)
         #expect(Kind(address: "") == .webhook)
-        // A stored service from an older build is read from the address too.
+        // A stored `kind` is not read: the address decides.
         let stored = #"{"kind":"slack","url":"https://example.com/hook","notifyOnSuccess":true}"#
         #expect(try JSONDecoder().decode(NotificationChannel.self, from: Data(stored.utf8)).kind == .webhook)
     }

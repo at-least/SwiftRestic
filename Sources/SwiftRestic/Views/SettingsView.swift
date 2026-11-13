@@ -4,7 +4,8 @@ struct SettingsView: View {
     private static let width: CGFloat = 560
     /// Past this a pane scrolls: its webhooks can outgrow a small screen.
     private static let maxHeight: CGFloat = 620
-    /// Not the old "lastSettingsPane": it can hold the restic pane, now gone.
+    /// Not "lastSettingsPane": that key's stored index can name a removed
+    /// pane.
     private static let paneKey = "lastSettingsTab"
     /// The pane the window reopens on. UserDefaults, not
     /// `configuration.settings`: it is window state, not a preference.
@@ -38,9 +39,9 @@ struct SettingsView: View {
     /// observable says the grant is there.
     private var needsFullDiskAccess: Bool { model.fullDiskAccess != .granted }
 
-    /// Each pane at its own height, the window following it (the Settings
-    /// scene's `.contentSize`): the HIG's "a settings window accommodates
-    /// the size of the current pane", no pane scrolling.
+    /// Each pane at its own height up to `maxHeight`, the window following it
+    /// (the Settings scene's `.contentSize`): the HIG's "a settings window
+    /// accommodates the size of the current pane".
     private func pane(_ content: some View) -> some View {
         content
             .environment(model)

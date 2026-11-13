@@ -2,9 +2,7 @@ import SwiftUI
 
 /// Read-only, selectable, monospaced text with the system find bar (⌘F) —
 /// an `NSTextView`, because it lays out lazily and holds a quarter-megabyte
-/// log without the stall a SwiftUI `Text` of that size would cost. The run
-/// log's sheet and the restic console's output pane both show their text
-/// through it.
+/// log without the stall a SwiftUI `Text` of that size would cost.
 struct LogTextView: NSViewRepresentable {
     let text: String
     let finder: LogFinder

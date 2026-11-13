@@ -18,8 +18,7 @@ import GRDB
 /// deleting too much loses a claim, deleting too little leaves garbage that
 /// `invariantViolations()` (b) reports.
 extension SnapshotIndex {
-    /// Where a queued seq sits between the chain's indexed seqs: the nearest
-    /// indexed seq below and above it, either possibly absent.
+    /// The nearest indexed seqs below and above a queued seq.
     private struct Gap: Hashable {
         let below: Int64?
         let above: Int64?
@@ -39,10 +38,8 @@ extension SnapshotIndex {
     func housekeeping() throws {
         try pool.write { db in
             var queued = false
-            /// One housekeeping delete: its fill first queues the nodes of
-            /// the runs it is about to remove (the pair shares one
-            /// predicate, see `SnapshotIndexSchema.Statements.hkBottomNodes`),
-            /// then the delete.
+            /// The fill queues the nodes of the runs the delete is about to
+            /// remove; the pair shares one predicate (`SnapshotIndexSchema.Statements`).
             func reclaim(_ fill: String, _ delete: String, _ arguments: StatementArguments) throws {
                 try db.cachedStatement(sql: fill).execute(arguments: arguments)
                 // Read right after the fill: `changesCount` is the last
@@ -108,12 +105,10 @@ extension SnapshotIndex {
     /// becomes pending again, in place, with a fresh seq above everything
     /// its chain ever used — outside the window, exactly where a new
     /// arrival would land. The coordinator calls this once per process per
-    /// repository, from that repository's first reconcile and before that
-    /// reconcile's own listing — a snapshot that failed for a reason that
-    /// has since gone (a volume unplugged) must not stay out of the index
-    /// forever. A reconcile arriving while the release is in flight may land
-    /// its listing first; either order leaves a whole index (see
-    /// `IndexCoordinator.reconcile`).
+    /// repository, before that repository's first reconcile: a snapshot that
+    /// failed for a reason that has since gone (a volume unplugged) must not
+    /// stay out of the index forever. Either order of this and a concurrent
+    /// reconcile leaves a whole index (see `IndexCoordinator.reconcile`).
     ///
     /// In place rather than deleted for the next reconcile to re-add: the
     /// release and that reconcile are two writes, and a read between them

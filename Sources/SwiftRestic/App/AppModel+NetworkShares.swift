@@ -5,11 +5,9 @@ extension AppModel {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
 
-    /// The share an editor's folder row shows: as mounted now, else as
-    /// saved — a share away while the sheet is open keeps its row, so its
-    /// password can still be replaced. A mounted volume of another name is
-    /// the stale read of a path since changed, not the row. Nil off
-    /// /Volumes with nothing saved.
+    /// Falls back to the saved share, so one away while the sheet is open
+    /// keeps its row and its password can still be replaced. A mounted
+    /// volume of another name is a stale read of a changed path.
     func shareRow(for path: String, mounted: MountedShare?) -> (share: MountedShare, isSaved: Bool)? {
         guard let volume = VolumePresence.volumeName(of: path) else { return nil }
         let saved = networkShare(forVolume: volume)
@@ -17,10 +15,8 @@ extension AppModel {
         return saved.map { (MountedShare(volumeName: $0.volumeName, url: $0.url), true) }
     }
 
-    /// Saves a share's password and, the first time, the share itself, by
-    /// volume name — a repository and a plan on one share keep one record,
-    /// its URL as last read from the mounted volume. The password goes
-    /// first: a share is never saved without one.
+    /// Keyed by volume name: a repository and a plan on one share keep one
+    /// record. The password goes first: a share is never saved without one.
     func saveNetworkShare(_ share: MountedShare, password: String) async throws {
         var saved = networkShare(forVolume: share.volumeName) ?? NetworkShare(volumeName: share.volumeName, url: share.url)
         try await secrets.saveSharePassword(saved.id, password)
@@ -30,8 +26,6 @@ extension AppModel {
         } else {
             configuration.settings.networkShares.append(saved)
         }
-        // The password is the fix of each failed backup that needed the
-        // share: into a location on it, or of a folder on it.
         let repositoryIDs = Set(
             configuration.repositories.filter { $0.driveVolumeName == share.volumeName }.map(\.id)
                 + configuration.plans.filter { VolumePresence.volumeName(of: $0.resolvedPath) == share.volumeName }.compactMap(\.repositoryID)
@@ -39,17 +33,14 @@ extension AppModel {
         for repositoryID in repositoryIDs { rerunFailedBackups(in: repositoryID) }
     }
 
-    /// Forgets a share: its password first, then the share — a Keychain
-    /// that refuses keeps both.
+    /// Password first: a Keychain that refuses keeps both.
     func removeNetworkShare(_ share: NetworkShare) async throws {
         try await secrets.saveSharePassword(share.id, nil)
         configuration.settings.networkShares.removeAll { $0.id == share.id }
     }
 
-    /// Forgets each saved share on a volume `before` used and nothing uses
-    /// now: the last plan or location on it was removed, or moved off it
-    /// (`followPlans`). The editors save a share's password after the plan or
-    /// location that needs it, so a new share is already in use.
+    /// The editors save a share's password after the plan or location that
+    /// needs it, so a new share is already in use.
     func forgetNetworkShares(unusedSince before: Set<String>) async {
         let inUse = configuration.volumesInUse
         for share in configuration.settings.networkShares
@@ -67,10 +58,8 @@ extension AppModel {
         }
     }
 
-    /// A read that needs a local repository on a network share — the
-    /// retention preview — reconnects its saved share first when it is
-    /// away, as a run does; still away, it throws in the run's words. A
-    /// volume with no saved share is left to the read, as before.
+    /// Still away, it throws in a skipped run's words. A volume with no
+    /// saved share is left to the read.
     func reconnectShare(before repository: Repository) async throws {
         guard await isVolumeMissing(repository), let volume = repository.driveVolumeName else { return }
         let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
@@ -83,17 +72,14 @@ extension AppModel {
         await volumeProbe.isMounted(volumeOf: path)
     }
 
-    /// With the environment restic would run with — a proxy there means
-    /// nothing is probed.
+    /// restic's environment: a proxy there means nothing is probed.
     func probeServer(of repository: Repository) async -> ServerProbe.Outcome? {
         guard repository.kind != .local else { return nil }
         let environment = ProcessInfo.processInfo.environment.merging(repository.extraEnvironment) { _, own in own }
         return await serverProbe.check(repository, environment)
     }
 
-    /// Reconnects the saved shares among `volumes` — volumes a backup needs
-    /// that are away. A volume no share is saved for is left to the run's
-    /// away checks, as before; it gets no entry.
+    /// A volume with no saved share gets no entry.
     func reconnectShares(volumes: [String]) async -> [ShareReconnect] {
         var results: [ShareReconnect] = []
         for volume in volumes {
@@ -103,8 +89,7 @@ extension AppModel {
         return results
     }
 
-    /// One mount of a share at a time: a second run asking while the first
-    /// mount is in flight waits for its answer (`shareReconnects`).
+    /// A second caller while a mount is in flight awaits its answer.
     private func reconnect(_ share: NetworkShare) async -> ShareReconnect {
         if let inFlight = shareReconnects[share.volumeName] { return await inFlight.value }
         let task = Task { [secrets, shareMounter, volumeProbe] () -> ShareReconnect in
@@ -125,10 +110,9 @@ extension AppModel {
             case let .failed(status):
                 return result(ShareMounter.failure(status: status))
             case let .mounted(mountpoints):
-                // A folder of that name left in /Volumes by an unclean
-                // disconnect makes macOS mount the share beside it, as
-                // "NAS-1", where the plan's and repository's paths still
-                // miss it.
+                // A folder left in /Volumes by an unclean disconnect makes
+                // macOS mount the share beside it as "NAS-1", where the
+                // saved paths miss it.
                 guard await volumeProbe.isMounted(volumeOf: "/Volumes/\(share.volumeName)") == true else {
                     return result(.refused(
                         "macOS mounted it as \(mountpoints.first ?? "another folder") — a folder named “\(share.volumeName)” is in the way in /Volumes"
@@ -145,8 +129,6 @@ extension AppModel {
 }
 
 extension AppConfiguration {
-    /// The volumes under /Volumes the plans' folders and the local
-    /// repositories sit on: the ones a saved share can be needed for.
     var volumesInUse: Set<String> {
         Set(plans.compactMap { VolumePresence.volumeName(of: $0.resolvedPath) }
             + repositories.compactMap(\.driveVolumeName))

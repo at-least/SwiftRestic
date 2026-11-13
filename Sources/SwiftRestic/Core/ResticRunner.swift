@@ -3,37 +3,26 @@ import Foundation
 struct ResticInvocation: Sendable {
     var arguments: [String]
     var environment: [String: String] = [:]
-    /// Exit codes that should not be treated as failure. `backup` adds 3, which
-    /// means "finished, but some files could not be read".
-    ///
-    /// `nil` accepts any code, for callers that read the exit status themselves
-    /// rather than treating it as an error.
+    /// `backup` adds 3: "finished, but some files could not be read". `nil`
+    /// accepts any code, for callers that read the exit status themselves.
     var allowedExitCodes: Set<Int32>? = [0]
-    /// Kill the child after this many seconds.
     var timeout: TimeInterval?
-    /// Kill the child after it has produced no output at all for this many
-    /// seconds — a stall cap, not a runtime cap: every received chunk resets
-    /// the clock. For commands that stream NDJSON while they work (`backup`,
-    /// `restore`, the index walks) total silence means the child is hung, while
-    /// a total cap would kill work that was merely slow. Commands that are
-    /// legitimately silent for long stretches (`prune`, `forget`, a console
-    /// `runRaw`) must not set this.
+    /// A stall cap: every received chunk resets the clock. For commands that
+    /// stream NDJSON while they work (`backup`, `restore`, the index walks)
+    /// silence means a hung child, while a total cap would kill slow work.
+    /// Commands silent for long stretches (`prune`, `forget`, the console's
+    /// `runRaw`) must not set it.
     var idleTimeout: TimeInterval?
-    /// Keep the whole stdout text rather than a bounded tail. Needed for the
-    /// commands that answer with one big JSON array (`snapshots`, `stats`,
-    /// `forget`) instead of a line-per-event stream.
+    /// For commands that answer with one big JSON array (`snapshots`,
+    /// `stats`, `forget`) rather than a line-per-event stream.
     var retainFullOutput: Bool = false
-    /// Keep every decoded message in the result. Off for commands whose stream
-    /// is unbounded — a `diff` of two home-folder snapshots is hundreds of
-    /// thousands of lines — where the caller collects through `onMessage` and
-    /// stops keeping them at some cap of its own.
+    /// Off for unbounded streams — a `diff` of two home-folder snapshots is
+    /// hundreds of thousands of lines — where the caller collects through
+    /// `onMessage` under a cap of its own.
     var retainMessages: Bool = true
 
-    /// The arguments for logs and error messages — without the environment,
-    /// so the password stays out, but every argument as given — through the
-    /// console tokenizer's shell-style quoting, so a path with spaces stays
-    /// one word on screen instead of reading as two arguments the run never
-    /// received.
+    /// Leaves the environment out, so the password stays out. Shell-style
+    /// quoting keeps a path with spaces one word.
     fileprivate var displayCommand: String {
         CommandLineTokenizer.render(["restic"] + arguments)
     }
@@ -44,9 +33,9 @@ struct ResticRunResult: Sendable {
     var messages: [ResticMessage]
     var stdout: String
     var stderr: String
-    /// Lines carrying a known `message_type` whose payload failed to decode.
-    /// A schema change under us must be countable, not silent — the run
-    /// record reports this number instead of dropping the lines.
+    /// Lines with a known `message_type` whose payload failed to decode, plus
+    /// lines that are not UTF-8. The run record reports it, so a restic
+    /// schema change shows up as a count.
     var malformedCount: Int = 0
 
     private var exitError: ResticExitError? {
@@ -56,13 +45,11 @@ struct ResticRunResult: Sendable {
         return nil
     }
 
-    /// restic's fatal-error line when it wrote one as JSON, else the tail of
-    /// stderr — what a failed command's error carries. Under `--json` the
-    /// fatal line can lose the cause: what ssh said reaches stderr only as
-    /// plain lines restic prefixes "subprocess " ("subprocess ssh: Host key
-    /// verification failed.", restic 0.19.1), so the last of those follow
-    /// the fatal line — ssh's verdict is its last lines, after a warning
-    /// banner that runs to a dozen.
+    /// restic's JSON fatal-error line, else the tail of stderr. Under
+    /// `--json` the fatal line can lose the cause: what ssh said reaches
+    /// stderr only as plain lines prefixed "subprocess " ("subprocess ssh:
+    /// Host key verification failed.", restic 0.19.1), so the last three of
+    /// those follow — ssh's verdict comes after a banner of a dozen lines.
     var failureMessage: String {
         guard let fatal = exitError?.message else { return ResticRunner.tail(of: stderr, limit: 2000) }
         let lines = stderr.split(separator: "\n")
@@ -70,21 +57,20 @@ struct ResticRunResult: Sendable {
         return ([Self.withoutGoStackTrace(fatal)] + subprocess).joined(separator: "\n")
     }
 
-    /// What restic was retrying, from its last "… returned error, retrying
-    /// after …" line on stderr — "Stat(<config/>) returned error, retrying
-    /// after 38.6s: Head "http://…/config": dial tcp 127.0.0.1:18000:
-    /// connect: connection refused" gives "connection refused" — or empty.
+    /// From restic's last "… returned error, retrying after …" stderr line:
+    /// "Stat(<config/>) returned error, retrying after 38.6s: Head
+    /// "http://…/config": dial tcp 127.0.0.1:18000: connect: connection
+    /// refused" gives "connection refused".
     fileprivate static func retryCause(in stderr: String) -> String {
         guard let line = stderr.split(separator: "\n").last(where: { $0.contains(" returned error, retrying after ") }) else { return "" }
         return line.components(separatedBy: ": ").last ?? ""
     }
 
-    /// restic's message without the Go stack restic 0.19.1 appends to an
-    /// error that is not one of its fatal ones (`%+v` in its main.go) —
-    /// "failed to remove one or more snapshots\nmain.init\n\tgithub.com/
-    /// restic/restic/cmd/restic/cmd_forget.go:67\n…". It ends before the
-    /// first frame: a line followed by a tab-indented "….go:<line>". The
-    /// run's log keeps the whole line.
+    /// restic 0.19.1 appends a Go stack to an error that is not one of its
+    /// fatal ones (`%+v` in its main.go): "failed to remove one or more
+    /// snapshots\nmain.init\n\tgithub.com/restic/restic/cmd/restic/
+    /// cmd_forget.go:67\n…". The message ends before the first frame, a line
+    /// followed by a tab-indented "….go:<line>". The run's log keeps it all.
     private static func withoutGoStackTrace(_ message: String) -> String {
         let lines = message.split(separator: "\n", omittingEmptySubsequences: false)
         for index in lines.indices.dropLast() {
@@ -108,46 +94,32 @@ struct ResticRunResult: Sendable {
     }
 }
 
-/// Spawns a child process and turns any NDJSON it writes into `ResticMessage`
-/// values; lines that are not restic JSON decode to nothing.
-///
-/// The runner is an actor so that in-flight processes can be tracked and
-/// cancelled by handle. Its methods suspend rather than block while restic runs,
-/// so concurrent calls (a snapshot listing during a backup, say) are not
-/// serialised behind each other.
+/// Runs restic and decodes its NDJSON into `ResticMessage` values; lines
+/// that are not restic JSON decode to nothing. Methods suspend rather than
+/// block, so a snapshot listing during a backup is not queued behind it.
 actor ResticRunner {
-    /// Grace between SIGTERM and SIGKILL when a child is being stopped —
-    /// long enough for restic to flush and a shell to unwind, short enough
-    /// that a quit waiting on the child does not outwait the user's patience.
+    /// Between SIGTERM and SIGKILL: long enough for restic to flush, short
+    /// enough that a quit waiting on the child stays bearable.
     static let killGrace: TimeInterval = 5
 
-    /// How long the pipe readers may keep draining after the child has died.
-    /// A healthy pipe reaches EOF within milliseconds of the child's exit;
-    /// when it does not, someone else is holding the write end — restic's own
-    /// backend child after a SIGKILL. Abandoning the pipes then is what lets
-    /// every stop path answer: the invariant is that a run ends at most this
-    /// long after its child dies, whatever a grandchild does. Bytes a
-    /// grandchild writes afterwards get EPIPE, which usually ends it too.
+    /// A run ends at most this long after its child dies. A healthy pipe
+    /// reaches EOF within milliseconds of the exit; when it does not, a
+    /// grandchild holds the write end (restic's backend child after a
+    /// SIGKILL), and the readers abandon the pipes. The grandchild's later
+    /// writes get EPIPE, which usually ends it too.
     private static let grandchildGrace: TimeInterval = 2
 
     private var running: [UUID: ProcessBox] = [:]
 
-    /// - Parameter onMessage: called for every decoded NDJSON line as it arrives,
-    ///   off the main actor.
-    /// - Parameter onRawLine: called for every raw line of both streams before
-    ///   JSON decoding — the human-readable progress `prune` prints, which
-    ///   decodes to nothing. Fires off the main actor, possibly concurrently
-    ///   for the two streams, with no ordering guarantee between them; keep
-    ///   the callback cheap. Commands whose streams are unbounded (backup,
-    ///   diff) must not pass it: there is no back-pressure.
-    /// - Throws: `ResticError.commandFailed` for a disallowed exit code, or
-    ///   `ResticError.cancelled` if the surrounding task was cancelled.
+    /// - Parameter onMessage: off the main actor.
+    /// - Parameter onRawLine: every line of both streams before decoding
+    ///   (the plain-text progress `prune` prints). Off the main actor, the
+    ///   two streams concurrently and unordered. No back-pressure, so
+    ///   unbounded streams (backup, diff) must not pass it.
     ///
-    /// When a `RunTranscript` is bound (a run engine's service call), the
-    /// command line, every line either stream printed and the exit code are
-    /// recorded into it; a child stopped by a cancel or a cap leaves a note
-    /// instead of an exit code, because a signal's termination status is
-    /// not one.
+    /// A bound `RunTranscript` gets the command line, every line and the
+    /// exit code; a child stopped by a cancel or a cap leaves a note
+    /// instead, because a signal's termination status is not an exit code.
     func run(
         binary: URL,
         invocation: ResticInvocation,
@@ -155,9 +127,8 @@ actor ResticRunner {
         onRawLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> ResticRunResult {
         let handle = UUID()
-        // Read once, here in the caller's task: the pipe readers run on GCD
-        // threads, where task-locals are not visible — they get the
-        // reference itself.
+        // Read here in the caller's task: the pipe readers run on GCD
+        // threads, where task-locals are not visible.
         let transcript = RunTranscript.current
         let process = Process()
         process.executableURL = binary
@@ -168,9 +139,8 @@ actor ResticRunner {
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        // No terminal is attached, so a backend that tries to prompt (an SFTP
-        // host-key confirmation, say) must fail fast rather than hang on a stdin
-        // that will never answer.
+        // A backend that prompts (an SFTP host-key confirmation) fails fast
+        // instead of hanging on a stdin that never answers.
         process.standardInput = FileHandle.nullDevice
 
         let box = ProcessBox(process)
@@ -179,11 +149,8 @@ actor ResticRunner {
             exit.complete(finished.terminationStatus)
         }
 
-        // Registered before launch, not after: a quit racing a cold spawn
-        // must not miss a child that is already running. The ProcessBox
-        // treats a not-yet-launched process as not running, so a terminate
-        // that arrives in this window is a harmless no-op, and the defer
-        // covers the launch-failure path.
+        // Before launch, so a quit racing the spawn cannot miss the child. A
+        // terminate before launch is a no-op (not yet running).
         running[handle] = box
         defer { running[handle] = nil }
 
@@ -205,9 +172,8 @@ actor ResticRunner {
         }
         defer { watchdog?.cancel() }
 
-        // The stall cap: a once-a-second look at how long since the last
-        // chunk. Polling rather than re-arming a sleep per line, which would
-        // churn tasks at restic's progress rate.
+        // Polls once a second rather than re-arming a sleep per line, which
+        // would churn tasks at restic's progress rate.
         let idleWatchdog: Task<Void, Never>? = invocation.idleTimeout.map { seconds in
             Task { [weak box] in
                 while !Task.isCancelled {
@@ -222,8 +188,7 @@ actor ResticRunner {
         }
         defer { idleWatchdog?.cancel() }
 
-        // Any chunk on either pipe proves the child is alive and counts
-        // against the stall cap — complete lines are not required.
+        // Any chunk on either pipe counts, complete line or not.
         let activity: @Sendable () -> Void = { [weak box] in
             guard let box else { return }
             box.ping()
@@ -243,14 +208,9 @@ actor ResticRunner {
         let stdoutLine = Self.transcriptFeed(transcript, stream: .stdout)
         let stderrLine = Self.transcriptFeed(transcript, stream: .stderr)
 
-        // The reaper: a pipe that has not reached EOF within `grandchildGrace`
-        // of the child's death is being held open by an inherited copy — a
-        // backend child that outlived a SIGKILL — and no signal of ours can
-        // reach it. Abandoning the read then is what
-        // keeps every stop path (caps, cancellation, quit's terminateAll)
-        // answerable; a healthy run never sees it, because EOF lands in
-        // milliseconds. A second waiter on `exit` is exactly why ExitWaiter
-        // keeps a list of continuations rather than one.
+        // The reaper keeps every stop path (caps, cancellation, quit's
+        // terminateAll) answerable when a grandchild holds a pipe open; no
+        // signal of ours reaches it. It is the second waiter on `exit`.
         let reaper = Task {
             _ = await exit.value()
             try? await Task.sleep(for: .seconds(Self.grandchildGrace))
@@ -262,10 +222,8 @@ actor ResticRunner {
         let result: ResticRunResult
         do {
             result = try await withTaskCancellationHandler {
-                // restic writes its per-item error events to stderr, not stdout —
-                // a partial backup's `message_type: error` lines (and its exit_error)
-                // only reach the result if stderr is decoded too. The decoder drops
-                // every non-JSON line, so human-readable stderr noise is unaffected.
+                // restic writes its per-item `error` events and its
+                // `exit_error` to stderr, so stderr is decoded too.
                 async let stderrOutcome = stderrReader.readAll(
                     onMessage: onMessage,
                     onRawLine: onRawLine,
@@ -301,7 +259,6 @@ actor ResticRunner {
             throw ResticError.timedOut(seconds: seconds, cause: ResticRunResult.retryCause(in: result.stderr))
         }
 
-        // Before the verdict below, so a failing exit is logged too.
         transcript?.exited(exitCode)
 
         if let allowed = invocation.allowedExitCodes, !allowed.contains(exitCode) {
@@ -318,10 +275,9 @@ actor ResticRunner {
         for box in running.values { box.terminate() }
     }
 
-    /// stderr's decoded events are appended after stdout's, so a backup's
-    /// per-item errors land after its summary. Order within each stream is
-    /// preserved, and every consumer reads one stream's events or does reversed
-    /// lookup, so the interleaving is never load-bearing.
+    /// stderr's events follow stdout's, so a backup's per-item errors land
+    /// after its summary. Every consumer reads one stream's events or looks
+    /// up in reverse, so the cross-stream order is never relied on.
     private static func result(
         exitCode: Int32,
         stdout: StreamReader.Outcome,
@@ -336,42 +292,32 @@ actor ResticRunner {
         )
     }
 
-    /// Keys the app itself owns: the repository location and every form of the
-    /// password restic can read. Letting the environment override these would
-    /// silently point restic at another repository or break authentication —
-    /// the class of bug behind backrest's issue #1139 — so they are stripped
-    /// from every child's inheritance here, and
-    /// `RepositoryContext.overriddenExtraEnvironmentKeys` reads the same set
-    /// to flag the settings that can have no effect.
+    /// Keys the app owns: the repository location and every form of the
+    /// password. Inherited or extra-environment values would silently point
+    /// restic at another repository or break authentication, so the runner
+    /// strips them from the inherited environment and `RepositoryContext`
+    /// from the repository's extra environment.
     ///
-    /// RESTIC_REPOSITORY_FILE is `--repository-file`, which restic (0.19.1)
-    /// refuses beside the RESTIC_REPOSITORY the app always sets ("Options
-    /// -r and --repository-file are mutually exclusive"), so it would fail
-    /// every command. RESTIC_HOST would record its name on every backup in
-    /// place of this Mac's, which `ResticService.localHostname` and every
-    /// "from this Mac" reading assume restic took from gethostname(3). Not
-    /// `backup --host` instead: RESTIC_HOST also filters `snapshots`, `ls
-    /// latest` and `forget` (0.19.1, probed: an empty listing, "no
-    /// snapshot found").
+    /// RESTIC_REPOSITORY_FILE: restic 0.19.1 refuses it beside
+    /// RESTIC_REPOSITORY ("Options -r and --repository-file are mutually
+    /// exclusive"). RESTIC_HOST: would replace this Mac's name on every
+    /// backup, which `ResticService.localHostname` assumes is
+    /// gethostname(3); it also filters `snapshots`, `ls latest` and `forget`
+    /// (0.19.1, probed), so overriding it with `backup --host` is not enough.
     static let protectedEnvironmentKeys: Set<String> = [
         "RESTIC_REPOSITORY", "RESTIC_REPOSITORY_FILE", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE",
         "RESTIC_PASSWORD_COMMAND", "RESTIC_HOST",
     ]
 
-    /// The extra PATH entries restic runs with, before the system folders —
-    /// where a brew ssh lives, which an sftp location needs.
+    /// Where a Homebrew or MacPorts ssh lives, which an sftp location needs.
     private static let toolDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
 
-    /// A predictable environment for the child. A GUI app's inherited environment
-    /// is nearly empty, so we rebuild the parts restic actually reads. It has
-    /// no `SSH_AUTH_SOCK` and no terminal, so an SFTP repository's key must
-    /// be passphrase-less or named in `~/.ssh/config`, and its host key
-    /// accepted once with `ssh` beforehand.
-    ///
-    /// restic's own repository and password variables are stripped from whatever
-    /// we inherited: they would win over the per-repository values restic is
-    /// handed (restic ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD),
-    /// and the app always supplies them explicitly.
+    /// A GUI app inherits a nearly empty environment, so PATH is rebuilt. It
+    /// has no `SSH_AUTH_SOCK` and no terminal, so an SFTP repository's key
+    /// must be passphrase-less or named in `~/.ssh/config`, and its host key
+    /// accepted once with `ssh` beforehand. Inherited repository and password
+    /// variables would win over the app's (restic ranks PASSWORD_COMMAND and
+    /// PASSWORD_FILE above PASSWORD), so they go.
     static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         for key in Self.protectedEnvironmentKeys {
@@ -381,7 +327,7 @@ actor ResticRunner {
         var merged = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
         for path in extraPaths where !merged.contains(path) { merged.append(path) }
         env["PATH"] = merged.joined(separator: ":")
-        // Keep restic's own progress printer quiet; we drive progress from JSON.
+        // Progress comes from JSON; restic's own printer stays slow.
         env["RESTIC_PROGRESS_FPS"] = "1"
         return env
     }
@@ -399,32 +345,26 @@ actor ResticRunner {
     }
 }
 
-/// `Process` is safe to `terminate()` from another thread but is not annotated
-/// `Sendable`. A lock-guarded `@unchecked Sendable` shim — one of several
-/// across the codebase; keep it small.
+/// `Process` is safe to `terminate()` from another thread but is not
+/// annotated `Sendable`.
 private final class ProcessBox: @unchecked Sendable {
     private let process: Process
     private let lock = NSLock()
     private var wasTimedOut = false
     private var wasIdleTimedOut = false
-    /// In `systemUptime` terms, not wall-clock time: the uptime clock pauses
-    /// while the Mac sleeps, so a backup that survives a closed lid is not
-    /// read as having been silent for the whole nap.
+    /// `systemUptime`, not wall-clock: it pauses while the Mac sleeps, so a
+    /// backup that survives a closed lid is not read as silent for the nap.
     private var lastActivity = ProcessInfo.processInfo.systemUptime
 
     init(_ process: Process) {
         self.process = process
     }
 
-    /// Ends the process. The two flags record *why*: one for the wall-clock
-    /// cap killing slow work, one for the idle cap killing silent work — so
-    /// the two caps report differently.
     func terminate(timeout: Bool = false, idleTimeout: Bool = false) {
         lock.lock()
         let running = process.isRunning
-        // Only a live process can be killed by the watchdog — a child that
-        // exited on its own in the race window between poll and terminate
-        // must still report as the success (or failure) it earned.
+        // A child that exited on its own just before the cap fired reports
+        // its own exit, not the cap.
         if timeout && running { wasTimedOut = true }
         if idleTimeout && running { wasIdleTimedOut = true }
         lock.unlock()
@@ -433,17 +373,10 @@ private final class ProcessBox: @unchecked Sendable {
         escalateToKill()
     }
 
-    /// SIGTERM is a request, and children may decline it — a shell script
-    /// wearing a `trap "" TERM`, a helper wedged in uninterruptible I/O. A
-    /// runner that cannot stop its children hangs every cancel and the quit
-    /// that drains them, so after the grace it stops asking: SIGKILL. Two
-    /// terminate calls racing arm two escalations; the second finds the
-    /// process already gone (`isRunning` is the real guard — the pid itself
-    /// never changes, so there is nothing to re-verify, and the reuse window
-    /// between the check and the kill is not a real one). A grandchild that
-    /// inherited the pipes can still hold the streams open after the child
-    /// dies; no signal reaches it — the reaper's abandonment (`grandchildGrace`)
-    /// is the answer there.
+    /// A child can decline SIGTERM (wedged in uninterruptible I/O), which
+    /// would hang every cancel and the quit that drains them, so after
+    /// `killGrace` it gets SIGKILL. Two racing terminates arm two
+    /// escalations; `isRunning` makes the second a no-op.
     private func escalateToKill() {
         let identifier = process.processIdentifier
         guard identifier > 0 else { return }
@@ -453,8 +386,7 @@ private final class ProcessBox: @unchecked Sendable {
         }
     }
 
-    /// Synchronous on purpose: the lock must never be taken from an async
-    /// context, so the sleeping escalation lands here to do its checking.
+    /// Synchronous because the lock must not be taken from an async context.
     private func killIfStillRunning(_ identifier: pid_t) {
         lock.lock()
         let running = process.isRunning
@@ -488,13 +420,8 @@ private final class ProcessBox: @unchecked Sendable {
     }
 }
 
-/// Bridges `Process.terminationHandler` to `async`. The handler is installed
-/// before `run()`, so an immediate exit cannot be missed.
-///
-/// Several parties wait on one exit: `run` itself and the reaper task that
-/// abandons the pipes `grandchildGrace` later — so the waiter list is an
-/// array, never a single slot. A second `value()` overwriting the first
-/// caller's continuation would strand it forever.
+/// Two parties wait on one exit, `run` and the reaper, so the waiters are a
+/// list: a single slot would strand the first caller's continuation.
 private final class ExitWaiter: @unchecked Sendable {
     private let lock = NSLock()
     private var status: Int32?
@@ -526,15 +453,12 @@ private final class ExitWaiter: @unchecked Sendable {
     }
 }
 
-/// Both pipes must be drained concurrently: restic will block on a full stderr
-/// buffer while we are still reading stdout, and the command would never finish.
+/// Both pipes are drained concurrently: restic blocks on a full stderr
+/// buffer while stdout is still being read.
 ///
-/// The wait is a `poll` over the pipe and a wakeup pipe rather than a plain
-/// blocking read: closing a descriptor another thread is blocked reading does
-/// not wake it on macOS, so abandonment could not be delivered any other way.
-/// The read itself stays raw `read(2)` — Foundation's read buffers on pipes,
-/// which would turn restic's progress stream into one lump at process exit
-/// (see `FileHandleBox`).
+/// The wait is a `poll` over the pipe and a wakeup pipe, not a blocking read:
+/// on macOS, closing a descriptor another thread is blocked reading does not
+/// wake it, so abandonment has no other way in.
 private final class StreamReader: @unchecked Sendable {
     struct Outcome: Sendable {
         var messages: [ResticMessage] = []
@@ -547,18 +471,14 @@ private final class StreamReader: @unchecked Sendable {
     private let handle: FileHandleBox
     private let textLimit: Int
     private let retainMessages: Bool
-    /// Fires for every chunk read, before any line splitting — liveness is
-    /// cheaper to prove than progress, and a stall cap only needs liveness.
+    /// Every chunk, before line splitting.
     private let onActivity: (@Sendable () -> Void)?
 
-    /// Wakes the reader out of its `poll` when the run is being abandoned.
-    /// The write end is kept open for the reader's lifetime so the signal can
-    /// always be delivered; a `write` after the loop has ended fails with
-    /// EPIPE and is ignored.
+    /// The write end stays open for the reader's lifetime, so the signal can
+    /// always be delivered.
     private let wakeup: Pipe
     private let lock = NSLock()
-    /// `true` once the loop has ended, by EOF or by abandonment — makes
-    /// `abandon` idempotent and a no-op for an already-finished reader.
+    /// The loop ended, by EOF or by abandonment.
     private var finished = false
     private var abandonSignalled = false
 
@@ -575,8 +495,7 @@ private final class StreamReader: @unchecked Sendable {
         self.wakeup = Pipe()
     }
 
-    /// Stops the reader at its next `poll`, returning whatever it has. Safe
-    /// from any thread, any number of times; a finished reader ignores it.
+    /// Safe from any thread, any number of times.
     func abandon() {
         lock.lock()
         if finished || abandonSignalled {
@@ -585,21 +504,17 @@ private final class StreamReader: @unchecked Sendable {
         }
         abandonSignalled = true
         lock.unlock()
-        // One byte is the whole message; the pipe's own buffer makes the
-        // write non-blocking.
         var byte: UInt8 = 0x1
         _ = write(wakeup.fileHandleForWriting.fileDescriptor, &byte, 1)
     }
 
-    /// Marks the loop as over, so a later `abandon` cannot resurrect anything.
     private func markFinished() {
         lock.lock()
         finished = true
         lock.unlock()
     }
 
-    /// - Parameter onLine: every line with what it decoded to (nil for a
-    ///   line that is not restic JSON) — the run transcript's feed.
+    /// - Parameter onLine: the run transcript's feed.
     func readAll(
         onMessage: (@Sendable (ResticMessage) -> Void)?,
         onRawLine: (@Sendable (String) -> Void)?,
@@ -616,15 +531,13 @@ private final class StreamReader: @unchecked Sendable {
 
                 func consume(_ line: String) {
                     onRawLine?(line)
-                    // utf8.count, not count: grapheme counting is O(n) and this
-                    // runs once per line for the whole stream.
+                    // utf8.count, not count: grapheme counting is O(n), per line.
                     if retained.utf8.count < limit { retained += line + "\n" }
                     let decoded = ResticMessageDecoder.decode(line: line)
                     onLine?(line, decoded)
                     guard let message = decoded else { return }
                     if case .malformed = message { outcome.malformedCount += 1 }
-                    // Fatal errors are always kept: the runner reads them back to
-                    // build the failure message when the exit code is bad.
+                    // `failureMessage` needs the exit error.
                     if keepMessages { outcome.messages.append(message) }
                     else if case .exitError = message { outcome.messages.append(message) }
                     onMessage?(message)
@@ -635,8 +548,8 @@ private final class StreamReader: @unchecked Sendable {
                 func absorb(_ chunk: Data) {
                     onActivity?()
                     buffer.append(chunk)
-                    // Consumed lines leave once per chunk — not per line:
-                    // removing each line moves the rest of the buffer.
+                    // Removed once per chunk: removing per line moves the
+                    // rest of the buffer each time.
                     var start = buffer.startIndex
                     while let newline = buffer[start...].firstIndex(of: 0x0A) {
                         let lineData = buffer[start ..< newline]
@@ -644,10 +557,6 @@ private final class StreamReader: @unchecked Sendable {
                         if let line = String(data: lineData, encoding: .utf8) {
                             consume(line)
                         } else {
-                            // A line that is not valid UTF-8 cannot decode as
-                            // restic JSON — count it as the reporting gap it
-                            // is, exactly like a known message with a bad
-                            // payload, rather than dropping it silently.
                             outcome.malformedCount += 1
                         }
                     }
@@ -655,8 +564,7 @@ private final class StreamReader: @unchecked Sendable {
                 }
 
                 loop: while true {
-                    // Wait for either the pipe or the abandonment signal. An
-                    // EINTR must restart the poll, not read as readiness.
+                    // EINTR restarts the poll; it is not readiness.
                     var fds = [pollfd(fd: pipeFD, events: Int16(POLLIN), revents: 0),
                                pollfd(fd: wakeupFD, events: Int16(POLLIN), revents: 0)]
                     while true {
@@ -665,15 +573,10 @@ private final class StreamReader: @unchecked Sendable {
                         break
                     }
                     if fds[1].revents != 0 {
-                        // Abandoned: the child's death plus `grandchildGrace`
-                        // proved someone else is holding the pipe. Drain the
-                        // signal byte, then take whatever the pipe still
-                        // holds readable *right now* — the reaper only fires
-                        // after the child died, so this is the run's last
-                        // bytes, never live output. A zero-timeout poll
-                        // bounds the drain: nothing readable means a
-                        // grandchild still owns the write end, and a plain
-                        // read here would block on it exactly as before.
+                        // Abandoned after the child died: take what is
+                        // readable now. The zero-timeout poll bounds the
+                        // drain; a plain read would block on the grandchild
+                        // that still owns the write end.
                         var sink = [UInt8](repeating: 0, count: 16)
                         _ = Darwin.read(wakeupFD, &sink, sink.count)
                         while true {
@@ -708,25 +611,23 @@ private final class StreamReader: @unchecked Sendable {
     }
 }
 
-/// Reads are thread-confined here: exactly one background queue touches each
-/// descriptor for its whole lifetime.
+/// `@unchecked Sendable`: one background queue touches each descriptor for
+/// its whole lifetime.
 private final class FileHandleBox: @unchecked Sendable {
     private let handle: FileHandle
     init(_ handle: FileHandle) { self.handle = handle }
 
     var fileDescriptor: Int32 { handle.fileDescriptor }
 
-    /// Raw `read(2)` on the descriptor, not `FileHandle.read(upToCount:)`:
-    /// Foundation's read buffers on pipes, so `FileHandle.read` would deliver
-    /// restic's status lines only at process exit — a progress bar stuck at
-    /// 0% instead of one that moves.
+    /// Raw `read(2)`, not `FileHandle.read(upToCount:)`: Foundation buffers
+    /// pipe reads and would deliver restic's status lines only at exit, a
+    /// progress bar stuck at 0%.
     func read(upToCount count: Int) -> Data {
         var storage = [UInt8](repeating: 0, count: count)
         let bytesRead = storage.withUnsafeMutableBufferPointer { buffer -> Int in
             while true {
                 let n = Darwin.read(handle.fileDescriptor, buffer.baseAddress, buffer.count)
-                // A signal interrupt must not read as EOF: retry it, or the
-                // stream would silently end early.
+                // EINTR is not EOF.
                 if n < 0, errno == EINTR { continue }
                 return n
             }

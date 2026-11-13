@@ -78,9 +78,7 @@ struct Banner: Identifiable, Equatable {
     var title: String
     var message: String
     var level: Level
-    /// When set, the banner offers a Show-in-Finder button, which selects
-    /// them all — a restore that ends with "here is the path" reads finished
-    /// only half-way.
+    /// Non-empty: the banner offers Show in Finder, which selects them all.
     var revealPaths: [String] = []
     var link: Link?
 
@@ -98,8 +96,6 @@ struct Banner: Identifiable, Equatable {
         self.link = link
     }
 
-    /// Errors and warnings stay until dismissed: something did not work,
-    /// and it must not expire unread.
     var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
 
@@ -131,9 +127,7 @@ enum SidebarItem: Hashable {
 }
 
 extension SidebarItem {
-    /// The views the page's toolbar switches between: a plan's Overview |
-    /// Backups, and none for every other page. A group under Other backups
-    /// is one view, its backups.
+    /// A group under Other backups is one view, its backups: no tabs.
     var pageTabs: [PageTab] {
         switch self {
         case .plan: PageTab.allCases
@@ -169,8 +163,7 @@ struct FileNode: Hashable, Sendable {
     }
 
     /// The level a chain's tree hangs from: the folders its backups hold at
-    /// their top, a plan's path (several where an earlier build's plan held
-    /// a list). Not a path, so never a row or a selection.
+    /// their top. Not a path, so never a row or a selection.
     static func roots(repositoryID: UUID, chainKey: String) -> FileNode {
         FileNode(repositoryID: repositoryID, chainKey: chainKey, path: "", isDirectory: true)
     }
@@ -211,8 +204,6 @@ enum SnapshotListingOutcome: Equatable {
         }
     }
 
-    /// The one action that helps a failed read; nil where trying again is
-    /// all there is.
     func failureFix(repositoryID: UUID) -> RunFix? {
         switch self {
         case let .failed(_, fix): fix

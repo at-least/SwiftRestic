@@ -1,8 +1,7 @@
 import Foundation
 
-/// Only non-secret configuration lives here — this struct is what gets written to
-/// `config.json`. The repository password and any provider secret key are held in
-/// the login Keychain and fetched at spawn time; see `KeychainStore`.
+/// Written to `config.json`, so nothing secret: the password and any
+/// provider secret key are in the login Keychain (`KeychainStore`).
 struct Repository: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable, CaseIterable, Identifiable {
         case local, sftp, s3
@@ -42,16 +41,14 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var s3Bucket: String = ""
     var s3AccessKeyID: String = ""
 
-    /// Extra `KEY=value` pairs handed to the restic child process verbatim.
-    /// Not in `config.json` (`CodingKeys`): only tests set it, to steer the
-    /// stub restic (`AppModel.init`'s `repositoryEnvironment`).
+    /// Not in `config.json`: only tests set it, to steer the stub restic
+    /// (`AppModel.init`'s `repositoryEnvironment`).
     var extraEnvironment: [String: String] = [:]
 
     var maintenance = MaintenancePolicy()
 
-    /// restic's own ID for what is at this location (`restic cat config`),
-    /// recorded at the first listing that reads it: how Locate knows a moved
-    /// folder is this repository and not another. Nil until then.
+    /// `restic cat config`'s ID, recorded at the first listing that reads
+    /// it: how Locate knows a moved folder is this repository.
     var resticID: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -59,8 +56,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case s3Endpoint, s3Bucket, s3AccessKeyID, maintenance, resticID
     }
 
-    /// Written by hand so a field that does not read falls back with a note;
-    /// see `KeyedDecodingContainer.value(_:default:)`.
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, default: UUID())
@@ -78,18 +73,15 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     init() {}
 
-    /// ssh's `user@host`, or the host alone without a user.
     private var sftpUserHost: String {
         sftpUser.isEmpty ? sftpHostName : "\(sftpUser)@\(sftpHostName)"
     }
 
-    /// The value of `RESTIC_REPOSITORY` for this repository.
+    /// `RESTIC_REPOSITORY`
     var resticRepositoryString: String {
         switch kind {
         case .local:
-            // restic is spawned without a shell, so a literal `~` would
-            // resolve against `/`; the shell's expansion happens here, as
-            // for plan sources and exclude patterns.
+            // No shell expands `~` for restic.
             return resolvedLocalPath
         case .sftp:
             guard let port = sftpCustomPort else {
@@ -116,8 +108,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         value.addingPercentEncoding(withAllowedCharacters: allowed)!
     }
 
-    /// The Server field split into ssh's user, host and port: the user ends
-    /// at the last `@`, the host at the next colon. restic's `sftp:` form
+    /// The user ends at the last `@`, the host at the next colon. restic's `sftp:` form
     /// cuts the host at a colon too, so a port left in the host would start
     /// the path and ssh would dial 22.
     private var sftpHostParts: (user: String, name: String, port: String) {
@@ -137,13 +128,11 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var sftpHostName: String { sftpHostParts.name }
 
-    /// The port typed after the host; empty for none. The editor refuses
-    /// one that is not a port.
+    /// The editor refuses one that is not a port.
     var sftpPortText: String { sftpHostParts.port }
 
-    /// The SFTP port when it is not ssh's own: nil for none and for 22, so
-    /// a repository without one keeps the `sftp:` form, which reads
-    /// ~/.ssh/config's Port.
+    /// nil for none and for 22, so the `sftp:` form, which reads
+    /// ~/.ssh/config's Port, stays.
     private var sftpCustomPort: Int? {
         guard let port = Int(sftpPortText), port != 22 else { return nil }
         return port
@@ -160,9 +149,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return driveVolumeName.map { volume in shares.contains { $0.volumeName == volume } } ?? false
     }
 
-    /// The local path with `~` expanded — the form every file-system
-    /// consumer (restic, the volume read) needs; `localPath` keeps the form
-    /// the user typed.
+    /// `localPath` keeps the form the user typed.
     var resolvedLocalPath: String {
         ResticService.expandTilde(localPath)
     }
@@ -175,12 +162,10 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// What every surface calls the repository — it has no name of its
-    /// own: where it is, said short. A local folder on a drive is the
-    /// drive's name (`VolumePresence.volumeName`, the name the drive-away
-    /// and drive-full words use). When another of
-    /// `repositories` would read the same, each reads as its location
-    /// (`displayLocation`).
+    /// A repository has no name of its own: every surface calls it by where
+    /// it is, said short; a local folder on a drive by the drive's name.
+    /// When another of `repositories` reads the same, each reads as its
+    /// `displayLocation`.
     func label(among repositories: [Repository]) -> String {
         let short = shortLabel
         guard !short.isEmpty else { return "Untitled Location" }
@@ -188,9 +173,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return twin ? displayLocation : short
     }
 
-    /// The location in the reader's words, not restic's repository string:
-    /// the repository page's Location, and a twin's label, which every
-    /// notification and webhook says.
+    /// The reader's words, not restic's repository string.
     var displayLocation: String {
         switch kind {
         case .local:
@@ -214,11 +197,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// The stored repository wins over an editor's draft for what the model
-    /// writes after each check and cleanup — the stamps and the check's next
-    /// slice — the same rule as `BackupPlan.merging(draft:)`: the editor
-    /// holds its older copy, and a check that finished mid-edit must not
-    /// look like it never happened, or the scheduler repeats it.
+    /// What the model writes after each check and cleanup comes from the
+    /// stored repository, not the editor's older copy: a check that finished
+    /// mid-edit would otherwise be repeated by the scheduler.
     func merging(draft: Repository) -> Repository {
         var merged = draft
         merged.maintenance.lastCheckAt = maintenance.lastCheckAt

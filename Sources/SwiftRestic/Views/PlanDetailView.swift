@@ -185,9 +185,8 @@ struct PlanDetailView: View {
                 Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID), repositoryID: plan.repositoryID) }
             }
             scheduleSection(plan)
-            // The rest of the plan — what it leaves out — in
-            // the editor, as System Settings keeps a pane's rarer settings
-            // behind Options….
+            // What the plan leaves out is in the editor, as System Settings
+            // keeps a pane's rarer settings behind Options….
             Section {
                 HStack {
                     Spacer()
@@ -311,28 +310,20 @@ struct PlanDetailView: View {
     }
 
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
-        // The one moment every surface's "Last backup" counts from
-        // (PlanStatus.lastBackupAt) — the sidebar caption's and the
-        // Status line's own derivation, so history the plan arrived
-        // with is not "Never" here.
+        // The moment every surface's "Last backup" counts from, so history
+        // the plan arrived with is not "Never" here.
         let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: snapshots.first?.time), now: now)
-        // The run the value claims — the newest backup that stamped
-        // `lastSuccessAt` (PlanStatus.lastBackupRun).
         let lastSuccessfulRun = PlanStatus.lastBackupRun(planID: plan.id, in: model.configuration.runs)
-        // The run record is the primary source. When the global history cap
-        // has evicted this plan's newest record — a busy plan can do that to
-        // a quiet neighbour — or the history arrived with the repository and
-        // no run exists, the newest snapshot's own summary answers the same
-        // question, because a snapshot carries what its backup added.
+        // The newest snapshot's summary stands in when the history cap has
+        // evicted this plan's newest run (a busy plan can do that to a quiet
+        // neighbour) or the history arrived with the repository.
         let added = (lastSuccessfulRun?.dataAdded ?? snapshots.first?.dataAdded).flatMap { $0 > 0 ? $0 : nil }
         return Text(added.map { "\(value) · added \(Format.bytes($0))" } ?? value)
     }
 
-    /// "—" until the listing succeeds; the caveat says why. While a listing
-    /// is read, a value read before stays with no spinner beside it; with
-    /// none yet, "Reading backups…". An empty plan says
-    /// which kind of empty: a location holding other backups must not read as
-    /// "nothing there".
+    /// While a listing is read, a value read before stays with no spinner
+    /// beside it. An empty plan says which kind of empty: a location holding
+    /// other backups must not read as "nothing there".
     @ViewBuilder
     private func snapshotsValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         if let repositoryID = plan.repositoryID {

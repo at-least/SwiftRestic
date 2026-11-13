@@ -66,7 +66,8 @@ and for the restic inside it.
   when no plan has one. To turn it off, use System Settings ▸ General ▸
   Login Items.
 - One switch, *Notify when a backup succeeds*, sends successes to macOS
-  notifications and every webhook; failures always go. A webhook's service
+  notifications and every webhook. A plan's first backup and the first
+  failure in a row are announced either way. A webhook's service
   (Slack, Discord, Healthchecks.io, or plain JSON) is read from its address.
   Healthchecks hears every run.
 - The app is not sandboxed. restic has to read any folder and reach the

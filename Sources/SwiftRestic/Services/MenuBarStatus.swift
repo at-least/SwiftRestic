@@ -1,16 +1,12 @@
 import Foundation
 
 /// The menu bar's headline, derived from observable state.
-///
-/// Pure and view-free, so the idle → running → finished transitions can be
-/// tested by handing it snapshots of the state.
 enum MenuBarStatus {
-    /// The four faces the menu bar icon can wear. Problem beats running: the
-    /// icon answers "am I safe?" first, and a failure stays one steady face
-    /// until a success heals it. A plan's own run does not count against it,
-    /// so a first backup pulses. Unconfigured beats problem: run history
-    /// outlives removed repositories, so the icon must not ask for setup over
-    /// a line announcing an old failure.
+    /// Problem beats running: the icon answers "am I safe?" first, and a
+    /// failure stays one steady face until a success heals it. A plan's own
+    /// run does not count against it, so a first backup pulses. Unconfigured
+    /// beats problem: run history outlives removed repositories, so the icon
+    /// must not ask for setup over a line announcing an old failure.
     enum IconState: Equatable {
         case unconfigured
         case idle
@@ -51,14 +47,10 @@ enum MenuBarStatus {
         return isRunning ? .running : .idle
     }
 
-    /// What the icon draws for a state: the app's own line drawing (see
-    /// `MenuBarLogo`), pulsing while running, and with an exclamation mark
-    /// in the stack's place for a standing problem — Time Machine's menu
-    /// bar sign for a backup that needs the user; the menu's first line
-    /// names the run. An empty install wears the plain mark: a mark asking
-    /// for attention over a setup that has not begun would read as a
-    /// failure that has not happened, and the menu's first line says what
-    /// to set up (its VoiceOver words say so too).
+    /// `attentionLogo` is Time Machine's menu bar sign for a backup that
+    /// needs the user. An empty install wears the plain mark: an attention
+    /// mark before setup has begun would read as a failure that has not
+    /// happened; the menu's first line says what to set up.
     enum Glyph: Equatable {
         case logo
         case attentionLogo
@@ -74,9 +66,6 @@ enum MenuBarStatus {
         }
     }
 
-    /// The face's words, with what the glyph can't show: a hold, restic
-    /// missing, work running under a problem's steady face
-    /// ("SwiftRestic, backups paused until 3:40 PM").
     static func accessibilityDescription(
         for state: IconState,
         hold: ScheduleHold? = nil,
@@ -102,9 +91,8 @@ enum MenuBarStatus {
         return base + clauses.map { separator + $0 }.joined()
     }
 
-    /// Whether the icon wears its dimmed face: a hold is in force and nothing
-    /// runs. The running face wins — work in flight is the news, and a run
-    /// the user started by hand ignores the hold.
+    /// The running face wins over the dimmed one: work in flight is the
+    /// news, and a run the user started by hand ignores the hold.
     static func appearsHeld(state: IconState, hold: ScheduleHold?) -> Bool {
         hold != nil && state != .running
     }
@@ -115,17 +103,12 @@ enum MenuBarStatus {
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// The newest problem in the run history that still stands, as one
-    /// sentence, or `nil` while there is none. From `OverviewMetrics.problems`'s
-    /// week it drops the backup failures a later successful backup of the same
-    /// plan healed (`OverviewMetrics.isHealed`, the sidebar's rule): this line leads the
-    /// user in, and leading with a failure forever
-    /// would read as permanent breakage.
-    ///
-    /// Yields to `hasNoRepositories`: it must not answer the `unconfigured`
-    /// state with a failure of a removed repository's runs.
-    ///
-    /// `plans` and `repositories` name the subject by the one run-naming rule.
+    /// Drops the failures a later successful backup of the same plan healed
+    /// (`OverviewMetrics.isHealed`, the sidebar's rule): this line leads the
+    /// user in, and leading with an old failure forever would read as
+    /// permanent breakage. Yields to `hasNoRepositories`, so the
+    /// `unconfigured` state is never answered with a removed repository's
+    /// failure.
     static func problemLine(
         runs: [RunRecord],
         hasNoRepositories: Bool,
@@ -137,9 +120,8 @@ enum MenuBarStatus {
         guard !hasNoRepositories else { return nil }
         guard let newest = newestStandingProblem(runs: runs, now: now) else { return nil }
 
-        // The subject is the run's display name — the plan with its
-        // repository for a backup, the repository alone for a check or
-        // prune ("NAS failed" would read as the NAS failing).
+        // A check or prune names the repository alone, with its kind first:
+        // "NAS failed" would read as the NAS failing.
         let name = RunRecordPresentation.displayName(for: newest, plans: plans, repositories: repositories)
         let subject: String
         if name.isEmpty {
@@ -154,24 +136,18 @@ enum MenuBarStatus {
                 subject = "\(newest.kind.displayName) on \(name)"
             }
         }
-        // The outcome's own words, as the sidebar, the plan page and Activity
-        // say it. Notification bodies keep their count-bearing prose
-        // ("Completed with 2 unreadable items.") — a sentence about the run,
-        // not its label.
+        // The outcome's own words, as the sidebar, plan page and Activity say
+        // it. Notification bodies keep their count-bearing prose
+        // ("Completed with 2 unreadable items."), a sentence, not a label.
         return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
     }
 
-    /// The single line above the plan buttons. `nil` while anything runs —
-    /// restores and repository upkeep included: the running lines replace it
-    /// rather than sitting underneath. Console work has no running line, so
-    /// it does not hold the headline back. `nil` under a hold too: the hold's own
-    /// line leads the menu, and a next-run headline would announce a run the
-    /// scheduler will not fire — and while restic is damaged, for the same
-    /// reason. `hasNoRepositories` answers the
-    /// `unconfigured` icon face: it tells a first-time user what to do next.
-    ///
-    /// The plan is named with its repository — two repositories can hold
-    /// same-named plans.
+    /// `nil` while anything runs: the running lines replace it. Console work
+    /// has no running line, so it does not hold the headline back. `nil`
+    /// under a hold or while restic is damaged: their own line leads the
+    /// menu, and a next-run headline would announce a run the scheduler will
+    /// not fire. The plan is named with its repository: two repositories can
+    /// hold same-named plans.
     static func headline(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity] = [:],
@@ -195,10 +171,8 @@ enum MenuBarStatus {
         )
     }
 
-    /// One tray row per plan, in configuration order: Back Up Now while the
-    /// plan is idle, Stop while it runs — the tray is the only surface once
-    /// the window is closed, so a running backup must keep a working Stop
-    /// there.
+    /// Stop while the plan runs: the tray is the only surface once the
+    /// window is closed, so a running backup must keep a working Stop there.
     struct PlanRow: Equatable {
         enum Action: Equatable {
             case backUp
@@ -223,33 +197,32 @@ enum MenuBarStatus {
             let name = plan.label(among: plans)
             switch activity[plan.id]?.phase {
             case nil:
-                // The rule every Back Up Now follows: enabled only where the
-                // plan could run — not while its repository is locked
-                // exclusively, which restic would refuse at once.
+        // Disabled while the repository is locked exclusively, as every
+        // Back Up Now is: restic would refuse at once.
                 let lockReason = plan.repositoryID.flatMap { lockedRepositories[$0] }
                 return PlanRow(
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
                     isEnabled: plan.isConfigurationComplete && !isResticDamaged && lockReason == nil,
-                    // The Backup menu's own words for each reason.
+        // The Backup menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
                         : isResticDamaged ? ResticError.damagedInstall.localizedDescription : lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
             case let phase?:
-                // No percentage: restic's measure is reading, not uploading,
-                // and "Stop (100%)" would make stopping look free. The
-                // running line above keeps restic's figure.
+        // No percentage: restic's measure is reading, not uploading, and
+        // "Stop (100%)" would make stopping look free. The running line
+        // above keeps restic's figure.
                 return PlanRow(planID: plan.id, title: stopTitle(for: phase, planName: name), action: .stop, isEnabled: true)
             }
         }
     }
 
-    /// The Backup menu's Stop for this phase of a plan's run: a backup's own
-    /// retention step, whose snapshot is already written, is no backup. The
-    /// tray's row passes `planName`.
+    /// A backup's own retention step, whose snapshot is already written, is
+    /// no backup, so its Stop says what it stops. The tray's row passes
+    /// `planName`.
     static func stopTitle(for phase: PlanActivity.Phase?, planName: String? = nil) -> String {
         let quoted = planName.map { "“\($0)”" }
         switch phase {
@@ -258,22 +231,18 @@ enum MenuBarStatus {
         }
     }
 
-    /// One group per repository with plans, its plans' rows under the
-    /// repository's own name, repositories in configuration order and plans
-    /// in theirs — a flat list of two repositories could not tell their
-    /// same-named plans apart. Removing a repository removes its plans, so
-    /// no plan is left without a group.
+    /// One group per repository: a flat list could not tell two
+    /// repositories' same-named plans apart. Removing a repository removes
+    /// its plans, so no plan is left without a group.
     struct PlanGroup: Equatable {
         var repositoryID: UUID
         var title: String
-        /// The repository page's Status line ("3 of 3 plans up to date ·
-        /// Last backup 3 hours ago"), so the tray answers "did my backups
-        /// run?" with the window closed. Nil until the listing has loaded.
+        /// The repository page's Status line, so the tray answers "did my
+        /// backups run?" with the window closed. Nil until the listing has
+        /// loaded.
         var protection: String?
         var rows: [PlanRow]
-        /// The plans' news under the verbs: with the window closed the tray
-        /// is the only surface, and one plan's failure must not hide
-        /// another's.
+        /// One plan's failure must not hide another's.
         var newsLines: [String] = []
 
         /// The Status line where no submenu title names the repository.
@@ -282,20 +251,16 @@ enum MenuBarStatus {
         }
     }
 
-    /// One submenu per group only when there are two or more: a single
-    /// repository's rows sit in the menu itself, a hover closer (the user's
-    /// call, 2026-10-24).
+    /// A single repository's rows sit in the menu itself, a hover closer
+    /// (the user's call).
     static func showsGroupsAsSubmenus(_ groups: [PlanGroup]) -> Bool {
         groups.count > 1
     }
 
-    /// A plan's lines in its repository's submenu: news only, a standing
-    /// problem, in the sidebar caption's words, joined to the
-    /// plan's label as the Status section join them
-    /// ("Code: Failed — 3 hours ago"). A quiet plan says nothing (success is
-    /// quiet); a running plan's line already leads the menu. The menu's top
-    /// problem line repeats the newest problem as a sentence on purpose: a
-    /// submenu opened by hover must read on its own.
+    /// A standing problem only, in the sidebar caption's words: success is
+    /// quiet, and a running plan's line already leads the menu. The menu's
+    /// top problem line repeats the newest problem on purpose: a submenu
+    /// opened by hover must read on its own.
     static func newsLines(
         for plan: BackupPlan,
         among plans: [BackupPlan],
@@ -348,10 +313,10 @@ enum MenuBarStatus {
         }
     }
 
-    /// One line per job in flight, in the order plans, upkeep, restore — the
-    /// menu reads top-down from the plan the user most likely came for.
-    /// Identified by a stable string (two lines can share a display name, and
-    /// a `ForEach` over bare strings would collide).
+    /// Plans, upkeep, restore, in that order: the menu reads top-down from
+    /// the plan the user most likely came for. `id` is stable because two
+    /// lines can share a text, and a `ForEach` over bare strings would
+    /// collide.
     struct RunningLine: Equatable, Identifiable {
         var id: String
         var text: String
@@ -364,8 +329,7 @@ enum MenuBarStatus {
         progress: [UUID: OperationProgress]
     ) -> [RunningLine] {
         plans.filter { activity[$0.id] != nil }.map { plan in
-            // The plan with its repository, like the idle headline — two
-            // same-named plans can run at once.
+            // Two same-named plans can run at once.
             let name = RunRecordPresentation.planWithRepository(plan, plans: plans, repositories: repositories)
             return RunningLine(
                 id: plan.id.uuidString,
@@ -387,36 +351,32 @@ enum MenuBarStatus {
         }
     }
 
-    /// The restore, which is always at most one.
+    /// There is at most one restore.
     static func restoreLine(progress: OperationProgress?) -> RunningLine? {
         guard let progress else { return nil }
         let percent = Format.percent(progress.fraction)
         return RunningLine(id: "restore", text: "Restoring — \(percent)")
     }
 
-    /// Progress as the menu bar shows it: a percentage once restic is
-    /// streaming status, the phase's name before that. Progress arrives
-    /// beside the activity, not inside it — the menu is built from the pair
-    /// when it opens.
+    /// A percentage once restic streams status, the phase's name before
+    /// that. Progress arrives beside the activity, not inside it.
     static func progressText(activity: PlanActivity?, progress: OperationProgress?) -> String {
         guard let activity else { return "…" }
         guard activity.phase == .backingUp else { return activity.phase.displayName }
         return Format.percent(progress?.fraction ?? 0)
     }
 
-    /// One leading line of the tray's menu, before the repository rows.
+    /// Leads the tray's menu, before the repository rows.
     enum TrayLine: Equatable {
-        /// Greyed status text.
         case status(String)
-        /// The problem sentence: the menu's one line that goes somewhere
-        /// (Show in Activity), so it carries the run it names.
+        /// The menu's one line that goes somewhere (Show in Activity), so it
+        /// carries the run it names.
         case problem(text: String, runID: UUID)
     }
 
-    /// "Am I safe?" in one line: the worst thing wrong, or that nothing is.
-    /// Nil where neither is known yet, because no plan can be vouched for
-    /// while a listing is still being read or a first backup runs, and while
-    /// nothing is set up, where the headline says what to do.
+    /// "Am I safe?" in one line. Nil while no plan can be vouched for (a
+    /// listing still loading, a first backup running) and while nothing is
+    /// set up, where the headline says what to do.
     static func verdict(
         rows: [UpToDateRow],
         isResticDamaged: Bool,
@@ -436,9 +396,8 @@ enum MenuBarStatus {
 
     static let allUpToDateLine = "All plans up to date"
 
-    /// The tray's leading lines, in the order a menu open reads them: the
-    /// verdict, the hold, the named Status line when no submenu carries
-    /// it, then the idle headline or the running lines (which replace it).
+    /// In the order a menu open reads them; the running lines replace the
+    /// idle headline.
     static func trayLines(
         verdict: TrayLine?,
         holdSummary: String?,

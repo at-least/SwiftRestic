@@ -1,7 +1,5 @@
 import XCTest
 
-/// The Activity page lists the first backup: one row, its plan, Backup, and
-/// what it added.
 final class ActivityUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false

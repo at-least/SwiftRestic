@@ -38,7 +38,7 @@ struct AppConfiguration: Codable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         repositories = c.value(.repositories, default: repositories)
         plans = c.value(.plans, default: plans)
-        // Records written before stretches were stored get theirs here, so
+        // A record stored without its problem stretch gets one here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: runs))
         settings = c.value(.settings, default: settings)
@@ -137,9 +137,7 @@ actor ConfigStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         // Milliseconds, as restic's times are read (`ResticDateFormat`), so a
         // stored snapshot time equals the same time read from restic again.
-        // Not `.iso8601`, which drops the fraction. A file written before
-        // holds whole seconds, which the decoder still reads; an older build
-        // cannot read this one.
+        // Not `.iso8601`, which drops the fraction.
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(ResticDateFormat.string(from: date))

@@ -1,9 +1,6 @@
 import Foundation
 import Security
 
-/// Stores repository passwords, provider secret keys and network share
-/// passwords in the login Keychain.
-///
 /// Secrets never touch `config.json`; the repository's or share's UUID
 /// stored there is the base of the Keychain account name.
 enum KeychainStore {

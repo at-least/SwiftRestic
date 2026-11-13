@@ -109,7 +109,8 @@ struct SkippedRunTests {
         var run = RunRecord(kind: .backup, startedAt: now)
         run.outcome = .skipped
         #expect(!RunRecordPresentation.hasBackupNumbers(run))
-        // Copy Details says why, where a backup's numbers would be.
+        // The copied run (Edit ▸ Copy) says why, where a backup's numbers
+        // would be.
         run.detailText = "“Archive SSD” is not connected."
         let details = RunRecordPresentation.detailsText(
             for: run, repositoryName: "Home NAS", versionsNow: RunLogVersions.current(resticVersion: "")

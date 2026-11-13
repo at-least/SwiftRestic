@@ -1,7 +1,6 @@
 name: CI
 
-# Run by hand only — Actions › CI › Run workflow, or `gh workflow run CI` —
-# the owner's call (2026-10-18); a push or a pull request no longer starts it.
+# Run by hand only (the owner's decision): `gh workflow run CI`.
 on:
   workflow_dispatch:
 
@@ -17,7 +16,7 @@ jobs:
     # rejects in AppModel+Notifications.
     runs-on: macos-26
     env:
-      # The runner has no Apple Development certificate; see build.sh.
+      # The runner has no Apple Development certificate.
       SWIFTRESTIC_ADHOC_SIGN: "1"
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +24,5 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      # build.sh regenerates the project (xcodegen snapshots the file list),
-      # runs xcodebuild test, and fails both on a failed run and on a run that
-      # executed no tests at all.
       - name: Run the suite
         run: ./build.sh test

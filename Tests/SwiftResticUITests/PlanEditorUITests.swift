@@ -1,7 +1,5 @@
 import XCTest
 
-/// What the plan editor changes shows on the plan page and in the backups it
-/// makes after.
 final class PlanEditorUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false

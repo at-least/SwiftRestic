@@ -1,11 +1,9 @@
 import XCTest
 
-/// The refresh lands the rows before the size. With the size held back
-/// (SWIFTRESTIC_DELAY_STATS, Debug builds), the repository page's Size row
-/// is there with "—" — the listing's answer — and the size arrives only when
-/// the hold ends. The repository is the one the first-run sheet makes, whose
-/// first refresh starts before the plan exists: a hold on its stats delays
-/// only its size, never the rows.
+/// SWIFTRESTIC_DELAY_STATS (Debug builds) holds back the size: the Size row
+/// shows "—" until the hold ends. The first-run sheet's repository starts its
+/// first refresh before the plan exists, so the hold delays only its size,
+/// never the rows.
 final class RefreshOrderUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false

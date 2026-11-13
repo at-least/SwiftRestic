@@ -1,38 +1,35 @@
 import Foundation
 
-/// The one action that fixes a failure whose cause the app knows, offered
-/// where the failure is read — the Activity drawer and the plan's problem
-/// row.
+/// The one action that fixes a failure whose cause the app knows, offered in
+/// the Activity drawer and the plan's problem row.
 enum RunFix: Equatable {
-    /// The repository's password is missing, or restic exit 12: the stored
-    /// one does not open it. A prompt for the password alone
+    /// The password is missing, or restic exit 12: the stored one does not
+    /// open the repository. Prompts for the password alone
     /// (`PasswordPromptSheet`).
     case enterPassword(UUID)
-    /// restic exit 10 on a server or in the cloud: no repository is at its
-    /// location. Those locations are fixed, so where it is now takes a new
-    /// repository.
+    /// restic exit 10 on a server or in the cloud. Those locations are
+    /// fixed, so where the repository is now takes a new repository.
     case addRepository
     /// restic exit 10 on a disk, or a drive that never comes back under its
     /// name: pick the folder it moved to (`AppModel.locateRepository`).
     case locate(UUID)
-    /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
-    /// a plan's path is fixed, so where the folder is now takes a new plan
-    /// in the same repository, in place of this one
-    /// (`AppModel.movePlan(id:toPath:)`).
+    /// The plan's folder is not on this Mac (`RunRecord.missingSources`). A
+    /// plan's path is fixed, so the folder's new place takes a new plan in
+    /// the same repository, replacing this one (`AppModel.movePlan(id:toPath:)`).
     case chooseNewLocation(planID: UUID)
-    /// The repository's network share refused to reconnect
-    /// (`RunRecord.refusedShares`): its editor holds the share's password.
+    /// `RunRecord.refusedShares` names the repository's own share: its
+    /// editor holds the share's password.
     case editRepositoryShare(UUID)
-    /// A network share holding the plan's folder refused to reconnect: the
-    /// plan editor holds the share's password.
+    /// A share holding the plan's folder refused to reconnect: the plan
+    /// editor holds the share's password.
     case editPlanShare(UUID)
-    /// The repository's disk filled up during a backup
-    /// (`RunRecord.repositoryFull`): a prune frees what the failed run
-    /// uploaded. It runs at once: the failure already asked for it.
+    /// The disk filled up during a backup (`RunRecord.repositoryFull`): a
+    /// prune frees what the failed run uploaded. Runs at once: the failure
+    /// already asked for it.
     case pruneNow(UUID)
-    /// The location refused to delete what the plan's retention chose
+    /// The location refused the deletions retention chose
     /// (`RunRecord.retentionRefused`): the plan page's Remove old backups
-    /// automatically switch turns it off.
+    /// automatically switch turns retention off.
     case showPlan(UUID)
 
     var title: String {
@@ -48,8 +45,8 @@ enum RunFix: Equatable {
         }
     }
 
-    /// The button's tooltip: the fact the failure message beside it lacks;
-    /// nil where that message already says it.
+    /// The fact the failure message beside the button lacks; nil where the
+    /// message already says it.
     var help: String? {
         switch self {
         case .enterPassword, .addRepository, .locate, .chooseNewLocation, .pruneNow: nil
@@ -66,8 +63,8 @@ struct UnreadableItemWords: Equatable {
     var reason: String
 }
 
-/// A check or prune that did not end clean, run again from the drawer where
-/// its verdict is read, at once: the failed run already asked for it.
+/// Runs at once from the drawer where the verdict is read: the failed run
+/// already asked for it.
 enum MaintenanceRetry: Equatable {
     case check(UUID)
     case prune(UUID)
@@ -87,9 +84,8 @@ enum MaintenanceRetry: Equatable {
 }
 
 /// A run's words outside its log: the Activity Detail column, the drawer's
-/// rows, the copied details, and the name every app-wide surface calls the run by.
-/// The one place a run's one-line summary is worded, built on the plan
-/// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
+/// rows, the copied details, and the name every app-wide surface calls the
+/// run by. Built on `PlanStatus.facts(for:)` so Activity and the plan row
 /// cannot disagree.
 enum RunRecordPresentation {
     static func maintenanceRetry(for run: RunRecord, repositoryExists: Bool) -> MaintenanceRetry? {
@@ -103,8 +99,8 @@ enum RunRecordPresentation {
         }
     }
 
-    /// The repository a check that found damage sends to the restic console:
-    /// its verdict advises restic's repair commands, and the console is where the
+    /// A check that found damage goes to the restic console: its verdict
+    /// advises restic's repair commands, and the console is where the
     /// repository's password is supplied.
     static func repairRoute(for run: RunRecord, repositoryExists: Bool) -> UUID? {
         guard repositoryExists, run.kind == .check, run.outcome == .completedWithErrors else { return nil }
@@ -119,8 +115,8 @@ enum RunRecordPresentation {
         repositoryVolume: String? = nil,
         repositoryIsLocal: Bool = false
     ) -> RunFix? {
-        // A refused retention: after a backup the snapshot stands, so the run
-        // is a warning, and the fix is offered all the same.
+        // After a backup the snapshot stands, so a refused retention is a
+        // warning, and the fix is offered all the same.
         if run.retentionRefused != nil, repositoryExists, let planID = run.planID {
             return planExists ? .showPlan(planID) : nil
         }
@@ -129,8 +125,8 @@ enum RunRecordPresentation {
             guard let planID = run.planID, planExists else { return nil }
             return .chooseNewLocation(planID: planID)
         }
-        // A network share that refused: whichever editor holds its password
-        // — the repository's for its own folder's share, else the plan's.
+        // The repository's editor for its own folder's share, else the
+        // plan's.
         if let refusedShares = run.refusedShares {
             if let repositoryVolume, refusedShares.contains(repositoryVolume) { return .editRepositoryShare(repositoryID) }
             guard let planID = run.planID, planExists else { return nil }
@@ -144,21 +140,16 @@ enum RunRecordPresentation {
         return nil
     }
 
-    /// "Backup of “Documents”", "Restore of “Budget.numbers”", "Removing
-    /// old backups of “Documents”" — the subject line the log and Copy
-    /// Details open with.
+    /// The subject line the log and the copied details open with.
     static func subject(of run: RunRecord) -> String {
         guard !run.planName.isEmpty else { return run.kind.displayName }
         if run.kind == .forget { return "Removing old backups of “\(run.planName)”" }
         return "\(run.kind.displayName) of “\(run.planName)”"
     }
 
-    /// "Documents (Home Disk)" — the one way a plan and its repository are
-    /// said in a single string, wherever a surface must name both (the run
-    /// surfaces below, the tray's "Next:" headline, Settings' Next backup
-    /// line). A repository named exactly like the plan is not said twice —
-    /// one fact, one hearing, the rule Activity's Subject and Repository
-    /// columns also follow.
+    /// The one way a plan and its repository are said in a single string.
+    /// A repository named exactly like the plan is not said twice, the rule
+    /// Activity's Subject and Repository columns also follow.
     static func planWithRepository(_ planName: String, repositoryName: String?) -> String {
         guard !planName.isEmpty else { return planName }
         guard let repositoryName, !repositoryName.isEmpty, repositoryName != planName else {
@@ -171,16 +162,13 @@ enum RunRecordPresentation {
         planWithRepository(plan.label(among: plans), repositoryName: repositories.withID(plan.repositoryID).map { $0.label(among: repositories) })
     }
 
-    /// What a run is called by the surfaces that have one string for it:
-    /// the log sheet's header, the local notification's title, the tray's
-    /// problem line. Derived from IDs at render time — the plan by its
-    /// current name, check and prune by the repository `repositoryID` names
-    /// — because `planName` is overloaded storage: the plan for a backup,
-    /// the repository for a check or prune, a step label for a restore. An
-    /// ID that no longer resolves falls back to the stored name, which is
-    /// honest history rather than a silent fallback: the record outlives
-    /// its plan, and the name it was recorded under is the truest one it
-    /// has left.
+    /// The run's name where a surface has one string for it (log sheet
+    /// header, notification title, tray problem line). Derived from IDs at
+    /// render time because `planName` is overloaded storage: the plan for a
+    /// backup, the repository for a check or prune, a step label for a
+    /// restore. An ID that no longer resolves falls back to the stored name
+    /// on purpose: the record outlives its plan, and the name it was
+    /// recorded under is the truest one left.
     static func displayName(
         for run: RunRecord,
         plans: [BackupPlan],
@@ -189,12 +177,11 @@ enum RunRecordPresentation {
         let repositoryName = repositories.withID(run.repositoryID).map { $0.label(among: repositories) }
         switch run.kind {
         case .backup, .forget, .restore:
-            // The plan as it is called now. A restore carries no planID, so
-            // its step label is the stored name — the label is its subject.
+            // A restore carries no planID, so its step label (the stored
+            // name) is its subject.
             return planWithRepository(currentPlanName(of: run, plans: plans), repositoryName: repositoryName)
         case .check, .prune:
-            // The repository is the subject; the stored planName already
-            // holds it when the repository is gone.
+            // The stored planName holds the repository once it is gone.
             return repositoryName ?? run.planName
         }
     }
@@ -203,9 +190,8 @@ enum RunRecordPresentation {
         run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
     }
 
-    /// The run log sheet's header: "Backup log — Documents (Home Disk)",
-    /// "Check log — Home Disk". A derivation rather than view text so the
-    /// header's words are pinned with the naming rule they follow.
+    /// Here rather than in the view so a test pins the header to the naming
+    /// rule.
     static func logSheetTitle(
         for run: RunRecord,
         plans: [BackupPlan],
@@ -214,22 +200,20 @@ enum RunRecordPresentation {
         "\(run.kind.displayName) log — \(displayName(for: run, plans: plans, repositories: repositories))"
     }
 
-    /// Settings ▸ General ▸ Scheduling's "Next backup" line, in the tray
-    /// headline's words: the plan with its repository, then when.
+    /// Settings' "Next backup" line, in the tray headline's words.
     static func nextRunLine(plan: BackupPlan, date: Date, plans: [BackupPlan], repositories: [Repository]) -> String {
         let name = planWithRepository(plan, plans: plans, repositories: repositories)
         return "\(name) — \(Format.tileTimestamp(date))"
     }
 
-    /// The Activity Detail column: why a run failed, else its problems as
-    /// the plan page counts them ("1 unreadable item · Retention skipped" —
-    /// restic's count, never the stored lines), else what it did.
+    /// Problems are counted as the plan page counts them: restic's count,
+    /// never the stored lines.
     static func detail(for run: RunRecord) -> String {
-        // The first sentence: restic's multi-line tail stays in the drawer,
-        // the plan page and the copied details, which show the whole message.
+        // The first sentence: the drawer, plan page and copied details show
+        // the whole message.
         if let failure = run.failureMessage {
             let reason = Format.firstSentence(failure)
-            // A standing failure for the same folders gone, as a skip.
+        // A standing failure for the same folders gone, as a skip.
             guard let count = run.skipCount, let since = run.skippedSince else { return reason }
             let sentence = Format.fullSentence(reason)
             return "\(sentence) Failed \(count) times since \(Format.timestamp(since))."
@@ -252,37 +236,28 @@ enum RunRecordPresentation {
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
         case .forget, .prune:
-            // The record's own count ("Removed 2 backups.", "Freed 1.2 GB."),
-            // one short line; a cleanup whose amount restic's output did
-            // not say has none.
+            // A cleanup whose amount restic's output did not say has no
+            // count.
             return run.detailText ?? run.outcome.displayName
         case .check:
-            // The verdict the run recorded — "2 errors found. Some damage
-            // can be repaired…" or "No errors found." — its first
-            // sentence; a record from before the verdict falls to the
-            // outcome. The glyph already says the outcome; the count is
-            // what the column adds. No final period: the column's
-            // other entries ("2 unreadable items", "0 new · 1 changed") carry
-            // none, and the sentence cut drops one before a second sentence.
+            // The glyph already says the outcome; the count is what the
+            // column adds. No final period: the column's other entries ("2
+            // unreadable items", "0 new · 1 changed") carry none.
             guard let verdict = run.detailText else { return run.outcome.displayName }
             return Format.withoutFinalPeriod(Format.firstSentence(verdict))
         }
     }
 
-    /// The Detail column's words for a row that continues a line — the
-    /// Maintenance section's "22 hours ago · 2 errors found" —
-    /// the outcome lowercased when the detail is
-    /// only the outcome.
+    /// For a row that continues a line ("22 hours ago · 2 errors found"):
+    /// the outcome lowercased when the detail is only the outcome.
     static func verdictClause(for run: RunRecord) -> String {
         let detail = detail(for: run)
         return detail == run.outcome.displayName ? detail.lowercased() : detail
     }
 
-    /// One unreadable item as the app says it: its name, where it is —
-    /// inside the plan folder that holds it, else on disk — and why
-    /// (`unreadableReason`). From the path the run stored
-    /// (`RunRecord.unreadableItemPaths`); nil for a line with none, which
-    /// stays restic's own.
+    /// The item's name, where it is (inside the plan folder that holds it,
+    /// else on disk) and why. Nil for a line with no stored path, which stays
+    /// restic's own.
     static func unreadableItemWords(line: String, path: String?, sources: [String]) -> UnreadableItemWords? {
         guard let path else { return nil }
         let parent = ResticPath.parent(of: path)
@@ -290,7 +265,7 @@ enum RunRecordPresentation {
         // item is, so the item reads as on disk, tilde and all.
         let tops = sources.map { ResticPath.normalized(ResticService.expandTilde($0)) }.filter { $0 != "/" }
         let location = if let top = Format.containingRoot(of: parent, in: tops) {
-            // `holds` matched, so `top` is a byte prefix of `parent`.
+            // `containingRoot` matched, so `top` is a byte prefix of `parent`.
             ResticPath.basename(of: top) + parent.removingBytePrefix(top)!
         } else {
             (parent as NSString).abbreviatingWithTildeInPath
@@ -315,8 +290,8 @@ enum RunRecordPresentation {
         }
     }
 
-    /// Nil for a restore that says nothing countable — a record without
-    /// counts reads "Succeeded".
+    /// Nil for a restore that says nothing countable: the caller shows the
+    /// outcome.
     private static func restoreDetail(_ run: RunRecord) -> String? {
         guard run.outcome == .succeeded else { return nil }
         if run.filesRestored == 0, run.filesSkipped > 0 {
@@ -328,43 +303,34 @@ enum RunRecordPresentation {
     }
 
     /// What Keep did with files already at the landing, in the restore
-    /// banner's number: "kept as it was" for one, "kept as they were" for
-    /// the rest.
+    /// banner's words.
     static func kept(_ count: Int) -> String {
         count == 1 ? "kept as it was" : "kept as they were"
     }
 
-    /// restic's exit code for the drawer and the copied details, bare: the
-    /// failure text above it already says what went wrong, and a gloss
-    /// would be wrong for some commands (`forget`'s 3 is a refused
-    /// deletion, `check`'s 1 a damaged-repository verdict). Nil for 0,
-    /// which says nothing worth a row.
+    /// Bare: the failure text above it already says what went wrong, and a
+    /// gloss would be wrong for some commands (`forget`'s 3 is a refused
+    /// deletion, `check`'s 1 a damaged-repository verdict). Nil for 0.
     static func exitCodeText(_ code: Int32) -> String? {
         code == 0 ? nil : String(code)
     }
 
-    /// Whether a backup record's file and byte numbers mean anything: a run
-    /// that failed or was stopped before restic summarised has only zeros,
-    /// which would read as "nothing changed".
+    /// A run that failed or was stopped before restic summarised has only
+    /// zeros, which would read as "nothing changed".
     static func hasBackupNumbers(_ run: RunRecord) -> Bool {
         guard run.outcome == .failed || run.outcome == .cancelled || run.outcome == .skipped else { return true }
         return run.filesNew + run.filesChanged + run.filesUnmodified > 0
             || run.bytesProcessed > 0 || run.dataAdded > 0
     }
 
-    /// A backup's file counts, the drawer's and copied details' one wording:
-    /// "1 new · 0 changed · 2 unchanged".
     static func backupFiles(_ run: RunRecord) -> String {
         "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed · \(Format.count(run.filesUnmodified)) unchanged"
     }
 
-    /// A backup's bytes, in the notification's words: "Checked 3.4 GB ·
-    /// 120 MB of new data".
     static func backupSize(_ run: RunRecord) -> String {
         "Checked \(Format.bytes(run.bytesProcessed)) · \(Format.bytes(run.dataAdded)) of new data"
     }
 
-    /// A restore's counts: "1 restored · 2 kept as they were · 14 bytes".
     static func restoreFiles(_ run: RunRecord) -> String {
         var text = "\(Format.count(run.filesRestored)) restored"
         if run.filesSkipped > 0 { text += " · \(Format.count(run.filesSkipped)) \(kept(run.filesSkipped))" }
@@ -372,8 +338,7 @@ enum RunRecordPresentation {
     }
 
     /// Edit ▸ Copy on an Activity row: the run as plain text for a forum
-    /// post or an issue — what ran, how it ended, restic's exit code and the
-    /// versions.
+    /// post or an issue.
     static func detailsText(for run: RunRecord, repositoryName: String?, versionsNow: RunLogVersions) -> String {
         var lines = [
             "\(subject(of: run)) — \(run.outcome.displayName)",
@@ -390,8 +355,8 @@ enum RunRecordPresentation {
         }
         switch run.kind {
         case .backup:
-            // Why it was skipped, before what the rest added when a
-            // snapshot was written anyway.
+            // Why it was skipped, before what the rest added when a snapshot
+            // was written anyway.
             if run.outcome == .skipped, let reason = run.detailText { lines.append("Skipped: \(reason)") }
             if let since = run.skippedSince, let count = run.skipCount {
                 let label = run.outcome == .failed ? "Failing since" : "Skipped since"
@@ -416,8 +381,6 @@ enum RunRecordPresentation {
                 lines.append("Files: \(restoreFiles(run))")
             }
         case .check, .forget, .prune:
-            // A check's verdict, what a retention run removed, or what a
-            // cleanup freed.
             if let result = run.detailText { lines.append("Result: \(result)") }
         }
         if let code = run.exitCode, let text = exitCodeText(code) {

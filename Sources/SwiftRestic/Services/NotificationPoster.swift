@@ -1,9 +1,7 @@
 import Foundation
 
-/// Turns an event into the HTTP request a channel expects.
-///
-/// Kept separate from the sending so it can be tested without a network: the
-/// payload shapes are the part easy to get wrong.
+/// An event as the HTTP request a channel expects, apart from the sending
+/// so the payload shapes are tested without a network.
 enum NotificationPayload {
     struct Request: Sendable, Equatable {
         var url: URL

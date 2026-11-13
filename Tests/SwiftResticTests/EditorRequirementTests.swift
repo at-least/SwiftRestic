@@ -47,9 +47,9 @@ struct EditorRequirementTests {
         draft.repositoryID = UUID()
         #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
         #expect(EditorRequirements.plan(saved, isNew: false, among: [saved]) == nil)
-        // Twins: earlier builds let two plans back up one folder
-        // to one repository, and a plan's path is fixed once saved, so
-        // editing either — its schedule, its excludes — must save.
+        // Twins (two plans, one folder, one repository) can be in a
+        // configuration, and a plan's path is fixed once saved, so editing
+        // either — its schedule, its excludes — must save.
         var twin = saved
         twin.id = UUID()
         #expect(EditorRequirements.plan(saved, isNew: false, among: [saved, twin]) == nil)
@@ -129,10 +129,9 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(
             saved, password: "", confirmPassword: "", isNew: false, holdsBackups: false, hasStoredPassword: true, among: [saved]
         ) == nil)
-        // Twins: earlier builds named repositories, and one place
-        // could be added twice under two names. A saved repository's
-        // location is fixed, so its edits — a password this Mac lacks —
-        // must save.
+        // Twins (one location saved twice) can be in a configuration, and a
+        // saved repository's location is fixed, so its edits — a password
+        // this Mac lacks — must save.
         var twin = saved
         twin.id = UUID()
         #expect(EditorRequirements.repository(

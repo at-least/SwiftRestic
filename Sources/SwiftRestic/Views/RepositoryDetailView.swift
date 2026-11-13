@@ -9,9 +9,8 @@ struct RepositoryDetailView: View {
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     /// Read off the body: `resourceValues` is synchronous filesystem IO, and
-    /// a spun-down external disk can take seconds to answer — re-run on every
-    /// re-eval (progress ticks, banners) that would also stall the main
-    /// thread each time.
+    /// a spun-down external disk can take seconds to answer, on every
+    /// re-render.
     @State private var volumeCapacity: VolumeCapacity?
     private var repository: Repository? { model.repository(id: repositoryID) }
 

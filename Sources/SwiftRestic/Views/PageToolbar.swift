@@ -1,16 +1,9 @@
 import SwiftUI
 
-/// What a page hangs in the window toolbar: its tab picker in the middle
-/// (`pageTabPicker`) and its search field at the trailing side
-/// (`pageSearch`, `allBackupsSearch`) — the pieces PlanDetailView,
-/// RepositoryDetailView and OtherGroupView share, none of them
-/// BackupsBrowserView's own.
 extension View {
     /// A plan's page's Overview | Backups in the middle of the window
-    /// toolbar:
-    /// Apple's guidance for switching a main window's view (the HIG's
-    /// center area holds the common controls), clear of the trailing
-    /// corner, where the search field sits.
+    /// toolbar: the HIG's center area for switching a main window's view,
+    /// clear of the trailing corner, where the search field sits.
     func pageTabPicker(_ selection: Binding<PageTab>, tabs: [PageTab]) -> some View {
         toolbar {
             ToolbarItem(placement: .principal) {
@@ -21,7 +14,6 @@ extension View {
                     }
                 }
                 .pickerStyle(.segmented)
-                // Each segment 80 pt wide.
                 .frame(width: 80 * CGFloat(tabs.count))
             }
         }
@@ -29,11 +21,10 @@ extension View {
 }
 
 extension View {
-    /// A plan's page's search, in the window toolbar's trailing field — the
-    /// HIG's place for it ("Put a search field at the trailing side of the
-    /// toolbar for many common uses"): the plan's files across every backup.
-    /// Typed on Overview, the page turns to Backups, where the hits list. ⌘F
-    /// focuses it (`AppRouter.searchFocus`).
+    /// A plan's page's search, in the window toolbar's trailing field (the
+    /// HIG's place for it): the plan's files across every backup. Typed on
+    /// Overview, the page turns to Backups, where the hits list. ⌘F focuses
+    /// it (`AppRouter.searchFocus`).
     func pageSearch(page: SidebarItem, roots: FileNode?) -> some View {
         modifier(PageSearch(page: page, roots: roots))
     }

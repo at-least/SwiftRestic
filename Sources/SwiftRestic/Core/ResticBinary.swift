@@ -13,7 +13,6 @@ struct ResticBinary: Sendable {
 
 enum ResticState {
     case checking
-    /// The restic in use, and `restic version`'s answer.
     case ready(ResticBinary, version: String)
     /// The bundled restic is gone or cannot answer `restic version`.
     case damaged

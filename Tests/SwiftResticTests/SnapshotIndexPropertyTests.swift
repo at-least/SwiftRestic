@@ -523,8 +523,7 @@ private final class PropertyRun {
             if want.isEmpty {
                 if summary != nil { fail("mismatch", "\(label): summary for unheld \(path)") }
             } else {
-                // Counted in the chain of the newest snapshot holding it —
-                // the Files tab its Find Files row opens.
+                // Counted in the chain of the newest snapshot holding it.
                 let chainCount = truth(path, chain: world.all[want[0]]?.chain).count
                 if summary?.count != chainCount || summary?.newest.id != want.first {
                     fail("mismatch", "\(label): summary(\(path)) got \(String(describing: summary?.count)) want \(chainCount)")

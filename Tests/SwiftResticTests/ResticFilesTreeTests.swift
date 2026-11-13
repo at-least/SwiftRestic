@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@Suite("restic Files tree", .serialized)
+@Suite("restic file history and index search", .serialized)
 struct ResticFilesTreeTests {
     /// A scratch repository of three backups of one folder — a.txt never
     /// changes, b.txt in each, c.txt in the last, a[1].txt (a glob's
@@ -183,8 +183,8 @@ struct ResticFilesTreeTests {
 
     /// The index searches' cap, over the index the app builds: a full page
     /// of hits is the whole answer, one hit past the cap says it was cut —
-    /// the model's probe of asking one hit past the limit, for the Files
-    /// tab and Search All Backups. The ceiling itself is pinned
+    /// the model's probe of asking one hit past the limit, for a plan's
+    /// search and Search All Backups. The ceiling itself is pinned
     /// store-side (`SnapshotIndexScaleTests.search`).
     @MainActor
     @Test("an index search's full page is not called cut short; one hit past the cap is")

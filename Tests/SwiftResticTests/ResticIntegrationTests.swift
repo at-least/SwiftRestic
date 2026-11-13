@@ -100,8 +100,7 @@ struct ResticIntegrationTests {
             )
             // A name whose first character is a combining mark: the separator
             // before it merges into one grapheme, so any Character-level path
-            // arithmetic silently drops the file from a directory listing. A
-            // regression here would lose exactly this file at browse time.
+            // arithmetic silently drops the file from a directory listing.
             try "combining".write(
                 to: source.appendingPathComponent("\u{0301}leading.txt"),
                 atomically: true,
@@ -211,7 +210,6 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // Three snapshots from this plan…
         for index in 0 ..< 3 {
             try "change \(index)".write(
                 to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
@@ -220,7 +218,6 @@ struct ResticIntegrationTests {
             )
             _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
         }
-        // …and one from a different plan, which retention must not touch.
         var otherPlan = fixture.plan
         otherPlan.id = UUID()
         _ = try await fixture.service.backup(fixture.context, plan: otherPlan)
@@ -533,7 +530,6 @@ struct ResticIntegrationTests {
         #expect(preview.kept.count == 1)
         #expect(preview.removed.count == 1)
         #expect(preview.outcomeLine == "At the next backup, 2 backups become 1.")
-        // A dry run over an unsaved plan removed nothing.
         #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
     }
 
@@ -570,7 +566,7 @@ struct ResticIntegrationTests {
             try feed.fileHandleForWriting.write(contentsOf: Data("x".utf8))
             let locks = fixture.root.appendingPathComponent("repo/locks")
             // Waits on restic's own start — key derivation and the repository
-            // open — which load stretches; 20 s was a bet on it.
+            // open — which load stretches.
             let lockDeadline = Date.now.addingTimeInterval(120)
             while ((try? FileManager.default.contentsOfDirectory(atPath: locks.path)) ?? []).isEmpty, Date.now < lockDeadline {
                 try await Task.sleep(for: .milliseconds(100))
@@ -643,8 +639,8 @@ struct ResticIntegrationTests {
         let service = try PinnedRestic.service()
         var repository = Repository()
         repository.kind = .s3
-        // Port 1 refuses: restic 0.19.1 retried a REST server there for over
-        // ten minutes (probed) before the timeout bounded it.
+        // Port 1 refuses; without the timeout restic 0.19.1 kept retrying it
+        // for over ten minutes (probed).
         repository.s3Endpoint = "http://127.0.0.1:1"
         repository.s3Bucket = "bucket"
         repository.s3AccessKeyID = "key"
@@ -693,11 +689,9 @@ struct ResticIntegrationTests {
 
     @Test("a hostile RESTIC_PASSWORD in the environment cannot override the stored one")
     func hostileEnvironmentPassword() async throws {
-        // A RESTIC_PASSWORD inherited from the environment must never beat
-        // the password the app stores for the repository, or a stale shell
-        // variable quietly breaks every backup. The runner does inherit the
-        // parent environment, so the context's own value is the only thing
-        // standing between restic and whatever is in it.
+        // The runner inherits the parent environment, so the context's own
+        // value is the only thing standing between restic and a stale shell
+        // variable.
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
@@ -787,8 +781,7 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // A file restic cannot read. 0000 keeps the owner out too, which is the
-        // shape a corrupted download or a botched rsync actually leaves behind.
+        // 0000 keeps the owner out too.
         let unreadable = fixture.sourceDirectory.appendingPathComponent("locked.dat")
         try "secret".write(to: unreadable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadable.path)
@@ -798,8 +791,7 @@ struct ResticIntegrationTests {
 
         #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
         #expect(outcome.completedWithErrors)
-        // restic skipped the file but still wrote everything else, so the run
-        // must be recorded as a snapshot-with-warnings, never as no snapshot.
+        // restic skipped the file but still wrote everything else.
         let snapshotID = try #require(outcome.summary?.snapshotID, "a partial backup must still produce a snapshot")
         #expect(outcome.itemErrors.contains { $0.contains("locked.dat") })
 
@@ -836,8 +828,7 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.initializeRepository(fixture.context)
 
         // An unmounted volume or a renamed folder. A plan is one path, so
-        // nothing is left to back up: restic exits 1 and writes nothing —
-        // never the exit-3 snapshot of "the rest" a list of folders got.
+        // nothing is left to back up: restic exits 1 and writes nothing.
         fixture.plan.path = fixture.root.appendingPathComponent("does-not-exist").path
 
         await #expect {
@@ -1213,7 +1204,7 @@ struct ResticIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
 
-        // The new defaults' shapes with the "~" or "/" anchor replaced by
+        // The defaults' shapes with the "~" or "/" anchor replaced by
         // the scratch root: the real anchors name the user's home folder
         // and disk, and the fitting itself is the unit pins' fact. What
         // needs real restic is whether the globs match as drawn — `V*` and
@@ -1229,12 +1220,6 @@ struct ResticIntegrationTests {
             root + "/Volumes/*/.fseventsd",
         ]
 
-        // The trees the shapes answer to, in Mail's, Photos' and an
-        // external drive's own layout: the index (a SQLite trio) against
-        // the messages it indexes, the search database and analysis caches
-        // against the library database and the originals, an app group's
-        // caches against its preferences, and a volume root's bookkeeping
-        // against a user folder on the volume.
         @discardableResult
         func planted(_ relative: String, _ contents: String) throws -> URL {
             let url = fixture.sourceDirectory.appendingPathComponent(relative)
@@ -1300,11 +1285,8 @@ struct ResticIntegrationTests {
         fixture.plan.skipsDeveloperFiles = true
         fixture.plan.skipsMachines = true
 
-        // The developers' own layouts: a virtualenv by its name, a Cargo
-        // target by its marker, the package stores and toolchains beside
-        // the user's own files the rules must leave alone — a project made
-        // a virtualenv in place (`python -m venv .`) among them, whose
-        // pyvenv.cfg sits beside the user's code.
+        // `inplace` is a project made a virtualenv in place
+        // (`python -m venv .`): its pyvenv.cfg sits beside the user's code.
         @discardableResult
         func planted(_ relative: String, _ contents: String) throws -> URL {
             let url = fixture.sourceDirectory.appendingPathComponent(relative)
@@ -1341,7 +1323,6 @@ struct ResticIntegrationTests {
             "home/Library/Developer/CoreDevice/DeviceFS/device-x.localized/AppDataContainers/app/Library/a.ktx",
             "a connected iPhone's file"
         )
-        // The groups added on 2026-10-23, each with what it must leave.
         let bundledGem = try planted("rb/vendor/bundle/ruby/3.3.0/gems/x/lib/x.rb", "a gem Bundler installed")
         let vendoredCode = try planted("rb/vendor/mylib/lib.rb", "the user's own vendored code")
         let installedGem = try planted("home/.gem/ruby/3.3.0/gems/y/y.rb", "a gem installed for the user")
@@ -1446,10 +1427,9 @@ struct ResticMaintenanceTests {
 }
 
 /// Pins restic's end of the damage contract: a check that finds damage exits
-/// 1, and its `--json` summary naming the errors still arrives — the service
-/// is allowed to hand it up only because restic actually prints it before
-/// dying. Runs against a real repository, like the integration suite; kept
-/// apart only so the damage it inflicts can never touch another fixture.
+/// 1, and its `--json` summary naming the errors still arrives; the service
+/// hands it up only because restic prints it before dying. A suite of its own
+/// so the damage can never touch another fixture.
 @Suite("restic check damage", .serialized)
 struct ResticCheckDamageTests {
     @Test("a damaged repository's check still carries its error count")
@@ -1496,9 +1476,8 @@ struct ResticCheckDamageTests {
             "check exited 1 on damage but named no errors: \(String(describing: summary))"
         )
 
-        // The structure alone passes the same damage — an earlier build's
-        // default — while a rotation of slices
-        // reads the damaged pack in exactly one of them.
+        // The structure alone passes the same damage, while a rotation of
+        // slices reads the damaged pack in exactly one of them.
         #expect((try await service.check(context, readDataSubset: nil)?.numErrors ?? 0) == 0)
         var slicesFindingIt = 0
         for slice in 1 ... 2 where (try await service.check(context, readDataSubset: .slice(slice, of: 2))?.numErrors ?? 0) > 0 {
@@ -1509,7 +1488,6 @@ struct ResticCheckDamageTests {
 }
 
 private extension Data {
-    /// `UInt8.random` in a loop — fine at fixture sizes, and dependency-free.
     init(randomBytes count: Int) {
         self = Data((0 ..< count).map { _ in UInt8.random(in: .min ... .max) })
     }
@@ -1604,7 +1582,6 @@ struct ResticFindTests {
         #expect(match.name == "recovery-codes.txt")
         #expect(match.size == 9)
 
-        // Case-insensitive by default, and globs work.
         #expect(try await service.find(context, patterns: ["RECOVERY-*.TXT"]).count == 1)
 
         // The match restores through the same path a browsed node does.

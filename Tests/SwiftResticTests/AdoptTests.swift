@@ -154,8 +154,8 @@ struct AdoptTests {
         #expect(olderDraft.excludePatterns == ["*.iso"])
         #expect(olderDraft.excludesToPass.contains(all[0]))
 
-        // One group's rules recorded by a build that ticked languages one by
-        // one: the switch reads on, and the machines' stays off.
+        // Only the Python rules recorded: the switch reads on, and the
+        // machines' stays off.
         let pythonOnly = ["*.iso"] + ExcludeRule.developer.filter { $0.category == .python }.map(\.pattern)
         let made2 = try snapshot("python", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: pythonOnly)
         loadModel(model, repository: repository, listing: [made2])
@@ -454,7 +454,7 @@ struct AdoptTests {
         model.configuration.repositories = [repository]
         model.configuration.plans = [plan]
 
-        // Nothing backed up: today's sentence.
+        // Nothing backed up: the plain sentence.
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message
             == "This Mac stops backing up “Untitled Plan”. Backups already written to the location are not deleted.")
 

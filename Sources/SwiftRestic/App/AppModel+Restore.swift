@@ -5,19 +5,17 @@ import UniformTypeIdentifiers
 extension AppModel {
     var isRestoring: Bool { restoreActivity != nil }
 
-    /// Progress fires from the runner's reader threads, so a hop can still be
-    /// in flight when a cancelled restore unwinds — the token (rotated at
-    /// unwind) is what keeps such a late hop from resurrecting the strip,
-    /// which nothing else would ever clear.
+    /// A progress hop can still be in flight when a cancelled restore
+    /// unwinds; the run token, rotated at unwind, drops it so it cannot
+    /// resurrect the strip.
     func restoreProgressReporter() -> @Sendable (OperationProgress) -> Void {
         hopWriter(for: .restore) { model, progress in
             model.restoreActivity = progress
         }
     }
 
-    /// `overwrite` is the destination sheet's choice for files already at
-    /// the landing — required, like the service's, so no caller inherits a
-    /// destructive default.
+    /// `overwrite` has no default, like the service's: no caller should
+    /// inherit a destructive one.
     func restore(
         repositoryID: UUID,
         snapshotID: String,
@@ -97,9 +95,8 @@ extension AppModel {
         restore(repositoryID: repositoryID, items: items, overwrite: overwrite)
     }
 
-    /// The caller has already dropped items inside other selected folders
-    /// and refused names that would land twice in one directory
-    /// (`RestoreSelection`, `RestoreBatch.collidingNames`).
+    /// Expects items already deduplicated by `RestoreSelection` and checked
+    /// by `RestoreBatch.collidingNames`.
     func restore(
         repositoryID: UUID,
         items: [(snapshotID: String, node: SnapshotNode, directory: URL)],
@@ -152,10 +149,9 @@ extension AppModel {
         names.count == 1 ? names[0] : "\(names[0]) and \(Format.count(names.count - 1)) more"
     }
 
-    /// restic's files_restored counts directories too, so only
-    /// files_skipped means kept. Under Replace a skipped file already matched the backup, which
-    /// is not worth a line. "Backup", the restore surfaces' word: the
-    /// Restore pane shows this banner too.
+    /// restic's files_restored counts directories too, so only files_skipped
+    /// means kept. Under Replace a skipped file already matched the backup,
+    /// which is not worth a line.
     nonisolated static func restoreBanner(
         itemName: String,
         isDirectory: Bool,
@@ -214,17 +210,12 @@ extension AppModel {
         }
     }
 
-    /// A step's `label` is its record's subject in Activity, its
-    /// `description` the progress strip's title.
     private func beginRestore(
         repositoryID: UUID,
         steps: [RestoreStep],
         onSuccess: @escaping @MainActor ([ResticSummary?]) -> Void
     ) {
         guard !tasks.isOccupied(.restore) else {
-            // Every other refused start says why; a restore request that
-            // silently does nothing reads as a broken drop. News, not a
-            // success: the click did nothing yet.
             post(Banner(
                 title: "A restore is already running",
                 message: "Wait for it to finish, or stop it.",
@@ -261,10 +252,9 @@ extension AppModel {
             self.restoreActivity = nil
             self.restoreDescription = ""
             self.restoreRepositoryID = nil
-            // After the strip clears: any progress hop from this run still
-            // in flight must find a changed token and drop. Rotated, not
-            // retired — the next restore's reporter is built before its
-            // strip is installed, so the slot always carries an identity.
+            // After the strip clears, so a late progress hop drops. Rotated,
+            // not retired: the next restore's reporter is built before its
+            // strip is installed.
             self.rotateRunToken(for: .restore)
             self.tasks.clear(.restore)
         }, in: .restore)
@@ -287,8 +277,6 @@ extension AppModel {
         record.sourcePath = step.sourcePath
         record.sourcePaths = step.sourcePaths
         record.destinationPath = step.destinationPath
-        // Bound around the restore's own restic call only, like the
-        // run engines'.
         let transcript = RunTranscript()
         var outcome = RestoreStepOutcome.stopped
         do {
@@ -300,8 +288,8 @@ extension AppModel {
                 try await step.operation(service, context)
             }
             record.outcome = .succeeded
-            // A repeat restore answers with files_skipped alone — no
-            // files_restored key — so both are kept, zero when absent.
+            // A repeat restore's summary has files_skipped and no
+            // files_restored key.
             record.filesRestored = summary?.filesRestored ?? 0
             record.filesSkipped = summary?.filesSkipped ?? 0
             record.bytesProcessed = summary?.bytesRestored ?? 0
@@ -315,27 +303,16 @@ extension AppModel {
             let partial = restoredBefore.map {
                 "\(Format.count($0.count)) of \(Format.plural($0.total, "item")) were restored before it stopped."
             }
-            // The queue is global, so the title names the repository the
-            // restore read from — a long restore can outlive the pane that
-            // started it. Removing the repository is one thing that cancels
-            // a restore, and by then there is no name to say; the removal
-            // dialog has already disclosed it.
+            // nil when the repository's removal cancelled the restore; the
+            // removal dialog already said so.
             let repositoryName = repository(id: repositoryID).map { label(of: $0) }
             if record.outcome == .cancelled {
-                // The strip vanishing is the only signal a cancelled
-                // restore otherwise leaves — including when it is the
-                // repository's removal that cancelled it. During shutdown
-                // the banner would die with the process, and the quit
-                // confirmation has already said it. News, in the cancelled
-                // run's own glyph as Activity shows its record — not the
-                // success check: the restore did not finish.
+                // Not during shutdown: the quit confirmation already said it.
                 if !isShuttingDown {
                     let title = repositoryName.map { "Restore from “\($0)” stopped" } ?? "Restore stopped"
                     post(Banner(
                         title: title,
-                        // Empty with no partial: the title already says
-                        // cancelled once, and BannerView hides an empty
-                        // message.
+                        // BannerView hides an empty message.
                         message: partial ?? "",
                         level: .notice
                     ))
@@ -358,29 +335,21 @@ extension AppModel {
 
     func cancelRestore() { tasks.cancel(.restore) }
 
-    /// Whether a drag out of a list can restore at all. Lists ask on every
-    /// mouse-down on a row, so they offer nothing when it cannot rather than
-    /// letting `dragRestoreProvider` post its failure banner at each click.
+    /// Lists ask on every row mouse-down, so they offer no drag when this is
+    /// false instead of `dragRestoreProvider` posting a banner per click.
     func canDragRestore(repositoryID: UUID) -> Bool {
         repository(id: repositoryID) != nil && isResticAvailable
     }
 
-    /// Arq's signature restore gesture — drag an item out of the Restore
-    /// pane into Finder — as a promised-file provider: the file does not
-    /// exist yet, so the drag hands Finder a promise and the restore runs
-    /// when the drop asks for the contents. The drop location is the
-    /// destination.
-    ///
-    /// The load handler must not touch the main actor: the drag session
-    /// blocks the main thread waiting on this promise, so a hop there
-    /// deadlocks. Everything model-derived is captured before the session
-    /// starts; only the failure banner hops to main, after the drag ends.
+    /// A promised file: the restore runs when Finder's drop asks for the
+    /// contents. The load handler must not touch the main actor: the drag
+    /// session blocks the main thread on this promise, so a hop deadlocks.
+    /// Only the failure banner hops to main, after the drag ends.
     func dragRestoreProvider(repositoryID: UUID, snapshotID: String, node: SnapshotNode) -> NSItemProvider {
         let provider = NSItemProvider()
         provider.suggestedName = node.name
-        // A provider with nothing registered offers the drop nothing — and
-        // saying *why* right here, at drag start, beats a drop that Finder
-        // refuses with no explanation of its own.
+        // Finder refuses an empty provider without saying why, so the
+        // banner says it at drag start.
         guard let repository = repository(id: repositoryID) else {
             postDragImpossibleBanner(node.name, "This backup location no longer exists. Select a backup from one in the sidebar.")
             return provider
@@ -397,12 +366,8 @@ extension AppModel {
         let staging = stagingDirectory
         let itemName = node.name
 
-        // The promise is typed by *content*, not as a file URL:
-        // `public.file-url` declares the file's contents are a URL bookmark
-        // (what a .webloc is), and Finder answers that with the prohibited
-        // cursor — a content-typed promise is the shape Finder's drop sites
-        // accept. `public.data` is the root physical type every file
-        // conforms to; a directory's content type is `folder`.
+        // Typed by content, not `public.file-url`: Finder reads that as a
+        // URL bookmark (.webloc) and shows the prohibited cursor.
         let contentType: UTType = node.isDirectory ? .folder : .data
         provider.registerFileRepresentation(
             forTypeIdentifier: contentType.identifier,
@@ -423,10 +388,8 @@ extension AppModel {
                     completion(url, false, nil)
                 } catch {
                     completion(nil, false, error)
-                    // The drag is over by now (the promise resolved or
-                    // failed), so the main actor is draining again — and a
-                    // drag failing during shutdown stays as quiet as the
-                    // UI restore's own failure path.
+                    // The drag is over once the promise resolved, so the
+                    // main actor drains again.
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
                         let message = error.localizedDescription
@@ -443,16 +406,9 @@ extension AppModel {
         post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, level: .error))
     }
 
-    /// `nonisolated`, and handed everything it needs as values, because the
-    /// promise's load handler runs *during* the drag session, while the
-    /// main thread synchronously waits on it — any hop to the main actor
-    /// from there is a self-deadlock. The caller captures the model-derived
-    /// inputs before the session starts. Outside `beginRestore`: that path
-    /// owns the progress strip, the run history and the "Restored…"
-    /// banner, none of which describe a drop whose destination the drag
-    /// itself chose. A failed drag posts its banner from the caller, which
-    /// hops to main only after the promise resolves — the drag has ended by
-    /// then, and the main actor drains again.
+    /// `nonisolated` with value inputs: it runs while the main thread waits
+    /// on the drag session (see `dragRestoreProvider`). Not a restore run:
+    /// no progress strip, run record or banner.
     nonisolated static func restoredFileForDrag(
         service: any ResticClient,
         secrets: SecretStore,
@@ -470,36 +426,25 @@ extension AppModel {
             snapshotID: snapshotID,
             node: node,
             destinationDirectory: destination,
-            // A fresh UUID directory holds nothing to keep or replace; keep
-            // is the mode that cannot clobber if that ever changes.
             overwrite: .keepExisting,
-            // No progress through the drag path: the drop is the feedback.
             onProgress: nil
         )
-        // The one landing rule the service's restore branches and the run
-        // record use: the snapshot names the item, the destination
-        // directory decides where it lands.
         return ResticService.restoredItemURL(named: node.name, in: destination)
     }
 
-    /// The one definition of the password rules, off the main actor for the
-    /// drag path above; `context(for:)` caches its answer.
+    /// Off the main actor for the drag path; `context(for:)` caches its
+    /// answer.
     nonisolated static func readContext(
         for repository: Repository,
         label: String,
         secrets: SecretStore
     ) async throws -> RepositoryContext {
-        // A Keychain failure surfaces as itself — reading it as nil would
-        // re-dress the error as "no password stored" and send the user to
-        // fix a password that is sitting right there.
+        // A Keychain failure must throw as itself, not read as "no
+        // password stored".
         let stored = try await secrets.load(repository.id)
         guard let password = stored.password, !password.isEmpty else {
-            // Deleting a repository cancels its running plans first and
-            // removes the secret last, in a detached task — a run suspended
-            // at this actor hop can resume after that removal, and the
-            // missing password is the race's echo, not the cause. Honouring
-            // the cancellation here keeps the run's record `.cancelled`
-            // instead of a failure nobody can act on.
+            // Deleting a repository cancels its runs, then removes the
+            // secret; a run resuming here after that must record cancelled.
             try Task.checkCancellation()
             throw ResticError.passwordMissing(repositoryName: label)
         }
@@ -510,17 +455,11 @@ extension AppModel {
         )
     }
 
-    /// Prefix of every preview's temporary folder, shared with the launch
-    /// sweep and with `removePreviewCopy`, which deletes nothing else.
     nonisolated static let previewPrefix = "SwiftRestic-Preview-"
 
-    /// One version of a file, copied out for Quick Look: restored into a
-    /// fresh temporary folder of its own under its own name, so it opens as
-    /// what it is, and read-only. Like the drag restore, not a restore run
-    /// — no progress strip, no history, no banner; the preview is the
-    /// feedback. A restore that fails takes its folder with it. The caller removes the copy
-    /// when the preview closes (`removePreviewCopy`); a session that ends
-    /// first leaves it to the launch sweep.
+    /// A read-only copy for Quick Look, in a folder of its own. Not a
+    /// restore run. The caller removes it with `removePreviewCopy`; a
+    /// session that ends first leaves it to the launch sweep.
     func previewCopy(repositoryID: UUID, snapshotID: String, node: SnapshotNode) async throws -> URL {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let (service, context) = try await resticContext(for: repository)
@@ -533,19 +472,18 @@ extension AppModel {
                 snapshotID: snapshotID,
                 node: node,
                 destinationDirectory: folder,
-                // A fresh folder holds nothing to keep or replace.
                 overwrite: .keepExisting,
                 onProgress: nil
             )
-            // Read-only: Quick Look offers to open the copy in an app, and
-            // edits saved there would be deleted with it.
+            // Quick Look offers to open the copy in an app, and edits saved
+            // there would be deleted with it.
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o444],
                 ofItemAtPath: ResticService.restoredItemURL(named: node.name, in: folder).path
             )
         } catch {
-            // The restore's own error is the one to report; a folder this
-            // removal misses is the launch sweep's.
+            // The restore's error is the one to report; a missed folder is
+            // the launch sweep's.
             try? FileManager.default.removeItem(at: folder)
             throw error
         }
@@ -558,27 +496,19 @@ extension AppModel {
         try FileManager.default.removeItem(at: folder)
     }
 
-    /// Prefix shared by every drag-restore staging directory, so the launch
-    /// sweep in `bootstrap` and the creator above can never drift apart.
     nonisolated static let dragRestorePrefix = "SwiftRestic-Drag-"
 
-    /// The staging folder of the configuration in `configDirectory`, inside
-    /// the temporary folder. One per configuration, not the temporary folder
-    /// itself: every SwiftRestic of this user — a scratch instance, a test
-    /// run — shares that, and a launch sweep there deletes the copies
-    /// another one is showing.
+    /// One per configuration, not the temporary folder itself: every
+    /// SwiftRestic instance of this user (scratch, test run) shares that,
+    /// and one's launch sweep would delete another's copies.
     nonisolated static func stagingDirectory(for configDirectory: URL) -> URL {
         let digest = SHA256.hash(data: Data(configDirectory.standardizedFileURL.path.utf8))
         let name = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
         return FileManager.default.temporaryDirectory.appendingPathComponent("SwiftRestic-Staging-\(name)")
     }
 
-    /// Removes drag-restore staging directories and preview copies left
-    /// behind by earlier sessions. Run at launch only, never at shutdown:
-    /// Finder may still be copying from a directory a just-finished drop
-    /// handed over, and no callback says when that ends — deleting on our
-    /// side of the handoff is a race. A launch sweep has no such window:
-    /// nothing from a previous session can still be mid-copy.
+    /// Launch only, never at shutdown: Finder may still be copying from a
+    /// just-finished drop, and no callback says when that ends.
     nonisolated static func sweepDragRestoreStaging(in directory: URL) {
         let fileManager = FileManager.default
         guard let contents = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
@@ -597,8 +527,6 @@ private struct RestoreStep {
     var sourcePath: String?
     var sourcePaths: [String]?
     var destinationPath: String
-    /// How many of the run's items this step restores, for the banner of a
-    /// run that stops part-way.
     var itemCount: Int
     var operation: @Sendable (any ResticClient, RepositoryContext) async throws -> ResticSummary?
 }

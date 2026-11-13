@@ -7,8 +7,6 @@ enum LoginItemState: Sendable, Equatable {
     case enabled, off, needsApproval, notFound
 }
 
-/// Starting SwiftRestic at login.
-///
 /// The scheduler only runs while the app is running, so a plan fires reliably
 /// only if the app comes back after a restart. `SMAppService` registers that
 /// without a LaunchAgent plist or helper tool.

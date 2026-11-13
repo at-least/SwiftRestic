@@ -1,13 +1,9 @@
 import Foundation
 
-/// The model's bookkeeping for in-flight work: named slots for the runs that
-/// own their identity (one per plan, one per repository's maintenance, the
-/// single restore) and an unnamed lane for fire-and-forget sends (the start
-/// pings) that quitting must still drain.
-///
-/// The census is structural: cancel everything, await everything, and no run
-/// kind can be forgotten from the quit path by omission. All access is
-/// main-actor, like the tasks it tracks.
+/// Every in-flight task the quit path must cancel and await: named slots for
+/// runs that own an identity, and an unnamed lane for fire-and-forget sends
+/// (start pings). Registering here is what keeps a run kind from being
+/// forgotten by the quit path.
 @MainActor
 final class TaskRegistry {
     enum Slot: Hashable {
@@ -18,8 +14,7 @@ final class TaskRegistry {
 
     private var slots: [Slot: Task<Void, Never>] = [:]
 
-    /// Whether the slot already holds a run — the one-at-a-time guard the
-    /// run kinds apply to themselves.
+    /// The one-at-a-time guard each run kind applies to itself.
     func isOccupied(_ slot: Slot) -> Bool {
         slots[slot] != nil
     }
@@ -28,9 +23,8 @@ final class TaskRegistry {
         slots[slot]
     }
 
-    /// Stores a run in its slot, replacing nothing: callers guard with
-    /// `isOccupied` first, and a silent replace would let two runs for one
-    /// plan race over who nils the slot.
+    /// Callers guard with `isOccupied` first: a silent replace would let two
+    /// runs for one plan race over who nils the slot.
     func install(_ task: Task<Void, Never>, in slot: Slot) {
         precondition(slots[slot] == nil, "run slot \(slot) already occupied")
         slots[slot] = task
@@ -40,18 +34,16 @@ final class TaskRegistry {
         slots[slot]?.cancel()
     }
 
-    /// Frees a finished run's slot; only the run's own completion path calls
-    /// this.
+    /// Only the run's own completion path calls this.
     func clear(_ slot: Slot) {
         slots[slot] = nil
     }
 
-    /// A send that must not outlive the quit (a start ping arming a
-    /// monitor's timer), but which nothing cancels individually.
+    /// Sends the quit awaits but nothing cancels individually.
     ///
     /// Keyed by token rather than appended to an array: entries reap
-    /// themselves when their task completes. (`Task.isCancelled` is false
-    /// for a *finished* task, so an isCancelled sweep would prune nothing.)
+    /// themselves when their task completes. An `isCancelled` sweep would
+    /// prune nothing: it is false for a finished task.
     private var background: [UUID: Task<Void, Never>] = [:]
 
     func addBackground(_ task: Task<Void, Never>) {
@@ -63,24 +55,20 @@ final class TaskRegistry {
         }
     }
 
-    /// Cancels every slotted run. Used by `shutdown`; the runs themselves
-    /// unwind and write their own records. Not the background lane: a start
-    /// ping already in flight is awaited, never aborted — its monitor must
-    /// hear that the run started, even one that quit stopped.
+    /// Not the background lane: a start ping in flight is awaited, never
+    /// aborted — its monitor must hear that the run started, even one that
+    /// quit stopped.
     func cancelSlots() {
         for task in slots.values { task.cancel() }
     }
 
-    /// Awaits every tracked task until the registries are actually empty.
-    /// Cancellation is the caller's job (terminateAll has to reach the restic
-    /// children before their Swift-side tasks can finish unwinding).
+    /// Awaits until both lanes are empty. Cancelling is the caller's job:
+    /// the restic children must be terminated before their Swift tasks can
+    /// unwind.
     ///
     /// A loop, not one pass: a task installed while the awaits are suspended
-    /// is caught by the next pass instead of being dropped un-awaited, so no
-    /// ordering above the registry is load-bearing. Each pass
-    /// awaits a snapshot of the entries present when it began, then removes
-    /// exactly those entries — a completion that lands mid-pass has already
-    /// cleared its own slot, and a fresh install survives to the next pass.
+    /// is caught by the next pass. Each pass removes exactly the entries it
+    /// awaited, so a fresh install survives to the next pass.
     func drain() async {
         while !slots.isEmpty || !background.isEmpty {
             let awaitedSlots = Array(slots.values)

@@ -1,7 +1,6 @@
 import Foundation
 
-/// One entry of `restic snapshots --json`, or the header object that `restic ls
-/// --json` emits before the node stream.
+/// One entry of `restic snapshots --json`, or `restic ls --json`'s header.
 struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var id: String
     var shortID: String
@@ -9,14 +8,11 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var paths: [String]
     var hostname: String?
     var tags: [String]
-    /// The `--exclude` patterns the backup ran with, which restic records
-    /// beside the paths (`excludes` in `snapshots --json`; a backup without
-    /// patterns omits the key) — what a plan-UUID group's page shows and
-    /// what the adopt sheet prefills from.
+    /// The `--exclude` patterns the backup ran with; restic omits the key
+    /// for none. The adopt sheet prefills from them.
     var excludes: [String]
-    /// What the backup that made this snapshot added — the one field of
-    /// restic's `summary` object anything reads. Listings are the app's
-    /// largest arrays, so the rest of the object is not carried.
+    /// The one field of restic's `summary` anything reads. Listings are the
+    /// app's largest arrays, so the rest is not carried.
     var dataAdded: Int64?
     /// The snapshot `restic rewrite` made this one from: the one just
     /// before, not the first of a chain (0.19.1, probed: a third rewrite's
@@ -29,7 +25,6 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         case shortID = "short_id"
     }
 
-    /// restic's `summary` object, narrowed to the one field anything reads.
     private struct Summary: Decodable {
         var dataAdded: Int64?
         private enum CodingKeys: String, CodingKey { case dataAdded = "data_added" }
@@ -60,9 +55,7 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
         case dev, chardev, fifo, socket
     }
 
-    /// Identity is the path, like `Snapshot`'s is its ID: equality and hashing
-    /// follow so `Identifiable`, `Equatable` and set semantics can never
-    /// disagree about which node is which.
+    /// Identity is the path, so `Identifiable`, `Equatable` and sets agree.
     static func == (lhs: SnapshotNode, rhs: SnapshotNode) -> Bool { lhs.path == rhs.path }
     func hash(into hasher: inout Hasher) { hasher.combine(path) }
 
@@ -98,8 +91,7 @@ struct SnapshotNode: Sendable, Equatable, Hashable, Identifiable, Decodable {
 }
 
 extension SnapshotNode {
-    /// Synthesises a directory node for a path restic never handed us as JSON —
-    /// used for the snapshot's own root paths at the top of the browsers.
+    /// For a snapshot's own root paths, which restic never lists.
     static func directory(path: String) -> SnapshotNode {
         SnapshotNode(name: SnapshotLineage.component(of: path), type: .dir, path: path)
     }
@@ -116,7 +108,6 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     var isDirectory: Bool { type == .dir }
     var name: String { SnapshotLineage.component(of: path) }
 
-    /// Identity is the path, matching `id`; equality and hashing follow.
     static func == (lhs: FindMatch, rhs: FindMatch) -> Bool { lhs.path == rhs.path }
     func hash(into hasher: inout Hasher) { hasher.combine(path) }
 
@@ -133,7 +124,7 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
 /// no snapshot would group and restore under a backup ID of "".
 struct FindResult: Sendable, Equatable, Decodable {
     var matches: [FindMatch]
-    /// Full snapshot ID.
+    /// The full ID.
     var snapshot: String
 }
 
@@ -149,15 +140,9 @@ struct RepositoryStats: Sendable, Equatable, Decodable {
 }
 
 extension Snapshot {
-    /// The snapshot this one is most naturally compared against: the newest
-    /// earlier one that backed up the same paths from the same host.
-    ///
-    /// A repository shared by several plans, or several Macs, holds snapshots of
-    /// unrelated trees side by side. Diffing against "the row above" in that list
-    /// shows every file as added and every other file as removed, which is noise;
-    /// this mirrors restic's own `--group-by host,paths` grouping instead —
-    /// the lineage rule `SnapshotLineage` states, which the backups no plan
-    /// tag marks sit in under Other backups.
+    /// The newest earlier snapshot of the same paths from the same host
+    /// (`SnapshotLineage`'s rule, restic's `--group-by host,paths`), not the
+    /// row above: a shared repository holds unrelated trees side by side.
     func previousComparable(in snapshots: [Snapshot]) -> Snapshot? {
         let key = lineageKey
         return snapshots
@@ -165,9 +150,7 @@ extension Snapshot {
             .max { $0.time < $1.time }
     }
 
-    /// The Macs a history was made from, first-seen order, once each — one
-    /// derivation, so the group page's "Made on" row and the adopt
-    /// sheet's header cannot count the Macs differently.
+    /// First-seen order, once each.
     static func distinctHosts(of snapshots: [Snapshot]) -> [String] {
         BackupPlan.withoutDuplicates(snapshots.map { $0.hostname ?? "Unknown Mac" })
     }

@@ -1,24 +1,18 @@
 import Foundation
 
 extension AppModel {
-    /// Why a run was cancelled, for the run record: the user's own stop and the
-    /// app quitting mid-run are different events worth telling apart.
     var cancellationMessage: String {
         isShuttingDown ? "Interrupted by quitting SwiftRestic" : "Stopped"
     }
 
-    /// `Logs/` beside `config.json` — so `SWIFTRESTIC_CONFIG_DIR` moves it
-    /// with the configuration, and a capture or test run never writes the
-    /// real one.
+    /// Beside `config.json`, so `SWIFTRESTIC_CONFIG_DIR` moves it too.
     var runLogs: RunLogStore {
         RunLogStore(directory: store.directory.appendingPathComponent("Logs", isDirectory: true))
     }
 
-    /// Stamps the restic version and writes the run's log, before the
-    /// record joins the history: the two land together, and `hasLog` says
-    /// only what the write actually did (a full disk leaves it false, and
-    /// Show Log says why). Rendering and writing both run detached — a
-    /// log can be hundreds of kilobytes — while the names are read here.
+    /// Call before the record joins the history, so the two land together;
+    /// `hasLog` is false when the write failed. Detached: a log can be
+    /// hundreds of kilobytes.
     func seal(_ record: inout RunRecord, transcript: RunTranscript.Contents) async {
         let versions = RunLogVersions.current(resticVersion: resticVersion)
         if !resticVersion.isEmpty { record.resticVersion = versions.restic }
@@ -62,10 +56,8 @@ extension AppModel {
 
     func append(record: RunRecord) {
         var record = record
-        // A skip, or a failure for the same folders gone or shares refused,
-        // continuing the plan's last one replaces it, counting it
-        // (`continuingSkip(of:)`, `continuingStandingFailure(of:)`); its log
-        // leaves with it.
+        // A continuing skip or standing failure replaces the plan's last
+        // record, counting it.
         if record.outcome == .skipped || record.missingSources != nil || record.refusedShares != nil,
            let index = configuration.runs.firstIndex(where: { $0.isBackup(ofPlan: record.planID) }),
            let merged = record.outcome == .skipped
@@ -80,8 +72,7 @@ extension AppModel {
         configuration.runs = RunRecord.fillingProblemStretches(configuration.runs)
         let limit = activityHistoryLimit
         if configuration.runs.count > limit {
-            // Past the cap by count, except what a standing problem still
-            // reads (`OverviewMetrics.standingProblemIDs`).
+            // Records a standing problem still reads survive the cap.
             let standing = OverviewMetrics.standingProblemIDs(in: configuration.runs, now: .now)
             let trimmed = Set(configuration.runs.dropFirst(limit).map(\.id).filter { !standing.contains($0) })
             configuration.runs.removeAll { trimmed.contains($0.id) }
@@ -89,8 +80,7 @@ extension AppModel {
         }
     }
 
-    /// A log leaves with its record. On the background lane, so quitting
-    /// drains the removal instead of stranding it.
+    /// On the background lane, so quitting drains it.
     private func removeRunLogs(_ ids: [UUID]) {
         guard !ids.isEmpty else { return }
         let logs = runLogs
@@ -100,18 +90,14 @@ extension AppModel {
 
 enum RunSnapshotLink: Equatable {
     case available(Snapshot)
-    /// The listing is loaded and the snapshot is not in it: removed after
-    /// the run — by retention, a prune, or another restic client, which all
-    /// look the same from here.
+    /// Absent from a loaded listing; retention, a prune and another restic
+    /// client look the same from here.
     case removed
-    /// The listing is not loaded (or could not be read), so nobody knows.
     case unavailable
     case repositoryGone
 
-    /// Matched by full ID or short ID — a record names its snapshot however
-    /// its run was asked for it. A stale listing that still holds the
-    /// snapshot is good enough to open it; one that does not proves nothing
-    /// unless it is freshly loaded.
+    /// A record may name its snapshot by full or short ID. Only a loaded
+    /// listing proves a snapshot gone; a stale one still opens it.
     static func resolve(
         snapshotID: String,
         repositoryExists: Bool,

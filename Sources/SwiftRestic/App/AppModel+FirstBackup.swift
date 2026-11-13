@@ -1,9 +1,7 @@
 import Foundation
 
 extension AppModel {
-    /// A plan the user just created: it starts now, and its first success is
-    /// announced whatever the notification setting. A Manually plan waits for
-    /// its Back Up Now.
+    /// The first success is announced whatever the notification setting.
     func createPlan(_ plan: BackupPlan) {
         var plan = plan
         plan.announcesFirstBackup = true
@@ -13,9 +11,8 @@ extension AppModel {
         }
     }
 
-    /// The first-run sheet's Back Up: a repository in `folder`, created
-    /// before it is kept, as the repository editor's Save does, then a plan
-    /// for `source` with today's defaults. Throws with nothing kept.
+    /// The repository is created before it is kept, so a throw keeps
+    /// nothing.
     func createFirstBackup(source: String, folder: String, password: String) async throws -> UUID {
         var repository = Repository()
         repository.localPath = folder
@@ -30,18 +27,13 @@ extension AppModel {
         return createFirstPlan(source: source, repositoryID: repository.id)
     }
 
-    /// A plan for `source` on today's defaults, into `repositoryID`: one the
-    /// sheet just created, one the repository editor created for it, or one
-    /// already set up that the sheet's destination named.
     func createFirstPlan(source: String, repositoryID: UUID) -> UUID {
         let plan = BackupPlan(firstBackupOf: source, into: repositoryID)
         createPlan(plan)
         return plan.id
     }
 
-    /// Back Up a Folder…'s panel answer, when it is the last one: a location
-    /// set up here that takes `source` and a folder with no Full Disk Access
-    /// notice. The plan is made and started; nil leaves it to the sheet.
+    /// nil leaves it to the sheet.
     func backUpWithoutSheet(source: String, destination: FirstBackupDestination?) -> UUID? {
         guard case let .location(repositoryID) = destination,
               FirstBackupDestination.requirement(
@@ -55,8 +47,6 @@ extension AppModel {
 }
 
 private extension BackupPlan {
-    /// Today's defaults for `source`: what the first-run sheet creates and
-    /// checks.
     init(firstBackupOf source: String, into repositoryID: UUID) {
         self.init()
         path = source
@@ -66,21 +56,17 @@ private extension BackupPlan {
 
 /// Where Back Up a Folder…'s sheet puts the backups.
 enum FirstBackupDestination: Hashable {
-    /// A location already set up.
     case location(UUID)
-    /// A folder for a new location: a disk's, or one chosen with Other Folder….
+    /// A folder for a new location.
     case folder(String)
 
-    /// What the sheet opens on with locations set up: the one whose page is
-    /// on screen, else the one added last (the only one, when there is one).
     static func initial(onScreen: UUID?, among repositories: [Repository]) -> FirstBackupDestination? {
         if let onScreen, repositories.contains(where: { $0.id == onScreen }) { return .location(onScreen) }
         return repositories.last.map { .location($0.id) }
     }
 
-    /// The sheet's greyed Back Up, in the order it asks: what, where, the
-    /// password. `holdsBackups` is `EditorRequirements.holdsBackups(atLocalPath:)`
-    /// for a folder.
+    /// `holdsBackups` is `EditorRequirements.holdsBackups(atLocalPath:)` for
+    /// a folder.
     static func requirement(
         source: String,
         destination: FirstBackupDestination?,
@@ -114,7 +100,7 @@ struct ExternalDisk: Equatable, Sendable {
     let name: String
     let path: String
 
-    /// The repository folder on it: restic creates it.
+    /// restic creates it.
     var repositoryFolder: String {
         (path as NSString).appendingPathComponent("SwiftRestic Backups")
     }
@@ -134,12 +120,10 @@ struct ExternalDisk: Equatable, Sendable {
             .map { ExternalDisk(name: $0.name, path: $0.path) }
     }
 
-    /// A volume whose facts macOS won't give is not offered: "Other Folder…" still reaches it.
     static func mounted() -> [ExternalDisk] {
         #if DEBUG
-        // The UI tests' disk (SwiftResticUITests): a folder standing in for the
-        // only disk on the Mac. Not a disk image: macOS gives an attached image
-        // no isInternal, so it is never offered.
+        // A folder, not a disk image: macOS gives an attached image no
+        // isInternal, so it is never offered.
         if let path = ProcessInfo.processInfo.environment["SWIFTRESTIC_DISK"] {
             return [ExternalDisk(name: (path as NSString).lastPathComponent, path: path)]
         }

@@ -9,10 +9,9 @@ extension AppModel {
         configuration.plans.filter { $0.repositoryID == repositoryID }
     }
 
-    /// These plans' Status rows as of `now` — one derivation for the
-    /// repository page's Status section and its sidebar row's warning. Read from
-    /// a view body, the lookups below still register that view's
-    /// observation of the state they touch.
+    /// One derivation for the repository page's Status section and its
+    /// sidebar row's warning. The closures read observed state, so a view
+    /// body calling this still registers its observation.
     func protectionRows(for plans: [BackupPlan], now: Date) -> [UpToDateRow] {
         OverviewMetrics.protectionRows(
             plans: plans,
@@ -40,10 +39,8 @@ extension AppModel {
         )
     }
 
-    /// The repository page's Status section, from the same rows the
-    /// repository's sidebar row reads its warning from — one derivation.
-    /// Read from a view body, the lookups still register that view's
-    /// observation of the state they touch.
+    /// Built on `protectionRows`, so the Status section and the sidebar
+    /// warning cannot disagree.
     func upToDateSummary(repositoryID: UUID, now: Date) -> UpToDateSummary? {
         let plans = plans(in: repositoryID)
         let existingRepositoryIDs = Set(configuration.repositories.map(\.id))
@@ -115,11 +112,9 @@ extension AppModel {
         configuration.plans.removeAll { $0.id == id }
     }
 
-    /// Choose New Location… for a plan whose folder moved: a plan's path is
-    /// fixed (`BackupPlan.path`), so the folder where it is now gets a new
-    /// plan with this one's settings in the same location, and this one is
-    /// removed in the same step — its backups stay in the location, under
-    /// Other backups. Returns the new plan's ID.
+    /// Choose New Location…: a plan's path is fixed (`BackupPlan.path`), so
+    /// the new folder gets a new plan with these settings and this one is
+    /// removed; its backups stay in the location, under Other backups.
     func movePlan(id: UUID, toPath path: String) throws -> UUID {
         guard let old = plan(id: id) else { throw MessageError(message: "This plan was removed.") }
         var moved = old

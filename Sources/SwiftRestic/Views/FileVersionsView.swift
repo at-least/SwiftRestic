@@ -54,12 +54,9 @@ struct FileVersionsView: View {
         // One find per file shown, again when the versions change under a
         // newer listing or a re-read of the index.
         .task(id: versions.map(\.id)) { await readDetails() }
-        // A restore can put a version back where it came from: the disk is
-        // read again once it ends, as when the pane opens — and whenever
-        // the tree reads the disk again (`DiskWatch.diskMayHaveChanged`).
-        // Off the main actor, as the tree's and the pane's own reads are: a
-        // stalled share holds the read for as long as it stalls, and every
-        // activation and mount is a disk turn.
+        // Read again when a restore starts and ends (it can put a version
+        // back where it came from) and on every disk turn. Off the main
+        // actor: a stalled share holds the read for as long as it stalls.
         .task(id: DiskReadKey(path: diskPath, isRestoring: model.isRestoring, diskGeneration: diskWatch.diskGeneration)) {
             guard let path = diskPath else {
                 disk = nil
@@ -107,13 +104,10 @@ struct FileVersionsView: View {
             NoBackupHoldsItYet()
         } else {
             List(selection: Binding(get: { chosen?.id }, set: { chosenID = $0 })) {
-                // A history past one month is grouped by month, as the
-                // folder pane's picker and the Backups tab's list are, so a year
-                // of hourly versions is not one flat scroll. Each version
-                // falls under the month of the first backup that held it —
-                // the backup after its change, so the month its modified
-                // date sits in, give or take one backup's interval; its
-                // newest backup could be months later for a file left alone.
+                // Past one month, a section per month, as the Backups tab's
+                // list has. Each version falls under the month of the first
+                // backup that held it, near its modified date; its newest
+                // backup could be months later for a file left alone.
                 if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time) {
                     ForEach(months, id: \.label) { month in
                         Section(month.label) {

@@ -4,7 +4,6 @@ struct FileTreeRow: Identifiable, Equatable {
     let node: SnapshotNode
     let depth: Int
     var expanded: Bool
-    /// Directories start unloaded; `ls` fills them on first expansion.
     var childrenLoaded: Bool
     /// Stored, not computed: the list reads it per row on every render, and
     /// the hex encoding allocates.
@@ -19,14 +18,12 @@ struct FileTreeRow: Identifiable, Equatable {
     }
 }
 
-/// Pure state machine so it is testable without SwiftUI: the view toggles
-/// expansion, receives the directory whose children must be fetched, and
-/// feeds listings back through `replaceChildren`. A snapshot switch rebuilds
-/// from the roots; the caller re-expands whatever spine it wants to keep.
+/// Kept out of SwiftUI so tests drive it. A snapshot switch rebuilds from the
+/// roots; the caller re-expands whatever spine it wants to keep.
 ///
-/// Paths are matched by their bytes (`PathKey`), never with String's `==`,
-/// which calls two names that differ only in Unicode normalization equal —
-/// a file system that keeps the bytes it was given holds both.
+/// Paths match by their bytes (`PathKey`), never String's `==`, which calls
+/// two names that differ only in Unicode normalization equal — a file system
+/// that keeps the bytes it was given holds both.
 struct FileTree: Equatable {
     private(set) var rows: [FileTreeRow] = []
 
@@ -47,10 +44,8 @@ struct FileTree: Equatable {
         }
     }
 
-    /// Flips expansion of a directory row. Collapsing removes its descendant
-    /// rows. Expanding returns the directory's path when its children have
-    /// never been loaded — the caller fetches them and calls
-    /// `replaceChildren`; nil means the view has nothing to fetch.
+    /// Returns the path whose children the caller must fetch and hand to
+    /// `replaceChildren`, or nil when there is nothing to fetch.
     mutating func toggleExpanded(path: String) -> String? {
         guard let index = index(of: path), rows[index].node.isDirectory
         else { return nil }
@@ -67,13 +62,11 @@ struct FileTree: Equatable {
         return path
     }
 
-    /// Installs a directory's children directly under it, one level deeper.
-    /// Replacing is idempotent: any stale descendant rows — a fetch landing
-    /// twice after a double-click race, or an earlier deeper walk — go away
-    /// with the level they belong to. A folder collapsed while its fetch was
-    /// in flight refuses the late listing — the rows would appear under a
-    /// folder showing as closed — and stays unloaded so re-expanding asks
-    /// again.
+    /// Idempotent: stale descendant rows — a fetch landing twice after a
+    /// double-click race, or an earlier deeper walk — are replaced. A folder
+    /// collapsed while its fetch was in flight refuses the late listing (the
+    /// rows would appear under a folder showing as closed) and stays unloaded
+    /// so re-expanding asks again.
     mutating func replaceChildren(of path: String, nodes: [SnapshotNode]) {
         guard let index = index(of: path), rows[index].expanded
         else { return }
@@ -93,10 +86,9 @@ struct FileTree: Equatable {
         return end
     }
 
-    /// Closes a directory row if it is open; a closed one stays closed. A
-    /// failed listing closes its folder through this, not a toggle: the user
-    /// may have closed it — by ← or its chevron — while the listing was in
-    /// flight, and a toggle would reopen it, empty, with no listing coming.
+    /// A failed listing closes its folder through this, not a toggle: the
+    /// user may have closed it while the listing was in flight, and a toggle
+    /// would reopen it, empty, with no listing coming.
     mutating func collapse(path: String) {
         guard let index = index(of: path), rows[index].expanded else { return }
         _ = toggleExpanded(path: path)
@@ -110,12 +102,8 @@ struct FileTree: Equatable {
 extension FileTree {
     enum HorizontalArrow: Sendable { case left, right }
 
-    /// What a Left or Right arrow does to the selected row — NSOutlineView's
-    /// own grammar: Right opens a closed folder and otherwise does nothing;
-    /// Left closes an open folder, otherwise selects the folder the row sits
-    /// in, and does nothing on a top-level row. Option-Right's
-    /// expand-everything is left out: every folder is a `restic ls` round
-    /// trip.
+    /// NSOutlineView's arrow-key grammar. Option-Right's expand-everything is
+    /// left out: every folder is a `restic ls` round trip.
     enum ArrowStep: Equatable, Sendable {
         case expand(String)
         case collapse(String)
@@ -123,10 +111,8 @@ extension FileTree {
         case stay
     }
 
-    /// The step for `arrow` on the row at `path`. A folder whose listing is
-    /// still in flight counts as open — it shows as open — so Left closes
-    /// it and Right asks nothing more. A path that is not a row (a search
-    /// hit left selected) stays.
+    /// A folder whose listing is still in flight counts as open — it shows as
+    /// open. A path that is not a row (a search hit left selected) stays.
     func arrowStep(_ arrow: HorizontalArrow, from path: String) -> ArrowStep {
         guard let index = index(of: path) else { return .stay }
         let row = rows[index]
@@ -136,8 +122,7 @@ extension FileTree {
         case .left:
             if row.node.isDirectory, row.expanded { return .collapse(path) }
             guard row.depth > 0 else { return .stay }
-            // The parent is the nearest row above at one level shallower —
-            // by depth, not the row directly above, which may sit inside an
+            // By depth, not the row directly above, which may sit inside an
             // open sibling folder.
             for candidate in rows[..<index].reversed() where candidate.depth == row.depth - 1 {
                 return .selectParent(candidate.node.path)

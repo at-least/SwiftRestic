@@ -1,9 +1,6 @@
 import Foundation
 
-/// A local volume's capacity — the numbers behind the repository page's
-/// used/free strip. A repository's size only means something against the
-/// disk it lives on, and restic cannot report that disk: only the
-/// filesystem can.
+/// The repository page's used/free strip; restic cannot report the disk.
 struct VolumeCapacity: Equatable {
     let totalBytes: Int64
     let freeBytes: Int64
@@ -12,15 +9,12 @@ struct VolumeCapacity: Equatable {
 
     var isLow: Bool { totalBytes > 0 && freeBytes * 20 < totalBytes }
 
-    /// A degenerate total reads as empty rather than NaN.
     var usedFraction: Double {
         guard totalBytes > 0 else { return 0 }
         return Double(usedBytes) / Double(totalBytes)
     }
 
-    /// Reads the volume that holds `path`. `nil` when the filesystem reports
-    /// nothing usable — callers render no strip rather than a zeroed one,
-    /// which would pass an empty disk off as the truth.
+    /// `nil` rather than zeros, which would pass an empty disk off as fact.
     static func of(path: String) -> VolumeCapacity? {
         guard !path.isEmpty else { return nil }
         guard

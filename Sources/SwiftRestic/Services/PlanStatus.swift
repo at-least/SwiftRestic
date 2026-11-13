@@ -1,7 +1,7 @@
 import Foundation
 
-/// What the plan page's status row says about the plan's standing problem —
-/// the run `AppModel.currentProblem(for:)` names.
+/// The plan page's status row for the run `AppModel.currentProblem(for:)`
+/// names.
 struct PlanProblemSummary: Equatable, Sendable {
     let runID: RunRecord.ID
     let outcome: RunRecord.Outcome
@@ -9,40 +9,32 @@ struct PlanProblemSummary: Equatable, Sendable {
     let headline: String
     let message: String?
     let facts: [String]
-    /// The unreadable items the row lists, restic's own lines, at most
-    /// `PlanStatus.listedItemLimit` of them, each with the drawer's fixes.
+    /// restic's own lines, at most `PlanStatus.listedItemLimit`; the view
+    /// gives each the drawer's fixes.
     let items: [String]
-    /// How many unreadable items the row leaves to Activity — from
-    /// restic's count, never the stored lines.
+    /// From restic's count, never the stored lines.
     let unlistedItemCount: Int
 }
 
-/// A stat tile's face: the value on it and the tooltip behind it.
 struct TileFace: Equatable, Sendable {
     let value: String
     let help: String?
 }
 
-/// What a plan's sidebar row says under its name.
+/// A plan's sidebar row, under its name.
 struct PlanCaption: Equatable, Sendable {
-    /// The row's news: the running phase, a standing problem, the last backup
-    /// or the schedule.
     var text: String
-    /// The standing problem's outcome, whose glyph leads `text`.
+    /// Its glyph leads `text`.
     var outcome: RunRecord.Outcome?
-    /// A shorter spelling of `text` for a column too narrow for it —
-    /// "Warnings — 2 days ago" for "Completed with warnings — 2 days ago" —
-    /// tried before the middle cut that reads "Completed with…ings". Nil
-    /// when no shorter form exists.
+    /// For a column too narrow for `text` ("Warnings — 2 days ago"), tried
+    /// before the middle cut that reads "Completed with…ings".
     var shortText: String? = nil
 }
 
-/// What a repository's sidebar row says under its name after a failed read
-/// or while its disk is away — nil renders nothing. `full` is the tooltip
-/// the renderer hangs under its truncated text.
+/// A repository's sidebar row, under its name, after a failed read or while
+/// its disk is away. `full` is the tooltip under the truncated text.
 enum RepositoryCaption: Equatable, Sendable {
-    /// The disk is not connected (`SnapshotListingOutcome.notConnected`): a normal
-    /// state, said without a glyph.
+    /// A normal state, so it carries no glyph.
     case notConnected(full: String)
     case failed(String, full: String)
 
@@ -60,49 +52,36 @@ enum RepositoryCaption: Equatable, Sendable {
     }
 }
 
-/// The plan page's words and the app's one "Last backup" moment, kept out
-/// of the view so they can be tested: the status row for a problem that
-/// still stands, the Next backup value, the sidebar caption, and the
-/// moment (`lastBackupAt`) every surface's "Last backup" counts from.
+/// The plan page's words and the one "Last backup" moment
+/// (`lastBackupAt`) every surface counts from, outside the view so tests
+/// reach them.
 enum PlanStatus {
     private static let retentionSkippedFact = "Old backups not removed"
     private static let unnamedUnreadFact = "Some files couldn’t be read"
-    /// The plan page's empty fact when the repository holds other backups —
-    /// the Overview's count line and the Backups tab's empty state in
-    /// the same words.
+    /// Also the Overview's count line and the Backups tab's empty state:
+    /// one wording on every surface.
     static let noneFromThisPlanFact = "None from this plan yet. This location holds others"
-    /// How many unreadable items the plan page's problem row lists; the drawer
-    /// holds the rest. Five: the usual run names one or two, and a home
-    /// folder macOS blocked in bulk is a diagnosis, not a list.
+    /// The usual run names one or two; a home folder macOS blocked in bulk
+    /// is a diagnosis, not a list. The drawer holds the rest.
     private static let listedItemLimit = 5
 
-    /// The plan page's problem row's when-line: how many backups in a row
-    /// ended this way for this cause (`RunRecord.problemStretch`), then the
-    /// newest one's moment ("3 times in a row · 2 days ago"), else the
-    /// moment alone — "in a row", as a success in between starts the count
-    /// over.
+    /// "In a row" because a success in between starts the count
+    /// (`RunRecord.problemStretch`) over.
     static func standingProblemWhen(inARow count: Int, ago: String) -> String {
         count > 1 ? "\(count) times in a row · \(ago)" : ago
     }
 
-    /// A run's problems as short countable facts, in a fixed order: the
-    /// unreadable items (or, for a backup restic ended with exit 3 without
-    /// naming any, that some files went unread), a skipped retention
-    /// step. The unreadable count is `itemErrorCount` —
-    /// restic's items, taken before the engine stores its decoding and
-    /// retention lines — never the stored line count, which would call a
-    /// lock-contention retention skip (`restic forget` exit 11) "1
-    /// unreadable item". The one source of these facts, so every surface
-    /// that summarises a run reads the same words.
+    /// The one source of a run's problem facts, so every surface reads the
+    /// same words. The unreadable count is `itemErrorCount`, never the
+    /// stored line count: a lock-contention retention skip (`restic forget`
+    /// exit 11) would otherwise read "1 unreadable item".
     static func facts(for run: RunRecord) -> [String] {
         var facts: [String] = []
         if run.itemErrorCount > 0 {
             facts.append(Format.plural(run.itemErrorCount, "unreadable item"))
         } else if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode {
-            // restic exited 3 and named nothing: a file count would pass for
-            // a clean run, and a skipped retention step would pass for the
-            // whole story. The log keeps restic's own
-            // words.
+            // Exit 3 with nothing named: without this fact the run would
+            // pass for clean, or the retention skip for the whole story.
             facts.append(unnamedUnreadFact)
         }
         if retentionLine(of: run) != nil {
@@ -111,39 +90,30 @@ enum PlanStatus {
         return facts
     }
 
-    /// The row for a failed or completed-with-errors backup. It always says
-    /// something: a failure leads with why it failed; a warning with the
-    /// first unreadable item, else the line that explains the warning
-    /// (a decoding gap or a skipped retention step — never presented as an
-    /// unreadable file), else the banner's words
-    /// for a bare exit 3.
+    /// Always says something. A decoding gap or skipped retention step is
+    /// never presented as an unreadable file.
     static func summary(of run: RunRecord) -> PlanProblemSummary {
-        // The row lists the unreadable items (each with Show in Finder and
-        // Exclude, as the drawer's lines), so the message never repeats
-        // the first of them: it explains the warning past the items — a
-        // decoding gap, a skipped retention step.
+        // The row lists the items itself, so the message never repeats the
+        // first of them; it explains what the items do not.
         let (listedItems, unlisted) = run.unreadableItemListing(limit: listedItemLimit)
         let explanation = run.trailingItemErrorsOnScreen.first
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
         } else {
-            // The words for a bare exit 3 — only while the row lists
-            // nothing: listed items are the explanation.
+            // The bare-exit-3 words only while the row lists nothing:
+            // listed items are the explanation.
             explanation ?? run.failureMessage
                 ?? (run.outcome == .completedWithErrors && listedItems.isEmpty ? RunRecord.unexplainedWarningMessage : nil)
         }
 
         var facts = facts(for: run)
-        // The row lists the unreadable items under the facts line, so once
-        // every one is listed there the count says nothing new. It stands
-        // while items are left to Activity (unlisted > 0) or none was
-        // listed, where it is the only place the count is said.
+        // Once every item is listed the count says nothing new; it stays
+        // while items are left to Activity or none was listed.
         if !listedItems.isEmpty, unlisted == 0 {
             facts.removeAll { $0 == Format.plural(run.itemErrorCount, "unreadable item") }
         }
-        // A retention-only warning already says so in its message; beside
-        // any other fact the line stays, so the facts read as Activity's
-        // Detail column does.
+        // A retention-only warning says so in its message; beside any other
+        // fact the line stays, matching Activity's Detail column.
         if let message, message.hasPrefix(RunRecord.retentionSkippedOnScreenPrefix), facts == [retentionSkippedFact] {
             facts = []
         }
@@ -151,9 +121,8 @@ enum PlanStatus {
             runID: run.id,
             outcome: run.outcome,
             finishedAt: run.finishedAt,
-            // A plan's problem is always a backup record — the forget and
-            // rewrite runs that carry its ID too are never one — so the noun
-            // is fixed.
+            // A plan's problem is always a backup record (its forget and
+            // rewrite runs never are), so the noun is fixed.
             headline: "Backup \(run.outcome.displayName.lowercased())",
             message: message,
             facts: facts,
@@ -162,26 +131,18 @@ enum PlanStatus {
         )
     }
 
-    /// The moment a plan's "Last backup" says — the run's stamp when the
-    /// app ran it, else its newest snapshot's own time: history a plan
-    /// arrives with (adopted, or a repository added with its snapshots
-    /// already in it) is still its last backup. The sidebar caption, the
-    /// repository page's Status line and the plan page's Last backup
-    /// row all read this one moment, so the same backup cannot read three
-    /// ways side by side.
+    /// Falls back to the newest snapshot's time: history a plan arrives with
+    /// (adopted, or a repository added with snapshots) is still its last
+    /// backup. Every "Last backup" surface reads this one moment, so they
+    /// cannot disagree side by side.
     static func lastBackupAt(plan: BackupPlan, latestSnapshotTime: Date?) -> Date? {
         plan.lastSuccessAt ?? latestSnapshotTime
     }
 
-    /// The run the plan page's Last backup value lands on: the newest
-    /// backup that stamped `lastSuccessAt` — the moment `lastBackupAt`
-    /// names while the plan's history is runs of its own; history that
-    /// arrived with the repository has no run to land on. The predicate
-    /// follows `markPlanRun`'s: the stamp lands once the snapshot is
-    /// written, so a run whose retention was skipped counts
-    /// (`.completedWithErrors`), and so does one whose retention was
-    /// stopped afterwards (`.cancelled`, snapshot written); a failed run,
-    /// or one stopped before its snapshot, never stamped.
+    /// The newest run that stamped `lastSuccessAt`. The predicate must
+    /// follow `markPlanRun`'s: the stamp lands once the snapshot is written,
+    /// so a skipped retention (`.completedWithErrors`) and a retention
+    /// stopped afterwards (`.cancelled` with a snapshot) count.
     static func lastBackupRun(planID: UUID, in runs: [RunRecord]) -> RunRecord? {
         runs
             .filter {
@@ -191,12 +152,8 @@ enum PlanStatus {
             .max { $0.startedAt < $1.startedAt }
     }
 
-    /// The plan page's Next backup value, from `Scheduler.upcomingRuns`, so
-    /// the page cannot show a date nothing will fire at. A plan the scheduler
-    /// skips (an incomplete setup, or a repository it cannot find) says it is
-    /// not scheduled. A timed `hold` moves the date to its end; under an
-    /// open-ended one every run reads "Waiting": no date is promised. A due slot
-    /// whose backup is in flight reads "Running now".
+    /// From `Scheduler.upcomingRuns`, so the page cannot show a date nothing
+    /// will fire at. Under an open-ended hold no date is promised.
     static func nextBackupTile(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
@@ -205,8 +162,8 @@ enum PlanStatus {
         now: Date = .now
     ) -> TileFace {
         guard plan.isScheduled else {
-            // The row asks when; "Manually" answered how. The schedule row
-            // above it keeps the word.
+            // Not "Manually": the row asks when; the schedule row above
+            // says how.
             return TileFace(value: "When you click Back Up Now", help: nil)
         }
         guard let next = Scheduler.upcomingRuns(
@@ -220,9 +177,9 @@ enum PlanStatus {
                 help: "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
             )
         }
-        // Nothing stamps the slot until the run ends, so "Running now"
-        // must beat "Waiting" and the "Due now" below — a Back Up Now
-        // under a hold runs and stamps the slot too.
+        // Nothing stamps the slot until the run ends, so "Running now" must
+        // win over "Waiting" and "Due now"; a Back Up Now under a hold also
+        // stamps the slot.
         if isBackingUp, next <= now {
             return TileFace(value: "Running now", help: nil)
         }
@@ -240,10 +197,7 @@ enum PlanStatus {
         return TileFace(value: Format.tileTimestamp(next, now: now), help: help)
     }
 
-    /// Why a scheduled plan will not run by itself now, for the Status
-    /// section: "Not scheduled" when the scheduler skips it (the sidebar's and
-    /// Next backup's word). Nil while it will, and for a manual plan, which
-    /// never does: that is its chosen mode.
+    /// Nil for a manual plan: never running by itself is its chosen mode.
     static func willNotRunCaption(
         for plan: BackupPlan,
         existingRepositoryIDs: Set<UUID>,
@@ -256,18 +210,10 @@ enum PlanStatus {
         return nil
     }
 
-    /// A plan's sidebar caption. In rank: a run in flight's phase; a turn
-    /// waited for behind another plan's run (`AppModel.runBackups`); a
-    /// standing problem, named for as long as it stands, seen or not;
-    /// overdue; "Not scheduled" when the scheduler skips the plan (no folder
-    /// or file, or a repository it cannot find), as its Next backup value
-    /// reads. Nil for a plan that needs nothing: its row stays one line.
-    /// Overdue counts from `lastBackupAt`'s one moment, so history a plan
-    /// arrived with counts here as well.
-    ///
-    /// The caption carries no next run: a plan's next run stays with the
-    /// surfaces that act on it, the plan page's Next backup value, the tray
-    /// and Settings.
+    /// A standing problem is named for as long as it stands, seen or not.
+    /// Nil keeps the row one line. The caption carries no next run: that
+    /// stays with the surfaces that act on it (the plan page, the tray,
+    /// Settings).
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,
@@ -289,8 +235,7 @@ enum PlanStatus {
             return PlanCaption(
                 text: "\(problem.outcome.displayName) — \(when)",
                 outcome: problem.outcome,
-                // The one outcome whose words outgrow the column; the glyph
-                // beside them carries the severity either way.
+                // The one outcome whose words outgrow the column.
                 shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
             )
         }
@@ -304,9 +249,6 @@ enum PlanStatus {
         return nil
     }
 
-    /// The repository row's second line when its read failed (a wrong
-    /// password, an unreachable server, a repository missing from its
-    /// location: restic exit 10) or its disk is away; nil otherwise.
     static func repositoryCaption(outcome: SnapshotListingOutcome) -> RepositoryCaption? {
         if case let .notConnected(volume) = outcome {
             return .notConnected(full: SnapshotListingOutcome.connectText(volume: volume))
@@ -315,8 +257,8 @@ enum PlanStatus {
         return .failed(Format.firstSentence(message), full: message)
     }
 
-    /// Searched among the trailing lines only, so an unreadable item's own
-    /// text can never pass for it.
+    /// Trailing lines only, so an unreadable item's own text never passes
+    /// for it.
     private static func retentionLine(of run: RunRecord) -> String? {
         run.trailingItemErrors.first { $0.hasPrefix(RunRecord.retentionSkippedPrefix) }
     }

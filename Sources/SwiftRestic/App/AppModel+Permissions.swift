@@ -19,10 +19,9 @@ extension AppModel {
         return status
     }
 
-    /// What the editors say where the path is chosen, rather than after a
-    /// backup comes back with warnings; nil when nothing in `path` needs the
-    /// grant or it is granted. A few string comparisons
-    /// (`ProtectedLocations`), so a view may ask on every render.
+    /// Shown where the path is chosen, rather than after a backup comes back
+    /// with warnings. String comparisons only, so a view may ask on every
+    /// render.
     func fullDiskAccessNotice(for path: String) -> String? {
         guard fullDiskAccess != .granted, ProtectedLocations.needsFullDiskAccess(path, home: NSHomeDirectory()) else {
             return nil

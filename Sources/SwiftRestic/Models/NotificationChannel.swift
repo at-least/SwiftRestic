@@ -1,8 +1,7 @@
 import Foundation
 
 struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
-    /// The service an address belongs to, read from the address alone: a
-    /// person pastes a link and picks nothing.
+    /// Read from the address alone: the user pastes a link and picks nothing.
     enum Kind: Equatable, Sendable {
         case webhook
         case slack
@@ -10,9 +9,8 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         /// A dead-man's switch: silence is the alarm.
         case healthchecks
 
-        /// Healthchecks needs a ping when a run *starts* — that is what arms the
-        /// timer it measures the run against. For the others a "started" message
-        /// is just noise.
+        /// The start ping arms Healthchecks' timer; for the others a
+        /// "started" message is noise.
         var usesStartPing: Bool { self == .healthchecks }
 
         /// A self-hosted Healthchecks pings at `PING_ENDPOINT`, by default the
@@ -43,7 +41,6 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
 
     var kind: Kind { Kind(address: url) }
 
-    /// The address's host: a person pastes a link, and names nothing.
     var displayName: String {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.host() ?? "Address"
     }
@@ -52,16 +49,14 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
         URL(string: url.trimmingCharacters(in: .whitespaces))?.scheme?.hasPrefix("http") == true
     }
 
-    /// `notifyOnSuccess` is the app's one success switch, shared with the
-    /// macOS notifications. Failures and warnings always go.
+    /// `notifyOnSuccess` is shared with the macOS notifications.
     func wants(_ stage: NotificationEvent.Stage, notifyOnSuccess: Bool) -> Bool {
         switch stage {
         case .started: kind.usesStartPing
         // A monitor needs every success: a missing ping is its alarm.
         case .succeeded: kind.usesStartPing || notifyOnSuccess
         case .warned, .failed: true
-        // A cancelled backup did not happen: only a dead-man's switch needs
-        // to hear of it, and whoever cancelled it already knows.
+        // Whoever cancelled it already knows.
         case .cancelled, .skipped: kind.usesStartPing
         }
     }
@@ -78,11 +73,8 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
 struct NotificationEvent: Sendable, Equatable {
     enum Stage: String, Sendable, Equatable {
         case started, succeeded, warned, failed
-        /// The user stopped the run. Chat channels stay quiet, but a monitor
-        /// waiting for a check-in has still missed one.
         case cancelled
-        /// A drive or server the run needs was away. Like a cancel,
-        /// only a monitor waiting for a check-in needs to hear of it.
+        /// A drive or server the run needs was away.
         case skipped
     }
 
@@ -92,16 +84,13 @@ struct NotificationEvent: Sendable, Equatable {
     var kind: RunRecord.Kind
     var snapshotID: String?
     var errorMessage: String?
-    /// Excerpts only — the first few warnings, for the message body. The full
-    /// count lives in `warningCount`; a summary that counted the sample would
-    /// tell a chat room "5 warnings" about a run that hit 500.
+    /// The first few only; counting them would tell a chat room "5 warnings"
+    /// about a run that hit 500.
     var warnings: [String] = []
-    /// Every warning the run reported. `nil` when nobody counted (a
-    /// hand-built event, or a run with nothing to count).
+    /// `nil` when nobody counted (a hand-built event, or nothing to count).
     var warningCount: Int?
-    /// What to do about the warnings, when the app can tell — "macOS
-    /// blocked 1 item: SwiftRestic needs Full Disk Access." Built from
-    /// restic's item errors only, like `warnings`.
+    /// "macOS blocked 1 item: SwiftRestic needs Full Disk Access." From
+    /// restic's item errors only.
     var hint: String?
     var filesNew: Int = 0
     var bytesProcessed: Int64 = 0
@@ -109,11 +98,8 @@ struct NotificationEvent: Sendable, Equatable {
     var duration: TimeInterval = 0
 
     var summary: String {
-        // The subject follows the app's one run-naming rule: the plan with
-        // its repository ("Documents (NAS)"). A check or prune reports the
-        // repository in `planName` too, and the rule's same-name guard says
-        // it once. The webhook's separate plan/repository keys keep their
-        // own values; this is only the sentence.
+        // A check or prune carries the repository in `planName` too;
+        // `planWithRepository` says a repeated name once.
         let subject = planName.isEmpty
             ? repositoryName
             : RunRecordPresentation.planWithRepository(planName, repositoryName: repositoryName)
@@ -122,13 +108,11 @@ struct NotificationEvent: Sendable, Equatable {
         case .started:
             return "\(operation) started: \(subject)"
         case .succeeded:
-            // Only a backup adds data; a check's or a cleanup's 0 is not news.
             let added = kind == .backup ? " — \(Format.bytes(dataAdded)) of new data" : ""
             return "\(operation) succeeded: \(subject)\(added) in \(Format.duration(duration))"
         case .warned:
             // A retention line is appended to `itemErrors` after
-            // `itemErrorCount` is set, so it can sit in the sample without
-            // being in any count — not a warning, and never counted one.
+            // `itemErrorCount` is set: in the sample, never in a count.
             let counted = warningCount ?? warnings.filter { !$0.hasPrefix(RunRecord.retentionSkippedOnScreenPrefix) }.count
             return "\(operation) \(counted > 0 ? "completed with \(Format.plural(counted, "warning"))" : "completed with warnings"): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")

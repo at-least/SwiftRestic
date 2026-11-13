@@ -1,33 +1,27 @@
 import Foundation
 
 extension AppModel {
-    /// `prune` takes an exclusive lock and `backup` a shared one, so anything
-    /// already touching a repository — a plan or an upkeep job — makes the whole
-    /// repository off limits, not just that one plan.
+    /// `prune` takes an exclusive lock and `backup` a shared one, so any run
+    /// makes the whole repository off limits, not just its plan.
     var busyRepositoryIDs: Set<UUID> {
         var ids = Set(maintenance.keys)
         for run in activity.values { ids.insert(run.repositoryID) }
         return ids
     }
 
-    /// Repositories restic holds exclusively right now — a check or prune,
-    /// or a plan's retention step — with the sentence a disabled Back Up Now
-    /// gives. A backup's shared lock would fail at once against them (exit
-    /// 11), so the verb waits instead of writing a failed run.
+    /// Held exclusively: a backup's shared lock would fail at once (exit 11),
+    /// so Back Up Now waits instead of writing a failed run.
     var lockedRepositories: [UUID: String] {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
             reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
         }
-        // A backup holds the exclusive lock only in its forget step. Not by
-        // phase: Stop turns the phase to `.cancelling` while the restic
+        // Not by phase: Stop turns it to `.cancelling` while the restic
         // child, still holding the lock, dies.
         for (planID, run) in activity where run.isInRetentionStep {
             guard reasons[run.repositoryID] == nil else { continue }
             let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
-            // The live label, as the sidebar shows it; the run's own copy
-            // only once Remove Plan has taken the plan.
             let planName = plan(id: planID).map { label(of: $0) } ?? run.planName
             reasons[run.repositoryID] = "\(name) is removing old backups of “\(planName)”. Backups wait until it finishes."
         }
@@ -76,24 +70,19 @@ extension AppModel {
         }, in: .maintenance(repositoryID))
     }
 
-    /// The maintenance mirror of `installPlanActivity`: a fresh activity
-    /// carries a new run token, so a line still in flight from the previous
-    /// job drops instead of writing into this one.
+    /// A new run token, so a line still in flight from the previous job
+    /// drops.
     private func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool) {
         rotateRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = MaintenanceActivity(task: task, askedByUser: askedByUser)
         reconcileSleepAssertion()
     }
 
-    /// Every piece of per-run bookkeeping leaves together,
-    /// `unwindPlanRun(_:)`'s rule, so the copies cannot drift. Call only
-    /// from the job's own task: `clear` while a cancelled
-    /// run is still unwinding would remove its slot, and quit's
-    /// `tasks.drain()` would no longer wait for its record.
+    /// Call only from the job's own task: `clear` while a cancelled run is
+    /// still unwinding would remove its slot, and quit's `tasks.drain()`
+    /// would no longer wait for its record.
     private func unwindMaintenanceRun(_ repositoryID: UUID) {
         tasks.clear(.maintenance(repositoryID))
-        // The token retires with the strip, so a late hop from this job
-        // drops.
         retireRunToken(for: .maintenance(repositoryID))
         maintenance[repositoryID] = nil
         reconcileSleepAssertion()
@@ -133,18 +122,15 @@ extension AppModel: MaintenanceRunEngine.Sink {
         maintenanceAwaitingDrive.insert(repositoryID)
     }
 
-    /// A failure — a check that found errors is one — posts no banner: the
-    /// repository page's Last check or Last cleanup and Activity's badge say
-    /// it.
+    /// A failure posts no banner: the repository page and Activity's badge
+    /// say it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)
         append(record: record)
         switch record.outcome {
         case .skipped:
-            // The drive away: Verify Backups or Clean Up Now is answered, as Back Up
-            // Now is; a scheduled one waits in silence, Next check saying
-            // for what.
+            // Answered only when asked for; a scheduled one waits silently.
             guard maintenance[repository.id]?.askedByUser == true else { break }
             post(Banner(
                 title: "\(record.kind.displayName) of “\(label(of: repository))” skipped",
@@ -157,11 +143,9 @@ extension AppModel: MaintenanceRunEngine.Sink {
         await broadcast(record: record, plan: nil)
     }
 
-    /// The maintenance engine's closing refresh, handed over uncancelled: the
-    /// engine's own task is cancelled when the run was, and an inherited
-    /// cancel would kill the refresh mid-call. Registered on the registry's
-    /// background lane so a quit drains it rather than orphaning its restic
-    /// children past `terminateAll`.
+    /// A new task, not inheriting the caller's cancellation, which would
+    /// kill the refresh mid-call. On the background lane so a quit drains it
+    /// instead of orphaning restic children past `terminateAll`.
     func scheduleSnapshotRefresh(repositoryID: UUID) {
         guard !isShuttingDown else { return }
         tasks.addBackground(Task { [weak self] in

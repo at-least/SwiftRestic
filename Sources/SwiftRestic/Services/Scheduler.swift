@@ -36,11 +36,10 @@ enum Scheduler {
     /// The plans a newly mounted volume brings back: each the scheduler
     /// would start by itself whose newest backup was skipped — its folder
     /// or its repository's drive was missing — and whose folder and
-    /// repository are both here now. They run at once
-    /// instead of waiting a whole interval for the next slot. (The app-wide
-    /// hold is the caller's guard, as for the tick.) On the main actor, the
-    /// model's, so the reads it is handed need not be `Sendable`; they hop
-    /// off it themselves.
+    /// repository are both here now. They run at once instead of waiting
+    /// for the next slot. The app-wide hold is the caller's guard, as for
+    /// the tick. On the main actor, so the reads it is handed need not be
+    /// `Sendable`; they hop off it themselves.
     @MainActor
     static func catchUpAfterMount(
         plans: [BackupPlan],
@@ -87,8 +86,8 @@ enum Scheduler {
         return nil
     }
 
-    /// Plans that should start now, most overdue first. (The app-wide pause is
-    /// the tick's own early return.)
+    /// Plans that should start now, most overdue first. The app-wide pause is
+    /// the tick's own early return.
     ///
     /// - Parameters:
     ///   - existingRepositoryIDs: repositories in the configuration. A plan
@@ -151,8 +150,7 @@ enum Scheduler {
         }
     }
 
-    /// Only retention leaves anything for a cleanup to free, and an
-    /// append-only server refuses both.
+    /// Only retention leaves anything for a cleanup to free.
     static func cleansUp(_ repository: Repository, plans: [BackupPlan]) -> Bool {
         plans.contains { $0.repositoryID == repository.id && $0.retention.isSafeToRun }
     }

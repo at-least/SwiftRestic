@@ -326,14 +326,10 @@ enum IndexTestData {
         return String(repeating: "0", count: 64 - digits.count) + digits
     }
 
-    /// A path as `restic diff` spells it: a directory ends in `/`. Every
-    /// writer of that spelling in the test scaffolding goes through here —
-    /// `diff(from:to:)`, the scripted client's `walkDiff` and the scale
-    /// model's deltas; a test that pins a particular spelling writes it
-    /// inline. The app only reads the spelling (`ResticDiffChange.isDirectory`
-    /// and `IndexedEntry(diffSpelling:)`, both through `ResticPath`), so the
-    /// writing side lives with the tests;
+    /// A path as `restic diff` spells it: a directory ends in `/`. The app
+    /// only reads the spelling, so the writing side lives with the tests;
     /// `DeltaCollectorTests.diffSpellingRoundTrips` pins the two together.
+    /// A test that pins a particular spelling writes it inline.
     static func diffSpelling(_ path: String, isDirectory: Bool) -> String {
         isDirectory ? path + "/" : path
     }
@@ -509,11 +505,8 @@ extension SnapshotIndex {
 
     /// The virtual-machine work the writer connection does inside `body`,
     /// counted by SQLite's progress handler at one-instruction granularity:
-    /// a statement that visits n rows counts at least n. A measure of cost
-    /// that does not depend on the machine, for asserting that a write's
-    /// work does not grow with rows it has no business reading. Only
-    /// statements `body` runs on the writer count; reads on pool readers do
-    /// not.
+    /// a statement that visits n rows counts at least n, on any machine.
+    /// Reads on pool readers do not count.
     func writerWork(_ body: () throws -> Void) throws -> Int {
         let counter = UnsafeMutablePointer<Int>.allocate(capacity: 1)
         counter.initialize(to: 0)

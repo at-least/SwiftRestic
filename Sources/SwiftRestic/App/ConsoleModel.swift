@@ -70,7 +70,6 @@ final class ConsoleModel {
             output = "The command ends inside an open quote — close it before running."
             return
         }
-        // Submitting ends any recall walk: the field belongs to the user again.
         endRecall()
         if CommandLineTokenizer.isDestructive(arguments) {
             pendingDestructive = PendingCommand(arguments: arguments, text: commandText)

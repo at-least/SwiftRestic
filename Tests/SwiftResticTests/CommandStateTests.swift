@@ -388,8 +388,7 @@ struct CommandStateTests {
         #expect(model.planCommands(for: .plan(plan.id)).stopTitle == "Stop Backup")
 
         // A backup's own retention step (its snapshot is already written):
-        // Stop ends the forget, and both
-        // surfaces say so.
+        // Stop ends the forget, and both surfaces say so.
         model.activity[plan.id]?.phase = .applyingRetention
         #expect(trayRow()?.title == "Stop Removing Old Backups of “Docs”")
         #expect(trayRow()?.action == .stop)
@@ -465,7 +464,7 @@ struct CommandStateTests {
         #expect(model.quitInterruptions == ["2 cleanups are running.", "A verification is running."])
     }
 
-    @Test("⇧⌘F searches the Files tab of a plan's page, and Find Files everywhere else — a group's page too")
+    @Test("⌘F searches a plan's Backups tab, and Search All Backups everywhere else — a group's page too")
     func filesSearchRootsFollowThePage() throws {
         let model = makeModel()
         let repository = makeRepository()
@@ -505,7 +504,7 @@ struct CommandStateTests {
         let untagged = try IndexTestData.snapshot(IndexTestData.hexID(3), micros: 3_000_000, paths: ["/Music"])
         model.snapshots[repository.id] = [untagged, orphan, own]
 
-        // Where a run's Browse and a Files tab's Show in Backups land: the
+        // Where a run's Browse and Activity's Show in Backups land: the
         // one page whose Backups tab lists it.
         #expect(model.page(ofBackup: own.id, in: repository.id) == .plan(plan.id))
         #expect(model.page(ofBackup: orphan.id, in: repository.id) == .orphanPlan(repositoryID: repository.id, planID: deleted))

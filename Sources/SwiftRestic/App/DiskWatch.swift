@@ -10,13 +10,10 @@ import Observation
 final class DiskWatch {
     static let recheckInterval: Duration = .seconds(15)
 
-    /// Moved by `diskMayHaveChanged`: what was read of the disk in an older
-    /// turn is read again.
     private(set) var diskGeneration: UInt64 = 0
 
-    /// The disk may no longer be as it was read: the Backups tab shown
-    /// again, the app made active — another app may have changed a folder
-    /// meanwhile — or a volume mounted or unmounted.
+    /// The app made active counts: another app may have changed a folder
+    /// meanwhile.
     func diskMayHaveChanged() {
         diskGeneration += 1
     }

@@ -99,7 +99,6 @@ struct SidebarTreeTests {
                               tags: [ResticService.planTag(movedAway.id)])
         // Another Mac or the console: no plan tag at all.
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
-        // A deleted plan's tag.
         let g1 = try snapshot("g1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Gone"],
                               tags: [ResticService.planTag(deleted)])
 
@@ -467,7 +466,7 @@ struct SidebarTreeTests {
         #expect(router.filesPaneOpenings == opening + 1)
         #expect(router.filesChosenVersion[beach] == "b8")
 
-        // A search left on the tab would list its hits over the tree the
+        // A search left in place would list its hits over the tree the
         // route opens at the item.
         router.filesSearchText[roots] = "beach"
         router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID, focusPath: beach.path)

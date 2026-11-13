@@ -438,7 +438,7 @@ actor IndexCoordinator {
     }
 
     /// Captures one diff for next time, and returns at once, as
-    /// `cacheListing` does: the Change column's marks are in hand. Callers
+    /// `cacheListing` does: the changes are in hand. Callers
     /// pass only complete walks — a partial stream must never present itself
     /// as the whole answer.
     nonisolated func cacheDiff(olderID: String, newerID: String, changes: [ResticDiffChange], repositoryID: UUID) {
@@ -885,8 +885,9 @@ private final class StoreRegistry: @unchecked Sendable {
     }
 }
 
-/// The browse-cache captures in flight: `cacheListing` and `cacheDiff` hand
-/// a write over and return, and a quit still waits for it. Off the actor,
+/// The browse-cache captures in flight: `cacheListing`, `cacheDiff` and
+/// `cacheFileNodes` hand a write over and return, and a quit still waits for
+/// it. Off the actor,
 /// like `StoreRegistry`, so handing one over never waits on the actor
 /// either. Each task removes its own entry when it ends; after `close`,
 /// nothing new starts.
@@ -998,20 +999,18 @@ final class DeltaCollector: @unchecked Sendable {
     }
 }
 
-/// Thread confinement by lock: the restic stream's callbacks arrive on one
-/// background queue, while `finish` runs after the walk returns. The flush
-/// call is synchronous and transaction-per-chunk, so chunks recorded before
-/// a failure or cancellation stay staged — the snapshot remains pending and
-/// the next pass streams it again from the top. Internal, not private: the
-/// tests drive the failure paths through an injected flush.
+/// Locked: the restic stream's callbacks arrive on one background queue,
+/// while `finish` runs after the walk returns. Each flush is its own
+/// transaction, so chunks recorded before a failure or cancellation stay
+/// staged; the snapshot remains pending and the next pass streams it again
+/// from the top. Internal, not private: the tests drive the failure paths
+/// through an injected flush.
 ///
 /// The first chunk that fails to record stops the buffer for good: no later
-/// chunk is flushed and the final marker is never sent. The snapshot cannot
-/// be declared read after a lost chunk anyway, so every later chunk would be
-/// a write spent on a stream already known incomplete — and a chunk may have
-/// failed because the store's picture of this stream is wrong, which later
-/// chunks would only build on. The next pass reads the snapshot again from
-/// the top.
+/// chunk is flushed and the final is never sent. The snapshot cannot be
+/// declared read after a lost chunk anyway, and a chunk may have failed
+/// because the store's picture of this stream is wrong, which later chunks
+/// would only build on.
 final class BackfillBuffer: @unchecked Sendable {
     private let flush: @Sendable ([IndexedEntry], Bool) throws -> Void
     private let chunkSize = SnapshotIndex.chunkSize
@@ -1046,17 +1045,12 @@ final class BackfillBuffer: @unchecked Sendable {
         if let chunk { flushChunk(chunk) }
     }
 
-    /// Sends the remainder as the final chunk — what applies the stream and
-    /// marks the snapshot read, in the remainder's own transaction (the
-    /// store stages it and compares in one); without it the snapshot stays
-    /// pending. A stream that ended on a chunk boundary sends an empty
-    /// final. Any error captured mid-stream throws instead, and then
-    /// nothing more reaches the store, the remainder included; an error
-    /// from the final itself throws too — either way the snapshot stays
-    /// pending for the next pass. A stream that delivered no entry at all
-    /// throws `IncompleteStream.emptyListing` without sending the final:
-    /// applied, an empty listing would read as a snapshot that holds
-    /// nothing.
+    /// Sends the remainder (possibly empty) as the final chunk, which applies
+    /// the stream and marks the snapshot read. An error captured mid-stream
+    /// throws instead, and nothing more reaches the store. A stream that
+    /// delivered no entry throws `IncompleteStream.emptyListing` without
+    /// sending the final: applied, an empty listing would close every run of
+    /// the chain.
     func finish() throws {
         lock.lock()
         let remainder = pending
@@ -1066,20 +1060,17 @@ final class BackfillBuffer: @unchecked Sendable {
         let empty = !receivedAny
         lock.unlock()
         if let failed { throw failed }
-        // A buffer told to stop never declares coverage — the snapshot stays
-        // pending. Its walk unwinds with its own error and never finishes
-        // it; one that did must not read as a full read landed.
+        // Its walk unwinds with its own error and never finishes it; one that
+        // did must not read as a full read landed.
         if cancelled { throw CancellationError() }
         guard !empty else { throw IncompleteStream.emptyListing }
-        // The decisive call propagates directly rather than being captured:
-        // a failure here is exactly what must surface.
+        // Thrown, not captured as a chunk's error is: this failure must
+        // reach the caller.
         try flush(remainder, true)
     }
 
-    /// Stops accepting paths — the walk above us is unwinding with an error
-    /// or cancellation, and half-flushed state is exactly as far as the
-    /// resumable design wants to go. The final marker is not exempt: a
-    /// cancelled buffer never declares a snapshot fully read.
+    /// For a walk unwinding with an error or cancellation: the chunks already
+    /// flushed stay staged, and the final is never sent.
     func cancel() {
         lock.lock()
         isCancelled = true

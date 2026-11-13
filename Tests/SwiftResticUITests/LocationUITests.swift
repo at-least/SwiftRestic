@@ -1,15 +1,11 @@
 import XCTest
 
-/// The Location menu on the plan's backup location: Verify Backups and
-/// Remove Location….
 final class LocationUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
-    /// The scheduled check, asked for by hand, of a fresh repository: it runs
-    /// at once, with no question, and Activity records it with restic's
-    /// verdict.
+    /// Verify Backups runs at once, with no confirmation dialog.
     @MainActor
     func testVerifyFindsNoErrors() throws {
         let folders = try UITestFolders.make("Verify")

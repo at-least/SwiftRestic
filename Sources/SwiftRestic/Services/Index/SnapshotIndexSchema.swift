@@ -237,8 +237,8 @@ enum SnapshotIndexSchema {
 
         let stageInsert = "INSERT OR IGNORE INTO temp.stage (node_id, snap_id, is_dir) VALUES (?, ?, ?)"
         let stageClear = "DELETE FROM temp.stage"
-        /// Whose stream the stage holds: one snapshot's rows at most, so the
-        /// first row answers. `LIMIT 1` is what keeps the scan to one row.
+        /// The stage holds one snapshot's rows at most, so the first row
+        /// answers.
         let stageOwner = "SELECT snap_id FROM temp.stage LIMIT 1"
         /// The stage's nodes no run holds, queued in `temp.gc` for
         /// `discardStage` to collect once the stage is cleared. No
@@ -456,10 +456,6 @@ enum SnapshotIndexSchema {
             ORDER BY s.time DESC, s.id DESC
             """
         let editSeqs = "SELECT seq FROM edit WHERE node_id = ? AND chain_id = (SELECT id FROM chain WHERE key = ?)"
-        /// A folder's children one indexed snapshot of a chain holds, each
-        /// with the run that claims it there (its `first_seq`, unique per
-        /// node and chain) and its kind: one side of a folder's comparison
-        /// of two backups.
         let blindSeqs = """
             SELECT seq FROM blind WHERE chain_id = (SELECT id FROM chain WHERE key = ?) AND seq > ? AND seq <= ?
             """
@@ -546,11 +542,10 @@ enum SnapshotIndexSchema {
         }
     }
 
-    /// How the store spells a statement: `SQL.nodeLookup` is the
-    /// `nodeLookup` property of the one `Statements` value, reached through
-    /// a key path. Call sites read as they did when the statements were
-    /// static constants, while the statements stay stored properties that
-    /// reflection can list (a `static let` is invisible to `Mirror`).
+    /// `SQL.nodeLookup` is the `nodeLookup` property of the one `Statements`
+    /// value, reached through a key path, so the statements stay stored
+    /// properties that reflection can list (a `static let` is invisible to
+    /// `Mirror`).
     ///
     /// Declare no statement here. A `static let` on this enum compiles at
     /// every `SQL.x` call site, because ordinary lookup finds it before the

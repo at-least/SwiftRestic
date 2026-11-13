@@ -16,7 +16,6 @@ struct RunLogTests {
 
     @Test("a rendered log leads with versions and the run, lists entries by time, and ends with the verdict")
     func renderedLog() {
-        // Called by its drive, the path itself kept out of the log.
         var repository = Repository()
         repository.kind = .local
         repository.localPath = "/Volumes/Home NAS/repo"

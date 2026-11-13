@@ -1,7 +1,7 @@
 import Foundation
 
-/// A backed-up file as this Mac holds it now, beside its versions in a Files
-/// pane — the last fact a restore decision needs: is the copy here one of
+/// A backed-up file as this Mac holds it now, beside its versions in the file
+/// pane (`FilesPaneView`) — the last fact a restore decision needs: is the copy here one of
 /// these, or none, or gone? One `lstat` (FileManager's attributes, which do
 /// not follow a link), no restic. It answers where Full Disk Access is not
 /// granted too — macOS checks `open`, not `lstat` (see `FullDiskAccess`).

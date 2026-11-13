@@ -1,16 +1,11 @@
 import Foundation
 
-/// Everything the app asks a restic engine to do, collected behind one line.
-///
-/// The live implementation is `ResticService` over the real binary. The model
-/// and the views hold `any ResticClient`, never the concrete type, so the
-/// engine can be swapped whole without touching anything above it. (The
-/// engine tests substitute `MockResticClient`; `AppModel.service()` is the
-/// one place production picks the concrete type.) Requirements carry no
-/// default arguments (a protocol cannot), so calls through the existential
-/// spell every parameter; the pure statics (`planTag`, `expandTilde`,
-/// `countRemoved`) stay on `ResticService` — no state to abstract behind
-/// a protocol.
+/// Everything the app asks a restic engine to do. The model and the views
+/// hold `any ResticClient`, never the concrete type: `AppModel.service()` is
+/// the one place production picks `ResticService`, and the engine tests
+/// substitute `MockResticClient`. The pure statics (`planTag`,
+/// `expandTilde`, `countRemoved`) stay on `ResticService` — no state to
+/// abstract behind a protocol.
 protocol ResticClient: Sendable {
     func version() async throws -> String
 
@@ -28,8 +23,8 @@ protocol ResticClient: Sendable {
 
     func unlock(_ context: RepositoryContext) async throws
 
-    /// `restic key passwd`: the repository opens with `newPassword` from
-    /// now on, and no longer with the context's.
+    /// `restic key passwd`: afterwards the repository opens with
+    /// `newPassword`, not the context's.
     func changePassword(_ context: RepositoryContext, newPassword: String) async throws
 
     func stats(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> RepositoryStats

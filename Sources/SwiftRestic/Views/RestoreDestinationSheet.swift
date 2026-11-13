@@ -1,11 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// One restore waiting for its destination: what, from which backup, and
-/// what to run once it has one. Every Restore in the app builds one — a
-/// backup's tree's, a file's versions', Search All Backups' — and hands it
-/// to `restoreFlow`, so the destination and what to do with what is already
-/// there are asked in one place.
+/// One restore waiting for its destination. Every Restore in the app builds
+/// one and hands it to `restoreFlow`, so the destination and what to do with
+/// what is already there are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
     let subject: RestoreSubject
@@ -30,13 +28,10 @@ struct RestoreDestinationRequest: Identifiable {
     /// all, or for Original location each item's own parent.
     let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
 
-    /// The picked rows' restore — every surface's that restores a selection:
-    /// the Restore pane's and the folder-versions pane's, of one backup, and
-    /// Search All Backups', of several. One rule and one
-    /// wording for all (`RestoreSelection`): items inside a selected folder
-    /// of the same backup are left to it, and the sheet says so, or three
-    /// selected rows would read as two. Nil when the picked rows restore
-    /// nothing.
+    /// Every selection's restore, by one rule and one wording
+    /// (`RestoreSelection`): items inside a selected folder of the same
+    /// backup are left to it, and the sheet says so, or three selected rows
+    /// would read as two. Nil when the picked rows restore nothing.
     @MainActor
     static func picked(
         _ picked: [RestoreSource],
@@ -255,13 +250,10 @@ private struct RestoreFlow: ViewModifier {
 }
 
 /// Another Mac's backup, and Restore when the items' own place is not
-/// available: Arq's "Restore to:" window, with our item-and-backup wording kept — a
-/// folder (the Desktop until another is chosen) or the items' original
-/// location, and a live line saying exactly where it lands. It opens on the
-/// folder: Restore is the way back to the original location. What is
-/// already there is asked about only when Restore finds something in the
-/// way, so Return, Return (the pane's default action, then this sheet's)
-/// never replaces anything: the question's Replace has no Return.
+/// available: Arq's "Restore to:" window. It opens on the folder (the
+/// Desktop until another is chosen). Return, Return (the pane's default
+/// action, then this sheet's) never replaces anything: the question's
+/// Replace has no Return.
 private struct RestoreDestinationSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -433,8 +425,9 @@ private struct RestoreDestinationSheet: View {
     }
 
     /// A sentence, which wraps. Height-pinned: the Form sizes its rows from
-    /// a one-line measure and otherwise cuts a long sentence to one line. Safe in this sheet, unlike in the window's detail column:
-    /// the sheet's fixed 460-pt width is the only width it is ever asked at.
+    /// a one-line measure and otherwise cuts a long sentence to one line.
+    /// Safe in this sheet, unlike in the window's detail column: the sheet's
+    /// fixed width is the only width it is ever asked at.
     private func caption(_ text: String) -> some View {
         Text(text)
             .font(.caption)

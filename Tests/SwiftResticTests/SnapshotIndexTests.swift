@@ -81,7 +81,7 @@ struct SnapshotIndexTests {
         #expect(try await index.versions(ofPath: "/data/f", inChain: nfdKey).map(\.id) == ["nfd"])
     }
 
-    @Test("Find Files' summary counts the backups of its newest copy's chain — the Files tab its row opens — not every plan's")
+    @Test("Find Files' summary counts the backups of its newest copy's chain — the plan its row shows in Backups — not every plan's")
     func summaryCountsTheNewestChain() async throws {
         let fixture = try IndexFixture()
         let index = fixture.index
@@ -114,8 +114,8 @@ struct SnapshotIndexTests {
             "older": ["/data": true, "/data/x": false, "/data/y": true, "/data/y/inner": false],
             "newer": ["/data": true, "/data/x": true, "/data/x/g": false, "/data/y": false],
         ])
-        // What a Files tab's folder pane offers for x and its file pane for y:
-        // both backups, so a version pane's own kind is not the backup's.
+        // What the Backups tab lists for x (versions) and y (contentVersions):
+        // both backups, so a version list's own kind is not the backup's.
         #expect(try await index.versions(ofPath: "/data/x", inChain: planA).map(\.id) == ["newer", "older"])
         #expect(try await index.contentVersions(ofPath: "/data/y", inChain: planA).flatMap { $0.snapshots.map(\.id) }
             == ["newer", "older"])
@@ -326,9 +326,9 @@ struct SnapshotIndexTests {
     /// Equal times are real: `restic rewrite` without `--forget` keeps the
     /// original beside a rewritten snapshot of the same time, and `restic
     /// copy` keeps times. The summary's newest must be the version the
-    /// Files tab its row opens lists first — its chain's
+    /// Backups tab lists first for the row's plan — its chain's
     /// `versions(ofPath:inChain:).first` — or a Find Files row names, and
-    /// restores from, another snapshot than the one the tab shows.
+    /// restores from, another snapshot than Show in Backups shows.
     @Test("versionSummaries' newest breaks a time tie as versions does: the later arrival")
     func summariesTieMatchesVersions() async throws {
         let fixture = try IndexFixture()
@@ -346,7 +346,7 @@ struct SnapshotIndexTests {
 
     /// Across chains the tie goes to the higher chain id, not the later
     /// arrival `versions(ofPath:)` lists first: the summary stays its own
-    /// chain's, the Files tab its Find Files row opens.
+    /// chain's, the plan its Find Files row shows in Backups.
     @Test("a summary's newest through a time tie across chains is its own chain's first version")
     func summariesCrossChainTieIsChainScoped() async throws {
         let fixture = try IndexFixture()
@@ -478,12 +478,6 @@ struct SnapshotIndexTests {
         }
     }
 
-    /// Two byte-distinct, canonically equivalent paths are two nodes with
-    /// their own answers. Keyed by `String`, whose keys compare canonically,
-    /// one entry would stand for both, so a Restore pane reading
-    /// `inRecord[hit.path]` would miss one hit and invent the other; the
-    /// keyed reads therefore return `PathKey`s, which compare bytes. This
-    /// pins that they keep the two apart.
     /// FTS5's unicode61 folds only Latin marks, so a kana voicing mark or
     /// Hangul jamo written decomposed (HFS+-era names, kept as restic's
     /// bytes) tokenizes apart from what an input method types.
@@ -549,6 +543,10 @@ struct SnapshotIndexTests {
         }
     }
 
+    /// Keyed by `String`, whose keys compare canonically, one entry would
+    /// stand for both spellings, so a Restore pane reading
+    /// `inRecord[hit.path]` would miss one hit and invent the other; hence
+    /// the keyed reads return `PathKey`s, which compare bytes.
     @Test("canonically equivalent, byte-distinct paths keep their own answers in the keyed reads")
     func keyedReadsKeepByteDistinctSpellings() async throws {
         let fixture = try IndexFixture()
@@ -843,7 +841,7 @@ struct SnapshotIndexTests {
         let hit = try #require(found.hits.first { $0.path == "/data/k" })
         let summary = try #require(found.summaries["/data/k"])
         #expect(summary.newest.id == "a-second")
-        // Counted in a-second's chain, plan B's, as its Files tab lists.
+        // Counted in a-second's chain, plan B's, as the Backups tab lists it.
         #expect(summary.count == 1)
         let inNewest = try await index.kinds(of: ["/data/k"], inSnapshot: summary.newest.id)
         #expect(inNewest["/data/k"] == hit.isDirectory)

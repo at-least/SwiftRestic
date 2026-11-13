@@ -13,9 +13,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             }
         }
 
-        /// The webhook payload's `operation`, which receivers match on: the
-        /// words it carried before the app called a prune a cleanup, so a
-        /// rename on screen never changes what a filter reads.
+        /// The webhook payload's `operation`, which receivers match on: apart
+        /// from `displayName`, so a rename on screen never changes it.
         var payloadOperation: String {
             switch self {
             case .forget: "Retention"
@@ -26,15 +25,13 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 
     enum Outcome: String, Codable, Sendable {
         case succeeded, completedWithErrors, failed, cancelled
-        /// A run whose plan's folder or repository is on a drive that is
-        /// away, or whose network repository's server is out of reach:
-        /// nothing was written. A skipped backup stamps its slot; no
-        /// problem surface counts it (`detailText` says why).
+        /// A drive that is away or a server out of reach: nothing was
+        /// written. A skipped backup stamps its slot; no problem surface
+        /// counts it (`detailText` says why).
         case skipped
 
-        /// What every problem surface counts — Activity's Problems filter,
-        /// the overview, a stretch, a retry: a failure, or a run that
-        /// finished with warnings.
+        /// What every problem surface counts: Activity's Problems filter,
+        /// the overview, a stretch, a retry.
         var isProblem: Bool { self == .failed || self == .completedWithErrors }
 
         var displayName: String {
@@ -47,10 +44,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             }
         }
 
-        /// The marker a run row wears in lists. Success wears nothing — only
-        /// trouble asks to be seen. Cancelled keeps a quiet monochrome
-        /// outline so it can never be misread as success; the problem
-        /// outcomes keep their alarm glyphs.
+        /// Success wears nothing. Cancelled keeps a quiet outline so it is
+        /// never misread as success.
         var symbolName: String? {
             switch self {
             case .succeeded: nil
@@ -76,136 +71,97 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var filesUnmodified: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
-    /// Per-item errors reported by restic (unreadable files and the like) —
-    /// restic's own words about the user's files, and the only warnings sent
-    /// to external notification channels. Capped at `storedItemErrorLimit`
-    /// entries so a pathological run cannot bloat `config.json`;
-    /// `itemErrorCount` keeps the real total.
+    /// restic's words about the user's files, and the only warnings sent to
+    /// external channels. Capped at `storedItemErrorLimit` so a pathological
+    /// run cannot bloat the history; `itemErrorCount` keeps the total.
     ///
-    /// Ordered, and the order is load-bearing (`unreadableItems` slices it):
-    /// the unreadable items first — sources restic skipped, then its error
-    /// events, one line per item — then the decoding-gap warning, then the
-    /// "Retention skipped: …" line. Only the first group is counted.
+    /// The order is relied on (`unreadableItems` slices it): the unreadable
+    /// items first — sources restic skipped, then its error events — then
+    /// the decoding-gap warning, then the "Retention skipped: …" line. Only
+    /// the first group is counted.
     var itemErrors: [String] = []
-    /// How many distinct unreadable items the run produced, which can exceed
-    /// the capped `itemErrors` list. The lines stored after the unreadable
-    /// items — the decoding-gap warning, the "Retention skipped" line — are
-    /// never counted.
     var itemErrorCount: Int = 0
-    /// The path each stored unreadable line names, keyed by the line, where
-    /// restic named one (`ResticService.unreadableItemPaths`). Nil on records
-    /// written before it was kept: their lines get no per-item actions.
-    /// By bytes: two lines that differ only in Unicode normalization name
-    /// two items to restic, and a String key would keep one.
+    /// Keyed by the line, where restic named a path. By bytes: two lines
+    /// that differ only in Unicode normalization name two items to restic.
+    /// Nil: the lines get no per-item actions.
     var unreadableItemPaths: [PathKey: String]?
-    /// restic's exit code for the run's own command — the `backup` (0, or 3
-    /// when some source data could not be read), else the first exit the
-    /// run's transcript saw: a failed backup's, a check's, a prune's, a
-    /// restore's. Nil when restic never reached an exit (a launch failure,
-    /// a stop by cancel or a cap) and on records
-    /// from before this field existed.
+    /// The `backup`'s exit (0, or 3 when some source could not be read),
+    /// else the first exit the run's transcript saw. Nil when restic never
+    /// reached an exit (a launch failure, a stop by cancel or a cap).
     var exitCode: Int32?
-    /// The unreadable items by cause — macOS's privacy protection or the
-    /// files' own permissions — counted over every item, past the stored
-    /// cap. Nil on records from before it was kept; those are counted from
+    /// Counted over every item, past the stored cap. Nil: counted from
     /// `unreadableItems`.
     var itemErrorTally: ItemErrorDiagnosis.Tally?
-    /// Whether SwiftRestic had Full Disk Access when the backup finished,
-    /// so the drawer can tell "grant it" from "it has it now, back up
-    /// again" from "macOS protects these anyway". Backups only; nil on
-    /// records from before it was stamped.
+    /// Lets the drawer tell "grant it" from "it has it now, back up again"
+    /// from "macOS protects these anyway". Backups only.
     var fullDiskAccessAtRun: FullDiskAccessStatus?
     var failureMessage: String?
-    /// restic's first sentence, for the copied details: `failureMessage` says what
-    /// to do instead (`ResticError.resticDetail`).
+    /// `ResticError.resticDetail`, for the run's details text.
     var resticDetail: String?
-    /// A plain-text result: the tail of what `prune` printed (it has no JSON
-    /// output in restic 0.19.1, so this is the only record of what it did; the drawer shows
-    /// it among the run's messages), a check's verdict, or what Apply
-    /// Retention Now removed — the Result row of a check or a forget in
-    /// the drawer and the copied details (a check's in its log too), and a
-    /// forget's Activity Detail and banner.
+    /// The tail of what `prune` printed (no JSON output in restic 0.19.1, so
+    /// the only record of what it did), a check's verdict, or what Apply
+    /// Retention Now removed.
     var detailText: String?
-    /// restic's `version` line when the run was stored, for the copied details and
-    /// the log header. Nil on records from before it was kept.
+    /// restic's `version` line when the run was stored.
     var resticVersion: String?
-    /// Whether `Logs/<id>.log` was written for this run. False on records
-    /// from before logs existed and when the write failed, so Show Log
-    /// can say so without a file check on the render path.
+    /// Whether `Logs/<id>.log` was written, so Show Log needs no file check
+    /// on the render path.
     var hasLog: Bool = false
 
-    // Restores only. A restore's `snapshotID` is the backup it read, as the
-    // restore was asked for it — never the snapshot a run wrote, which is
-    // why the snapshot→run join filters on `kind == .backup`.
+    // Restores only. A restore's `snapshotID` is the backup it read, never
+    // a snapshot a run wrote: the snapshot→run join filters on
+    // `kind == .backup`.
 
-    /// When the backup restored from was made, if the listing knew it.
     var snapshotTime: Date?
-    /// The item restored, or nil for a whole backup or several items.
+    /// Nil for a whole backup or several items.
     var sourcePath: String?
-    /// Several items restored in one restic call, each its path in the
-    /// backup — all from one folder of it (`RestoreBatch.Group`). Nil for
+    /// All from one folder of the backup (`RestoreBatch.Group`). Nil for
     /// one item or a whole backup.
     var sourcePaths: [String]?
-    /// Where it landed: the restored item itself (what Show in Finder
-    /// selects), or for a whole backup or several items, the folder they
-    /// were restored into.
+    /// The restored item itself (what Show in Finder selects), or for a
+    /// whole backup or several items, the folder they went into.
     var destinationPath: String?
     var filesRestored: Int = 0
-    /// Files restic left as they were because the destination already held
-    /// them — all a repeat restore reports (`files_skipped`, no
-    /// `files_restored` key).
+    /// All a repeat restore reports (`files_skipped`, no `files_restored`
+    /// key).
     var filesSkipped: Int = 0
 
-    /// The plan's path when a backup failed because it is missing from this
-    /// Mac and on no drive that is away (`folderGoneMessage(path:)`). Nil
-    /// for any other run.
+    /// A backup failed because the plan's path is missing from this Mac and
+    /// on no drive that is away (`folderGoneMessage(path:)`).
     var missingSources: [String]?
 
-    /// The network shares a backup, check or prune needed that refused to
-    /// reconnect for a cause only the user clears
-    /// (`ShareReconnect.Outcome.refused`), by volume name: the run failed
-    /// for them. Nil for any other run.
+    /// By volume name: shares that refused to reconnect for a cause only the
+    /// user clears (`ShareReconnect.Outcome.refused`), failing the run.
     var refusedShares: [String]?
 
-    /// True when a backup failed because the repository's disk filled up
-    /// (`repositoryFullMessage`): what it uploaded before it stopped stays
-    /// until a prune. Nil for any other run.
+    /// What the backup uploaded before the disk filled stays until a prune
+    /// (`repositoryFullMessage`).
     var repositoryFull: Bool?
 
-    /// How many snapshots the repository refused to delete when the run's
-    /// retention ran (`ResticError.snapshotsNotRemoved`) — an append-only
-    /// server, a locked bucket: the plan's editor is the fix. Nil for any
-    /// other run.
+    /// `ResticError.snapshotsNotRemoved`'s count: an append-only server or a
+    /// locked bucket, fixed in the plan's editor.
     var retentionRefused: Int?
 
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
     // one record for every run it lasted. Nil for a run that stands alone.
 
-    /// How many runs the record stands for.
     var skipCount: Int?
     /// When the first of them started.
     var skippedSince: Date?
-    /// The snapshots the runs this record counts wrote before its own,
-    /// newest first — a backup around an away drive wrote one per run, in
-    /// older builds whose plans held several folders. Each
-    /// resolves to this record (`backupRunsBySnapshot`), so an earlier
-    /// backup keeps its incomplete mark and its drawer after the merge. Nil
-    /// for a whole skip's record; no run writes it now.
+    /// Snapshots the merged runs wrote before this record's own, newest
+    /// first, each resolving to this record (`backupRunsBySnapshot`). No run
+    /// writes it; it is read from stored records.
     var continuedSnapshotIDs: [String]?
     /// The IDs `restic rewrite` gave this run's snapshot since, oldest
     /// first, each resolving to this record (`backupRunsBySnapshot`), so a
-    /// rewritten backup keeps its incomplete mark and its drawer. Filled as
-    /// listings arrive (`adoptingRewrites`): restic's `original` names only
-    /// the snapshot just before, so the chain is followed one listing at a
-    /// time.
+    /// rewritten backup keeps its incomplete mark and its drawer. restic's
+    /// `original` names only the snapshot just before, so the chain grows
+    /// one listing at a time (`adoptingRewrites`).
     var rewrittenSnapshotIDs: [String]?
 
-    /// A failed or completed-with-errors backup's stretch: how many of its
-    /// plan's backups in a row, this one the last, ended the same way for
-    /// the same cause (`fillingProblemStretches`). Stored as the record is
-    /// appended, before the history cap trims those before it. Nil for any
-    /// other run.
+    /// `fillingProblemStretches`. Stored as the record is appended, before
+    /// the history cap trims those before it.
     var problemStretch: Int?
 
     init(
@@ -239,16 +195,15 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         filesUnmodified = c.value(.filesUnmodified, default: 0)
         bytesProcessed = c.value(.bytesProcessed, default: 0)
         dataAdded = c.value(.dataAdded, default: 0)
-        // Stored lines can still carry restic's trailing newline; mapping
-        // through `storedItemError` here keeps every surface clean.
+        // Stored lines can carry restic's trailing newline.
         itemErrors = c.value(.itemErrors, default: [String]()).map(Self.storedItemError)
         itemErrorCount = c.value(.itemErrorCount, default: 0)
         unreadableItemPaths = c.optional(.unreadableItemPaths)
         exitCode = c.optional(.exitCode)
         itemErrorTally = c.optional(.itemErrorTally)
         fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)
-        // Records from before a stop read "Stopped" carry the old word, which
-        // would no longer match the outcome and show as a second message.
+        // "Cancelled" is a stop's stored word in older records; unmapped, it
+        // would show as a second message beside the outcome.
         let storedFailure: String? = c.optional(.failureMessage)
         failureMessage = storedFailure == "Cancelled" ? RunRecord.Outcome.cancelled.displayName : storedFailure
         resticDetail = c.optional(.resticDetail)
@@ -278,52 +233,41 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
 extension RunRecord {
     static let storedItemErrorLimit = 50
 
-    /// An item-error line as stored and shown: without trailing whitespace.
     /// restic ends its extended-attribute errors with a newline, which would
-    /// break every sentence these lines are spliced into. Only the tail
-    /// goes: a line starts with the item's own path, never touched.
+    /// break every sentence these lines are spliced into. Only the tail goes:
+    /// a line starts with the item's path.
     static func storedItemError(_ line: String) -> String {
         var line = line
         while line.last?.isWhitespace == true { line.removeLast() }
         return line
     }
 
-    /// The start of the line the backup engine stores after the unreadable
-    /// items when retention could not run behind a written snapshot. The
-    /// plan page recognises the line by this prefix, so the engine's
-    /// spelling must stay in sync — and records already in history carry
-    /// these exact bytes.
+    /// Stored when retention could not run after a written snapshot. The
+    /// plan page recognises the line by it, and stored records carry these
+    /// exact bytes.
     static let retentionSkippedPrefix = "Retention skipped: "
     static let retentionSkippedOnScreenPrefix = "Old backups not removed: "
 
-    /// A network repository's server out of reach (`ServerProbe`): "“Home
-    /// Server” cannot be reached (connection refused)." — a skipped run's
-    /// reason and its listing's words.
+    /// A skipped run's reason and its listing's words.
     static func serverUnreachableReason(repositoryName: String, why: String) -> String {
         "“\(repositoryName)” cannot be reached (\(why))."
     }
 
-    /// What a completed-with-errors backup says when nothing more specific
-    /// explains it — restic exited 3 and named nothing. The in-app banner and
-    /// the plan page's status row both fall back to it, so the two agree
-    /// word for word.
+    /// restic exited 3 and named nothing. The banner and the plan page's
+    /// status row share it.
     static let unexplainedWarningMessage = "Finished, but some items may not be backed up."
 
-    /// Whether the snapshot a backup wrote holds everything it was asked to.
-    /// restic keeps no such fact in the snapshot itself (`snapshots --json`
-    /// has no error field), so the run record is the only place it lives.
+    /// restic keeps no such fact in the snapshot (`snapshots --json` has no
+    /// error field), so the run record is the only place it lives.
     enum SnapshotCompleteness: Sendable, Equatable {
         case complete, incomplete, unknown
     }
 
-    /// Nil unless this is a backup that wrote a snapshot. restic's exit code
-    /// alone decides: 3 means some source data could not be read
-    /// (`restic backup --help`: "incomplete snapshot created"), and nothing
-    /// else leaves a snapshot short — retention skips and decoding gaps
-    /// both come after a whole snapshot, so the outcome is no
-    /// guide. A record from before the exit code was stored is incomplete
-    /// only if it named an unreadable item; otherwise it proves nothing
-    /// either way and reads unknown, never complete.
+    /// restic's exit code alone decides: 3 is "incomplete snapshot created"
+    /// (`restic backup --help`). The outcome is no guide: retention skips
+    /// and decoding gaps both come after a whole snapshot. Without an exit
+    /// code, a record proves nothing unless it named an unreadable item, so
+    /// it reads unknown, never complete.
     var snapshotCompleteness: SnapshotCompleteness? {
         guard kind == .backup, snapshotID != nil else { return nil }
         if let exitCode {
@@ -332,34 +276,24 @@ extension RunRecord {
         return itemErrorCount > 0 ? .incomplete : .unknown
     }
 
-    /// The unreadable items a surface lists and how many more Activity's
-    /// drawer holds past them, counted from restic's total (`itemErrorCount`),
-    /// never the stored lines, which are capped: the drawer lists every
-    /// stored line, the plan page's problem row the first few
-    /// (`PlanStatus.listedItemLimit`).
+    /// `unlisted` counts from restic's total, never the capped stored lines.
     func unreadableItemListing(limit: Int? = nil) -> (listed: ArraySlice<String>, unlisted: Int) {
         let listed = limit.map { unreadableItems.prefix($0) } ?? unreadableItems
         return (listed, max(0, itemErrorCount - listed.count))
     }
 
-    /// The stored lines naming what restic could not read, without the
-    /// decoding and retention lines stored after them. `min` because a run
-    /// with more unreadable items than the cap stored only the cap's worth,
-    /// and a bare `prefix(itemErrorCount)` would reach into the trailing
-    /// lines. A scan-time complaint about an item the archiver then read
-    /// fine (a permission changed mid-run) is still among them — rare, and
+    /// `min`: past the cap, a bare `prefix(itemErrorCount)` would reach into
+    /// the trailing lines. A scan-time complaint about an item the archiver
+    /// then read fine (a permission changed mid-run) is still among them;
     /// restic gives no way to tell.
     var unreadableItems: ArraySlice<String> {
         itemErrors.prefix(min(itemErrorCount, Self.storedItemErrorLimit))
     }
 
-    /// The lines stored after the unreadable items: the decoding-gap warning,
-    /// then the retention line (`itemErrors`' order).
     var trailingItemErrors: ArraySlice<String> {
         itemErrors.dropFirst(unreadableItems.count)
     }
 
-    /// `trailingItemErrors` as the app and its channels say them.
     var trailingItemErrorsOnScreen: [String] {
         trailingItemErrors.map { line in
             guard line.hasPrefix(Self.retentionSkippedPrefix) else { return line }
@@ -367,12 +301,10 @@ extension RunRecord {
         }
     }
 
-    /// The backup run that wrote each snapshot, keyed by full snapshot ID —
-    /// not by repository: two repository entries pointing at one restic
-    /// repository list the same snapshot, which the same run wrote. Backup
-    /// records only, so a restore naming the snapshot it read never becomes
-    /// its status; the first in array order wins, and runs are stored newest
-    /// first.
+    /// Keyed by full snapshot ID, not by repository: two repository entries
+    /// pointing at one restic repository list the same snapshot. Backups
+    /// only, so a restore never becomes a snapshot's status. Runs are stored
+    /// newest first, and the first wins.
     static func backupRunsBySnapshot(_ runs: [RunRecord]) -> [String: RunRecord] {
         var map: [String: RunRecord] = [:]
         map.reserveCapacity(runs.count)
@@ -410,14 +342,10 @@ extension RunRecord {
 }
 
 extension RunRecord {
-    /// restic's fatal line when every source of a backup is missing
-    /// (restic 0.19.1, exit 1, no snapshot written).
+    /// restic 0.19.1, exit 1, no snapshot written.
     static let everySourceMissingMessage = "Fatal: all source directories/files do not exist"
 
-    /// Why a backup was skipped, for Activity's Detail: the drives its
-    /// folders — or the repository — live on, every one away, and why each
-    /// network share among them could not be reconnected
-    /// (`ShareReconnect`). A folder missing from this Mac is no skip
+    /// For Activity's Detail. A folder missing from this Mac is no skip
     /// (`folderGoneMessage(path:)`).
     static func skippedReason(sources: [String], reconnectFailures: [String: String] = [:]) -> String {
         guard let drives = notConnected(sources) else { preconditionFailure("a skip with a source not on a volume: \(sources)") }
@@ -429,10 +357,7 @@ extension RunRecord {
         return volumes.compactMap { volume in failures[volume].map { " Reconnecting “\(volume)” failed: \($0)." } }.joined()
     }
 
-    /// A backup's failure in plain words when restic could not write into
-    /// the local repository's folder for want of space — "“TinyDisk” is
-    /// full — …", naming the drive, or this Mac's disk — and what the failed
-    /// run left behind; nil for any other failure, restic's words standing.
+    /// nil for any other failure: restic's words stand.
     static func repositoryFullMessage(resticMessage: String, repository: Repository) -> String? {
         guard repository.kind == .local, resticMessage.contains("no space left on device") else { return nil }
         let root = ResticPath.normalized(repository.resolvedLocalPath)
@@ -443,23 +368,17 @@ extension RunRecord {
             + "What it uploaded before it stopped stays in the location until a cleanup frees it."
     }
 
-    /// Why a backup failed when the plan's folder is not on this Mac and no
-    /// drive it could wait for is away: named, and what to do — the
-    /// record's fix, Choose New Location… (`AppModel.movePlan`), replaces
-    /// the plan with one for where the folder is now.
+    /// The plan's folder is not on this Mac and no drive it could wait for
+    /// is away. Choose New Location… is `AppModel.movePlan`.
     static func folderGoneMessage(path: String) -> String {
         "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted. "
             + "Put it back, or use Choose New Location… to back it up where it is now."
     }
 
-    /// This failure as the continuation of `previous`, the plan's newest
-    /// backup before it, failed for the same cause only the user clears —
-    /// the same folders gone (`missingSources`) or network shares refused
-    /// (`refusedShares`): one record,
-    /// this run's, counting the runs as a standing skip does
-    /// (`continuingSkip(of:)`, whose fields it shares). An hourly plan whose
-    /// folder was deleted, or whose share's password changed, is one row and
-    /// one notification, not one an hour. Nil when it does not continue it.
+    /// `previous`: the plan's newest backup before this one. The same
+    /// folders gone or shares refused make one record, counted as a
+    /// standing skip is, so an hourly plan whose folder was deleted is one
+    /// row and one notification, not one an hour.
     func continuingStandingFailure(of previous: RunRecord) -> RunRecord? {
         guard continuesPlanBackup(previous),
               outcome == .failed, previous.outcome == .failed,
@@ -492,12 +411,10 @@ extension RunRecord {
         return merged
     }
 
-    /// This skipped backup as the continuation of `previous` — the plan's
-    /// newest backup before it, skipped for the same reason, the same
-    /// stored lines (a retention skip is news): one record, this run's, counting `previous`'s runs
-    /// and keeping when the skips began. An hourly plan whose drive is away
-    /// a week is one row, not 168, and leaves the history cap to real runs.
-    /// Nil when it does not continue it.
+    /// `previous`: the plan's newest backup before this one. The same reason
+    /// and stored lines (a retention skip is news) make one record, so an
+    /// hourly plan whose drive is away a week is one row, not 168, and
+    /// leaves the history cap to real runs.
     func continuingSkip(of previous: RunRecord) -> RunRecord? {
         guard continuesPlanBackup(previous),
               outcome == .skipped, previous.outcome == .skipped,
@@ -506,11 +423,8 @@ extension RunRecord {
         return merged(after: previous)
     }
 
-    /// Maps a thrown error onto the outcome fields: task cancellation — Swift's
-    /// or restic's own — reads as `.cancelled`, with the caller saying whether
-    /// it was the user's stop or the app quitting, and anything else as
-    /// `.failed` with the error's message. Callers keep their own side effects:
-    /// stamps, banners, bookkeeping.
+    /// `cancellationMessage`: the caller says whether the user stopped it or
+    /// the app quit.
     mutating func setOutcome(
         from error: Error,
         cancellationMessage: String,

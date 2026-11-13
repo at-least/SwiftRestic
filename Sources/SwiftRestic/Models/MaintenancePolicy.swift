@@ -1,25 +1,21 @@
 import Foundation
 
-/// Periodic repository upkeep: `restic check` to verify integrity and
-/// `restic prune` to reclaim the space that `forget` freed.
-///
-/// Both hold a lock on the repository — `prune` an exclusive one that can run for
-/// a long time — so the scheduler treats a repository under maintenance as busy
-/// and defers backups to it rather than letting them collide.
+/// `restic check` and `restic prune`. Both lock the repository — `prune`
+/// exclusively and for a long time — so the scheduler treats a repository
+/// under maintenance as busy and defers its backups.
 struct MaintenancePolicy: Codable, Sendable, Hashable {
     private static let checkIntervalDays = 7
     private static let pruneIntervalDays = 30
     static let rotatingSlices = 12
 
-    /// The slice the next scheduled check reads, 1 … `rotatingSlices`.
+    /// 1 … `rotatingSlices`.
     var nextCheckDataSlice: Int = 1
 
-    /// A scheduled check's data by where the repository is (the user's pick):
-    /// its data read in slices where reading costs only time — this Mac's
-    /// disks, a network share, an SFTP server — so every pack is read once
-    /// every `rotatingSlices` checks; the structure alone where reading may
-    /// be billed. A structure-only check passed a pack with one bit flipped
-    /// that its slice caught (restic 0.19.1).
+    /// The user's decision: data read in slices where reading costs only time
+    /// (this Mac's disks, a network share, an SFTP server), so every pack is
+    /// read once every `rotatingSlices` checks; the structure alone where
+    /// reading may be billed. A structure-only check passed a pack with one
+    /// bit flipped that its slice caught (restic 0.19.1).
     func scheduledDataSubset(for kind: Repository.Kind) -> CheckDataSubset? {
         switch kind {
         case .local, .sftp: .slice(min(max(1, nextCheckDataSlice), Self.rotatingSlices), of: Self.rotatingSlices)
@@ -39,9 +35,8 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
         lastPruneAt = c.optional(.lastPruneAt)
     }
 
-    /// A repository that has never had the task run counts from when it was
-    /// added, not from now — otherwise adding a repository would immediately
-    /// kick off a check or a long prune.
+    /// From `addedAt` when the task never ran, so adding a repository does
+    /// not start a check or a long prune at once.
     func nextDate(for task: MaintenanceTask, addedAt: Date) -> Date {
         switch task {
         case .check: (lastCheckAt ?? addedAt).addingTimeInterval(TimeInterval(Self.checkIntervalDays) * 86_400)
@@ -50,14 +45,13 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     }
 }
 
-/// What `restic check` reads of the backed-up data besides the structure.
 enum CheckDataSubset: Equatable, Sendable {
     case percent(Int)
-    /// Slice `n` of `total`: restic splits the packs into `total` groups by
-    /// their IDs and reads group `n`.
+    /// restic splits the packs into `total` groups by their IDs and reads
+    /// group `n`.
     case slice(Int, of: Int)
 
-    /// restic's `--read-data-subset` value.
+    /// `--read-data-subset`
     var argument: String {
         switch self {
         case let .percent(percent): "\(percent)%"
@@ -67,8 +61,7 @@ enum CheckDataSubset: Equatable, Sendable {
 }
 
 enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
-    /// Takes an exclusive lock and can run for a long time, so it
-    /// is ordered ahead of `check` when both fall due at once.
+    /// Ahead of `check` when both fall due at once: the exclusive, long one.
     case prune
     case check
 
@@ -79,8 +72,7 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
         }
     }
 
-    /// "A verification is running", the clause the quit and removal
-    /// dialogs build on.
+    /// For the quit and removal dialogs.
     var runningClause: String {
         "A \(displayName.lowercased()) is running"
     }

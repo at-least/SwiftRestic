@@ -376,9 +376,9 @@ struct RunRecordPresentationTests {
         let damaged = check(.completedWithErrors, "2 errors — restic repair can recover some damage. A cleanup is suggested.")
         #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — restic repair can recover some damage")
         #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — restic repair can recover some damage")
-        // A verdict stored before 2026-10-09 put a period before the
-        // command, which the sentence cut leaves alone: shown whole, its
-        // own final period dropped like every entry's.
+        // A stored verdict with a period before the command, which the
+        // sentence cut leaves alone: shown whole, its own final period
+        // dropped like every entry's.
         let older = check(.completedWithErrors, "2 errors. `restic repair` can recover some damage.")
         #expect(RunRecordPresentation.detail(for: older) == "2 errors. `restic repair` can recover some damage")
         // No verdict at all: the outcome, as every kind without words.
@@ -578,7 +578,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.exitCodeText(0) == nil)
     }
 
-    @Test("Copy Details names the run, the numbers and the versions")
+    @Test("a copied Activity row names the run, the numbers and the versions")
     func copyDetails() {
         let snapshotID = "73d9b51de71d34eb451a02fefd7e94ca3daa4e6c817f27549d2ff6bbf54d093f"
         let record = backup {
@@ -613,7 +613,7 @@ struct RunRecordPresentationTests {
         #expect(lines.last == "Copied from SwiftRestic 0.1.0 (1) on macOS 26.6.2 (Build 25G83)")
     }
 
-    @Test("Copy Details for a retention run says what it removed")
+    @Test("a copied Activity row for a retention run says what it removed")
     func copyDetailsForARetentionRun() {
         var record = RunRecord(kind: .forget, planName: "Documents")
         record.outcome = .succeeded
@@ -628,7 +628,7 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
-    @Test("Copy Details for a cleanup says what it freed")
+    @Test("a copied Activity row for a cleanup says what it freed")
     func copyDetailsForACleanup() {
         var record = RunRecord(kind: .prune, planName: "Home NAS")
         record.outcome = .succeeded
@@ -641,7 +641,7 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Result: Freed 3 MB."), "details were \(lines)")
     }
 
-    @Test("Copy Details for a restore names the backup, the item and where it landed")
+    @Test("a copied Activity row for a restore names the backup, the item and where it landed")
     func copyDetailsForARestore() {
         let record = restore {
             $0.snapshotID = "abf728998814d029"
@@ -665,7 +665,7 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Files: 1 restored · 2 kept as they were · \(Format.bytes(14))"))
     }
 
-    @Test("Copy Details for a whole-snapshot restore says so in the drawer's vocabulary")
+    @Test("a copied Activity row for a whole-snapshot restore says so in the drawer's vocabulary")
     func copyDetailsForAWholeRestore() {
         let record = restore {
             $0.snapshotID = "abf728998814d029"
@@ -683,7 +683,7 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Restored to: /tmp/restored"))
     }
 
-    @Test("restic's own sentence stays out of the message and in Copy Details")
+    @Test("restic's own sentence stays out of the message and in a copied Activity row")
     func resticDetailReachesCopyDetailsOnly() throws {
         var run = RunRecord(kind: .backup, planName: "Documents")
         run.setOutcome(
@@ -711,7 +711,7 @@ struct RunRecordPresentationTests {
         #expect(run.failureMessage == run.outcome.displayName)
     }
 
-    @Test("Copy Details for a failed multi-item restore names the items, the destination, the error and the count past the sample")
+    @Test("a copied Activity row for a failed multi-item restore names the items, the destination, the error and the count past the sample")
     func copyDetailsForAFailedMultiItemRestore() {
         let record = restore {
             $0.outcome = .failed

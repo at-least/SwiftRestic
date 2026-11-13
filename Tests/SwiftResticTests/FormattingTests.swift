@@ -31,8 +31,7 @@ struct FormattingTests {
     func durationUnitSwitch() {
         // The allowed units flip at an hour, so a 90-minute run never reads as
         // "1 hr 30 min 0 sec". Pinned to exact literals — an inequality between
-        // two different inputs would also survive a broken formatter. (The
-        // suite's other pins assume the en locale; so does DateComponentsFormatter.)
+        // two different inputs would also survive a broken formatter.
         #expect(Format.duration(90) == "1m 30s")
         #expect(Format.duration(90 * 60) == "1h 30m")
         // At the boundary the seconds round away into a whole hour, never a
@@ -204,11 +203,10 @@ struct FormattingTests {
 
     @Test("repeated and alternating calls keep their own formatting")
     func formatterReuseStaysCorrect() {
-        // The formatters behind these helpers are long-lived shared instances
-        // (they are paid for per row per render, so construction cannot be the
-        // per-call cost). Alternating inputs are exactly the case a reused
-        // mutable formatter gets wrong — the sub-hour/hour-plus unit switch
-        // leaking from one call into the next — so the pins alternate.
+        // The formatters behind these helpers are long-lived shared instances.
+        // Alternating inputs are the case a reused mutable formatter gets
+        // wrong — the sub-hour/hour-plus unit switch leaking from one call
+        // into the next — so the pins alternate.
         for _ in 0..<3 {
             #expect(Format.duration(90) == "1m 30s")
             #expect(Format.duration(90 * 60) == "1h 30m")
@@ -234,7 +232,7 @@ struct FormattingTests {
         // Structural on the locale like `timestamp`'s pin, plus the two
         // guarantees the row needs: the year's digits are gone (the month
         // section header says them), the minutes are not — a truncated tail
-        // once read 10:19 AM and 10:19 PM as one row.
+        // reads 10:19 AM and 10:19 PM as one row.
         let value = Format.dayTime(Date(timeIntervalSince1970: 1_759_000_000))
         #expect(!value.isEmpty)
         #expect(!value.contains("2025"))

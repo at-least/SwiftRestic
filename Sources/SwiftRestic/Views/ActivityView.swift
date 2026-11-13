@@ -63,29 +63,24 @@ struct ActivityView: View {
                     }
                     .width(24)
 
-                    // Five columns after the glyph, one line per row: how
-                    // long a run took and what it added are in the drawer
-                    // below and in the copied details. A SwiftUI table gives every
-                    // capped column its minimum and sends the spare width to
-                    // the one uncapped column, Detail — the one whose text
-                    // runs long — so each minimum is what its column shows
-                    // on arrival. The minimums together still leave room for
-                    // a legacy scroller without a sideways scroll.
+                    // One line per row: how long a run took and what it added
+                    // are in the drawer below and in the copied details. A
+                    // SwiftUI table gives every capped column its minimum and
+                    // sends the spare width to the one uncapped column,
+                    // Result, so each minimum is what its column shows on
+                    // arrival. The minimums together still leave room for a
+                    // legacy scroller without a sideways scroll.
                     TableColumn("Started", value: \.startedAt) { run in
                         Text(Format.timestamp(run.startedAt))
                             .monospacedDigit()
                     }
                     .width(min: 162, ideal: 164, max: 164)
 
-                    // Backups and restores name their plan or item, the Kind
-                    // column names the operation. A check or prune has no
-                    // plan to name — its subject is the repository, which
-                    // the Repository column beside this one says, and
-                    // saying it here too would state one fact twice in
-                    // adjacent columns. No sort value for the same reason:
-                    // those rows' stored name is the repository's, so a sort
-                    // on this header would order their "—" cells by a value
-                    // on screen nowhere.
+                    // A check or prune has no plan to name: its subject is
+                    // the location, which the Location column says. No sort
+                    // value: those rows' stored name is the repository's, so
+                    // a sort would order their "—" cells by a value on screen
+                    // nowhere.
                     TableColumn("Name") { run in
                         Group {
                             switch run.kind {
@@ -100,9 +95,9 @@ struct ActivityView: View {
                     .width(min: 96, ideal: 112, max: 120)
 
                     // Looked up by ID at render time, so a rename survives. A
-                    // "—" is either a run recorded before runs carried a
-                    // location or a location since removed; the data cannot
-                    // tell them apart, so the tooltip asserts neither.
+                    // "—" is a run with no location ID or a location since
+                    // removed; the data cannot tell them apart, so the tooltip
+                    // asserts neither.
                     if model.configuration.repositories.count > 1 {
                         TableColumn("Location") { run in
                             if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
@@ -136,17 +131,14 @@ struct ActivityView: View {
                     }
                     .width(min: 80, ideal: 200)
                 }
-                // A full-height table that outlives its records paints striped
-                // phantom rows under the last one. The stripes are the
-                // table's alternating-row background, not its content
-                // background, so it is the alternating behavior that gets
-                // disabled; the outcome glyphs and the Detail column keep
-                // rows scannable.
+                // A full-height table paints striped phantom rows under the
+                // last record; the stripes are the alternating-row
+                // background, not the content background.
                 .alternatingRowBackgrounds(.disabled)
                 .accessibilityIdentifier(AccessibilityID.Activity.table)
                 .focusOnClick($tableIsFocused)
-                // Edit ▸ Copy (⌘C): the selected run as text for a forum
-                // post or an issue, worded only when copied.
+                // Edit ▸ Copy (⌘C): the selected run as text, worded only when
+                // copied.
                 .onCopyCommand { copiedDetails(of: runs).map { NSItemProvider(object: $0 as NSString) } }
                 .contextMenu(forSelectionType: RunRecord.ID.self) { ids in
                     if ids.count == 1, let id = ids.first,
@@ -193,9 +185,8 @@ struct ActivityView: View {
                 .environment(model)
         }
         .task(id: router.activityShowsProblemsOnly) {
-            // Switching to Problems lands with the newest problem already
-            // selected — otherwise the detail panel below sits empty at the
-            // exact moment the user wants answers.
+            // Switching to Problems selects the newest problem, so the
+            // drawer is not empty.
             guard router.activityShowsProblemsOnly,
                   !visibleRuns.contains(where: { $0.id == selection })
             else { return }

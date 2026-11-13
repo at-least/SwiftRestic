@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Every command's confirmation, once, wherever it is asked from: the Plan and
-/// Location menus, the panes' toolbars, the sidebar's menus. One dialog with the model's words
-/// (`AppModel.confirmationCopy(for:)`), so no two surfaces can word one
-/// action two ways, and none adds a dialog of its own. A modifier of its
-/// own because RootView's chain sits at the compiler's type-check limit.
+/// Every command's confirmation, wherever it is asked from: one dialog with
+/// the model's words (`AppModel.confirmationCopy(for:)`), so no two surfaces
+/// word one action two ways; no surface adds a dialog of its own. A modifier
+/// of its own because RootView's chain sits at the compiler's type-check
+/// limit.
 struct CommandPresentations: ViewModifier {
     @Environment(AppModel.self) private var model
     @Binding var pendingConfirmation: CommandConfirmation?

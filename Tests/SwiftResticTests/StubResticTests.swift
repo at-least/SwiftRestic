@@ -1,12 +1,11 @@
 import Foundation
 import Testing
 
-/// The script is installed per-fixture and picks its behaviour from the
-/// `SWIFTRESTIC_STUB` environment variable, which tests set through the
-/// repository's extra environment. That makes the failure modes a CLI wrapper
-/// actually owns — a child that hangs, dribbles progress, dies mid-line, or
-/// refuses to launch — reachable in milliseconds, without gigabytes of bulk
-/// data existing only to keep a run alive until a cancel lands.
+/// The script picks its behaviour from `SWIFTRESTIC_STUB`, set through the
+/// repository's extra environment. It makes the failure modes a CLI wrapper
+/// owns — a child that hangs, dribbles progress, dies mid-line, or refuses
+/// to launch — reachable in milliseconds, without bulk data to keep a run
+/// alive until a cancel lands.
 struct StubRestic: Sendable {
     let url: URL
     /// The argument the hung stub sleeps on. Unique per install, so a
@@ -32,9 +31,8 @@ struct StubRestic: Sendable {
         pgrep.standardOutput = pipe
         pgrep.standardError = FileHandle.nullDevice
         do { try pgrep.run() } catch {
-            // A broken pgrep must not read as "processes found": report the
-            // real cause against the running test and nothing, so hang checks
-            // fail loudly with evidence instead of passing on a phantom list.
+            // A broken pgrep records its cause against the running test, so
+            // hang checks fail with evidence.
             Issue.record("pgrep could not run: \(error)")
             return []
         }
@@ -716,12 +714,9 @@ struct StubResticTests {
             taskStarted.mark()
             return try await service.backup(context, plan: plan)
         }
-        // The hang is what guarantees the cancel lands mid-run, so the test
-        // must not assume a fixed delay: a cold first spawn can take a
+        // Wait for the hang, not a fixed delay: a cold first spawn can take a
         // moment, and more under load. The wait ends the moment the hang
         // shows, so its length costs a healthy run nothing.
-        // If the hang never establishes, this fails with the stub's own trace
-        // and when the backup's task got a thread, if it ever did.
         await StubRestic.requireHang(
             matching: fixture.stub.sleepMarker,
             root: fixture.root,
@@ -806,7 +801,7 @@ struct StubResticTests {
 
     @Test("a timeout names what restic was retrying when it was stopped")
     func timeoutNamesTheRetriedCause() async throws {
-        // restic 0.19.1's own lines against a stopped rest-server, then a
+        // restic 0.19.1's own retry lines against a stopped server, then a
         // hang the timeout ends. The last retry's cause is the news.
         let earlier = #"Stat(<config/>) returned error, retrying after 552.330144ms: Head "http://:***@127.0.0.1:18000/demo/config": "#
             + "dial tcp: lookup nas.local: no such host"

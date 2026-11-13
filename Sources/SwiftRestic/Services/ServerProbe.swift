@@ -5,11 +5,10 @@ import os
 /// One connection attempt to a network repository's server before restic is
 /// asked. restic 0.19.1 retries a server that refuses, does not answer or
 /// whose name does not resolve for about a quarter of an hour before it
-/// fails — so a backup held the repository, the menu bar's busy face and the
-/// Mac's sleep that long, then failed red, at every slot. A server out of
-/// reach is a drive that is away: the run is skipped within seconds, in
-/// these words, and runs again when the network changes or at its next
-/// slot. Injectable, so a test never dials anything.
+/// fails, holding the repository, the busy menu bar and the Mac's sleep
+/// that long. A server out of reach is treated as a drive that is away: the
+/// run is skipped within seconds and runs again when the network changes or
+/// at its next slot. Injectable, so a test never dials anything.
 struct ServerProbe: Sendable {
     struct Target: Equatable, Sendable {
         var host: String

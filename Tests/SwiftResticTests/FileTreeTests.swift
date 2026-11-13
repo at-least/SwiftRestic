@@ -1,9 +1,7 @@
 import Foundation
 import Testing
 
-/// The restore browser's tree state machine: lazy expansion returns exactly
-/// the directory that needs fetching, collapsing removes the subtree, and
-/// rows keep their identity by path so SwiftUI selection survives reloads.
+/// Rows keep their identity by path so SwiftUI selection survives reloads.
 @Suite("restore file tree")
 struct FileTreeTests {
     private func dir(_ path: String) -> SnapshotNode {

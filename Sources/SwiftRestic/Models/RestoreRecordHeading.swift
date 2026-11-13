@@ -1,24 +1,21 @@
 import Foundation
 
-/// What the restore pane's Change column was computed against, as the pane
-/// last set it: written where the record's diff starts and where it lands,
-/// so the header names exactly the comparison the marks on screen came from
-/// — never a re-derivation that could disagree with them.
+/// What the restore pane's Change column was computed against, written where
+/// the diff starts and lands, so the header names the comparison the marks
+/// came from — never a re-derivation that could disagree.
 enum ChangeComparison: Equatable, Sendable {
     /// No earlier backup of these folders from this host: no diff runs, and
     /// the restore pane shows no Change column.
     case firstBackup
     case comparing(baseline: Snapshot)
-    /// The diff finished: `changeCount` of the items this backup holds
-    /// changed, zero meaning none.
+    /// `changeCount`: of the items this backup holds.
     case compared(baseline: Snapshot, changeCount: Int)
-    /// The diff stopped short. Marks that streamed before the failure stay —
-    /// each is still true — but a blank row no longer means "unchanged".
+    /// Marks that streamed before the failure stay, but a blank row no
+    /// longer means "unchanged".
     case failed(baseline: Snapshot, reason: String)
 }
 
 extension ChangeComparison {
-    /// The backup compared with; nil for a first backup.
     var baseline: Snapshot? {
         switch self {
         case let .comparing(baseline), let .compared(baseline, _), let .failed(baseline, _): baseline
@@ -26,21 +23,17 @@ extension ChangeComparison {
         }
     }
 
-    /// The changes the Change column marks: the items this backup holds. A
-    /// removal has no row in its tree, and counting one in a folder's tally
-    /// would promise a row the folder does not have; Show Changes Only lists
-    /// them.
+    /// A removal has no row in this backup's tree, so it is not marked;
+    /// Show Changes Only lists it.
     static func heldChanges(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ResticDiffChange] {
         changes.filter { $0.value.category != .removed }
     }
 }
 
-/// What a folder's subtree holds of a diff, counted by kind: restic's diff
-/// names the leaves — a modified file's folders are never listed — so a
-/// collapsed folder would otherwise read as unchanged under a header that
-/// counts changes.
+/// restic's diff names the leaves, never a modified file's folders, so a
+/// collapsed folder needs its subtree's tally to not read as unchanged.
 struct ChangesInside: Equatable, Sendable {
-    /// The kinds present and how many of each; a kind with none is absent.
+    /// A kind with none is absent.
     var counts: [ResticDiffChange.Category: Int] = [:]
 
     var total: Int { counts.values.reduce(0, +) }
@@ -57,11 +50,8 @@ struct ChangesInside: Equatable, Sendable {
 }
 
 extension ChangeComparison {
-    /// Each folder's tally of the changes beneath it — every entry of the
-    /// diff counted once per folder above it, removals included, so the
-    /// tree root's total is the header's count. One pass over the map's
-    /// keys when the diff lands, not a walk per row. Keys are the diff's
-    /// own: normalized paths, no trailing slash.
+    /// Removals included, so the root's total is the header's count. One
+    /// pass when the diff lands, not a walk per row.
     static func changesInside(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ChangesInside] {
         var inside: [PathKey: ChangesInside] = [:]
         for (key, change) in changes {
@@ -73,11 +63,9 @@ extension ChangeComparison {
     }
 }
 
-/// What a backup's own run could not read (`AppModel.unreadItems(inBackup:)`),
-/// each item with restic's line, by its normalized path's bytes. restic
-/// leaves such an item — a folder with all it holds — out of the snapshot,
-/// so the backup lacks it while the disk may still have it: not read, not
-/// removed.
+/// What a backup's own run could not read, with restic's line. restic
+/// leaves such an item, a folder with all it holds, out of the snapshot:
+/// not read, not removed.
 struct UnreadItems: Equatable, Sendable {
     var lines: [PathKey: String] = [:]
 
@@ -95,19 +83,15 @@ struct UnreadItems: Equatable, Sendable {
     }
 }
 
-/// What the restore pane says of its Change column: a line above the tree
-/// only when the comparison failed — a blank column then means "not known",
-/// not "unchanged" — and otherwise its title's tooltip (`columnHelp`). Pure,
-/// so the wording is pinned by tests; the pane only lays it out.
+/// A line above the tree only when the comparison failed (a blank column
+/// then means "not known"), otherwise the column title's tooltip
+/// (`columnHelp`). Pure, so tests pin the wording.
 struct RestoreRecordHeading: Equatable, Sendable {
     var name: String
-    /// Kept apart from `name` so the view can truncate a
-    /// long qualifier and never the day.
+    /// Apart from `name`, so the view truncates a long qualifier, never the day.
     var time: String
     var caption: String
-    /// The tooltip: the backup's folders (with host and writers when the
-    /// label has them), when it was made, and that the comparison failed.
-    /// No IDs: the run drawer's copied details carry those.
+    /// The tooltip. No IDs: a run's details text carries those.
     var detail: String
     var isProblem: Bool
 
@@ -139,11 +123,8 @@ struct RestoreRecordHeading: Equatable, Sendable {
         if case .failed = comparison { isProblem = true } else { isProblem = false }
     }
 
-    /// The Change column title's tooltip: what the marks are measured
-    /// against, and that what this backup no longer holds is not among
-    /// them — its tree has no row for it. nil for a first backup, which has
-    /// no Change column, and when the comparison failed: the line above the
-    /// tree is that fact's carrier.
+    /// nil for a first backup (no Change column) and for a failed
+    /// comparison, which the line above the tree carries.
     static func columnHelp(for comparison: ChangeComparison?) -> String? {
         switch comparison {
         case nil:

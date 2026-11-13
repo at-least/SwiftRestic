@@ -1,7 +1,7 @@
 import Foundation
 
-/// The versions a run's log and its copied details lead with — what a forum
-/// thread asks first.
+/// The versions a run's log and its copied details lead with — what a
+/// forum thread asks first.
 struct RunLogVersions: Sendable, Equatable {
     /// "SwiftRestic 0.1.0 (1)".
     var app: String

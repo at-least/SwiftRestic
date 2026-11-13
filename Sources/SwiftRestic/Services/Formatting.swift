@@ -15,9 +15,8 @@ enum Format {
 
     nonisolated(unsafe) private static let byteCounter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
-        // ByteCountFormatter spells zero as "Zero KB" by default, which reads
-        // as a glitch beside other byte counts.
         formatter.countStyle = .file
+        // Otherwise zero reads "Zero KB", a glitch beside other byte counts.
         formatter.allowsNonnumericFormatting = false
         return formatter
     }()
@@ -52,10 +51,8 @@ enum Format {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var cuts = ["\n", "。"].compactMap { trimmed.range(of: $0)?.lowerBound }
         // ". " ends a sentence only when something sentence-shaped follows:
-        // a capital starting the next one, or restic — a name that is always
-        // spelled lowercase, and opens the second sentence of messages stored
-        // by older builds. Anything else — "U.S. region" — is an abbreviation the
-        // cut would have truncated mid-thought.
+        // a capital starting the next one, or restic, a name always spelled
+        // lowercase. Anything else — "U.S. region" — is an abbreviation.
         var searchEnd = trimmed.startIndex
         while let range = trimmed.range(of: ". ", range: searchEnd..<trimmed.endIndex) {
             let after = range.upperBound
@@ -192,9 +189,8 @@ enum Format {
     }
 
     /// The day an item a chain's newest backup no longer holds was last
-    /// backed up, short for its row in the Backups tab — "until Oct 2", the year
-    /// said only when it is not this one. The row's tooltip carries the
-    /// full moment.
+    /// backed up, short for a search hit's tag — "until Oct 2", the year
+    /// said only when it is not this one.
     static func until(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         let style = style(calendar)
         let day = calendar.component(.year, from: date) == calendar.component(.year, from: now)
@@ -273,8 +269,8 @@ enum Format {
     /// A count when restic named what it could not read — a permanently
     /// unreadable file marks every snapshot, and the number keeps that from
     /// reading as fresh alarm each time. Nil when nothing is known (no run
-    /// record, or one from before the exit code was stored), so the mark
-    /// makes no claim.
+    /// record, or one without restic's exit code), so the mark makes no
+    /// claim.
     static func snapshotCompleteness(_ run: RunRecord?) -> String? {
         switch run?.snapshotCompleteness {
         case .incomplete?:
@@ -303,8 +299,7 @@ enum Format {
     }
 
     /// The ancestor chain of a path from its containing root down to itself,
-    /// inclusive — the spine a tree must be expanded along to bring the path
-    /// back on screen. Empty outside every root.
+    /// inclusive. Empty outside every root.
     static func pathChain(of path: String, roots: [String]) -> [String] {
         guard let root = containingRoot(of: path, in: roots) else { return [] }
         // Byte steps, as `holds` matched the root: a Character walk drops a

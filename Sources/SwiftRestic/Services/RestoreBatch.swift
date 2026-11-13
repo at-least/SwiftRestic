@@ -1,8 +1,5 @@
 import Foundation
 
-/// What `RestoreBatch.covering` reads of a selected item: its name, for the
-/// destination sheet's note, its path in its backup, and whether it is a
-/// folder.
 protocol RestoreBatchItem {
     var name: String { get }
     var path: String { get }

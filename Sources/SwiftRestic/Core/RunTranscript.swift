@@ -1,26 +1,19 @@
 import Foundation
 
-/// What restic said during one run — the command lines, every line it
-/// printed except progress ticks, and its exit codes — for the plain-text
-/// log the run leaves beside `config.json`.
+/// What restic said during one run, for the run's plain-text log.
 ///
-/// Reached through a task-local rather than a parameter: the run engines
-/// bind one around their restic service calls (`$current.withValue`), and
-/// `ResticRunner.run` records into whatever is bound, so neither the
-/// `ResticClient` protocol nor any call site grows a parameter. The binding
-/// is kept narrow on purpose — the service calls only, never the closing
-/// snapshot refresh or the index walks, which run restic too but are not
-/// part of the run. Any `Task {}` started inside a bound scope inherits the
-/// binding and could append after the run has ended; `Task.detached` does
-/// not.
+/// A task-local rather than a parameter, so neither `ResticClient` nor any
+/// call site grows one. The run engines bind it around their restic service
+/// calls only, never the closing snapshot refresh or the index walks, which
+/// are not part of the run. A `Task {}` started inside a bound scope
+/// inherits the binding and could append after the run ended;
+/// `Task.detached` does not.
 ///
-/// Memory is capped rather than streamed to disk: the first `headByteLimit`
-/// bytes of text are kept, then only the last `tailEntryLimit` entries, and
-/// the lines that fell between are counted. restic's final exit_error and
-/// the engine's closing notes are in the tail, so they always survive.
-/// Every line is also cut at `lineByteLimit`. The two reader threads write
-/// concurrently, so all state sits behind one lock, taken only inside the
-/// synchronous methods below.
+/// Capped in memory rather than streamed to disk: the first `headByteLimit`
+/// bytes, then the last `tailEntryLimit` entries, the lines between counted.
+/// restic's final exit_error and the engine's closing notes are in the
+/// tail, so they survive. The two reader threads write concurrently, so the
+/// lock is taken only inside the synchronous methods.
 final class RunTranscript: @unchecked Sendable {
     @TaskLocal static var current: RunTranscript?
 
@@ -30,12 +23,11 @@ final class RunTranscript: @unchecked Sendable {
 
     struct Entry: Sendable, Equatable {
         enum Kind: Sendable, Equatable {
-            /// A command line, as `ResticInvocation.displayCommand` renders it.
             case command
             case output(Stream)
             case exit(Int32)
-            /// An app-authored line: retention's result, a stop that ended
-            /// the child before it could exit.
+            /// App-written: retention's result, a stop that ended the child
+            /// before it could exit.
             case note
         }
 
@@ -46,22 +38,19 @@ final class RunTranscript: @unchecked Sendable {
 
     struct Contents: Sendable, Equatable {
         var entries: [Entry] = []
-        /// How many of `entries` were kept from the start; any omitted lines
-        /// fell between these and the rest.
+        /// Omitted lines fall between the first `headCount` entries and the rest.
         var headCount: Int = 0
         var omittedLineCount: Int = 0
-        /// The first exit code recorded — the run's primary command (a
-        /// backup before its forget, a restore's one command). Kept apart
-        /// from `entries`, so it survives even when its entry was omitted.
+        /// The run's primary command (a backup before its forget). Apart from
+        /// `entries`, so it survives when its entry was omitted.
         var firstExitCode: Int32?
     }
 
     static let headByteLimit = 256 * 1024
     static let tailEntryLimit = 200
     static let lineByteLimit = 4096
-    /// The app's own command line, bounded by what it passes — a plan's
-    /// switches alone pass some 150 excludes, past `lineByteLimit` — and
-    /// what the log is read for first, so it keeps its own, wider cap.
+    /// A plan's switches alone pass some 150 excludes, past `lineByteLimit`,
+    /// and the command line is what the log is read for first.
     static let commandByteLimit = 64 * 1024
 
     private let lock = NSLock()
@@ -77,10 +66,8 @@ final class RunTranscript: @unchecked Sendable {
         append(Entry(time: .now, kind: .command, text: Self.capped(text, at: Self.commandByteLimit)))
     }
 
-    /// One line restic printed. Progress ticks (`status`, `verbose_status`)
-    /// and blank lines are dropped: they are what makes a backup's output
-    /// unbounded, and the log is a record of what restic said, not of how
-    /// fast it went.
+    /// Progress ticks and blank lines are dropped: they make a backup's
+    /// output unbounded.
     func output(_ line: String, message: ResticMessage?, stream: Stream) {
         switch message {
         case .status?, .verboseStatus?: return
@@ -130,8 +117,7 @@ final class RunTranscript: @unchecked Sendable {
         omitted += 1
     }
 
-    /// A line cut at `limit` bytes, on a scalar boundary, with the length
-    /// it had — one pathological line must not eat the head alone.
+    /// Cut on a scalar boundary, so one pathological line cannot eat the head.
     private static func capped(_ line: String, at limit: Int = lineByteLimit) -> String {
         let length = line.utf8.count
         guard length > limit else { return line }

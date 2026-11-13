@@ -273,10 +273,9 @@ struct IndexBackfillTests {
     func backfillThroughput() async throws {
         let scene = try await makeScene("SwiftResticThroughput")
         defer { scene.remove() }
-        // Fifty folders of two hundred small files each — enough rows for the
-        // store side to dominate the decode side, small enough that CI stays
-        // quick. The assertion is the generous bound; the printed rate is
-        // informational.
+        // Enough rows for the store side to dominate the decode side, few
+        // enough that CI stays quick. The assertion is a generous bound; the
+        // printed rate is informational.
         for folder in 0..<50 {
             let directory = scene.source.appendingPathComponent("folder\(folder)")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -382,8 +381,8 @@ extension IndexCoordinator {
         try await read(repositoryID) { try await $0.versionSummaries(ofPaths: paths) }
     }
 
-    /// Test-only — both searches the app runs answer their second question
-    /// in the same read (`searchWithMembership`, `searchWithSummaries`).
+    /// Test-only — the app's search answers its second question in the
+    /// same read (`searchWithSummaries`).
     nonisolated func searchPaths(matching query: String, repositoryID: UUID, limit: Int) async throws -> [SearchHit] {
         try await read(repositoryID) { try await $0.searchPaths(matching: query, limit: limit) }
     }
@@ -573,12 +572,10 @@ struct IndexCoordinatorGenerationTests {
     }
 }
 
-/// The two read wrappers the app alone takes to the store's folder reads —
-/// `changes` for a Files tab's folder against the backup before, `search`
-/// for a Files tab's search — without restic. Every store-level read below
-/// them is densely tested, but a transcription slip in a wrapper (a swapped
-/// pair of IDs, a dropped limit or chain key) compiles and would only show
-/// as a wrong Files view.
+/// The coordinator's chain-scoped read wrappers, without restic. Every
+/// store-level read below them is densely tested, but a transcription slip
+/// in a wrapper (a swapped pair of IDs, a dropped limit or chain key)
+/// compiles and would only show as wrong rows.
 @Suite("index coordinator read wrappers")
 struct IndexCoordinatorReadWrapperTests {
     private func makeScene() async throws -> (CoordinatorScene, IndexCoordinator, UUID) {
@@ -1283,8 +1280,8 @@ struct IndexCoordinatorConcurrencyTests {
         let coordinator = scene.coordinator
         let repositoryID = scene.repositoryID
         // No listing has landed: a new repository, a missing password, an
-        // offline remote. The index knows nothing, so it cannot answer
-        // exactly — Find Files must ask restic, which can say why.
+        // offline remote. The index knows nothing, so its answers are not
+        // exact.
         let beforeAnyListing = try await coordinator.isComplete(repositoryID: repositoryID)
         #expect(beforeAnyListing == false)
 
@@ -1300,8 +1297,8 @@ struct IndexCoordinatorConcurrencyTests {
         let relaunched = IndexCoordinator(directory: scene.root)
         #expect(try await relaunched.isComplete(repositoryID: repositoryID))
 
-        // Try Again on a failed search index: the reset has returned, the rebuild's
-        // reconcile has not landed yet.
+        // Try Again on a failed search index: the reset has returned, the
+        // rebuild's reconcile has not landed yet.
         await coordinator.resetRepository(repositoryID: repositoryID)
         let afterReset = try await coordinator.isComplete(repositoryID: repositoryID)
         #expect(afterReset == false)
@@ -1393,8 +1390,8 @@ struct IndexCoordinatorConcurrencyTests {
         )
         #expect(all.hits.count == 3_000)
 
-        // The Restore pane's read — the one each keystroke cancels — parked
-        // inside its statement, cancelled there, then let go.
+        // The search read parked inside its statement, cancelled there,
+        // then let go.
         let gate = await StatementGate.onReaders(try await coordinator.read(repositoryID) { $0 })
         gate.arm()
         let search = Task {

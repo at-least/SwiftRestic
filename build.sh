@@ -5,11 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 xcodegen generate --quiet
 
-# The portability seam: Core, Models and the restic engine stay free of UI
-# frameworks, so a future port does not inherit AppKit by accident. This is
-# the import guard only — it does not claim the layer compiles off macOS
-# today (the runner still calls Darwin.read). NSString (expandTilde) is
-# Foundation's own and allowed.
+# Core, Models and the restic engine stay free of UI frameworks, so a port
+# off macOS does not inherit AppKit. An import guard only: the runner still
+# calls Darwin.read. NSString (expandTilde) is Foundation's and allowed.
 portable=(
     Sources/SwiftRestic/Core
     Sources/SwiftRestic/Models
@@ -17,9 +15,8 @@ portable=(
     Sources/SwiftRestic/Services/ResticClient.swift
     Sources/SwiftRestic/Services/Index
 )
-# Fail closed: a renamed or moved path makes grep exit 2, which an `if grep`
-# alone would read as "clean" — the guard must not die with the paths it
-# names, so missing paths fail the build too.
+# A missing path makes grep exit 2, which `if grep` reads as clean, so a
+# renamed path fails the build here instead.
 for linted in "${portable[@]}"; do
     if [ ! -e "$linted" ]; then
         echo "error: portability lint path is missing: $linted (update the list in build.sh)" >&2
@@ -39,11 +36,10 @@ if grep -rnE "^import GRDB" Sources --include='*.swift' | grep -vE "^Sources/Swi
 fi
 
 # The test target compiles the app's sources itself (project.yml) and has no
-# SwiftRestic module to import. Such an import resolves only against the
-# app's module an earlier build left in DerivedData — xcodebuild warns that
-# the tests are "missing a dependency on 'SwiftRestic'" and the build passes —
-# while a clean checkout fails with "Unable to resolve module dependency:
-# 'SwiftRestic'".
+# SwiftRestic module. An import of it resolves against a module an earlier
+# build left in DerivedData (only a warning, "missing a dependency on
+# 'SwiftRestic'"), and a clean checkout then fails with "Unable to resolve
+# module dependency: 'SwiftRestic'".
 tests=Tests/SwiftResticTests
 if [ ! -d "$tests" ]; then
     echo "error: test-import lint path is missing: $tests (update the path in build.sh)" >&2
@@ -54,13 +50,11 @@ if grep -rnE "^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+SwiftRestic
     exit 1
 fi
 
-# SwiftUI recurses without end when an accessibility client reads a Text
-# that has both .textSelection(.enabled) and .accessibilityLabel: the app
-# dies of a stack overflow the moment VoiceOver (or any AX client) reaches
-# it — seen on macOS 27.0.1 with the Activity drawer's snapshot ID. A
-# selectable text says its own words; put a label on the row around it
-# instead. A modifier chain is the run of lines starting with "." around
-# the .textSelection line.
+# A Text with both .textSelection(.enabled) and .accessibilityLabel makes
+# SwiftUI recurse until the stack overflows when any accessibility client
+# reads it (seen on macOS 27.0.1). Put the label on the row around it. A
+# modifier chain is the run of lines starting with "." around the
+# .textSelection line.
 if ! perl -e '
     my $bad = 0;
     for my $file (@ARGV) {
@@ -91,10 +85,8 @@ if [ "$ACTION" = "test" ]; then
     refuse_concurrent_test_session
 fi
 
-# The full log goes to a temporary file, the interesting lines stream to the
-# terminal, and the script's exit status is xcodebuild's own: a failed build or
-# test run must fail this script, or CI (and humans) will read silence as
-# success.
+# The full log goes to a temporary file, the interesting lines to the
+# terminal; the exit status is xcodebuild's own, not grep's.
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 status=0
@@ -103,17 +95,15 @@ xcodebuild "${xcodebuild_arguments[@]}" "$ACTION" 2>&1 \
   | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
   || status=${PIPESTATUS[0]}
 
-# The grepped stream above cannot show a restarted runner
-# (`runner_restarted`).
+# The filtered stream above does not show a restarted runner.
 if [ "$ACTION" = "test" ] && runner_restarted "$log"; then
     echo "error: the test runner restarted mid-run (a test crash or timeout, or a concurrent xcodebuild session) — inspect the newest xcresult before re-running" >&2
     status=1
 fi
 
-# A successful exit is not enough: xcodebuild reports success even when a
-# filter or a stale project file selects zero tests: the swift-testing
-# summary line is then absent entirely. Only checked when xcodebuild itself
-# succeeded, so a compile failure is not mislabelled as an empty run.
+# xcodebuild exits 0 when a filter or a stale project file selects zero
+# tests; the swift-testing summary line is then absent. Checked only after
+# success, so a compile failure is not reported as an empty run.
 if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     if ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
         echo "error: test run reported success without executing any tests" >&2
@@ -121,8 +111,7 @@ if [ "$status" -eq 0 ] && [ "$ACTION" = "test" ]; then
     fi
 fi
 
-# The app in the build folder must carry the pinned restic under
-# a seal that holds: what the tests ran on is what ships.
+# The built app must carry the pinned restic under a seal that holds.
 if [ "$status" -eq 0 ]; then
     app="$(xcodebuild "${xcodebuild_arguments[@]}" -showBuildSettings 2>/dev/null \
         | awk -F' = ' '/^ *TARGET_BUILD_DIR = /{dir=$2} /^ *WRAPPER_NAME = /{name=$2} END{print dir"/"name}')"

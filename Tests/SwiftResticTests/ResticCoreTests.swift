@@ -3,8 +3,6 @@ import Testing
 
 @Suite("restic error messages")
 struct ResticErrorTests {
-    /// The exit codes restic documents, per `man restic` — the mapping the error
-    /// banners are built on.
     @Test("restic's \"Fatal:\" stays out of what a person reads; the reason after it stays, and the copied details keep the line whole")
     func fatalPrefixOffScreen() {
         let line = "Fatal: config cannot be loaded: open /Volumes/A/config: permission denied"
@@ -629,7 +627,8 @@ struct UnreadableItemsTests {
     func unreadableItemsDropTrailingWhitespace() throws {
         // restic 0.19.1 ends its extended-attribute errors with a newline,
         // and the stored line lands in the banner, the plan row, the drawer
-        // and Copy Details, where a newline breaks the sentence.
+        // and the Activity row's copied text, where a newline breaks the
+        // sentence.
         let events = try errors([
             #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.macl for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.macl: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,
             #"{"message_type":"error","error":{"message":"can not obtain extended attribute com.apple.quarantine for /Users/u/Library/Safari: xattr.get /Users/u/Library/Safari com.apple.quarantine: operation not permitted\n"},"during":"archival","item":"/Users/u/Library/Safari"}"#,

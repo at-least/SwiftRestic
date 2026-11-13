@@ -1,32 +1,28 @@
 import Foundation
 
-/// A network share SwiftRestic reconnects before a backup that needs it —
-/// the volume a local repository's folder or a plan's source lives on, as
-/// macOS mounted it under /Volumes. The URL is the volume's own remount
-/// URL (`URLResourceKey.volumeURLForRemountingKey`), read while it was
-/// mounted, so nobody types it; the password is in the Keychain
-/// (`KeychainStore.Slot.sharePassword`, under `id`). A record exists only
-/// once a password was entered for it.
+/// A share SwiftRestic reconnects before a backup that needs it: the volume
+/// under /Volumes a local repository's folder or a plan's source lives on.
+/// The password is in the Keychain (`KeychainStore.Slot.sharePassword`,
+/// under `id`). A record exists only once a password was entered for it.
 struct NetworkShare: Codable, Sendable, Hashable, Identifiable {
     var id = UUID()
     /// The folder it mounts as under /Volumes: "NAS" for /Volumes/NAS.
     var volumeName: String
-    /// What to mount, as macOS reported it: "smb://me@nas.local/NAS" —
-    /// never with a password.
+    /// `URLResourceKey.volumeURLForRemountingKey`, read while mounted:
+    /// "smb://me@nas.local/NAS", never with a password.
     var url: String
 }
 
 struct ShareReconnect: Equatable, Sendable {
-    /// Why not, in a clause that follows "Reconnecting “NAS” failed: ".
+    /// A failure's text is a clause that follows "Reconnecting “NAS” failed: ".
     enum Outcome: Equatable, Sendable {
         case reconnected
-        /// A cause that may pass by itself — the server out of reach, or an
-        /// error macOS did not explain: a run waits for the share as for a
-        /// drive that is away.
+        /// May pass by itself (server out of reach, an unexplained macOS
+        /// error): a run waits for the share as for a drive that is away.
         case unreachable(String)
-        /// A cause only the user clears — the share refused the saved
-        /// password, has no share by that name, refused access, mounted
-        /// beside a leftover folder, or no password came from the Keychain.
+        /// Only the user clears it: a refused password or access, no share
+        /// by that name, a leftover folder at the mount point, no password
+        /// in the Keychain.
         case refused(String)
     }
 

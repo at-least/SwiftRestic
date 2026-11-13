@@ -138,10 +138,9 @@ struct OverviewMetricsTests {
 
     @Test("an up-to-date row counts from the moment the sidebar counts from")
     func upToDateRowCountsFromTheRun() {
-        // Photos waits in a before-backup hook and restic stamps its snapshot
-        // after it, so the sidebar (the run's start, lastSuccessAt) and the
-        // card (the snapshot's time) must count the same backup from the same
-        // moment.
+        // restic stamps its snapshot some time after the run starts, so the
+        // sidebar (the run's start, lastSuccessAt) and the card (the
+        // snapshot's time) must count the same backup from the same moment.
         let repository = UUID()
         var photos = plan("Photos", repository: repository)
         photos.lastSuccessAt = Date.now.addingTimeInterval(-207)
@@ -210,7 +209,7 @@ struct OverviewMetricsTests {
         #expect(adoptedSurfaces.line == "1 of 1 plan up to date · Last backup \(adoptedWords)")
 
         // A run of the plan's own: the run's start is the moment even while
-        // restic stamped the snapshot later (the before-backup hooks), so
+        // restic stamped the snapshot later, so
         // the same backup cannot straddle a minute between surfaces.
         var ranHere = plan("Photos", repository: repository)
         ranHere.lastSuccessAt = tick.addingTimeInterval(-207)

@@ -1,21 +1,16 @@
 import Foundation
 
-/// Tolerant accessors for decoding the stored configuration.
+/// Tolerant decoding of the stored configuration. Synthesized `Decodable`
+/// fails on a missing key, which would take every schedule and repository
+/// down with one field. A persisted model with defaults decodes through
+/// these: a missing or malformed field falls back to its default. One with
+/// nothing to fall back to (`NetworkShare`, `SchedulePause`) decodes
+/// strictly, and the field holding it falls back whole.
 ///
-/// The synthesized `Decodable` conformance requires every key to be present,
-/// so a `config.json` written before a field existed would fail to decode —
-/// taking every schedule and repository down with it. A persisted model
-/// whose fields have defaults decodes through these instead: an unknown,
-/// missing or malformed field falls back to its default. One with nothing
-/// to fall back to (`NetworkShare`, `SchedulePause`) decodes strictly, and
-/// the field holding it falls back whole.
-///
-/// Tolerance is not silence: a field that is *present* but unreadable is a
-/// reporting gap, not a missing key. With a `DecodeNoteBox` bound around the
-/// decoding pass (`DecodeNotes.$current.withValue`, as the config store
-/// does), every such fallback is recorded there, so the app can say what was
-/// substituted — an unknown enum value silently becoming `.local` would
-/// repoint a repository without a word, and the next save would persist it.
+/// A present but unreadable field is recorded in the bound `DecodeNoteBox`
+/// (the config store binds one), so the app says what it substituted: an
+/// unknown enum value silently becoming `.local` would repoint a repository,
+/// and the next save would persist it.
 extension KeyedDecodingContainer {
     func value<T: Decodable>(_ key: Key, default fallback: T) -> T {
         guard contains(key) else { return fallback }
@@ -50,8 +45,6 @@ extension KeyedDecodingContainer {
         }
     }
 
-    /// Reports one tolerant fallback to the bound note box, if there is one.
-    /// Silent without a box — models decoded bare record nothing.
     private func note(_ key: Key, _ reason: String) {
         guard let box = DecodeNotes.current else { return }
         box.add(field: Self.fieldName(in: codingPath, key: key), reason)
@@ -71,9 +64,8 @@ extension KeyedDecodingContainer {
 }
 
 /// The tolerant fallbacks of one decoding pass. Decoding runs synchronously
-/// inside the `withValue` closure, so it never crosses an isolation
-/// boundary; the lock exists only so the box can claim `Sendable`, which
-/// binding a task-local value requires.
+/// inside `withValue`; the box's lock exists only because a task-local value
+/// must be `Sendable`.
 enum DecodeNotes {
     @TaskLocal static var current: DecodeNoteBox?
 }

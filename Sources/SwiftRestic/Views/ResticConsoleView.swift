@@ -113,9 +113,8 @@ struct ResticConsoleView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
         } else {
-            // restic check on a large repository can print hundreds of
-            // thousands of lines — the log sheet's lazily laid-out text view,
-            // not a SwiftUI Text.
+            // Not a SwiftUI Text: restic check on a large repository can
+            // print hundreds of thousands of lines.
             LogTextView(text: model.console.output, finder: finder)
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Why Locate kept a repository where it was. Nothing is repointed on a
-/// guess: every plan of the repository would back up into what it finds.
+/// Nothing is repointed on a guess: every plan of the repository would
+/// back up into what it finds.
 enum LocateRefusal: LocalizedError, Equatable {
     case neverRead(name: String)
     case differentRepository(name: String)
@@ -29,18 +29,15 @@ enum LocateRefusal: LocalizedError, Equatable {
 }
 
 extension AppModel {
-    /// Called with what a successful listing could read. A failure is left
-    /// to the next listing to ask again; until then Locate refuses and says
-    /// why (`LocateRefusal.neverRead`).
+    /// A failure is left to the next listing; until then Locate refuses
+    /// with `LocateRefusal.neverRead`.
     func recordResticID(of repositoryID: UUID, service: any ResticClient, context: RepositoryContext) async {
         guard let id = try? await service.resticID(context, timeout: Self.refreshTimeout) else { return }
         updateRepository(repositoryID) { $0.resticID = id }
     }
 
-    /// A disk repository that moved: `path` becomes its location once restic
-    /// says the repository there is this one. The index is keyed by the
-    /// app's own ID and holds the backups' paths, never the location, so it
-    /// stays good; restic keys its cache by the same ID checked here.
+    /// The index is keyed by the app's ID and never holds the location, so
+    /// it stays good; restic keys its cache by the ID checked here.
     func locateRepository(id: UUID, atPath path: String) async throws {
         guard let repository = repository(id: id), repository.kind == .local else {
             throw ResticError.repositoryRemoved

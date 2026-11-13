@@ -1,9 +1,8 @@
 import Foundation
 
-/// Runs restic work under the run's transcript; a lock in its way is
-/// unlocked and the work run once more, unasked. `restic unlock` removes
-/// only stale locks — with restic 0.19.1 a running backup's lock survived
-/// it — so a lock in use stays and the second try fails as the first did.
+/// A lock in the way is unlocked and the work run once more. `restic
+/// unlock` removes only stale locks (with restic 0.19.1 a running backup's
+/// lock survived it), so a lock in use makes the second try fail too.
 @MainActor
 private func unlockingStaleLocks<T>(
     service: any ResticClient,
@@ -54,36 +53,28 @@ enum BackupStamp: Equatable, Sendable {
     case nothing, whole
 }
 
-/// The pre-run gate the backup and maintenance engines walk, stated once:
-/// the saved shares `paths` need are reconnected first; a share that refused fails the run in the skip's words,
-/// never asking restic, the editor that holds the share's password being
-/// the fix; a local repository's drive that is away skips the run —
-/// restic's "does not exist" could not tell it from a moved folder (both
-/// exit 10, "Fatal: repository does not exist: unable to open config file",
-/// restic 0.19.1); a network repository's server out of reach skips it
-/// within seconds — restic would retry such a server for about a quarter
-/// of an hour, then fail.
+/// The pre-run gate both engines walk, asked before restic. A local
+/// repository's drive is checked here because restic cannot tell it from a
+/// moved folder (both exit 10, "Fatal: repository does not exist: unable to
+/// open config file", restic 0.19.1); a server is probed here because restic
+/// retries an unreachable one for about a quarter of an hour, then fails.
 @MainActor
 enum ReachabilityGate {
     fileprivate enum Verdict {
-        /// Run. Carries the reconnect failures, for a partial skip's words
-        /// later in the run (a folder whose share would not mount).
+        /// Carries the reconnect failures, for a later skip's words (a
+        /// folder whose share would not mount).
         case clear(reconnectFailures: [String: String])
-        /// A saved share refused to mount — its password, its name, its
-        /// access, a leftover folder, the Keychain. Only the user clears
-        /// this, so the run fails in the skip's words. `sources` are the
-        /// needed paths sitting on the refused volumes, `reasons` their
-        /// refusals by volume.
+        /// Only the user clears a refused share (its password, name, access,
+        /// a leftover folder, the Keychain), so the run fails rather than
+        /// skips. `sources` are the needed paths on the refused volumes,
+        /// `reasons` the refusals by volume.
         case refusedShare(sources: [String], reasons: [String: String], volumes: [String])
-        /// The repository's drive is away; the run is skipped.
         case driveAway(reason: String)
-        /// The repository's server is out of reach; the run is skipped.
         case serverAway(reason: String)
     }
 
-    /// Which away a skip verdict named: the repository's drive, or its
-    /// server. Travels with the reason so the listing's answer need not
-    /// re-derive it from the sentence.
+    /// Travels with the reason so the listing need not re-derive it from the
+    /// sentence.
     enum Away {
         case drive, server
     }
@@ -122,81 +113,59 @@ enum ReachabilityGate {
 
 @MainActor
 protocol RunEngineSink: AnyObject {
-    /// What every surface calls the repository (`AppModel.label(of:)`): the
-    /// run's record says it.
     func label(of repository: Repository) -> String
     func service() throws -> any ResticClient
     func context(for repository: Repository) async throws -> RepositoryContext
     func noteAuthFailure(_ error: Error, repositoryID: UUID)
-    /// The closing snapshot refresh, scheduled by the sink so it runs
-    /// outside this task — a cancelled run leaves its task cancelled, and
-    /// an inline refresh would die with it — and inside whatever
-    /// bookkeeping keeps work from outliving a quit.
+    /// Scheduled by the sink, outside the run's task: a cancelled run leaves
+    /// its task cancelled, and an inline refresh would die with it. The sink
+    /// keeps it from outliving a quit.
     func scheduleSnapshotRefresh(repositoryID: UUID)
     func reconnectShares(volumes: [String]) async -> [ShareReconnect]
-    /// One connection attempt to a network repository's server
-    /// (`ServerProbe`); nil when there is nothing to ask first.
+    /// Nil when there is nothing to ask first.
     func probeServer(of repository: Repository) async -> ServerProbe.Outcome?
-    /// Whether the volume holding `path` is mounted; nil for a path on the
-    /// startup disk. Off the main actor (`VolumeProbe`).
+    /// Nil for a path on the startup disk. Off the main actor (`VolumeProbe`).
     func isMounted(volumeOf path: String) async -> Bool?
 }
 
 extension RunEngineSink {
-    /// A local repository whose drive is not mounted. False for every other
-    /// kind, and while the mount cannot be told.
+    /// False while the mount cannot be told.
     func isVolumeMissing(_ repository: Repository) async -> Bool {
         guard repository.kind == .local else { return false }
         return await isMounted(volumeOf: repository.resolvedLocalPath) == false
     }
 }
 
-/// One backup run's lifecycle, so the sequencing — gate → start ping →
-/// backup → retention → closing refresh → record — is unit-testable against
-/// a mock engine.
-///
-/// The engine owns what happens in what order; everything observable
-/// (activity phases, run stamps, banners, records, notifications) is written
-/// through the sink, which `AppModel` implements. `AppModel.runBackup` and
-/// friends remain the facade the views and the scheduler call — this type is
-/// not reachable from outside the model layer.
+/// One backup run's order — gate → start ping → backup → retention →
+/// closing refresh → record — kept apart from its effects so a mock sink can
+/// test it. Everything observable goes through the sink (`AppModel`).
 @MainActor
 enum BackupRunEngine {
     @MainActor
     protocol Sink: RunEngineSink {
-        /// Why a run was cancelled, for its record: the user's Stop or the
-        /// app quitting.
+        /// The user's Stop or the app quitting.
         var cancellationMessage: String { get }
-        /// What every surface calls the plan (`AppModel.label(of:)`): the
-        /// run's record and notifications say it.
         func label(of plan: BackupPlan) -> String
         /// Nil-anchored like the activity entry itself: a phase for a plan
         /// whose run has already unwound is dropped, never resurrected.
         func setActivityPhase(_ phase: PlanActivity.Phase, for planID: UUID)
-        /// The forget has returned: its restic child is gone, so the
-        /// repository's other backups may start. Leaves the phase alone, so
-        /// a Stop's `.cancelling` stays.
+        /// The forget's restic child is gone, so the repository's other
+        /// backups may start. Leaves the phase alone, so a Stop's
+        /// `.cancelling` stays.
         func endRetentionStep(for planID: UUID)
-        /// The run's progress reporter, hopping to the sink's own actor —
-        /// built by the sink because only it knows its concrete isolation.
-        /// Sink-built is load-bearing: @Sendable captures a concrete
+        /// Built by the sink: the @Sendable closure must capture a concrete
         /// main-actor class, not an existential or a generic parameter.
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
         func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp)
-        /// A start ping in flight must not be lost to a quit mid-backup. The
-        /// channels are read at send time, not capture time — a channel
-        /// edited mid-run applies from this ping on.
+        /// Must not be lost to a quit mid-backup. Channels are read at send
+        /// time, so one edited mid-run applies from this ping on.
         func addStartPing(_ event: NotificationEvent)
-        /// The closing refresh also feeds the snapshot index, and it must
-        /// stay after retention: it reads the listing the forget left, which
-        /// the index then takes.
+        /// Must stay after retention: the snapshot index takes the listing
+        /// the forget left.
         func refreshSnapshots(repositoryID: UUID) async
-        /// The listing of a repository whose drive or server the run found
-        /// away, in the run's words — its share's reconnect already tried,
-        /// and not tried again by a refresh.
+        /// The share's reconnect was already tried; a refresh would try it
+        /// again.
         func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String)
-        /// Stores and announces a finished run: its log, run history,
-        /// banner, user notification, external channels.
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
     }
 
@@ -210,22 +179,17 @@ enum BackupRunEngine {
             repositoryID: repository.id,
             startedAt: startedAt
         )
-        // What restic said, for the run's log: bound around the restic
-        // service calls only — the closing refresh is not part of the run.
+        // Bound around the restic service calls only: the closing refresh is
+        // not part of the run's log.
         let transcript = RunTranscript()
-        // Why each away share this run needed could not be reconnected, by
-        // volume name, for the skip's words.
         var reconnectFailures: [String: String] = [:]
 
-        // Every exit but a missing password leaves through the tail below
-        // (`break run`), so delivery runs once.
+        // Every exit leaves through the tail below (`break run`), so delivery
+        // runs once.
         run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
 
-            // The gate: this run's shares — the repository's folder, the
-            // plan's — reconnected, a refusal failed in the skip's words,
-            // the drive or server that is away skipped.
             switch await ReachabilityGate.verdict(
                 of: repository,
                 needing: (repository.kind == .local ? [repository.resolvedLocalPath] : [])
@@ -245,8 +209,6 @@ enum BackupRunEngine {
                 record.outcome = .skipped
                 record.detailText = reason
                 sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                // The listing learns it now, not at the next launch, and
-                // why: a refresh would reconnect the share again.
                 sink.noteRepositoryAway(repositoryID: repository.id, away: .drive, reason: reason)
                 break run
             case let .serverAway(reason):
@@ -261,9 +223,9 @@ enum BackupRunEngine {
             // ended here, before a start ping for a run that will not run.
             if Task.isCancelled { throw ResticError.cancelled }
 
-            // Healthchecks measures the run against this ping, so it has to go out
-            // before the backup starts — but concurrently, so a slow endpoint
-            // cannot delay the backup itself.
+            // Healthchecks measures the run against this ping, so it goes out
+            // before the backup starts, concurrently, so a slow endpoint
+            // cannot delay the backup.
             let startEvent = NotificationEvent(
                 stage: .started,
                 planName: planLabel,
@@ -306,14 +268,12 @@ enum BackupRunEngine {
                 ? .succeeded
                 : .completedWithErrors
 
-            // The snapshot exists from here on. Mark the run before doing anything
-            // else, so nothing that follows can make a good backup look like a
-            // failed one.
+            // Stamped before anything else, so nothing that follows can make
+            // a good backup look like a failed one.
             sink.markPlanRun(plan.id, at: startedAt, wrote: .whole)
 
-            // Retention runs only after a backup that actually produced a
-            // snapshot, so a failed run can never trigger a forget against stale
-            // data.
+            // Only after a backup that produced a snapshot, so a failed run
+            // never triggers a forget against stale data.
             if plan.retention.isSafeToRun, record.snapshotID != nil {
                 sink.setActivityPhase(.applyingRetention, for: plan.id)
                 do {
@@ -322,22 +282,20 @@ enum BackupRunEngine {
                     }
                     transcript.note("Removed \(Format.plural(removed, "backup"))")
                 } catch where ResticError.isCancellation(error) {
-                    // The user's stop, "Stop Removing Old Backups" in the Plan
-                    // menu or the tray, or a quit: recorded
-                    // as every stop is, never as the lock failure below. The
-                    // snapshot stands and is already stamped, so nothing
-                    // stamps the run again.
+                    // A Stop or a quit: recorded as every stop is, never as
+                    // the lock failure below. The snapshot stands and is
+                    // already stamped.
                     record.setOutcome(
                         from: error, cancellationMessage: sink.cancellationMessage,
                         location: (sink.label(of: repository), repository.kind)
                     )
                     transcript.note("Stopped removing old backups")
                 } catch {
-                    // `forget` needs an exclusive repository lock while `backup`
-                    // takes a shared one, so a second plan backing up to the
-                    // same repository fails this with exit code 11, its lock
-                    // live. The data is safe; warn instead of failing the
-                    // whole backup — the next backup's retention runs again.
+                    // `forget` needs an exclusive lock while `backup` takes a
+                    // shared one, so a second plan backing up to the same
+                    // repository fails this with exit code 11. The data is
+                    // safe and the next backup's retention runs again, so
+                    // this warns instead of failing the backup.
                     record.outcome = .completedWithErrors
                     let reason = if ResticError.isRepositoryLocked(error) {
                         "another backup or job was using the location. Old backups are removed after the next backup."
@@ -352,23 +310,18 @@ enum BackupRunEngine {
                 sink.endRetentionStep(for: plan.id)
             }
 
-            // A cache must never delay, and never fail, the run that feeds it.
-            // A stop during retention — or one landing just after restic
-            // returned — leaves this task cancelled, which would kill an
-            // inline refresh.
+            // A stop during retention, or just after restic returned, leaves
+            // this task cancelled, which would kill an inline refresh.
             if record.outcome == .cancelled || Task.isCancelled {
                 sink.scheduleSnapshotRefresh(repositoryID: repository.id)
             } else {
                 await sink.refreshSnapshots(repositoryID: repository.id)
             }
         } catch let ResticError.commandFailed(_, message) where message.hasPrefix(RunRecord.everySourceMissingMessage) {
-            // The plan's folder missing: restic wrote nothing and said so.
-            // On a drive that is away the run is skipped — a mount brings it
-            // back sooner (`catchUpAfterMount`). Missing from this Mac — its
-            // startup disk, or a drive that is here — nothing brings it
-            // back, so the run fails, a new plan for where the folder is now
-            // its fix. The slot is stamped either way, so an hourly plan
-            // does not try again every tick.
+            // The plan's folder is missing. On a drive that is away the run
+            // is skipped: a mount brings it back (`catchUpAfterMount`).
+            // Missing from a disk that is here, the run fails. The slot is
+            // stamped either way, so an hourly plan does not retry every tick.
             if await sink.isMounted(volumeOf: plan.resolvedPath) == false {
                 record.outcome = .skipped
                 record.detailText = RunRecord.skippedReason(sources: [plan.path], reconnectFailures: reconnectFailures)
@@ -386,12 +339,10 @@ enum BackupRunEngine {
             if ResticError.isRepositoryLocked(error) {
                 record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: "backup")
             }
-            // The repository's disk full: said plainly, with what the run left
-            // behind — restic's line, naming a pack file by its hash, stays in
-            // the log — and Clean Up Now as its fix (`repositoryFull`): on a
+            // The repository's disk full gets Clean Up Now as its fix: on a
             // 40 MB disk image a 57 MB backup failed with 35 MB left behind,
-            // which `restic prune` freed (2026-10-16). A full disk elsewhere
-            // (restic's cache on this Mac) keeps restic's own words.
+            // which `restic prune` freed. A full disk elsewhere (restic's
+            // cache on this Mac) keeps restic's own words.
             if case let ResticError.commandFailed(_, message) = error,
                let full = RunRecord.repositoryFullMessage(resticMessage: message, repository: repository)
             {
@@ -413,17 +364,15 @@ enum BackupRunEngine {
     ) async {
         record.finishedAt = .now
 
-        // The success path took the backup's own code; anything that threw
-        // gets the first exit restic reached, and nil when it reached none.
+        // A run that threw gets the first exit restic reached.
         let contents = transcript.contents
         if record.exitCode == nil { record.exitCode = contents.firstExitCode }
         await sink.deliver(record: record, plan: plan, transcript: contents)
     }
 }
 
-/// One repository-maintenance run's lifecycle (`check` or `prune`), extracted
-/// for the same reasons as `BackupRunEngine` — the sequencing is testable
-/// against a mock engine, the model remains the facade.
+/// One `check` or `prune` run, kept apart from its effects as
+/// `BackupRunEngine` is.
 @MainActor
 enum MaintenanceRunEngine {
     @MainActor
@@ -432,14 +381,13 @@ enum MaintenanceRunEngine {
         func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date)
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)
-        /// The repository's drive is away: its upkeep, unstamped, waits for
-        /// the drive (`AppModel.maintenanceAwaitingDrive`).
+        /// Upkeep, unstamped, waits for the drive
+        /// (`AppModel.maintenanceAwaitingDrive`).
         func markDriveAway(repositoryID: UUID)
-        /// The repository's server is out of reach: its upkeep, unstamped,
-        /// waits for it (`AppModel.maintenanceAwaitingServer`).
+        /// Upkeep, unstamped, waits for the server
+        /// (`AppModel.maintenanceAwaitingServer`).
         func markServerAway(repositoryID: UUID)
-        /// A scheduled check read its slice of the data: the next one reads
-        /// the slice after (`MaintenancePolicy.nextCheckDataSlice`).
+        /// `MaintenancePolicy.nextCheckDataSlice`.
         func advanceCheckDataSlice(repositoryID: UUID)
         func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async
     }
@@ -456,22 +404,16 @@ enum MaintenanceRunEngine {
             repositoryID: repository.id,
             startedAt: startedAt
         )
-        // The backup engine's rule: restic's words for the log, bound around
-        // the service call only.
         let transcript = RunTranscript()
 
         // A failure leaves through the tail below (`break run`), which
-        // stamps it; a drive or server that is away returns unstamped.
+        // stamps it; a drive or server that is away returns unstamped, so
+        // the task stays due and the scheduler leaves it alone until the
+        // drive is back or the network changes.
         run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
 
-            // The gate, as a backup walks it. Refused, the run fails in the
-            // skip's words; its drive or server still away — no share saved,
-            // or one out of reach — the run waits for it, Skipped,
-            // unstamped, so the task stays due and the scheduler leaves it
-            // alone until the drive is back (`markDriveAway`) or the
-            // network changes (`markServerAway`).
             switch await ReachabilityGate.verdict(
                 of: repository,
                 needing: repository.kind == .local ? [repository.resolvedLocalPath] : [],
@@ -505,8 +447,7 @@ enum MaintenanceRunEngine {
 
             switch task {
             case .check:
-                // By hand or scheduled, the repository's depth — a
-                // rotation's next slice, moved on once the check has read it.
+                // By hand or scheduled; a slice moves on only once read.
                 let subset = repository.maintenance.scheduledDataSubset(for: repository.kind)
                 let summary = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                     try await service.check(context, readDataSubset: subset)
@@ -522,10 +463,9 @@ enum MaintenanceRunEngine {
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                // The count is the first sentence, which the Result column
-                // and the Maintenance row show; the repair steps follow for
-                // the drawer. The commands as the console takes them: it
-                // supplies `restic` itself.
+                // The first sentence is what the short surfaces show. The
+                // commands are as the console takes them: it supplies
+                // `restic` itself.
                 record.detailText = errors == 0
                     ? "No errors found."
                     : "\(Format.plural(errors, "error")) found. Some damage can be repaired in the restic Console: repair index, then repair snapshots."
@@ -542,9 +482,8 @@ enum MaintenanceRunEngine {
                 record.outcome = .succeeded
             }
         } catch ResticError.passwordMissing {
-            // Not finished being set up. Record nothing and stamp nothing: the
-            // scheduler skips this repository until a password exists, and the
-            // repository screen must not claim a check happened.
+            // Record and stamp nothing: the scheduler skips this repository
+            // until a password exists, and nothing may claim a check happened.
             sink.markPasswordMissing(repositoryID: repository.id)
             return
         } catch {
@@ -558,9 +497,8 @@ enum MaintenanceRunEngine {
             sink.noteAuthFailure(error, repositoryID: repository.id)
         }
 
-        // Stamp the timestamp whatever happened. Leaving it unset on failure would
-        // make the scheduler retry every minute against a repository that is very
-        // likely still unreachable.
+        // Stamped on failure too: unstamped, the scheduler would retry every
+        // minute against a repository that is likely still unreachable.
         sink.stampMaintenance(repositoryID: repository.id, task: task, at: startedAt)
         await finish(
             record: &record, repository: repository, transcript: transcript, sink: sink
@@ -577,10 +515,8 @@ enum MaintenanceRunEngine {
         let contents = transcript.contents
         if record.exitCode == nil { record.exitCode = contents.firstExitCode }
         await sink.deliver(record: record, repository: repository, transcript: contents)
-        // Scheduled by the sink, not awaited here: a cancelled run leaves
-        // this task cancelled, and an inherited cancel would kill the refresh
-        // mid-call and leave the listing stale. (A cancel landing inside the
-        // refresh itself is answered quietly by the sink.)
+        // Not awaited here: an inherited cancel would kill the refresh
+        // mid-call and leave the listing stale.
         sink.scheduleSnapshotRefresh(repositoryID: repository.id)
     }
 }

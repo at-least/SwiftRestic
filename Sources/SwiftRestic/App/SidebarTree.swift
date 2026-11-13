@@ -1,23 +1,20 @@
 import Foundation
 
-/// What the sidebar lists under one repository, in order — the sidebar's
-/// second and last level (the HIG: "no more than two levels of hierarchy in
-/// a sidebar"). The repository's own row is not one of them: it is the
-/// parent, always shown, and never collapses — its children are always in
-/// view. A page's backups are its Backups tab's, not rows of their own.
+/// The sidebar's second and last level under a repository (the HIG: "no
+/// more than two levels of hierarchy in a sidebar"). The repository row
+/// never collapses. A page's backups are its Backups tab's, not rows of
+/// their own.
 ///
-/// Each value is unique across the whole sidebar — the repository-wide
-/// rows carry their repository's ID — because the List gives every
-/// repository's children one identity space: a bare `otherBackups` case
-/// makes one repository's node show up, empty, under the others too.
+/// Each value is unique across the whole sidebar, so the repository-wide
+/// cases carry their repository's ID: the List gives every repository's
+/// children one identity space, and a bare `otherBackups` case showed one
+/// repository's node, empty, under the others too.
 enum SidebarChild: Hashable {
     case plan(UUID)
-    /// "Back Up a Folder…", only while the repository has no plan: the place
-    /// its plans would be names the way to its first one.
+    /// "Back Up a Folder…", only while the repository has no plan.
     case addPlan(repositoryID: UUID)
-    /// The caption over the groups of the repository's backups no plan of
-    /// it made — see `BackupShelves.others` — and the groups themselves,
-    /// each a page at the plans' level. Only while there are some.
+    /// The caption over `BackupShelves.others`, whose groups are each a page
+    /// at the plans' level. Only while there are some.
     case otherBackups(repositoryID: UUID)
 }
 
@@ -45,46 +42,31 @@ enum SidebarTree {
     }
 }
 
-/// One repository's backups, sorted to the page that lists them: each on
-/// the plan of this repository that made it — the plan's tag
-/// (`ResticService.planTag`) says which — and the rest under Other backups,
-/// grouped by the plan that made them when a plan tag says which, by lineage
-/// otherwise. Every backup has exactly one place, so one page's Backups tab
-/// lists it.
+/// One repository's backups, each on exactly one page: the plan of this
+/// repository whose tag (`ResticService.planTag`) it carries, else a group
+/// under Other backups — by plan UUID when a plan tag names one, by lineage
+/// otherwise.
 ///
-/// Equatable so the root view can watch the shelves themselves: `reshelve`
-/// rewrites them on any change to the plans, which is the one signal that
-/// sees backups change shelves when a plan is adopted or removed — no count
-/// changes, the listing does not change. Equality is the synthesized value
-/// one, so a reshelve that changes nothing compares equal, and one that
-/// moves a backup between shelves — or relabels a plan — does not;
-/// revalidating on a relabel is a no-op.
+/// Equatable so the root view can watch the shelves themselves: when a plan
+/// is adopted or removed, backups change shelves while no count and no
+/// listing changes, and `reshelve` rewriting the shelves is the one signal.
 struct BackupShelves: Equatable {
     /// The repository's plans, in configuration order.
     let plans: [BackupPlan]
-    /// Every configured plan, this repository's among them: what tells a
-    /// plan-UUID group under Other backups apart — a UUID that names one of
-    /// them is a plan that now backs up to another repository, any other is
-    /// a plan no configuration sets up. Classification is configuration-wide
-    /// on purpose: a UUID that belongs to a configured plan of another
-    /// repository must never read as adoptable.
+    /// Every configured plan: a plan-UUID group naming one of them is a plan
+    /// that now backs up to another repository, and must never read as
+    /// adoptable; any other UUID is a plan no configuration sets up.
     let allPlans: [BackupPlan]
-    /// Each plan's backups, newest first — one flat list even when the plan's
-    /// folders changed: the Change column finds its baseline by lineage in
-    /// the whole listing (`SnapshotLineage.changeBaseline`), not by the row
-    /// below. A plan with none here has no entry.
+    /// Each plan's backups, newest first, one flat list even when the plan's
+    /// folders changed: `SnapshotLineage.changeBaseline` finds a baseline by
+    /// lineage, not by the row below. A plan with none here has no entry.
     let byPlan: [UUID: [Snapshot]]
-    /// The rest — a deleted plan's or another repository's plan's backups by
-    /// their plan UUID, backups with no plan tag (another Mac, the console)
-    /// by lineage.
+    /// Backups with no plan tag come from another Mac or the console.
     let others: [OtherBackupsGroup]
 
     var hasOtherBackups: Bool { !others.isEmpty }
 
-    /// How many of the repository's backups none of its plans made — the
-    /// sidebar's Other backups node, the repository page's Status line,
-    /// its Other backups and its Snapshots split all count it from
-    /// here, so no two of them can disagree.
+    /// Every surface that shows this count reads it here, so no two disagree.
     var otherBackupsCount: Int {
         others.reduce(0) { $0 + $1.snapshots.count }
     }
@@ -93,13 +75,11 @@ struct BackupShelves: Equatable {
         others.filter { adoptablePath(of: $0, localHost: localHost) != nil }
     }
 
-    /// The path a plan adopting `group` would back up — nil when the group
-    /// cannot be adopted. A plan-UUID group no configuration sets up (a
-    /// deleted plan's history, or one still running on another Mac) whose
-    /// prefill backup holds one path, as a plan does. Not a moved plan's
-    /// (its plan exists, so its page offers that instead), not an untagged
-    /// lineage's (it has no UUID to adopt). The one rule the page, the
-    /// sidebar's menu and `AppModel.adoptDraft` read.
+    /// The path a plan adopting `group` would back up; nil when it cannot be
+    /// adopted. Only a plan-UUID group no configuration sets up (a deleted
+    /// plan's, or one still running on another Mac) whose prefill backup
+    /// holds one path, as a plan does. The one adoptability rule every
+    /// caller reads.
     func adoptablePath(of group: OtherBackupsGroup, localHost: String) -> String? {
         guard case let .plan(_, snapshots) = group, formerPlan(of: group) == nil,
               let prefill = Self.prefillSnapshot(among: snapshots, localHost: localHost),
@@ -108,10 +88,8 @@ struct BackupShelves: Equatable {
         return prefill.paths[0]
     }
 
-    /// The snapshot an adopt draft prefills from: the newest this Mac made,
-    /// else the newest of all — the folder most likely to exist here, with
-    /// the other-Mac warning carried beside it when it is not this Mac's.
-    /// `snapshots` are the group's, newest first.
+    /// The newest this Mac made, else the newest of all: the folder most
+    /// likely to exist here. `snapshots` newest first.
     static func prefillSnapshot(among snapshots: [Snapshot], localHost: String) -> Snapshot? {
         snapshots.first { $0.hostname == localHost } ?? snapshots.first
     }
@@ -136,9 +114,8 @@ struct BackupShelves: Equatable {
         others = OtherBackupsGroup.grouping(rest)
     }
 
-    /// The plan among `plans` a backup sits under: the first, in their
-    /// order, whose tag it carries. Only an outside `restic tag` can give a
-    /// backup two plans' tags — the app never does — and this keeps it in
+    /// The first of `plans`, in order, whose tag the backup carries. Only an
+    /// outside `restic tag` gives a backup two plans' tags; this keeps it in
     /// one place.
     static func owner(of snapshot: Snapshot, among plans: [BackupPlan]) -> UUID? {
         owner(of: snapshot, tags: tags(of: plans))
@@ -152,8 +129,7 @@ struct BackupShelves: Equatable {
         tags.first { snapshot.tags.contains($0.tag) }?.id
     }
 
-    /// The names of the groups under Other backups, told apart among
-    /// themselves — the set the sidebar shows together.
+    /// Labels distinct among the groups the sidebar shows together.
     func otherLabels(
         repositories: [Repository],
         localHost: String
@@ -161,11 +137,9 @@ struct BackupShelves: Equatable {
         OtherBackupsGroup.labels(for: others, plans: allPlans, repositories: repositories, localHost: localHost)
     }
 
-    /// How a backup is named where one backup is named — the restore pane's
-    /// header, a whole-backup restore — so it matches the place the sidebar
-    /// shows it: its plan's label, with the folders when the plan's backups
-    /// here span more than one set of them and the Mac when more than one
-    /// Mac made them; under Other backups, its group's label.
+    /// A single backup's name, matching where the sidebar shows it: its
+    /// plan's label (with folders or Mac when the plan's backups here span
+    /// several), else its Other backups group's label.
     func label(of record: Snapshot, repositories: [Repository], localHost: String) -> SnapshotLineage.Label? {
         guard let planID = Self.owner(of: record, among: plans),
               let plan = plans.withID(planID)
@@ -176,18 +150,14 @@ struct BackupShelves: Equatable {
         return label
     }
 
-    /// The page whose Backups tab lists `record`: the plan of this
-    /// repository that made it, or its group under Other backups.
     func page(of record: Snapshot, repositoryID: UUID) -> SidebarItem {
         if let planID = Self.owner(of: record, among: plans) { return .plan(planID) }
         return .otherGroup(repositoryID: repositoryID, id: record.otherGroupID)
     }
 
-    /// The one configured plan a group under Other backups belongs to: it
-    /// backs up to another repository now, which is why its backups here are
-    /// not under it. Nil for a group no configuration sets up (a deleted
-    /// plan's, or one still running on another Mac) and for an untagged
-    /// lineage.
+    /// The configured plan a group belongs to, which backs up to another
+    /// repository now. Nil for a group no configuration sets up and for an
+    /// untagged lineage.
     func formerPlan(of group: OtherBackupsGroup) -> BackupPlan? {
         guard case let .plan(id, _) = group else { return nil }
         return allPlans.withID(id)
@@ -219,10 +189,9 @@ extension BackupShelves {
         others.first { $0.id == .plan(planID) }
     }
 
-    /// The backups the plan editor counts as `planID`'s: a configured plan's
-    /// shelf, where its page counts them, so a backup two plans' tags claim
-    /// counts once; a plan being adopted has no shelf yet, so its group
-    /// under Other backups, the history it is about to own.
+    /// A configured plan's shelf, so a backup two plans' tags claim counts
+    /// once; a plan being adopted has no shelf yet, so its group under Other
+    /// backups.
     func backupCount(ofPlan planID: UUID) -> Int {
         byPlan[planID]?.count ?? orphanPlanGroup(planID)?.snapshots.count ?? 0
     }
@@ -243,8 +212,7 @@ extension BackupShelves {
         case let .lineage(key): lineageGroup(key)
         }
         guard let group else { return nil }
-        // The label that named the row names the page; otherLabels names
-        // every group it is given.
+        // otherLabels names every group it is given.
         let label = otherLabels(repositories: repositories, localHost: localHost)[group.id]!
         let planID: UUID? = if case let .plan(planID) = id { planID } else { nil }
         return OtherGroupPageSummary(

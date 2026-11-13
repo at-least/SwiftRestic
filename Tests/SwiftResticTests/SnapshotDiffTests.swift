@@ -87,7 +87,7 @@ struct DiffCandidateGroupingTests {
         let months = DiffCandidateGrouping.months(in: versions, time: \.time, calendar: calendar)
         #expect(months.map { $0.items.map(\.id) } == [["m2", "m1"], ["f9"]])
         #expect(months.map(\.label) == ["March 2026", "February 2026"])
-        // One month needs no landmark: the list reads as it always has.
+        // One month needs no landmark.
         #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.time, calendar: calendar) == nil)
         #expect(DiffCandidateGrouping.landmarks(in: versions, time: \.time, calendar: calendar)?.count == 2)
     }
@@ -113,7 +113,6 @@ struct DiffCandidateGroupingTests {
         let months = try #require(DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time, calendar: calendar))
         #expect(months.map(\.label) == ["March 2026", "January 2026"])
         #expect(months.map { $0.items.map(\.id) } == [["c", "b2"], ["a3"]])
-        // A file whose versions all began in one month reads as before.
         #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
     }
 

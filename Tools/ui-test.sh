@@ -1,10 +1,8 @@
 #!/bin/bash
-# The UI tests (scheme SwiftResticUITests): built here, run in a single-use
-# orchard VM from cirruslabs' Xcode image, never on this desktop, which they
-# would drive. Needs the orchard CLI's default context (the controller).
-# Arguments go to xcodebuild test-without-building (-only-testing:SwiftResticUITests/FirstBackupUITests).
-# The result bundle lands in .build/ui-test/ui.xcresult; the exit status is
-# the test run's.
+# The UI tests, built here and run in a single-use orchard VM (they would
+# drive this desktop). Needs the orchard CLI's default context. Arguments go
+# to xcodebuild test-without-building, e.g.
+# -only-testing:SwiftResticUITests/FirstBackupUITests.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

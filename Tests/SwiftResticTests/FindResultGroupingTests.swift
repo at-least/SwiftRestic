@@ -18,8 +18,8 @@ struct FindResultGroupingTests {
         #expect(built.rows.map(\.snapshotID) == ["new", "old"])
         #expect(built.dropped == 0)
 
-        // Equal times: the search's own order stands — name, then path —
-        // so equal times never shuffle between searches.
+        // Equal times keep the search's own order (name, then path), so ties
+        // never shuffle between searches.
         let tied = FindResultGrouping.indexRows(
             hits: hits.reversed(),
             summaries: [
