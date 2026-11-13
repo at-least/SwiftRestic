@@ -11,8 +11,8 @@ struct FilesTreeTests {
         FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: folder)
     }
 
-    private func entry(_ node: FileNode, _ standing: FilesTree.Standing = .onDisk) -> FilesTree.Entry {
-        FilesTree.Entry(node: node, standing: standing)
+    private func entry(_ node: FileNode, _ standing: FileEntry.Standing = .onDisk) -> FileEntry {
+        FileEntry(node: node, standing: standing)
     }
 
 
@@ -92,7 +92,7 @@ struct FilesTreeTests {
         #expect(entries.map(\.node.path) == ["/Docs/a/note2", "/Docs/b/note2", "/Docs/b/note10", "/Docs/Notes"])
         // A hit is the very node the tree lists, so picking it selects that
         // row's item; the one the disk no longer has is deleted.
-        #expect(entries[0] == FilesTree.Entry(node: node("/Docs/a/note2", folder: false), standing: .deleted(lastBackedUp: day)))
+        #expect(entries[0] == FileEntry(node: node("/Docs/a/note2", folder: false), standing: .deleted(lastBackedUp: day)))
         #expect(entries[1].standing == .onDisk)
         #expect(entries[3].node == node("/Docs/Notes"))
     }
@@ -106,8 +106,8 @@ struct FilesTreeTests {
         #expect(here.help == "/Docs/a.txt")
         #expect(here.spokenStanding == nil)
 
-        #expect(FilesTree.Entry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
-        #expect(FilesTree.Entry.notBackedUpReason(notRead: "permission denied") == "The newest backup couldn’t read it (permission denied)")
+        #expect(FileEntry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
+        #expect(FileEntry.notBackedUpReason(notRead: "permission denied") == "The newest backup couldn’t read it (permission denied)")
 
         let gone = entry(node("/Docs/old.txt", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: when)))
         #expect(gone.tag == Format.until(when))
@@ -116,8 +116,8 @@ struct FilesTreeTests {
 
         // On this Mac, but missing from the newest backup an older one is
         // not: the pane's line.
-        #expect(FilesTree.Entry.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
-        #expect(FilesTree.Entry.standing(notRead: "permission denied", lastBackedUp: when)
+        #expect(FileEntry.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
+        #expect(FileEntry.standing(notRead: "permission denied", lastBackedUp: when)
             == "Not read by the newest backup (permission denied) — last backed up \(stamp)")
     }
 

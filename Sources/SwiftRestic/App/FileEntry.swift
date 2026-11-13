@@ -1,20 +1,12 @@
 import Foundation
-import Observation
 
-/// What a plan's Backups tab knows of this Mac's disk beside its backups:
-/// the disk's turn — read again when the disk may have changed
-/// (`diskMayHaveChanged`: the tab shown, the app made active, a volume
-/// mounted or unmounted) — and an item's standing, on this Mac or gone
-/// from it, as a search's hits and a tree's rows show it.
-@MainActor
-@Observable
-final class FilesTree {
-    struct Entry: Hashable, Identifiable {
-        let node: FileNode
-        let standing: Standing
+/// An item of a chain's backups and its standing, on this Mac or gone
+/// from it, as a search's hits show it.
+struct FileEntry: Hashable, Identifiable {
+    let node: FileNode
+    let standing: Standing
 
-        var id: FileNode { node }
-    }
+    var id: FileNode { node }
 
     enum Standing: Hashable {
         /// On this Mac.
@@ -23,37 +15,9 @@ final class FilesTree {
         /// `lastBackedUp`.
         case deleted(lastBackedUp: IndexVersion)
     }
-
-    static let recheckInterval: Duration = .seconds(15)
-
-    /// Moved by `diskMayHaveChanged`: what was read of the disk in an older
-    /// turn is read again.
-    private(set) var diskGeneration: UInt64 = 0
-
-    /// The disk may no longer be as it was read: the Backups tab shown
-    /// again, the app made active — another app may have changed a folder
-    /// meanwhile — or a volume mounted or unmounted.
-    func diskMayHaveChanged() {
-        diskGeneration += 1
-    }
-
-    /// The index's children as rows of the backups alone — a search's hits
-    /// — each on this Mac or deleted by `present`, unsorted; each caller
-    /// applies its own order.
-    nonisolated static func entries(_ children: [IndexChild], repositoryID: UUID, chainKey: String, present: Set<PathKey>) -> [Entry] {
-        children.map { child in
-            Entry(
-                node: FileNode(
-                    repositoryID: repositoryID, chainKey: chainKey,
-                    path: child.path, isDirectory: child.isDirectory
-                ),
-                standing: present.contains(PathKey(child.path)) ? .onDisk : .deleted(lastBackedUp: child.newest)
-            )
-        }
-    }
 }
 
-extension FilesTree.Entry {
+extension FileEntry {
     var help: String {
         switch standing {
         case .onDisk: node.path
@@ -99,7 +63,7 @@ extension FilesTree.Entry {
 
 struct FilesSearchAnswer: Equatable {
     enum Outcome: Equatable {
-        case hits([FilesTree.Entry])
+        case hits([FileEntry])
         case failed(String)
     }
 
@@ -128,9 +92,17 @@ struct FilesSearchAnswer: Equatable {
     /// deleted by `present`, the paths found on the disk: by name as Finder
     /// sorts names, one name's hits by path — the tree's rows, with no
     /// folders first, since a hit's folder is its caption.
-    static func entries(_ hits: [IndexChild], under roots: FileNode, present: Set<PathKey>) -> [FilesTree.Entry] {
-        FilesTree.entries(hits, repositoryID: roots.repositoryID, chainKey: roots.chainKey, present: present)
-            .sorted { lhs, rhs in
+    static func entries(_ hits: [IndexChild], under roots: FileNode, present: Set<PathKey>) -> [FileEntry] {
+        hits.map { hit in
+            FileEntry(
+                node: FileNode(
+                    repositoryID: roots.repositoryID, chainKey: roots.chainKey,
+                    path: hit.path, isDirectory: hit.isDirectory
+                ),
+                standing: present.contains(PathKey(hit.path)) ? .onDisk : .deleted(lastBackedUp: hit.newest)
+            )
+        }
+        .sorted { lhs, rhs in
                 switch lhs.node.name.localizedStandardCompare(rhs.node.name) {
                 case .orderedAscending: true
                 case .orderedDescending: false

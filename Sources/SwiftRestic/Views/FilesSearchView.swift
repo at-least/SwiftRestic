@@ -9,7 +9,7 @@ import SwiftUI
 struct FilesSearchView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(FilesTree.self) private var filesTree
+    @Environment(DiskWatch.self) private var diskWatch
     let roots: FileNode
     /// The plan's page, which Search All Backups comes back to.
     let page: SidebarItem
@@ -47,7 +47,7 @@ struct FilesSearchView: View {
                 query: query,
                 listedAt: model.snapshotsLoadedAt(for: roots.repositoryID),
                 indexTaken: model.indexTakenGeneration[roots.repositoryID],
-                diskGeneration: filesTree.diskGeneration
+                diskGeneration: diskWatch.diskGeneration
             )) {
                 await search()
             }
@@ -112,7 +112,7 @@ struct FilesSearchView: View {
     /// Return or Esc in the hits: the search ends on the selected hit, in
     /// the open backup while this Mac still has it, else in the last backup
     /// that held it — the tree opens its folders to it.
-    private func endSearch(_ press: KeyPress, entries: [FilesTree.Entry]) -> KeyPress.Result {
+    private func endSearch(_ press: KeyPress, entries: [FileEntry]) -> KeyPress.Result {
         guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]) else { return .ignored }
         router.filesSearchText[roots] = nil
         if let hit = entries.first(where: { $0.node == router.filesSelection[roots] }) {
@@ -171,7 +171,7 @@ struct FilesSearchView: View {
             )
             guard !complete, case .hits = outcome else { return }
             do {
-                try await Task.sleep(for: FilesTree.recheckInterval)
+                try await Task.sleep(for: DiskWatch.recheckInterval)
             } catch {
                 return
             }
@@ -194,7 +194,7 @@ private struct FilesSearchKey: Equatable {
 /// folder that holds it. An item no longer on this Mac is dimmed, with the
 /// day it was last backed up.
 private struct FilesSearchRow: View {
-    let entry: FilesTree.Entry
+    let entry: FileEntry
     let folder: String
 
     var body: some View {

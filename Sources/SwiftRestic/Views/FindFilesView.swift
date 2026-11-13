@@ -112,7 +112,7 @@ struct FindFilesView: View {
             selection.formIntersection(found.rows.map(\.id))
             guard !found.stillReading.isEmpty else { return }
             do {
-                try await Task.sleep(for: FilesTree.recheckInterval)
+                try await Task.sleep(for: DiskWatch.recheckInterval)
             } catch {
                 return
             }

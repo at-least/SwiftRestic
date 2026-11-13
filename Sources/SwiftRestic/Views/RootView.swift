@@ -24,7 +24,7 @@ struct RootView: View {
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
     /// The disk's turn every page's Backups tab reads this Mac by.
-    @State private var filesTree = FilesTree()
+    @State private var diskWatch = DiskWatch()
     /// The adopt sheet, raised from a group's context menu or page — one
     /// presentation for both, so selecting the new plan afterwards lives
     /// here too.
@@ -75,7 +75,7 @@ struct RootView: View {
             onAdoptGroup: adoptGroup,
             onRevalidateSelection: revalidateSelection
         )
-        .environment(filesTree)
+        .environment(diskWatch)
         // The toolbar's material is hidden (`chrome`), so nothing else stops
         // a scrolled list from drawing under the title.
         .clipped()

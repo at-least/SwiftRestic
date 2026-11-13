@@ -17,7 +17,7 @@ import UniformTypeIdentifiers
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(FilesTree.self) private var filesTree
+    @Environment(DiskWatch.self) private var diskWatch
 
     let repositoryID: UUID
     let snapshotID: String
@@ -494,7 +494,7 @@ struct RestorePaneView: View {
     }
 
     private var presenceKey: PresenceKey {
-        PresenceKey(rows: tree.rows.map(\.id), loaded: loadedSnapshotID, diskGeneration: filesTree.diskGeneration)
+        PresenceKey(rows: tree.rows.map(\.id), loaded: loadedSnapshotID, diskGeneration: diskWatch.diskGeneration)
     }
 
     /// Which of the tree's rows this Mac no longer holds, for a backup made

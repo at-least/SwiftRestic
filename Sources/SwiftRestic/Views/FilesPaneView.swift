@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(FilesTree.self) private var filesTree
+    @Environment(DiskWatch.self) private var diskWatch
     let node: FileNode
 
     /// The backups of the chain holding the item, newest first.
@@ -66,7 +66,7 @@ struct FilesPaneView: View {
             node: node,
             listedAt: model.snapshotsLoadedAt(for: node.repositoryID),
             indexTaken: model.indexTakenGeneration[node.repositoryID],
-            diskGeneration: filesTree.diskGeneration
+            diskGeneration: diskWatch.diskGeneration
         )) {
             while !Task.isCancelled {
                 let path = node.path
@@ -74,7 +74,7 @@ struct FilesPaneView: View {
                 await load()
                 guard !indexComplete else { return }
                 do {
-                    try await Task.sleep(for: FilesTree.recheckInterval)
+                    try await Task.sleep(for: DiskWatch.recheckInterval)
                 } catch {
                     return
                 }
@@ -111,7 +111,7 @@ struct FilesPaneView: View {
             ContentUnavailableView(
                 "Not backed up",
                 systemImage: "clock.arrow.circlepath",
-                description: Text(verbatim: FilesTree.Entry.notBackedUpReason(notRead: notRead) + ".")
+                description: Text(verbatim: FileEntry.notBackedUpReason(notRead: notRead) + ".")
             )
         } else if node.isDirectory {
             FolderPaneActions(node: node, newest: versions.first)
@@ -311,10 +311,10 @@ private struct FilesPaneHeader: View {
     private var standing: String? {
         guard let newestHolder else { return nil }
         if node.isDirectory, isOnDisk == false {
-            return FilesTree.Entry.deleted(lastBackedUp: newestHolder.time)
+            return FileEntry.deleted(lastBackedUp: newestHolder.time)
         }
         if let chainNewest, newestHolder.id != chainNewest.id {
-            return FilesTree.Entry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
+            return FileEntry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
         }
         return node.isDirectory ? "Last backed up \(Format.timestamp(newestHolder.time))" : nil
     }

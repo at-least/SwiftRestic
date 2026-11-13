@@ -18,7 +18,7 @@ import SwiftUI
 struct BackupsBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
-    @Environment(FilesTree.self) private var filesTree
+    @Environment(DiskWatch.self) private var diskWatch
     let page: SidebarItem
     let repositoryID: UUID
     /// The page's backups, newest first.
@@ -80,15 +80,15 @@ struct BackupsBrowserView: View {
         // again when the tab shows, when SwiftRestic comes to the front —
         // another app may have changed a folder meanwhile — and when a
         // volume comes or goes.
-        .onChange(of: page, initial: true) { filesTree.diskMayHaveChanged() }
+        .onChange(of: page, initial: true) { diskWatch.diskMayHaveChanged() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            filesTree.diskMayHaveChanged()
+            diskWatch.diskMayHaveChanged()
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
-            filesTree.diskMayHaveChanged()
+            diskWatch.diskMayHaveChanged()
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
-            filesTree.diskMayHaveChanged()
+            diskWatch.diskMayHaveChanged()
         }
     }
 

@@ -98,8 +98,6 @@ struct Banner: Identifiable, Equatable {
         self.link = link
     }
 
-    var isError: Bool { level == .error }
-
     /// Errors and warnings stay until dismissed: something did not work,
     /// and it must not expire unread.
     var staysUntilDismissed: Bool { level == .error || level == .warning }
@@ -179,7 +177,6 @@ struct FileNode: Hashable, Sendable {
 
     var path: String { pathKey.path }
     var name: String { ResticPath.basename(of: path) }
-    var isRoots: Bool { path.isEmpty }
 }
 
 /// Not the in-flight state — `loadingSnapshots` owns that. A refresh that

@@ -9,7 +9,7 @@ import SwiftUI
 /// backup. Pick one to restore it, Space to look at it; drag one to Finder.
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
-    @Environment(FilesTree.self) private var filesTree
+    @Environment(DiskWatch.self) private var diskWatch
     let node: FileNode
     /// Newest first.
     let versions: [ContentVersion]
@@ -56,11 +56,11 @@ struct FileVersionsView: View {
         .task(id: versions.map(\.id)) { await readDetails() }
         // A restore can put a version back where it came from: the disk is
         // read again once it ends, as when the pane opens — and whenever
-        // the tree reads the disk again (`FilesTree.diskMayHaveChanged`).
+        // the tree reads the disk again (`DiskWatch.diskMayHaveChanged`).
         // Off the main actor, as the tree's and the pane's own reads are: a
         // stalled share holds the read for as long as it stalls, and every
         // activation and mount is a disk turn.
-        .task(id: DiskReadKey(path: diskPath, isRestoring: model.isRestoring, diskGeneration: filesTree.diskGeneration)) {
+        .task(id: DiskReadKey(path: diskPath, isRestoring: model.isRestoring, diskGeneration: diskWatch.diskGeneration)) {
             guard let path = diskPath else {
                 disk = nil
                 return

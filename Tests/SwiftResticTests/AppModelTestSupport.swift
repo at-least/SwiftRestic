@@ -36,3 +36,11 @@ extension BackupPlan {
         skipsMachines = false
     }
 }
+
+extension Banner {
+    var isError: Bool { level == .error }
+}
+
+extension FileNode {
+    var isRoots: Bool { path.isEmpty }
+}
