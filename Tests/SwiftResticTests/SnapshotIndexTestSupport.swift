@@ -691,4 +691,10 @@ extension IndexCoordinator {
             try await $0.searchWithMembership(matching: query, limit: limit, inSnapshot: snapshotID)
         }
     }
+
+    /// The store's `children` through the coordinator's read: the backfill
+    /// tests' view of what a pass indexed under a folder.
+    nonisolated func children(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
+        try await read(repositoryID) { try await $0.children(ofPath: path, inChain: chainKey) }
+    }
 }

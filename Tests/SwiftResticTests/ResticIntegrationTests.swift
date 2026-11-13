@@ -1397,7 +1397,7 @@ struct ResticIntegrationTests {
         let summary = try await fixture.service.check(fixture.context, readDataSubset: .percent(100))
         #expect(summary?.numErrors == 0)
 
-        let stats = try await fixture.service.stats(fixture.context)
+        let stats = try await fixture.service.stats(fixture.context, timeout: nil)
         #expect(stats.totalSize > 0)
         #expect(stats.snapshotsCount == 1)
     }
@@ -1422,7 +1422,7 @@ struct ResticMaintenanceTests {
             _ = try await service.backup(context, plan: plan)
         }
 
-        let before = try await service.stats(context)
+        let before = try await service.stats(context, timeout: nil)
 
         var trimmed = plan
         trimmed.retention = RetentionPolicy(
@@ -1437,7 +1437,7 @@ struct ResticMaintenanceTests {
         let freed = try #require(ResticService.pruneFreedBytes(in: output), "no total prune line in: \(output)")
         #expect(freed > 0)
 
-        let after = try await service.stats(context)
+        let after = try await service.stats(context, timeout: nil)
         #expect(after.totalSize < before.totalSize)
 
         let check = try await service.check(context, readDataSubset: .percent(100))

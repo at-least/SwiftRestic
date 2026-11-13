@@ -29,7 +29,7 @@ enum KeychainStore {
         }
     }
 
-    static func account(for ownerID: UUID, slot: Slot) -> String {
+    private static func account(for ownerID: UUID, slot: Slot) -> String {
         "\(ownerID.uuidString).\(slot.rawValue)"
     }
 
@@ -89,7 +89,7 @@ enum KeychainStore {
         }
     }
 
-    static func delete(ownerID: UUID, slot: Slot) throws {
+    private static func delete(ownerID: UUID, slot: Slot) throws {
         let status = SecItemDelete(query(ownerID: ownerID, slot: slot) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)

@@ -41,7 +41,6 @@ struct OperationProgress: Sendable, Equatable {
     var totalFiles: Int = 0
     var bytesDone: Int64 = 0
     var totalBytes: Int64 = 0
-    var currentFile: String?
     var secondsRemaining: Int?
 
     init() {}
@@ -52,7 +51,6 @@ struct OperationProgress: Sendable, Equatable {
         totalFiles = status.totalFiles ?? 0
         bytesDone = status.bytesDone ?? 0
         totalBytes = status.totalBytes ?? 0
-        currentFile = status.currentFiles.first
         secondsRemaining = status.secondsRemaining
     }
 }
@@ -228,7 +226,7 @@ struct ResticService: ResticClient {
     }
 
     /// Lock-free, for `find`'s reasons.
-    func stats(_ context: RepositoryContext, timeout: TimeInterval? = nil) async throws -> RepositoryStats {
+    func stats(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> RepositoryStats {
         let result = try await run(
             context,
             ResticInvocation(

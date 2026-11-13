@@ -29,11 +29,9 @@ struct IndexVersion: Sendable, Hashable, Identifiable {
     var time: Date
 }
 
-/// One entry directly under a folder somewhere in a chain's indexed history
-/// — a row of the Backups tab, which lists what a plan ever backed up, not
-/// only what its newest backup holds — or one hit of a search within the
-/// chain (`search(matching:inChain:limit:)`), which the Backups tab lists
-/// the same way.
+/// One hit of a search within a chain (`search(matching:inChain:limit:)`),
+/// the Backups tab's ⌘F results, or one entry directly under a folder
+/// somewhere in the chain's indexed history (`children(ofPath:inChain:)`).
 struct IndexChild: Sendable, Equatable {
     var path: String
     /// The kind in `newest`: a path can change kind over its history.
@@ -688,6 +686,9 @@ final class SnapshotIndex: @unchecked Sendable {
     /// included, marked by `isInNewest`. `/` lists the root's children; an
     /// unknown path or chain answers `[]`. Two snapshots of one chain at the
     /// same microsecond tie arbitrarily for `newest`.
+    /// No production caller — the Backups tab's tree lists the backup's own
+    /// folders through restic and the browse cache; this is the tests' view
+    /// of the chain history.
     func children(ofPath path: String, inChain chainKey: String) async throws -> [IndexChild] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
@@ -1326,7 +1327,7 @@ final class SnapshotIndex: @unchecked Sendable {
         Int64((date.timeIntervalSince1970 * 1_000_000).rounded())
     }
 
-    static func date(micros: Int64) -> Date {
+    private static func date(micros: Int64) -> Date {
         Date(timeIntervalSince1970: Double(micros) / 1_000_000)
     }
 

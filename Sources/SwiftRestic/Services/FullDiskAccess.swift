@@ -12,7 +12,7 @@ import Foundation
 enum FullDiskAccess {
     /// Three files, so one of them changing its protection in some macOS
     /// release cannot flip the answer alone: any EPERM means not granted.
-    static var probePaths: [String] {
+    private static var probePaths: [String] {
         let home = NSHomeDirectory()
         return [
             "/Library/Application Support/com.apple.TCC/TCC.db",

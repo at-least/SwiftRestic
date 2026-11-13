@@ -357,12 +357,6 @@ actor IndexCoordinator {
         try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
     }
 
-    /// Everything one chain ever held directly under a folder, items its
-    /// newest backup no longer has included.
-    nonisolated func children(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
-        try await read(repositoryID) { try await $0.children(ofPath: path, inChain: chainKey) }
-    }
-
     nonisolated func contentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }

@@ -29,12 +29,12 @@ extension SnapshotIndex {
     /// `Walk`), so a delta keeps it. The whole session ends when its target
     /// is set aside as unreadable.
     struct Session {
-        let hash: String
-        let snapID: Int64
-        var poisoned: Bool
+        fileprivate let hash: String
+        fileprivate let snapID: Int64
+        fileprivate var poisoned: Bool
         /// The target was already indexed when the stream began: chunks and
         /// the final are no-ops (a repeated read has nothing to teach).
-        var done: Bool
+        fileprivate var done: Bool
         var walk: Walk?
     }
 
