@@ -1,8 +1,7 @@
 import Foundation
 
-/// The kind of thing a rule the app passes leaves out. Older configurations
-/// stored the developer categories' raw values.
-enum ExcludeCategory: String, CaseIterable, Codable, Sendable {
+/// The kind of thing a rule the app passes leaves out.
+enum ExcludeCategory: Sendable {
     case finder
     case appState
     case indexes
@@ -50,7 +49,7 @@ struct ExcludeRule: Hashable, Sendable {
     /// Who puts it back, or why nothing has to.
     let why: String
 
-    init(_ pattern: String, _ category: ExcludeCategory, _ what: String, _ why: String) {
+    private init(_ pattern: String, _ category: ExcludeCategory, _ what: String, _ why: String) {
         self.pattern = pattern
         self.category = category
         self.what = what

@@ -82,7 +82,7 @@ final class DecodeNoteBox: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [(field: String, detail: String)] = []
 
-    func add(field: String, _ detail: String) {
+    fileprivate func add(field: String, _ detail: String) {
         lock.lock()
         defer { lock.unlock() }
         storage.append((field, detail))

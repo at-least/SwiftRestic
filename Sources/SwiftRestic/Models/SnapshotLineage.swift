@@ -31,7 +31,7 @@ struct SnapshotLineage: Identifiable, Sendable, Equatable {
     /// Every `swiftrestic-plan-` tag on the lineage's snapshots, and whether
     /// any snapshot carries none — who wrote it, read once at grouping time
     /// so naming it never rescans the snapshots.
-    let planTags: Set<String>
+    private let planTags: Set<String>
     private let hasSnapshotsWithoutPlan: Bool
 
     var id: Key { key }

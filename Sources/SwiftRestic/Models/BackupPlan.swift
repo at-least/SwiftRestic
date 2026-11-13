@@ -38,7 +38,7 @@ struct Schedule: Codable, Sendable, Hashable {
     /// An interval after the last run, never a time of day (user decision):
     /// a run missed while the Mac slept or the app was closed starts as soon
     /// as the app is running again.
-    func nextRunDate(after lastRun: Date?, now: Date = .now) -> Date? {
+    func nextRunDate(after lastRun: Date?, now: Date) -> Date? {
         guard let interval else { return nil }
         // A stamp after now comes from a clock that was set ahead; kept, it
         // would hold the plan back until that date. Within a minute of now it
