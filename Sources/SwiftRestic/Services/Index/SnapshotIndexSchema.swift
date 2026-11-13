@@ -133,7 +133,7 @@ enum SnapshotIndexSchema {
     ) STRICT;
     CREATE INDEX diff_result_newer ON diff_result (newer_id);
     -- One file's node in one snapshot, as `restic find` reported it: the size and modification
-    -- time a Files pane's version row shows.
+    -- time the Backups tab's version row shows.
     CREATE TABLE file_node (
         snapshot_id  TEXT NOT NULL,
         path         TEXT NOT NULL,              -- the file's exact path, restic's bytes

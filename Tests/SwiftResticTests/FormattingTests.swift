@@ -63,7 +63,7 @@ struct FormattingTests {
         #expect(Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 1)) == "Incomplete: 1 item couldn’t be read")
         #expect(
             Format.snapshotCompleteness(backup(exitCode: 3, unreadable: 0))
-                == "Incomplete: some of the source data couldn’t be read"
+                == "Incomplete: some files couldn’t be read"
         )
         #expect(Format.snapshotCompleteness(backup(exitCode: 0, unreadable: 0)) == "Complete")
         // No exit code and no errors: nothing is known, so nothing is said.
@@ -273,13 +273,9 @@ struct FormattingTests {
                 == "The run failed in U.S. region 2 and was stopped.",
             "a capital-less continuation after '. ' is an abbreviation, not a boundary"
         )
-        // restic is a name spelled lowercase, and it starts the second
-        // sentence of the wrong-password message.
-        let wrongPassword = ResticError.commandFailed(
-            exitCode: 12, message: "Fatal: wrong password or no key found"
-        )
+        // restic is a name spelled lowercase, and it can start a sentence.
         #expect(
-            Format.firstSentence(wrongPassword.localizedDescription)
+            Format.firstSentence("The password doesn’t open this backup location. restic says: wrong password.")
                 == "The password doesn’t open this backup location",
             "a sentence that starts with restic is still a sentence"
         )

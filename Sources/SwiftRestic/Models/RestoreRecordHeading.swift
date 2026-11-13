@@ -107,7 +107,7 @@ struct RestoreRecordHeading: Equatable, Sendable {
     var caption: String
     /// The tooltip: the backup's folders (with host and writers when the
     /// label has them), when it was made, and that the comparison failed.
-    /// No IDs: the run drawer's Copy Details carries those.
+    /// No IDs: the run drawer's copied details carry those.
     var detail: String
     var isProblem: Bool
 

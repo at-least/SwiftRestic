@@ -63,9 +63,35 @@ enum OriginalLocation: Sendable, Equatable {
     case unavailable(reason: String)
 }
 
+/// How a Restore asks where to (`RestoreDestinationRules.route`).
+enum RestoreDestinationRoute: Equatable {
+    /// Restore of this Mac's backup: back where the items were, the sheet
+    /// only when that place is not available.
+    case originalLocation
+    /// Restore To… of this Mac's backup: the folder panel straight away.
+    case folderPanel
+    /// Another Mac's backup, Restore or Restore To…: the sheet. That Mac's
+    /// paths can name other folders here.
+    case sheet
+}
+
 /// The destination sheet's rules, pure and with the file system injected, so
 /// the sheet's answers are testable without the paths existing.
 enum RestoreDestinationRules {
+    static func route(choosingDestination: Bool, madeOnThisMac: Bool) -> RestoreDestinationRoute {
+        guard madeOnThisMac else { return .sheet }
+        return choosingDestination ? .folderPanel : .originalLocation
+    }
+
+    /// The names of items that would land on each other: several items
+    /// into one folder, two of them named alike (`RestoreBatch`). Items each
+    /// going back to their own folder cannot meet — the folder panel's
+    /// check, made once a folder is chosen.
+    static func collidingNames(_ subject: RestoreSubject, into directories: [URL]) -> [String] {
+        guard case let .items(items) = subject, Set(directories).count == 1 else { return [] }
+        return RestoreBatch.collidingNames(items.map(\.name))
+    }
+
     /// The item's recorded path as a place on this Mac, when restoring its
     /// parent would put it back exactly there.
     ///

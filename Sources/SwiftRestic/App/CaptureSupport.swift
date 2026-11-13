@@ -77,10 +77,6 @@ extension AppDelegate {
         var stops: [(name: String, select: () async -> Void)] = []
         if let plan = model.configuration.plans.first {
             stops.append(("plan", { router.selection = .plan(plan.id) }))
-            stops.append(("files", {
-                router.selection = .plan(plan.id)
-                router.setTab(.files, of: .plan(plan.id))
-            }))
         }
         if let repository = model.configuration.repositories.first {
             stops.append(("repository", { router.selection = .repository(repository.id) }))

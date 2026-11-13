@@ -42,7 +42,7 @@ struct SkippedRunTests {
     @Test("a backup whose folder is gone from this Mac names it and says what to do")
     func folderGoneMessage() {
         #expect(RunRecord.folderGoneMessage(path: "/Users/me/Projects")
-            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
+            == "“Projects” is not on this Mac — it was moved, renamed or deleted. Put it back, or use Choose New Location… to back it up where it is now.")
     }
 
     @Test("a failure for the same shares refused continues the plan's last one, as one for folders gone does; another cause stands alone")
@@ -91,9 +91,6 @@ struct SkippedRunTests {
         otherFailure.failureMessage = "Fatal: unable to open config file"
         #expect(gone(60).continuingStandingFailure(of: otherFailure) == nil)
         #expect(otherFailure.continuingStandingFailure(of: first) == nil)
-        var complained = first
-        complained.hookMessages = ["“mount” exited with 1"]
-        #expect(gone(60).continuingStandingFailure(of: complained) == nil)
         var otherPlan = first
         otherPlan.planID = UUID()
         #expect(gone(60).continuingStandingFailure(of: otherPlan) == nil)
@@ -125,9 +122,6 @@ struct SkippedRunTests {
         )
         #expect(details.contains("Skipped: “Archive SSD” is not connected."))
         #expect(!details.contains("Files:"))
-        // The reason leads Activity's Detail even when an after-any hook
-        // complained.
-        run.hookMessages = ["“unmount” exited with 1"]
         #expect(RunRecordPresentation.detail(for: run) == "“Archive SSD” is not connected.")
     }
 
@@ -181,6 +175,29 @@ struct SkippedRunTests {
             repositoryReachable: { $0.id != repositoryAway.id }
         )
         #expect(due == [back.id])
+    }
+
+    @Test("a fix that worked runs again each scheduled plan whose newest backup failed, and nothing else")
+    func rerunAfterFix() {
+        func plan(_ frequency: Schedule.Frequency = .daily) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.repositoryID = UUID()
+            plan.path = "/Users/me/Documents"
+            plan.schedule.frequency = frequency
+            return plan
+        }
+        let failed = plan()
+        let skipped = plan()
+        let succeeded = plan()
+        let neverRan = plan()
+        let manual = plan(.manual)
+        let running = plan()
+        let plans = [failed, skipped, succeeded, neverRan, manual, running]
+        let newest: [UUID: RunRecord.Outcome] = [
+            failed.id: .failed, skipped.id: .skipped, succeeded.id: .succeeded,
+            manual.id: .failed, running.id: .failed,
+        ]
+        #expect(Scheduler.rerunAfterFix(plans: plans, newestBackupOutcome: newest, running: [running.id]) == [failed.id])
     }
 
     @Test("a backup an earlier build skipped around an away drive's folders still reads so, and that the rest was backed up")
@@ -247,9 +264,6 @@ struct SkippedRunTests {
 
         // Anything that makes the earlier record its own news keeps it.
         #expect(skip(60, reason: "“Travel” is not connected.").continuingSkip(of: first) == nil)
-        var complained = first
-        complained.hookMessages = ["“eject” exited with 1"]
-        #expect(skip(60).continuingSkip(of: complained) == nil)
         var failed = first
         failed.outcome = .failed
         #expect(skip(60).continuingSkip(of: failed) == nil)

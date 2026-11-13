@@ -522,9 +522,9 @@ struct ResticIntegrationTests {
         let model = try await adoptableModel(fixture: fixture, repository: repository)
 
         var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: plan.id))
-        // The policy is on in the draft alone: the plan is not saved, so the
+        // The policy is set in the draft alone: the plan is not saved, so the
         // draft itself travels to restic.
-        #expect(!draft.retention.isEnabled)
+        #expect(draft.retention == BackupPlan().retention)
         draft.retention = RetentionPolicy(
             isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
             keepWeekly: 0, keepMonthly: 0, keepYearly: 0
@@ -642,13 +642,17 @@ struct ResticIntegrationTests {
     func repositoryExistsTimesOut() async throws {
         let service = try PinnedRestic.service()
         var repository = Repository()
-        repository.kind = .rest
-        // Port 1 refuses: restic 0.19.1 retried this for over ten minutes
-        // (probed) before the timeout bounded it.
-        repository.restURL = "http://127.0.0.1:1/"
+        repository.kind = .s3
+        // Port 1 refuses: restic 0.19.1 retried a REST server there for over
+        // ten minutes (probed) before the timeout bounded it.
+        repository.s3Endpoint = "http://127.0.0.1:1"
+        repository.s3Bucket = "bucket"
+        repository.s3AccessKeyID = "key"
         let started = Date.now
         do {
-            _ = try await service.repositoryExists(RepositoryContext(repository: repository, password: Self.password), timeout: 3)
+            _ = try await service.repositoryExists(
+                RepositoryContext(repository: repository, password: Self.password, providerSecret: "secret"), timeout: 3
+            )
             Issue.record("expected the check to time out")
         } catch ResticError.timedOut {
             #expect(Date.now.timeIntervalSince(started) < 30)
@@ -1430,6 +1434,8 @@ struct ResticMaintenanceTests {
         // forget only unlinks snapshots; the packs stay until prune rewrites them.
         let output = try await service.prune(context)
         #expect(!output.isEmpty, "prune produced no output to record")
+        let freed = try #require(ResticService.pruneFreedBytes(in: output), "no total prune line in: \(output)")
+        #expect(freed > 0)
 
         let after = try await service.stats(context)
         #expect(after.totalSize < before.totalSize)

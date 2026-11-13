@@ -1,13 +1,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The pane for a folder or file picked in a Files tab's tree: what it is
-/// and where it lives — and when it was last backed up: always for a folder,
-/// for a file once the newest backup has dropped it or this Mac no longer
-/// holds it — then a file by each
-/// content it had (`FileVersionsView`), a folder by its way back
-/// (`FolderPaneActions`), or, for an item on this Mac no backup holds, that it
-/// is not backed up. A folder at any other moment is the Backups tab's.
+/// The pane under a Backups tab's tree for the file picked in it, or the
+/// folder or file picked in a plan's search: what it is and where it lives
+/// — and when it was last backed up: always for a folder, for a file once
+/// the newest backup has dropped it or this Mac no longer holds it — then a
+/// file by each content it had (`FileVersionsView`), a folder by its way
+/// back (`FolderPaneActions`), or, for an item on this Mac no backup holds,
+/// that it is not backed up.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -152,7 +152,7 @@ struct FilesPaneView: View {
             contentVersions = contents
             loadError = nil
             // Where the pane opens, settled on the first read: the version
-            // the file was left at, or Show Versions named. The newest as
+            // the file was left at, or the backup it was picked in. The newest as
             // nothing: an open pane follows a newer backup.
             if !didOpen {
                 didOpen = true
@@ -169,12 +169,11 @@ struct FilesPaneView: View {
 }
 
 /// A folder's way back, by the newest backup holding it — this Mac's copy gone
-/// or not: the whole folder's restore, and the backup itself open at the
-/// folder, for any other moment or a part of it. When that backup was is the
-/// header's line.
+/// or not: the whole folder's restore. When that backup was is the header's
+/// line; any other moment, or a part of it, is the tree's once the search
+/// ends on it.
 private struct FolderPaneActions: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     let node: FileNode
     let newest: IndexVersion?
 
@@ -191,9 +190,6 @@ private struct FolderPaneActions: View {
             }
             Divider()
             HStack {
-                Button("Show in Backups") { showInBackups() }
-                    .disabled(newest == nil)
-                    .help("Open the newest backup at this folder on the Backups tab")
                 Spacer()
                 Button("Restore To…") { restoreFolder(choosingDestination: true) }
                     .accessibilityIdentifier(AccessibilityID.FilesPane.restoreTo)
@@ -212,11 +208,6 @@ private struct FolderPaneActions: View {
             run: { restoreFolder() }
         ))
         .restoreFlow($destinationRequest)
-    }
-
-    private func showInBackups() {
-        guard let newest, let page = model.page(ofBackup: newest.id, in: node.repositoryID) else { return }
-        router.showBackup(newest.id, on: page, repositoryID: node.repositoryID, focusPath: node.path)
     }
 
     /// By its path, its kind in that backup read before it restores: the

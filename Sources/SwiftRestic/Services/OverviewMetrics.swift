@@ -414,7 +414,7 @@ enum OverviewMetrics {
         }
         // How far back the history reaches — the oldest backup's day, which
         // nothing else on the page says and which both the Backups tab's
-        // list and the Files tab's picker put at the end of a long list. One
+        // list and its picker put at the end of a long list. One
         // backup reaches no further than itself.
         if let since, total > 1 {
             line += " · since \(Format.day(since))"

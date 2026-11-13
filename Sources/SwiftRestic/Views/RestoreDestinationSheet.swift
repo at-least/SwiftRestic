@@ -2,17 +2,14 @@ import AppKit
 import SwiftUI
 
 /// One restore waiting for its destination: what, from which backup, and
-/// what to run once it has one. Every Restore in the app builds one — the
-/// Restore pane's, Search All Backups' and the Files view's — and hands it
+/// what to run once it has one. Every Restore in the app builds one — a
+/// backup's tree's, a file's versions', Search All Backups' — and hands it
 /// to `restoreFlow`, so the destination and what to do with what is already
 /// there are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
     let subject: RestoreSubject
-    /// Restore To…, or some item from another Mac's backup
-    /// (`RestoreSelection.isMadeOnThisMac`): the sheet. Otherwise Restore
-    /// puts the items back without it.
-    let opensSheet: Bool
+    let route: RestoreDestinationRoute
     /// `restoreFlow`'s look at the original location, carried into the
     /// sheet so it does not look again; nil until something looked.
     var original: OriginalLocation?
@@ -25,7 +22,7 @@ struct RestoreDestinationRequest: Identifiable {
     /// from the backup it was found in.
     var backupCount = 1
     /// The version's own modified time, when the request came from a row
-    /// named by it (the Files tab's version list): the sheet then repeats
+    /// named by it (a file's versions): the sheet then repeats
     /// the words the user chose by beside the backup the bytes come from.
     var versionModified: Date?
     /// Starts the restore with this policy, into these directories: one per
@@ -55,7 +52,7 @@ struct RestoreDestinationRequest: Identifiable {
         )
         return RestoreDestinationRequest(
             subject: selection.subject,
-            opensSheet: choosingDestination || !madeOnThisMac,
+            route: RestoreDestinationRules.route(choosingDestination: choosingDestination, madeOnThisMac: madeOnThisMac),
             selectionNote: selection.note,
             backupTime: selection.backupTime,
             backupCount: selection.backupCount
@@ -63,9 +60,49 @@ struct RestoreDestinationRequest: Identifiable {
             Task { await model.restore(selection, repositoryID: repositoryID, into: directories, overwrite: overwrite) }
         }
     }
+
+    /// The folder panel's message: the item and the backup it comes from.
+    var panelMessage: String {
+        let what = switch subject {
+        case let .item(name, _, _): "Restore “\(name)”"
+        case let .items(items): "Restore \(Format.plural(items.count, "item"))"
+        }
+        let backupLine = RestoreSelection.backupLine(
+            backupCount: backupCount, backupTime: backupTime, versionModified: versionModified
+        )
+        return "\(what)\(versionModified == nil ? " " : ", ")\(backupLine)."
+    }
 }
 
 extension RestoreDestinationRequest {
+    /// Names that would land on each other in the one folder chosen, said;
+    /// true when there are none and the restore may go on.
+    @MainActor
+    func namesFit(into directories: [URL]) -> Bool {
+        let colliding = RestoreDestinationRules.collidingNames(subject, into: directories)
+        guard !colliding.isEmpty else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "More than one item is named \(colliding.map { "“\($0)”" }.joined(separator: ", "))."
+        alert.informativeText = "In one folder they would land on each other. Restore them one at a time, or with Restore, each back where it was."
+        alert.addButton(withTitle: "Cancel")
+        alert.runModal()
+        return false
+    }
+
+    /// The policy for a restore into `directories`: what already holds its
+    /// landings, looked at off the main actor, then `overwritePolicy`. Nil
+    /// is Cancel, the asker's included.
+    @MainActor
+    func overwritePolicy(into directories: [URL]) async -> RestoreOverwritePolicy? {
+        let landings = RestoreDestinationRules.landings(for: subject, into: directories)
+        let existing = await Task.detached(priority: .userInitiated) {
+            RestoreDestinationRules.replaceConfirmationTargets(landings: landings, exists: RestoreDestinationRules.itemExists(at:))
+        }.value
+        guard !Task.isCancelled, let policy = overwritePolicy(existing: existing), !Task.isCancelled else { return nil }
+        return policy
+    }
+
     /// The policy for a restore whose landings `existing` already holds:
     /// keep with nothing in the way — the mode that cannot clobber what
     /// appears between the look and restic's run — else the question's
@@ -128,8 +165,9 @@ extension RestoreDestinationRequest {
 extension View {
     /// Runs each request set in `request`: Restore puts the items back
     /// where they were, Time Machine's way, asking only when something is in
-    /// the way; the sheet opens when that place is not on this Mac or not
-    /// writable, for another Mac's backup, and for Restore To….
+    /// the way; Restore To… opens the folder panel; the sheet opens only for
+    /// another Mac's backup and when the items' own place is not on this
+    /// Mac or not writable (`RestoreDestinationRules.route`).
     func restoreFlow(_ request: Binding<RestoreDestinationRequest?>) -> some View {
         modifier(RestoreFlow(request: request))
     }
@@ -155,13 +193,41 @@ private struct RestoreFlow: ViewModifier {
             }
     }
 
-    /// The look off the main actor: the parent may sit on a stalled
-    /// network mount, which must not stall the window.
+    /// Each look at the disk runs off the main actor: the parent may sit on
+    /// a stalled network mount, which must not stall the window.
     private func run(_ pending: RestoreDestinationRequest) async {
-        guard !pending.opensSheet else {
+        switch pending.route {
+        case .sheet:
             sheetRequest = pending
-            return
+        case .folderPanel:
+            await restoreIntoChosenFolder(pending)
+        case .originalLocation:
+            await restoreInPlace(pending)
         }
+    }
+
+    /// Restore To… of this Mac's backup: the panel, then the names that
+    /// would meet in it, then what is in the way.
+    private func restoreIntoChosenFolder(_ pending: RestoreDestinationRequest) async {
+        // Run from the main run loop's default mode, not from inside this
+        // task: run inside it, the panel's modal session started (the window
+        // went disabled) with no panel on screen.
+        let message = pending.panelMessage
+        let chosen: URL? = await withCheckedContinuation { continuation in
+            RunLoop.main.perform(inModes: [.default]) {
+                MainActor.assumeIsolated {
+                    continuation.resume(returning: FilePicker.chooseDirectory(message: message, prompt: "Restore"))
+                }
+            }
+        }
+        guard let folder = chosen, !Task.isCancelled else { return }
+        let directories = Array(repeating: folder, count: pending.subject.directoryCount)
+        guard pending.namesFit(into: directories), let policy = await pending.overwritePolicy(into: directories)
+        else { return }
+        pending.perform(directories, policy)
+    }
+
+    private func restoreInPlace(_ pending: RestoreDestinationRequest) async {
         let subject = pending.subject
         let (original, existing) = await Task.detached(priority: .userInitiated) {
             let original = RestoreDestinationRules.originalLocation(
@@ -188,8 +254,8 @@ private struct RestoreFlow: ViewModifier {
     }
 }
 
-/// Restore To…, and Restore when the items' own place is not available:
-/// Arq's "Restore to:" window, with our item-and-backup wording kept — a
+/// Another Mac's backup, and Restore when the items' own place is not
+/// available: Arq's "Restore to:" window, with our item-and-backup wording kept — a
 /// folder (the Desktop until another is chosen) or the items' original
 /// location, and a live line saying exactly where it lands. It opens on the
 /// folder: Restore is the way back to the original location. What is
@@ -316,7 +382,7 @@ struct RestoreDestinationSheet: View {
     /// same name from two folders of the backup (`RestoreBatch`). Original
     /// location puts each back in its own folder, where no two can meet.
     private var collidingNames: [String] {
-        items.map { RestoreBatch.collidingNames($0.map(\.name)) } ?? []
+        RestoreDestinationRules.collidingNames(request.subject, into: [folder])
     }
 
     private var directories: [URL]? {
@@ -413,19 +479,11 @@ struct RestoreDestinationSheet: View {
 
     private func restore() {
         guard let directories else { return }
-        let landings = RestoreDestinationRules.landings(for: request.subject, into: directories)
         isConfirming = true
         confirmation = Task {
-            let existing = await Task.detached(priority: .userInitiated) {
-                RestoreDestinationRules.replaceConfirmationTargets(
-                    landings: landings,
-                    exists: RestoreDestinationRules.itemExists(at:)
-                )
-            }.value
             defer { isConfirming = false }
             // Cancel pressed while the look ran: nothing starts.
-            guard !Task.isCancelled, let policy = request.overwritePolicy(existing: existing), !Task.isCancelled
-            else { return }
+            guard let policy = await request.overwritePolicy(into: directories) else { return }
             commit(directories, policy)
         }
     }

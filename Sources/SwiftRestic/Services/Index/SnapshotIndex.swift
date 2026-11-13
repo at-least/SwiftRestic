@@ -30,9 +30,9 @@ struct IndexVersion: Sendable, Hashable, Identifiable {
 }
 
 /// One entry directly under a folder somewhere in a chain's indexed history
-/// — a row of the Files view, which lists what a plan ever backed up, not
+/// — a row of the Backups tab, which lists what a plan ever backed up, not
 /// only what its newest backup holds — or one hit of a search within the
-/// chain (`search(matching:inChain:limit:)`), which the Files view lists
+/// chain (`search(matching:inChain:limit:)`), which the Backups tab lists
 /// the same way.
 struct IndexChild: Sendable, Equatable {
     var path: String
@@ -45,7 +45,7 @@ struct IndexChild: Sendable, Equatable {
 }
 
 /// One content of a path in a chain: the indexed snapshots holding it with
-/// nothing to say it changed between them — a row of the Files view's
+/// nothing to say it changed between them — a row of the Backups tab's
 /// version list, where a file backed up daily for a year and edited twice
 /// is three versions, not 365.
 struct ContentVersion: Sendable, Equatable, Identifiable {
@@ -70,7 +70,7 @@ struct ContentVersion: Sendable, Equatable, Identifiable {
 
 /// A path's version list reduced to what Search All Backups shows: the newest
 /// indexed snapshot holding it, and how many of its chain's snapshots do —
-/// the count the Files tab its row opens lists, which is chain-scoped; a
+/// the count the Backups tab its row opens lists, which is chain-scoped; a
 /// copy under another plan is that plan's to list. Output-light whatever
 /// the version count, which is the point.
 struct VersionSummary: Sendable, Equatable {
@@ -661,7 +661,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// the later arrival first. Only the exact spelling `restic ls` emits
     /// resolves (absolute, no `//`, no trailing `/`); anything else is an
     /// unknown path and answers `[]`.
-    /// No production caller — the Files view reads the chain-restricted
+    /// No production caller — the Backups tab reads the chain-restricted
     /// form below; this is the tests' chain-blind oracle.
     func versions(ofPath path: String) async throws -> [IndexVersion] {
         try await pool.read { db in
@@ -672,7 +672,7 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// `versions(ofPath:)` restricted to one chain — the Files view's plan
+    /// `versions(ofPath:)` restricted to one chain — the Backups tab's plan
     /// filter, in SQL. An unknown chain key answers `[]`.
     func versions(ofPath path: String, inChain chainKey: String) async throws -> [IndexVersion] {
         try await pool.read { db in
@@ -801,7 +801,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
     /// their own answers. Search All Backups reads the summaries inside its search
     /// (`searchWithSummaries`); this path-keyed form is what the tests hold
-    /// that read to, as `versions(ofPath:inChain:)` is the Files view's read.
+    /// that read to, as `versions(ofPath:inChain:)` is the Backups tab's read.
     func versionSummaries(ofPaths paths: [String]) async throws -> [PathKey: VersionSummary] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
@@ -947,7 +947,7 @@ final class SnapshotIndex: @unchecked Sendable {
         return result
     }
 
-    /// Basename search within one chain — a Files tab's: `searchPaths`'s
+    /// Basename search within one chain — the Backups tab's: `searchPaths`'s
     /// walk and order, keeping only the paths an indexed snapshot of the
     /// chain holds, so the limit counts the chain's hits alone and a chain
     /// whose names sort late still gets its own. Each hit is what the tree

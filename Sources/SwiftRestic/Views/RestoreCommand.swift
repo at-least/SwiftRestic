@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What Restore does on the page in view — a backup's tree on a Backups
-/// tab, a folder or a file on a Files tab, Search All Backups' results — published
+/// tab, a file's or a search's folder under it, Search All Backups' results — published
 /// by the pane that holds it for File ▸ Restore: the menu bar's way to the
 /// pane's own restore, its bottom bar's prominent button. Not in the window
 /// toolbar's trailing side, the HIG's place for a page's primary action:

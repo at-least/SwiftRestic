@@ -50,8 +50,7 @@ class EngineRecordingSink {
     }
 }
 
-/// restic is mocked; hooks still run as real `/bin/sh` processes. The
-/// stub-shell and real-restic suites own everything below the
+/// restic is mocked. The stub-shell and real-restic suites own everything below the
 /// `ResticClient` seam.
 @MainActor
 @Suite("backup run engine")
@@ -112,10 +111,6 @@ struct BackupRunEngineTests {
 
         var deliveredNotes: [String] {
             deliveredTranscripts.flatMap { $0.entries.filter { $0.kind == .note }.map(\.text) }
-        }
-
-        func makeHookRunner() -> HookRunner {
-            HookRunner(runner: ResticRunner())
         }
     }
 
@@ -293,51 +288,6 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .failed)
     }
 
-    @Test("cancelling during a before-backup hook reads as cancelled, not a hook failure")
-    func cancelDuringBeforeHookIsACancellation() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftResticEngineCancel-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        let hookStarted = directory.appendingPathComponent("hook-started")
-        let failureRan = directory.appendingPathComponent("after-failure-ran")
-        var plan = makePlan()
-        var gate = BackupHook()
-        gate.event = .beforeBackup
-        gate.command = "touch \(hookStarted.path); sleep 30"
-        var aftermath = BackupHook()
-        aftermath.event = .afterBackup
-        aftermath.command = "touch \(failureRan.path)"
-        plan.hooks = [gate, aftermath]
-
-        let sink = RecordingSink()
-        let client = MockResticClient().onBackup(.success(successOutcome()))
-        let task = Task {
-            await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
-        }
-        // The hang is what guarantees the cancel lands inside the hook, the
-        // window where a cancel must read as a cancellation, not a hook
-        // failure.
-        // A loaded Mac can stretch a shell's start well past seconds, and a
-        // cancel landing before the hook would test another case.
-        try #require(
-            await eventually(within: 60) { FileManager.default.fileExists(atPath: hookStarted.path) },
-            "the hook never started"
-        )
-        task.cancel()
-        await task.value
-
-        let record = try #require(sink.deliveredRecords.first)
-        #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
-        #expect(record.failureMessage == "cancelled in test")
-        #expect(record.hookMessages.isEmpty, "messages were \(record.hookMessages)")
-        #expect(
-            !FileManager.default.fileExists(atPath: failureRan.path),
-            "after-failure hooks fired for a user-initiated cancel"
-        )
-    }
-
     @Test("a retention failure degrades to warnings, never fails the run")
     func retentionFailureIsADegradation() async throws {
         let sink = RecordingSink()
@@ -364,8 +314,9 @@ struct BackupRunEngineTests {
         sink.probeAnswer = .unreachable("connection refused")
         let client = MockResticClient().onBackup(.success(successOutcome()))
         var repository = Repository()
-        repository.kind = .rest
-        repository.restURL = "http://127.0.0.1:18000/app"
+        repository.kind = .sftp
+        repository.sftpHost = "127.0.0.1"
+        repository.sftpPath = "/app"
         await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: sink.serving(client))
 
         let record = try #require(sink.deliveredRecords.first)
@@ -385,8 +336,9 @@ struct BackupRunEngineTests {
         sink.duringProbe = { withUnsafeCurrentTask { $0?.cancel() } }
         let client = MockResticClient().onBackup(.success(successOutcome()))
         var repository = Repository()
-        repository.kind = .rest
-        repository.restURL = "http://127.0.0.1:18000/app"
+        repository.kind = .sftp
+        repository.sftpHost = "127.0.0.1"
+        repository.sftpPath = "/app"
         let plan = makePlan()
         // Its own task, as the model gives a run: the cancel is the run's.
         let served = sink.serving(client)
@@ -405,8 +357,9 @@ struct BackupRunEngineTests {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome())).onForget(.success(0))
         var repository = Repository()
-        repository.kind = .rest
-        repository.restURL = "http://127.0.0.1:18000/app"
+        repository.kind = .sftp
+        repository.sftpHost = "127.0.0.1"
+        repository.sftpPath = "/app"
         await BackupRunEngine.perform(plan: makePlan(), repository: repository, sink: sink.serving(client))
         #expect(sink.log.contains("probe"))
         #expect(client.callLog.first == "backup")
@@ -602,19 +555,6 @@ struct BackupRunEngineTests {
             sink: decoding.serving(MockResticClient().onBackup(.success(gap)))
         )
 
-        // A failing after-success hook: the user's script, not the snapshot.
-        let hook = RecordingSink()
-        var plan = makePlan()
-        var failing = BackupHook()
-        failing.event = .afterBackup
-        failing.command = "exit 1"
-        plan.hooks = [failing]
-        await BackupRunEngine.perform(
-            plan: plan,
-            repository: Repository(),
-            sink: hook.serving(MockResticClient().onBackup(.success(successOutcome())))
-        )
-
         let retentionRecord = try #require(retention.deliveredRecords.first)
         #expect(retentionRecord.outcome == .completedWithErrors)
         #expect(retentionRecord.itemErrors.contains { $0.hasPrefix("Retention skipped") })
@@ -624,13 +564,9 @@ struct BackupRunEngineTests {
         #expect(decodingRecord.itemErrors == ["1 restic message could not be decoded"])
         #expect(decodingRecord.itemErrorCount == 0)
 
-        let hookRecord = try #require(hook.deliveredRecords.first)
-        #expect(hookRecord.outcome == .completedWithErrors)
-        #expect(!hookRecord.hookMessages.isEmpty)
-
-        for record in [retentionRecord, decodingRecord, hookRecord] {
+        for record in [retentionRecord, decodingRecord] {
             #expect(record.exitCode == 0)
-            #expect(record.snapshotCompleteness == .complete, "\(record.itemErrors) \(record.hookMessages)")
+            #expect(record.snapshotCompleteness == .complete, "\(record.itemErrors)")
         }
     }
 
@@ -658,43 +594,17 @@ struct BackupRunEngineTests {
         #expect(record.itemErrors[51].hasPrefix("Retention skipped"))
     }
 
-    private func hook(event: BackupHook.Event, command: String) -> BackupHook {
-        var hook = BackupHook()
-        hook.event = event
-        hook.command = command
-        return hook
-    }
-
-    @Test("backup and forget run inside the run's transcript; hooks are noted by verdict")
+    @Test("backup and forget run inside the run's transcript")
     func backupAndForgetAreTranscribed() async throws {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome()))
-        var plan = makePlan()
-        plan.hooks = [
-            hook(event: .beforeBackup, command: "true"),
-            hook(event: .afterBackup, command: "pwd"),
-        ]
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
+        await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         #expect(client.transcriptBound["backup"] == true)
         #expect(client.transcriptBound["forget"] == true)
         #expect(sink.deliveredTranscripts.count == 1)
         let notes = sink.deliveredNotes
-        #expect(notes.contains("Script “true” succeeded."), "notes were \(notes)")
-        #expect(notes.contains("Script “pwd” succeeded."), "notes were \(notes)")
         #expect(notes.contains("Removed 0 backups"), "notes were \(notes)")
-    }
-
-    @Test("a backup restic reports stopped runs no after-backup hook")
-    func stoppedBackupRunsNoAfterHook() async throws {
-        let sink = RecordingSink()
-        let client = MockResticClient().onBackup(.failure(ResticError.cancelled))
-        var plan = makePlan()
-        plan.hooks = [hook(event: .afterBackup, command: "true")]
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
-
-        #expect(sink.deliveredRecords.first?.outcome == .cancelled)
-        #expect(!sink.deliveredNotes.contains("Script “true” succeeded."), "a stopped run fired its after-backup hook: \(sink.deliveredNotes)")
     }
 
     @Test("a failed forget is noted in the log as a retention skip")
@@ -735,21 +645,6 @@ struct BackupRunEngineTests {
         let failedRecord = try #require(failed.deliveredRecords.first)
         #expect(failedRecord.outcome == .failed)
         #expect(failedRecord.exitCode == 12)
-
-        // A before-hook that aborts: restic never ran, so there is no code.
-        let aborted = RecordingSink()
-        var plan = makePlan()
-        var gate = hook(event: .beforeBackup, command: "exit 1")
-        plan.hooks = [gate]
-        await BackupRunEngine.perform(
-            plan: plan,
-            repository: Repository(),
-            sink: aborted.serving(MockResticClient().onExit("backup", 0))
-        )
-        let abortedRecord = try #require(aborted.deliveredRecords.first)
-        #expect(abortedRecord.outcome == .failed)
-        #expect(abortedRecord.exitCode == nil)
-        #expect(aborted.deliveredNotes == ["Script “exit” failed (exit code 1)."])
     }
 
     @Test("the blocked-item tally counts every error, not the 50 kept")
@@ -1001,12 +896,11 @@ struct MaintenanceRunEngineTests {
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
-        // One sentence for the verdict, so the Detail column carries it
-        // whole; restic's advice is the second.
+        // The Result column shows the count; the repair steps and restic's
+        // advice stay in the drawer.
         #expect(sink.deliveredRecords[0].detailText
-            == "1 error — repair index, then repair snapshots, in the restic Console can recover some damage. A cleanup is suggested.")
-        #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0])
-            == "1 error — repair index, then repair snapshots, in the restic Console can recover some damage")
+            == "1 error found. Some damage can be repaired in the restic Console: repair index, then repair snapshots. A cleanup is suggested.")
+        #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0]) == "1 error found")
     }
 
     @Test("a missing password records nothing and stamps nothing")
@@ -1038,11 +932,20 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredTranscripts.first?.firstExitCode == 0)
     }
 
-    @Test("a clean prune is delivered succeeded with restic's answer, its lines hopped home, and stamps")
+    @Test("a clean prune is delivered succeeded with what it freed, its lines hopped home, and stamps")
     func cleanPrune() async throws {
         let sink = RecordingSink()
+        // restic 0.19.1's summary lines, as a real prune printed them.
+        let output = """
+        to repack:             0 blobs / 0 B
+        this removes:          0 blobs / 0 B
+        to delete:            12 blobs / 2.864 MiB
+        total prune:          12 blobs / 2.864 MiB
+        remaining:            11 blobs / 4.144 KiB
+        done
+        """
         let client = MockResticClient()
-            .onPrune(.success("removed 2 of 3 packs"), rawLines: ["counting packs", "removed 2 of 3 packs"])
+            .onPrune(.success(output), rawLines: ["counting packs", "done"])
             .onExit("prune", 0)
         await MaintenanceRunEngine.perform(
             repository: Repository(),
@@ -1052,9 +955,9 @@ struct MaintenanceRunEngineTests {
         let record = try #require(sink.deliveredRecords.first)
         #expect(record.kind == .prune)
         #expect(record.outcome == .succeeded)
-        // The tail restic printed is the run's one-line answer, as the check
-        // verdict is for a check.
-        #expect(record.detailText == "removed 2 of 3 packs")
+        // What it freed is the run's one-line answer, as the check verdict
+        // is for a check; restic's own lines stay in the log.
+        #expect(record.detailText == "Freed \(Format.bytes(3_003_122)).")
         #expect(client.callLog == ["prune"])
         #expect(client.checkSubsets.isEmpty)
         #expect(!sink.log.contains("advance-slice"))
@@ -1064,6 +967,21 @@ struct MaintenanceRunEngineTests {
         #expect(sink.log.contains("stamp:prune"))
         #expect(sink.deliveredTranscripts.count == 1)
         #expect(sink.log.contains("refresh-scheduled"))
+    }
+
+    @Test("a prune whose output names no amount says nothing about it")
+    func pruneWithoutAmount() async throws {
+        #expect(ResticService.pruneFreedBytes(in: "total prune:          0 blobs / 0 B") == 0)
+        #expect(ResticService.pruneFreedBytes(in: "total prune:          3 blobs / 1.500 GiB") == 1_610_612_736)
+        #expect(ResticService.pruneFreedBytes(in: "removed 2 of 3 packs") == nil)
+        #expect(ResticService.pruneFreedBytes(in: "total prune:          3 blobs / 1.5 parsecs") == nil)
+        let sink = RecordingSink()
+        let client = MockResticClient().onPrune(.success("removed 2 of 3 packs")).onExit("prune", 0)
+        await MaintenanceRunEngine.perform(repository: Repository(), task: .prune, sink: sink.serving(client))
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .succeeded)
+        #expect(record.detailText == nil)
+        #expect(RunRecordPresentation.detail(for: record) == record.outcome.displayName)
     }
 
     @Test("a failed prune is stamped and recorded failed, never unstamped")

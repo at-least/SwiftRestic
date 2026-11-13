@@ -54,7 +54,7 @@ struct CommandStateTests {
         model.setActivityPhase(.backingUp, for: documents.id)
         #expect(model.planProgress[documents.id]?.fraction == 0.97)
 
-        for phase in [PlanActivity.Phase.applyingRetention, .runningHooks, .notifying] {
+        for phase in [PlanActivity.Phase.applyingRetention, .notifying] {
             model.planProgress[documents.id] = midway
             model.setActivityPhase(phase, for: documents.id)
             #expect(model.planProgress[documents.id] == nil, "phase \(phase)")
@@ -229,8 +229,9 @@ struct CommandStateTests {
     func upkeepWaitsForAnAwayServer() async throws {
         let model = makeModel()
         var repository = Repository()
-        repository.kind = .rest
-        repository.restURL = "http://127.0.0.1:9/app"
+        repository.kind = .sftp
+        repository.sftpHost = "127.0.0.1:9"
+        repository.sftpPath = "/app"
         // Added long ago and never checked: its check is due.
         repository.createdAt = .now.addingTimeInterval(-90 * 86400)
         model.configuration.repositories = [repository]
@@ -410,8 +411,6 @@ struct CommandStateTests {
         let repositoryState = model.repositoryCommands(for: .repository(repository.id))
         #expect(!repositoryState.canMaintain)
         #expect(!repositoryState.canFind)
-        #expect(!repositoryState.canRefreshAll)
-        #expect(!repositoryState.canOpenConsole)
         #expect(repositoryState.canEdit && repositoryState.canRemove)
     }
 
@@ -450,13 +449,20 @@ struct CommandStateTests {
         let nothing = model.repositoryCommands(for: .activity)
         #expect(nothing.repositoryID == nil)
         #expect(!nothing.canMaintain && !nothing.canEdit && !nothing.canRemove)
-        // Find, Refresh All and the console are about every repository,
-        // not the selection.
-        #expect(nothing.canFind && nothing.canRefreshAll && nothing.canOpenConsole)
+        // Find is about every repository, not the selection.
+        #expect(nothing.canFind)
         model.configuration.repositories = []
         #expect(!model.repositoryCommands(for: nil).canFind)
-        #expect(!model.repositoryCommands(for: nil).canRefreshAll)
-        #expect(!model.repositoryCommands(for: nil).canOpenConsole)
+    }
+
+    @Test("quitting names the verification or cleanup that is running, not maintenance")
+    func quitNamesRunningMaintenance() {
+        let model = makeModel()
+        model.maintenance[UUID()] = MaintenanceActivity(task: .check)
+        #expect(model.quitInterruptions == ["A verification is running."])
+        model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
+        model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
+        #expect(model.quitInterruptions == ["2 cleanups are running.", "A verification is running."])
     }
 
     @Test("⇧⌘F searches the Files tab of a plan's page, and Find Files everywhere else — a group's page too")
@@ -567,7 +573,6 @@ struct CommandStateTests {
         model.configuration.plans = [plan]
 
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
-        #expect(model.confirmationCopy(for: .prune(repository.id))?.title == "Clean up “NAS” now?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
 
@@ -587,7 +592,7 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Untitled Plan”?")
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)
-        #expect(model.confirmationCopy(for: .prune(UUID())) == nil)
+        #expect(model.confirmationCopy(for: .deleteRepository(UUID())) == nil)
     }
 
 }

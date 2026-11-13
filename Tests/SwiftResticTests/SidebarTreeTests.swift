@@ -432,8 +432,8 @@ struct SidebarTreeTests {
         #expect(OverviewMetrics.needingAttention([upToDate, pending, running]).isEmpty)
     }
 
-    @Test("a backup's page is its plan's, a plan-UUID group's or a lineage's; Show Versions lands on its plan's alone")
-    func showVersionsPage() throws {
+    @Test("a backup's page is its plan's, a plan-UUID group's or a lineage's")
+    func backupPage() throws {
         let repositoryID = UUID()
         var plan = BackupPlan()
         plan.repositoryID = repositoryID
@@ -446,91 +446,34 @@ struct SidebarTreeTests {
         #expect(shelves.page(of: own, repositoryID: repositoryID) == .plan(plan.id))
         #expect(shelves.page(of: orphan, repositoryID: repositoryID) == .orphanPlan(repositoryID: repositoryID, planID: gone))
         #expect(shelves.page(of: untagged, repositoryID: repositoryID) == .lineage(repositoryID: repositoryID, key: untagged.lineageKey))
-        // A group's page has no Files tab to show versions on.
-        #expect(shelves.versionsPage(of: own) == .plan(plan.id))
-        #expect(shelves.versionsPage(of: orphan) == nil)
-        #expect(shelves.versionsPage(of: untagged) == nil)
-
-        // Two plans' tags (only an outside `restic tag` writes them): the
-        // index files the backup under its first tag, so Show Versions goes
-        // to that plan's Files tab, whatever order the plans are in.
-        var second = BackupPlan()
-        second.repositoryID = repositoryID
-        let dual = try snapshot("d1", time: "2026-10-04T10:00:00Z",
-                                tags: [ResticService.planTag(second.id), ResticService.planTag(plan.id)])
-        let both = BackupShelves(listing: [dual], plans: [plan, second], allPlans: [plan, second])
-        #expect(SnapshotIndex.chainKey(for: dual) == ResticService.planTag(second.id))
-        #expect(both.versionsPage(of: dual) == .plan(second.id))
-        // Its first tag a plan no longer configured: no Files tab holds it.
-        let firstGone = try snapshot("d2", time: "2026-10-04T11:00:00Z",
-                                     tags: [ResticService.planTag(gone), ResticService.planTag(plan.id)])
-        #expect(shelves.versionsPage(of: firstGone) == nil)
     }
 
     @MainActor
-    @Test("Show Versions opens the page on Files at the item, every folder above it open down from its backed-up folder, at the backup it came from")
-    func showVersionsRoute() throws {
+    @Test("a file picked in a backup's tree shows its versions at that backup; a route to a backup ends the plan's search")
+    func showVersionsRoute() {
         let repositoryID = UUID()
         let planID = UUID()
         let tag = ResticService.planTag(planID)
-        let record = try snapshot("b7", time: "2026-10-02T10:00:00Z", paths: ["/Data", "/Data/Photos/2026"], tags: [tag])
+        let roots = FileNode.roots(repositoryID: repositoryID, chainKey: tag)
+        let beach = FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false)
         let router = AppRouter()
-        router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID)
-        // A search left on the Files tab would list its hits over the tree
-        // the route opens.
-        router.filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: tag)] = "report"
-        router.showVersions(
-            path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,
-            in: record, repositoryID: repositoryID, page: .plan(planID)
-        )
-
-        func folder(_ path: String) -> FileNode {
-            FileNode(repositoryID: repositoryID, chainKey: tag, path: path, isDirectory: true)
-        }
-        #expect(router.selection == .plan(planID))
-        #expect(router.tab(of: .plan(planID)) == .files)
-        // Down from the deepest backed-up folder holding it, not from /Data.
-        #expect(router.openFolders == [folder("/Data/Photos/2026"), folder("/Data/Photos/2026/Trip")])
-        #expect(router.filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: tag)]
-            == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
-        #expect(router.filesChosenVersion[FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false)] == "b7")
-        #expect(router.filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: tag)] == nil)
-        // The tab is asked to look whether this Mac still has it.
-        #expect(router.filesRevealRequest
-            == FileNode(repositoryID: repositoryID, chainKey: tag, path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false))
-        // Asked again for the item already selected, the pane opens anew:
-        // its identity moves, so it reads where to open again.
+        router.showVersions(of: beach, at: "b7")
+        #expect(router.filesSelection[roots] == beach)
+        #expect(router.filesChosenVersion[beach] == "b7")
+        // Picked again in another backup, the pane opens anew: its identity
+        // moves, so it reads where to open again.
         let opening = router.filesPaneOpenings
-        router.showVersions(
-            path: "/Data/Photos/2026/Trip/beach.jpg", isDirectory: false,
-            in: record, repositoryID: repositoryID, page: .plan(planID)
-        )
+        router.showVersions(of: beach, at: "b8")
         #expect(router.filesPaneOpenings == opening + 1)
+        #expect(router.filesChosenVersion[beach] == "b8")
 
-        // A backed-up folder itself: selected, nothing above it opened.
-        let other = AppRouter()
-        other.showVersions(path: "/Data", isDirectory: true, in: record, repositoryID: repositoryID, page: .plan(planID))
-        #expect(other.openFolders.isEmpty)
-        // "/Data2" is not inside "/Data": bytes, not a string prefix.
-        let sibling = AppRouter()
-        sibling.showVersions(path: "/Data2/x.txt", isDirectory: false, in: record, repositoryID: repositoryID, page: .plan(planID))
-        #expect(sibling.openFolders.isEmpty)
-    }
-
-    @Test("a Files tab selects its first root on a first visit, and follows the root when a re-read moves it, never a pick of the user's")
-    func filesRootToSelect() {
-        let repositoryID = UUID()
-        func node(_ path: String) -> FileNode {
-            FileNode(repositoryID: repositoryID, chainKey: "lineage:x", path: path, isDirectory: true)
-        }
-        let absolute = node("/Users/x/work/src/Music")
-        let relative = node("/src/Music")
-        #expect(FilesTree.rootToSelect(selected: nil, old: [], new: [relative]) == relative)
-        #expect(FilesTree.rootToSelect(selected: nil, old: [], new: []) == nil)
-        // The relative backup's root read before the index had read it, then again.
-        #expect(FilesTree.rootToSelect(selected: absolute, old: [absolute], new: [relative]) == relative)
-        // A root still listed, and a pick below the roots, stay.
-        #expect(FilesTree.rootToSelect(selected: relative, old: [relative], new: [relative, node("/b")]) == nil)
-        #expect(FilesTree.rootToSelect(selected: node("/src/Music/Album"), old: [absolute], new: [relative]) == nil)
+        // A search left on the tab would list its hits over the tree the
+        // route opens at the item.
+        router.filesSearchText[roots] = "beach"
+        router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID, focusPath: beach.path)
+        #expect(router.filesSearchText[roots] == nil)
+        #expect(router.selection == .plan(planID))
+        #expect(router.tab(of: .plan(planID)) == .backups)
+        #expect(router.takeRestoreFocus(repositoryID: repositoryID, snapshotID: "b7") == beach.path)
     }
 }

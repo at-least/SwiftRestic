@@ -66,7 +66,7 @@ enum RepositoryCaption: Equatable, Sendable {
 /// moment (`lastBackupAt`) every surface's "Last backup" counts from.
 enum PlanStatus {
     private static let retentionSkippedFact = "Old backups not removed"
-    private static let unnamedUnreadFact = "Some source data couldn’t be read"
+    private static let unnamedUnreadFact = "Some files couldn’t be read"
     /// The plan page's empty fact when the repository holds other backups —
     /// the Overview's count line and the Backups tab's empty state in
     /// the same words.
@@ -87,8 +87,8 @@ enum PlanStatus {
 
     /// A run's problems as short countable facts, in a fixed order: the
     /// unreadable items (or, for a backup restic ended with exit 3 without
-    /// naming any, that some source data went unread), a skipped retention
-    /// step, failing hooks. The unreadable count is `itemErrorCount` —
+    /// naming any, that some files went unread), a skipped retention
+    /// step. The unreadable count is `itemErrorCount` —
     /// restic's items, taken before the engine stores its decoding and
     /// retention lines — never the stored line count, which would call a
     /// lock-contention retention skip (`restic forget` exit 11) "1
@@ -100,16 +100,13 @@ enum PlanStatus {
             facts.append(Format.plural(run.itemErrorCount, "unreadable item"))
         } else if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode {
             // restic exited 3 and named nothing: a file count would pass for
-            // a clean run, and a skipped retention step or a failing hook
-            // would pass for the whole story. The log keeps restic's own
+            // a clean run, and a skipped retention step would pass for the
+            // whole story. The log keeps restic's own
             // words.
             facts.append(unnamedUnreadFact)
         }
         if retentionLine(of: run) != nil {
             facts.append(retentionSkippedFact)
-        }
-        if !run.hookMessages.isEmpty {
-            facts.append(Format.plural(run.hookMessages.count, "failed script"))
         }
         return facts
     }
@@ -118,16 +115,15 @@ enum PlanStatus {
     /// something: a failure leads with why it failed; a warning with the
     /// first unreadable item, else the line that explains the warning
     /// (a decoding gap or a skipped retention step — never presented as an
-    /// unreadable file), else a hook's complaint, else the banner's words
+    /// unreadable file), else the banner's words
     /// for a bare exit 3.
     static func summary(of run: RunRecord) -> PlanProblemSummary {
         // The row lists the unreadable items (each with Show in Finder and
         // Exclude, as the drawer's lines), so the message never repeats
         // the first of them: it explains the warning past the items — a
-        // decoding gap, a skipped retention step — or a hook's complaint.
+        // decoding gap, a skipped retention step.
         let (listedItems, unlisted) = run.unreadableItemListing(limit: listedItemLimit)
         let explanation = run.trailingItemErrorsOnScreen.first
-            ?? run.hookMessages.first
         let message: String? = if run.outcome == .failed {
             run.failureMessage ?? explanation
         } else {
@@ -182,7 +178,7 @@ enum PlanStatus {
     /// names while the plan's history is runs of its own; history that
     /// arrived with the repository has no run to land on. The predicate
     /// follows `markPlanRun`'s: the stamp lands once the snapshot is
-    /// written, so a run whose after-hooks then failed counts
+    /// written, so a run whose retention was skipped counts
     /// (`.completedWithErrors`), and so does one whose retention was
     /// stopped afterwards (`.cancelled`, snapshot written); a failed run,
     /// or one stopped before its snapshot, never stamped.

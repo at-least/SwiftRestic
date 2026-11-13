@@ -1,7 +1,8 @@
 import XCTest
 
-/// A file's versions on the Files tab: the one before the latest change
-/// restored, its old bytes back — into a chosen folder, and in place.
+/// A file's versions under its backup's tree on the Backups tab: the one
+/// before the latest change restored, its old bytes back — into a folder
+/// chosen in the folder panel, and in place.
 final class FileVersionsUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -19,9 +20,8 @@ final class FileVersionsUITests: XCTestCase {
         app.buttons[AccessibilityID.Plan.backUpNow].click()
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue(beginningWith: "2 backups · since ", timeout: 120))
 
-        app.radioButtons["Files"].click()
-        XCTAssertTrue(app.buttons[AccessibilityID.FilesPane.restore].waitForEnabled())
-        app.outlines.staticTexts["hello.txt"].firstMatch.click()
+        _ = UITest.showNewestBackup(folders, in: app)
+        app.outlines[AccessibilityID.RestorePane.tree].staticTexts["hello.txt"].firstMatch.click()
         // Newest first: the second row is the version before the change.
         let versions = app.outlines[AccessibilityID.FileVersions.list].outlineRows
         let two = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 2"), object: versions)
@@ -35,7 +35,9 @@ final class FileVersionsUITests: XCTestCase {
         XCTAssertTrue(restoreButton.waitForEnabled())
         UITest.restoreToButton(AccessibilityID.FileVersions.restoreTo, in: app).click()
 
-        UITest.restoreInSheet(into: restored, in: app)
+        // This Mac's backup: the folder panel at once, no sheet.
+        UITest.choose(restored, in: app)
+        XCTAssertFalse(app.buttons[AccessibilityID.RestoreSheet.chooseFolder].exists)
         let file = try XCTUnwrap(UITest.waitForFile(named: "hello.txt", under: restored))
         XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
         XCTAssertEqual(try Data(contentsOf: file), first)
@@ -54,10 +56,10 @@ final class FileVersionsUITests: XCTestCase {
         app.buttons[AccessibilityID.Plan.backUpNow].click()
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue(beginningWith: "2 backups · since ", timeout: 120))
 
-        app.radioButtons["Files"].click()
-        XCTAssertTrue(app.buttons[AccessibilityID.FilesPane.restore].waitForEnabled())
-        app.outlines.staticTexts["hello.txt"].firstMatch.click()
-        let versions = app.outlines[AccessibilityID.FileVersions.list].outlineRows
+        _ = UITest.showNewestBackup(folders, in: app)
+        app.outlines[AccessibilityID.RestorePane.tree].staticTexts["hello.txt"].firstMatch.click()
+        let versions
+ = app.outlines[AccessibilityID.FileVersions.list].outlineRows
         let two = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 2"), object: versions)
         XCTAssertEqual(XCTWaiter().wait(for: [two], timeout: 30), .completed)
         let older = versions.element(boundBy: 1)

@@ -122,9 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// up while no Settings window exists. Separate tasks, so no answer
     /// waits on another's round trip. The model arrives with the scene's
     /// task; an activation before that is covered by bootstrap's own reads.
+    /// Listings read a while ago are read again here too.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
         Task { await model?.refreshLoginItemStatus() }
+        model?.refreshStaleListings()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -237,8 +239,8 @@ struct SwiftResticApp: App {
             // ⌘N is macOS's reflex for "new thing" — an emptied group would
             // make adding a repository a mouse trip to the sidebar footer.
             CommandGroup(replacing: .newItem) {
-                // The folder panel, then the first-run sheet
-                // (`RootView.startBackUpAFolder`).
+                // The folder panel, then the first-run sheet when it still
+                // has something to ask (`RootView.startBackUpAFolder`).
                 let commands = model.repositoryCommands(for: router.selection)
                 Button("Back Up a Folder…") { ask(.newPlan) }
                     .keyboardShortcut("n", modifiers: .command)
@@ -291,11 +293,14 @@ struct SwiftResticApp: App {
         }
         .defaultSize(width: 480, height: 600)
 
+        // Opened only from the damage it repairs (`ConsoleRouteButton`):
+        // without commandsRemoved the Window menu lists it.
         Window("restic Console", id: Self.consoleWindowID) {
             ResticConsoleView()
                 .environment(model)
         }
         .defaultSize(width: 720, height: 480)
+        .commandsRemoved()
     }
 
     /// An ask for the root view, which also opens the window: an intent
@@ -355,10 +360,9 @@ struct SwiftResticApp: App {
     /// The View menu's own items, after the sidebar's: what the toolbar
     /// switches, each a command too (the HIG's Toolbars: "Make every
     /// toolbar item available as a command in the menu bar") — a page's
-    /// Overview | Backups | Files with ⌘1–⌘3, Finder's keys for its views,
-    /// a Files tab's Show Deleted Items and Activity's problems filter.
-    /// Greyed where the page has none: Files on a group's page, every tab on
-    /// a page with no tabs.
+    /// Overview | Backups with ⌘1–⌘2, Finder's keys for its views, and
+    /// Activity's problems filter. Greyed where the page has none: every
+    /// tab on a page with no tabs.
     private var viewMenu: some Commands {
         CommandGroup(after: .sidebar) {
             let page = router.selection
@@ -375,24 +379,11 @@ struct SwiftResticApp: App {
                 .disabled(!offered)
             }
             Divider()
-            // A plan's Files tab only, where the tree it changes is.
-            // A show/hide pair, not a checkmark: the HIG's View menu items
-            // name the state they change to ("Show Toolbar"/"Hide Toolbar").
-            Button(router.filesShowsDeletedItems ? "Hide Deleted Items" : "Show Deleted Items") {
-                router.filesShowsDeletedItems.toggle()
-            }
-            .disabled(!(page.map { $0.pageTabs.contains(.files) && router.tab(of: $0) == .files } ?? false))
             Toggle("Show Problems Only", isOn: Binding(
                 get: { router.activityShowsProblemsOnly },
                 set: { router.activityShowsProblemsOnly = $0 }
             ))
             .disabled(router.selection != .activity)
-            Divider()
-            Button("Refresh All Backups") {
-                Task { await model.refreshAllSnapshots() }
-            }
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(!model.repositoryCommands(for: page).canRefreshAll)
             Divider()
         }
     }
@@ -437,19 +428,14 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Backup Location…") {
+            Button("Edit Location…") {
                 if let id = r.repositoryID { ask(.editRepository(id)) }
             }
             .disabled(!r.canEdit)
-            Button("Remove from SwiftRestic…") {
+            Button("Remove Location…") {
                 if let id = r.repositoryID { ask(.confirm(.deleteRepository(id))) }
             }
             .disabled(!r.canRemove)
-
-            Divider()
-
-            Button("restic Console") { openWindow(id: Self.consoleWindowID) }
-                .disabled(!r.canOpenConsole)
         }
     }
 }

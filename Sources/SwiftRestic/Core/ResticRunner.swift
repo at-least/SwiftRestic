@@ -3,19 +3,13 @@ import Foundation
 struct ResticInvocation: Sendable {
     var arguments: [String]
     var environment: [String: String] = [:]
-    /// Where the child runs. `nil` inherits the app's own working directory,
-    /// which for a Finder-launched GUI app is `/` — a surprise no script
-    /// should have to guess at, so callers that run user-authored commands
-    /// (hooks) name a directory explicitly.
-    var workingDirectory: String?
     /// Exit codes that should not be treated as failure. `backup` adds 3, which
     /// means "finished, but some files could not be read".
     ///
     /// `nil` accepts any code, for callers that read the exit status themselves
-    /// rather than treating it as an error — a shell hook, for instance.
+    /// rather than treating it as an error.
     var allowedExitCodes: Set<Int32>? = [0]
-    /// Kill the child after this many seconds. A hook that never returns must not
-    /// hang the backup that triggered it.
+    /// Kill the child after this many seconds.
     var timeout: TimeInterval?
     /// Kill the child after it has produced no output at all for this many
     /// seconds — a stall cap, not a runtime cap: every received chunk resets
@@ -64,19 +58,16 @@ struct ResticRunResult: Sendable {
 
     /// restic's fatal-error line when it wrote one as JSON, else the tail of
     /// stderr — what a failed command's error carries. Under `--json` the
-    /// fatal line can lose the cause: what ssh or rclone said reaches
-    /// stderr only as plain lines restic prefixes "subprocess " ("subprocess
-    /// ssh: Host key verification failed.", restic 0.19.1) or "rclone: "
-    /// ("rclone: 2026/10/16 02:54:34 CRITICAL: Failed to create file system
-    /// for …", rclone 1.75.2), so the last of those follow the fatal line —
-    /// ssh's verdict is its last lines, after a warning banner that runs to
-    /// a dozen; rclone's are its errors, not its notices.
+    /// fatal line can lose the cause: what ssh said reaches stderr only as
+    /// plain lines restic prefixes "subprocess " ("subprocess ssh: Host key
+    /// verification failed.", restic 0.19.1), so the last of those follow
+    /// the fatal line — ssh's verdict is its last lines, after a warning
+    /// banner that runs to a dozen.
     var failureMessage: String {
         guard let fatal = exitError?.message else { return ResticRunner.tail(of: stderr, limit: 2000) }
         let lines = stderr.split(separator: "\n")
         let subprocess = lines.filter { $0.hasPrefix("subprocess ") }.suffix(3).map(String.init)
-        let rclone = lines.compactMap(Self.rcloneComplaint).suffix(3)
-        return ([Self.withoutGoStackTrace(fatal)] + subprocess + rclone).joined(separator: "\n")
+        return ([Self.withoutGoStackTrace(fatal)] + subprocess).joined(separator: "\n")
     }
 
     /// What restic was retrying, from its last "… returned error, retrying
@@ -105,22 +96,6 @@ struct ResticRunResult: Sendable {
         return message
     }
 
-    /// "rclone: Failed to create file system for …" for one of rclone's
-    /// errors as restic passes it on — "rclone: <date> <time> CRITICAL: …"
-    /// or "… ERROR : …" — without the date and the level; nil for any other
-    /// line, rclone's notices among them.
-    static func rcloneComplaint(_ line: Substring) -> String? {
-        guard line.hasPrefix("rclone: "), let words = rcloneErrorWords(line) else { return nil }
-        return "rclone: " + words
-    }
-
-    static func rcloneErrorWords(_ line: Substring) -> Substring? {
-        for level in [" CRITICAL: ", " ERROR : "] {
-            if let range = line.range(of: level) { return line[range.upperBound...] }
-        }
-        return nil
-    }
-
     var itemErrors: [ResticErrorMessage] {
         messages.compactMap { if case let .error(e) = $0 { e } else { nil } }
     }
@@ -134,11 +109,7 @@ struct ResticRunResult: Sendable {
 }
 
 /// Spawns a child process and turns any NDJSON it writes into `ResticMessage`
-/// values.
-///
-/// Written for restic, and also used to run a plan's shell hooks: they need the
-/// same pipe draining, cancellation and timeout handling, and lines that are not
-/// restic JSON simply decode to nothing.
+/// values; lines that are not restic JSON decode to nothing.
 ///
 /// The runner is an actor so that in-flight processes can be tracked and
 /// cancelled by handle. Its methods suspend rather than block while restic runs,
@@ -152,8 +123,7 @@ actor ResticRunner {
 
     /// How long the pipe readers may keep draining after the child has died.
     /// A healthy pipe reaches EOF within milliseconds of the child's exit;
-    /// when it does not, someone else is holding the write end — a shell hook
-    /// that backgrounded a long-lived command (`notify-me &`), or restic's own
+    /// when it does not, someone else is holding the write end — restic's own
     /// backend child after a SIGKILL. Abandoning the pipes then is what lets
     /// every stop path answer: the invariant is that a run ends at most this
     /// long after its child dies, whatever a grandchild does. Bytes a
@@ -192,9 +162,6 @@ actor ResticRunner {
         let process = Process()
         process.executableURL = binary
         process.arguments = invocation.arguments
-        if let workingDirectory = invocation.workingDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory, isDirectory: true)
-        }
         process.environment = Self.baseEnvironment().merging(invocation.environment) { _, new in new }
 
         let stdoutPipe = Pipe()
@@ -278,7 +245,7 @@ actor ResticRunner {
 
         // The reaper: a pipe that has not reached EOF within `grandchildGrace`
         // of the child's death is being held open by an inherited copy — a
-        // backgrounded hook command, a backend child that outlived a SIGKILL —
+        // backend child that outlived a SIGKILL —
         // and no signal of ours can reach it. Abandoning the read then is what
         // keeps every stop path (caps, cancellation, quit's terminateAll)
         // answerable; a healthy run never sees it, because EOF lands in
@@ -392,8 +359,7 @@ actor ResticRunner {
     ]
 
     /// The extra PATH entries restic runs with, before the system folders —
-    /// where a brew ssh lives, which an sftp location needs. rclone is not
-    /// among them: the bundled copy leads restic's PATH.
+    /// where a brew ssh lives, which an sftp location needs.
     static let toolDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
 
     /// A predictable environment for the child. A GUI app's inherited environment
@@ -413,11 +379,7 @@ actor ResticRunner {
         }
         let extraPaths = toolDirectories + ["/bin", "/usr/sbin", "/sbin"]
         let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
-        // The app's own helpers first: restic shells out to rclone by name,
-        // and the pinned one, not a brew rclone on the inherited PATH, is
-        // what every test ran.
-        var merged = [Bundle.main.helpersURL.path]
-        merged += existing
+        var merged = existing
         for path in extraPaths where !merged.contains(path) { merged.append(path) }
         env["PATH"] = merged.joined(separator: ":")
         // Keep restic's own progress printer quiet; we drive progress from JSON.

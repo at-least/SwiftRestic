@@ -50,79 +50,25 @@ struct ConfigStoreTests {
         #expect(loaded.runs.count == 1)
     }
 
-    @Test("a plan an earlier build saved with several folders becomes one plan per folder; the first keeps its id and stamps")
-    func multiFolderPlansSplit() async throws {
+    @Test("a repository's extra environment stays out of config.json and is not read from it")
+    func extraEnvironmentIsNotStored() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        let json = """
-        {
-          "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "name": "Home Disk",
-                            "kind": "local", "localPath": "/tmp/repo"}],
-          "plans": [
-            {"id": "340CA842-C653-4E2D-B61F-D7653D70A521", "name": "Projects",
-             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "sources": ["/Users/me/Code", "/Users/me/Notes", "/Volumes/Archive SSD/Photos", "/Users/me/Code"],
-             "excludePatterns": ["*.log"], "tags": ["work"], "isEnabled": false,
-             "schedule": {"frequency": "daily", "intervalHours": 1, "hour": 3, "minute": 30, "weekday": 2},
-             "retention": {"isEnabled": true, "keepLast": 3, "keepHourly": 0, "keepDaily": 0,
-                           "keepWeekly": 0, "keepMonthly": 0, "keepYearly": 0, "runPrune": false},
-             "lastRunAt": "2026-10-17T03:30:00Z", "lastSuccessAt": "2026-10-17T03:31:00Z",
-             "lastCompleteBackupAt": "2026-10-10T03:31:00Z", "staleAlertedFor": "2026-10-10T03:31:00Z"},
-            {"id": "5B0E7C2D-0000-4000-8000-000000000002", "name": "Music",
-             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "sources": ["/Users/me/Music"]},
-            {"id": "5B0E7C2D-0000-4000-8000-000000000003", "name": "Movies",
-             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "path": "/Users/me/Movies"},
-            {"id": "5B0E7C2D-0000-4000-8000-000000000004", "name": "Unfinished",
-             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504"}
-          ],
-          "runs": [],
-          "settings": {}
-        }
-        """
-        let file = directory.appendingPathComponent("config.json")
-        try Data(json.utf8).write(to: file)
         let store = ConfigStore(directory: directory)
-        let loaded = try await store.load()
-        #expect(loaded.decodeNotes.isEmpty)
-        let plans = loaded.configuration.plans
+        var repository = Repository()
+        repository.localPath = "/tmp/repo"
+        repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default"]
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        try await store.save(configuration)
 
-        #expect(plans.map(\.path) == [
-            "/Users/me/Code", "/Users/me/Notes", "/Volumes/Archive SSD/Photos",
-            "/Users/me/Music", "/Users/me/Movies", "",
-        ])
-        let original = try #require(plans.first)
-        let date = ISO8601DateFormatter()
-        #expect(original.id == UUID(uuidString: "340CA842-C653-4E2D-B61F-D7653D70A521"))
-        #expect(original.lastSuccessAt == date.date(from: "2026-10-17T03:31:00Z"))
-        #expect(original.staleAlertedFor == date.date(from: "2026-10-10T03:31:00Z"))
-
-        // The other folders: new plans with the settings copied. Their slot
-        // is the original's, so they wait for it; no backup carries their id
-        // yet, so nothing says they have one.
-        let copies = Array(plans[1 ... 2])
-        #expect(Set(copies.map(\.id)).count == 2)
-        #expect(!copies.contains { $0.id == original.id })
-        for copy in copies {
-            #expect(copy.repositoryID == original.repositoryID)
-            #expect(copy.excludePatterns == ["*.log"])
-            #expect(copy.tags == ["work"])
-            #expect(copy.schedule.frequency == .manual)
-            #expect(copy.schedule == original.schedule)
-            #expect(copy.retention == original.retention)
-            #expect(copy.lastRunAt == original.lastRunAt)
-            #expect(copy.lastSuccessAt == nil)
-            #expect(copy.staleAlertedFor == nil)
-        }
-        #expect(plans[3].id == UUID(uuidString: "5B0E7C2D-0000-4000-8000-000000000002"))
-
-        try await store.save(loaded.configuration)
-        let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
-        let savedPlans = try #require(saved?["plans"] as? [[String: Any]])
-        #expect(savedPlans.allSatisfy { $0["sources"] == nil })
-        #expect(savedPlans.compactMap { $0["path"] as? String } == plans.map(\.path))
-        #expect(try await store.load().configuration.plans.map(\.id) == plans.map(\.id))
+        let written = try String(contentsOf: directory.appendingPathComponent("config.json"), encoding: .utf8)
+        #expect(!written.contains("extraEnvironment"))
+        #expect(!written.contains("SWIFTRESTIC_STUB"))
+        let decoded = try JSONDecoder().decode(
+            Repository.self, from: Data(#"{"kind":"local","localPath":"/tmp/repo","extraEnvironment":{"A":"b"}}"#.utf8)
+        )
+        #expect(decoded.extraEnvironment.isEmpty)
     }
 
     @Test("a hand-written config decodes: every stored key must be accepted")
@@ -144,7 +90,7 @@ struct ConfigStoreTests {
           "plans": [{
             "id": "340CA842-C653-4E2D-B61F-D7653D70A521", "name": "Smoke Plan",
             "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-            "sources": ["/tmp/src"], "excludePatterns": [],
+            "path": "/tmp/src", "excludePatterns": [],
             "excludeCaches": true, "oneFileSystem": false, "tags": [],
             "schedule": {"frequency": "hourly", "intervalHours": 1, "hour": 2, "minute": 0, "weekday": 2},
             "retention": {"isEnabled": true, "keepLast": 3, "keepHourly": 0, "keepDaily": 0,
@@ -281,21 +227,6 @@ struct TolerantDecodingTests {
             #expect(object["skipDeveloperGroups"] == nil)
             #expect(object["excludeDeveloperFiles"] == nil)
         }
-    }
-
-    @Test("older builds' ticked groups turn on the switch that now holds them")
-    func legacyGroupsBecomeSwitches() throws {
-        func read(_ groups: String) throws -> BackupPlan {
-            try decode(BackupPlan.self, "{\"skipDeveloperGroups\":\(groups)}")
-        }
-        let none = try read("[]")
-        #expect(!none.skipsDeveloperFiles && !none.skipsMachines)
-        let python = try read(#"["python"]"#)
-        #expect(python.skipsDeveloperFiles && !python.skipsMachines)
-        let simulators = try read(#"["simulators"]"#)
-        #expect(simulators.skipsDeveloperFiles && simulators.skipsMachines)
-        let machines = try read(#"["rust","machines","cobol"]"#)
-        #expect(machines.skipsDeveloperFiles && machines.skipsMachines)
     }
 
     @Test("switches and every plan's fixed rules make the run, beside the plan's own patterns, each once")
@@ -446,13 +377,13 @@ struct TolerantDecodingTests {
             {"id": "5B0E7C2D-0000-4000-8000-000000000002", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "~", "excludePatterns": \(defaults)},
             {"id": "5B0E7C2D-0000-4000-8000-000000000003", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "sources": ["~", "~/Documents"], "excludePatterns": \(defaults)},
+             "path": "~/Documents", "excludePatterns": \(defaults)},
             {"id": "5B0E7C2D-0000-4000-8000-000000000004", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "\(home)/Music"},
             {"id": "5B0E7C2D-0000-4000-8000-000000000005", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "\(home)/Library", "excludePatterns": []},
             {"id": "5B0E7C2D-0000-4000-8000-000000000006", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "~/Code", "excludePatterns": \(python), "skipDeveloperGroups": ["python"]},
+             "path": "~/Code", "excludePatterns": \(python), "skipsDeveloperFiles": true},
             {"id": "5B0E7C2D-0000-4000-8000-000000000007", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "~/Notes", "excludePatterns": [".DS_Store"], "skipsFinderFiles": false, "skipsSystemFiles": true}
           ],
@@ -472,17 +403,15 @@ struct TolerantDecodingTests {
             // an earlier default, among them, its group unticked.
             ["**/node_modules", "~/elsewhere/cache", "*.log"],
             [],
-            // A split plan's folders each.
             [],
             [],
             [],
-            [],
-            // A ticked group's rules leave the list too.
+            // A switch's rules leave the list too.
             ["*.iso"],
             // Now passed by every plan, so a typed copy leaves the list.
             [],
         ])
-        #expect(plans[6].skipsDeveloperFiles)
+        #expect(plans[5].skipsDeveloperFiles)
 
         try await store.save(loaded.configuration)
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
@@ -492,41 +421,6 @@ struct TolerantDecodingTests {
         let reloaded = try await store.load().configuration.plans
         #expect(reloaded.map(\.excludePatterns) == plans.map(\.excludePatterns))
         #expect(reloaded.map(\.excludesToPass) == plans.map(\.excludesToPass))
-    }
-
-    @Test("a plan saved with older builds' single developer switch on gets both switches, their rules leaving its list")
-    func legacyDeveloperSwitchBecomesSwitchesAtLoad() async throws {
-        let directory = temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        let json = """
-        {
-          "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
-          "plans": [
-            {"id": "5B0E7C2D-0000-4000-8000-000000000001", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "~", "excludePatterns": ["*.iso", "**/node_modules"], "excludeDeveloperFiles": true},
-            {"id": "5B0E7C2D-0000-4000-8000-000000000002", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "~/Documents", "excludePatterns": ["*.iso"], "excludeDeveloperFiles": false},
-            {"id": "5B0E7C2D-0000-4000-8000-000000000003", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "~/Documents", "excludePatterns": ["*.iso"]}
-          ],
-          "runs": [],
-          "settings": {}
-        }
-        """
-        try Data(json.utf8).write(to: directory.appendingPathComponent("config.json"))
-        let store = ConfigStore(directory: directory)
-        let loaded = try await store.load().configuration
-        #expect(loaded.plans.map(\.skipsDeveloperFiles) == [true, false, false])
-        #expect(loaded.plans.map(\.skipsMachines) == [true, false, false])
-        #expect(loaded.plans.map(\.excludePatterns) == [["*.iso"], ["*.iso"], ["*.iso"]])
-        #expect(loaded.plans[0].excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.machineExcludes + ["*.iso"])
-
-        try await store.save(loaded)
-        let reloaded = try await store.load().configuration
-        #expect(reloaded.plans.map(\.skipsDeveloperFiles) == loaded.plans.map(\.skipsDeveloperFiles))
-        #expect(reloaded.plans.map(\.excludePatterns) == loaded.plans.map(\.excludePatterns))
     }
 
     @Test("a history saved before stretches were stored gets them at load; a stored one stands")
@@ -653,12 +547,8 @@ struct TolerantDecodingTests {
         #expect(partial.itemErrorTally == ItemErrorDiagnosis.Tally(blockedByMacOS: 2, deniedByFilePermissions: 0))
     }
 
-    @Test("a plan an older build switched off stays stopped; its timed pause and hour count are ignored")
+    @Test("a plan's old timed pause and hour count are ignored")
     func oldPlanPauseFieldsDecode() throws {
-        let off = try decode(BackupPlan.self, #"{"path":"/a","isEnabled":false,"schedule":{"frequency":"daily"}}"#)
-        #expect(off.schedule.frequency == .manual)
-        #expect(!off.runsOnSchedule)
-
         let on = try decode(BackupPlan.self, #"{"path":"/a","repositoryID":"7A1B0C2D-0000-4000-8000-000000000001","isEnabled":true,"pausedUntil":"2099-01-01T00:00:00Z","schedule":{"frequency":"hourly","intervalHours":12}}"#)
         #expect(on.schedule.frequency == .hourly)
         #expect(on.schedule.interval == 3600)
@@ -762,12 +652,6 @@ struct TolerantDecodingTests {
         #expect(record.kind == .backup)
         #expect(record.outcome == .succeeded)
         #expect(record.planName == "Docs")
-
-        let hook = try #require(try decode(
-            StoredHook.self,
-            #"{"event":"afterSuccess","command":"true"}"#
-        ).hook)
-        #expect(hook.command == "true")
 
         // The defaults above are substitutions, not readings: each one must
         // be reported so the app can surface what a newer build's fields

@@ -20,8 +20,8 @@ protocol ResticClient: Sendable {
     @discardableResult
     func initializeRepository(_ context: RepositoryContext) async throws -> String?
 
-    /// `timeout` bounds the answer: against a REST server that refuses
-    /// connections restic 0.19.1 retried for over ten minutes.
+    /// `timeout` bounds the answer: restic's retries keep it at an SFTP
+    /// server or S3 endpoint it cannot reach for minutes.
     func repositoryExists(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> Bool
     /// restic's own ID for the repository at the context's location.
     func resticID(_ context: RepositoryContext, timeout: TimeInterval?) async throws -> String

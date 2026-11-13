@@ -340,15 +340,6 @@ struct PlanStatusTests {
         #expect(summary.runID == failed.id)
         #expect(summary.outcome == .failed)
         #expect(summary.finishedAt == failed.finishedAt)
-
-        // A before-hook abort: the reason the backup never started leads,
-        // and the hook's own line is counted, not repeated.
-        var aborted = run(.failed)
-        aborted.failureMessage = "A before-backup hook failed and is set to cancel the backup."
-        aborted.hookMessages = ["mount-nas.sh exited with status 1"]
-        let abortSummary = PlanStatus.summary(of: aborted)
-        #expect(abortSummary.message == aborted.failureMessage)
-        #expect(abortSummary.facts == ["1 failed script"])
     }
 
     @Test("restic's count, not the stored lines, is the unreadable count")
@@ -404,15 +395,8 @@ struct PlanStatusTests {
         #expect(PlanStatus.facts(for: stored) == ["1 unreadable item", "Old backups not removed"])
     }
 
-    @Test("a warning from after-hooks alone names the hook, and a bare exit 3 still says something")
-    func hookOnlyAndBareWarnings() {
-        var hooked = run(.completedWithErrors)
-        hooked.hookMessages = ["notify.sh exited with status 1"]
-        let hookSummary = PlanStatus.summary(of: hooked)
-        #expect(hookSummary.message == "notify.sh exited with status 1")
-        #expect(hookSummary.facts == ["1 failed script"])
-        #expect(hookSummary.items.isEmpty)
-
+    @Test("a bare exit 3 still says something")
+    func bareWarning() {
         // restic exited 3 and named nothing: the row must not be a bare
         // headline, and it uses the banner's own words — with Activity's
         // fact under them, word for word.
@@ -420,7 +404,7 @@ struct PlanStatusTests {
         bare.exitCode = 3
         let bareSummary = PlanStatus.summary(of: bare)
         #expect(bareSummary.message == RunRecord.unexplainedWarningMessage)
-        #expect(bareSummary.facts == ["Some source data couldn’t be read"])
+        #expect(bareSummary.facts == ["Some files couldn’t be read"])
     }
 
     @Test("an unnamed exit 3 beside a retention skip still says some data was not read")
@@ -433,18 +417,8 @@ struct PlanStatusTests {
         partial.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked by PID 4242 on demo-mac"]
         let summary = PlanStatus.summary(of: partial)
         #expect(summary.message == RunRecord.retentionSkippedOnScreenPrefix + "repository is already locked by PID 4242 on demo-mac")
-        #expect(summary.facts == ["Some source data couldn’t be read", "Old backups not removed"])
+        #expect(summary.facts == ["Some files couldn’t be read", "Old backups not removed"])
         #expect(RunRecordPresentation.detail(for: partial) == summary.facts.joined(separator: " · "))
-
-        // Only a warning that is the retention skip alone lets its message
-        // stand for the fact.
-        var withHook = run(.completedWithErrors)
-        withHook.exitCode = 0
-        withHook.itemErrors = partial.itemErrors
-        withHook.hookMessages = ["Hook “notify” exited 1"]
-        let hookSummary = PlanStatus.summary(of: withHook)
-        #expect(hookSummary.facts == ["Old backups not removed", "1 failed script"])
-        #expect(RunRecordPresentation.detail(for: withHook) == hookSummary.facts.joined(separator: " · "))
     }
 
     @Test("a decoding gap leads only when nothing unreadable was named, and is never counted")
@@ -532,7 +506,7 @@ struct RepositoryLabelTests {
         return repository
     }
 
-    @Test("a repository is called by where it is: a drive's name, a folder's, a host, a bucket, a remote")
+    @Test("a repository is called by where it is: a drive's name, a folder's, a host, a bucket")
     func labels() {
         #expect(local("/Volumes/backup").label(among: []) == "backup")
         #expect(local("/Volumes/T7/restic").label(among: []) == "T7")
@@ -544,21 +518,12 @@ struct RepositoryLabelTests {
         #expect(sftp.label(among: []) == "nas.local")
         sftp.sftpHost = "nas.local:2222"
         #expect(sftp.label(among: []) == "nas.local", "a port typed after the host is not part of its name")
-        var rest = Repository()
-        rest.kind = .rest
-        rest.restURL = "rest:https://backup.example.com:8000/me/"
-        #expect(rest.label(among: []) == "backup.example.com")
         var s3 = Repository()
         s3.kind = .s3
         s3.s3Bucket = "photos-archive"
         #expect(s3.label(among: []) == "photos-archive")
         s3.s3Bucket = "/photos-archive/mac/"
         #expect(s3.label(among: []) == "photos-archive", "a folder typed after the bucket is not part of its name")
-        var rclone = Repository()
-        rclone.kind = .rclone
-        rclone.rcloneRemote = "gdrive:"
-        rclone.rclonePath = "restic"
-        #expect(rclone.label(among: []) == "gdrive")
         #expect(Repository().label(among: []) == "Untitled Location")
     }
 
@@ -578,20 +543,5 @@ struct RepositoryLabelTests {
         #expect(nas.label(among: [nas, nasAgain]) == "nas.local:/volume1/restic")
         let other = local("/Volumes/Samsung/restic")
         #expect(t7.label(among: [t7, other]) == "T7")
-        // A REST server's twins read as their URLs — without the login a URL
-        // saved before the login had fields of its own still carries: the
-        // label is every surface's, notifications, hooks and
-        // webhooks among them.
-        var me = Repository()
-        me.kind = .rest
-        me.restURL = "rest:https://alice:s3cret@backup.example.com:8000/me/"
-        var work = me
-        work.id = UUID()
-        work.restURL = "https://backup.example.com:8000/work/"
-        #expect(me.label(among: [me, work]) == "https://backup.example.com:8000/me/")
-        #expect(work.label(among: [me, work]) == "https://backup.example.com:8000/work/")
-        #expect(me.displayLocation == "https://backup.example.com:8000/me/")
-        // restic still gets the URL as saved, login and all.
-        #expect(me.resticRepositoryString == "rest:https://alice:s3cret@backup.example.com:8000/me/")
     }
 }

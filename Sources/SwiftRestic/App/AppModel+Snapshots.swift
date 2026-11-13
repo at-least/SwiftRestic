@@ -11,12 +11,34 @@ extension AppModel {
     /// caps arguments and environment together at 1 MiB (`ARG_MAX`).
     private static let fileHistoryNamedLimit = 2_000
 
-    func refreshAllSnapshots() async {
-        // Concurrent: one slow or unreachable location must not delay another's rows.
-        await withTaskGroup(of: Void.self) { group in
-            for repository in configuration.repositories {
-                group.addTask { await self.refreshSnapshots(repositoryID: repository.id) }
-            }
+    /// How old a read listing may be before the app's activation reads it
+    /// again: backups written by another Mac or by restic itself show up
+    /// without a refresh command, and switching apps back and forth does
+    /// not spawn restic each time.
+    nonisolated static let listingStaleAfter: TimeInterval = 5 * 60
+
+    /// Only listings that were read: a failed one has its own triggers (Try
+    /// Again, a mount, a network change), and re-reading it on every
+    /// activation would reconnect a share or ask an unreachable server each
+    /// time the user switches back.
+    nonisolated static func isListingStale(
+        outcome: SnapshotListingOutcome?, loadedAt: Date?, isLoading: Bool, now: Date
+    ) -> Bool {
+        guard !isLoading, outcome == .loaded, let loadedAt else { return false }
+        return now.timeIntervalSince(loadedAt) >= listingStaleAfter
+    }
+
+    func refreshStaleListings(now: Date = .now) {
+        guard !isShuttingDown, isResticAvailable else { return }
+        for repository in configuration.repositories
+            where Self.isListingStale(
+                outcome: snapshotListingOutcomes[repository.id],
+                loadedAt: snapshotsLoadedAt[repository.id],
+                isLoading: loadingSnapshots.contains(repository.id),
+                now: now
+            )
+        {
+            scheduleSnapshotRefresh(repositoryID: repository.id)
         }
     }
 
@@ -168,7 +190,7 @@ extension AppModel {
             repositoriesMissingPassword.insert(repositoryID)
             snapshotListingOutcomes[repositoryID] = .failed(
                 "No password is saved for “\(label(of: repository))”. Add it to read its backups.",
-                fix: .editRepository(repositoryID)
+                fix: .enterPassword(repositoryID)
             )
         } catch let ResticError.commandFailed(code, _) where code == ResticError.repositoryMissingCode {
             // restic's "does not exist": the repository is not where it was
@@ -211,7 +233,7 @@ extension AppModel {
     /// one is saved: two sentences, the sidebar showing the first alone.
     nonisolated static func missingRepositoryReason(kind: Repository.Kind) -> String {
         kind == .local
-            ? "Backups not found. Is the disk connected? If it moved, locate it."
+            ? ResticError.diskBackupsMissing
             : "Backups not found. If they moved, put them back, or add them where they are now as a new backup location."
     }
 
@@ -314,7 +336,7 @@ extension AppModel {
 
     /// One file's node in `snapshotIDs` — its size and modification time
     /// there — by snapshot ID, from one `restic find` of its exact path: the
-    /// Files view's version rows, which ask for each version's newest
+    /// Backups tab's version rows, which ask for each version's newest
     /// backup. Case-exact, as a path is, and matched by bytes, as the index
     /// keys paths.
     ///

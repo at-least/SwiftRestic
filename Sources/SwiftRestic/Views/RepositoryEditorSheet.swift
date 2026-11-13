@@ -39,10 +39,6 @@ struct RepositoryEditorSheet: View {
     /// (`AppModel.passwordRefused`), read once as the sheet opens: the
     /// password field shows, empty, in place of "Saved in Keychain".
     @State private var entersPassword = false
-    @State private var rcloneSetup: RcloneSetup?
-    /// Bumped when the app becomes active, so remotes set up in Terminal
-    /// meanwhile appear without leaving the sheet.
-    @State private var rcloneReadCount = 0
     /// The local folder's network share while it is mounted
     /// (`VolumePresence.mountedShare`), read off the main actor.
     @State private var mountedShare: MountedShare?
@@ -54,18 +50,13 @@ struct RepositoryEditorSheet: View {
 
     private let isNew: Bool
     /// The folder the first-run sheet is backing up, when it handed off to
-    /// this editor for a server or cloud storage: the Type picker leaves
-    /// out this Mac, and the sheet is that folder's backup.
+    /// this editor for a server kind: the kind is the one chosen there, with
+    /// no Type pop-up, and the sheet is that folder's backup.
     private let firstBackupSource: String?
     /// Told the new repository's id once it is created and saved — never on
     /// an edit, a cancel or a failed probe — so the window can open the
     /// page that offers its first plan.
     private let onCreated: (UUID) -> Void
-
-    private struct RcloneRead: Equatable {
-        var kind: Repository.Kind
-        var count: Int
-    }
 
     private struct Edit: Equatable {
         var draft: Repository
@@ -78,8 +69,8 @@ struct RepositoryEditorSheet: View {
     }
 
     /// `firstBackupSource`, `password` and `confirmPassword`: what the
-    /// first-run sheet held when it handed off to this editor. A new
-    /// location then opens on the first kind that is not on this Mac.
+    /// first-run sheet held when it handed off to this editor, with
+    /// `repository` of the server kind chosen there.
     init(
         repository: Repository,
         firstBackupSource: String? = nil,
@@ -87,13 +78,15 @@ struct RepositoryEditorSheet: View {
         confirmPassword: String = "",
         onCreated: @escaping (UUID) -> Void = { _ in }
     ) {
-        // A new repository opens as `Repository()`: a local folder not yet
-        // chosen. A saved one always has its location (Save requires it).
-        isNew = repository.kind == .local && repository.localPath.isEmpty
-        precondition(isNew || firstBackupSource == nil, "a first backup opens a new location only")
+        // A new repository opens with its location blank: `Repository()`,
+        // or one of the first-run sheet's server kinds. A saved one always
+        // has its location (Save requires it).
+        isNew = !repository.isConfigurationComplete
+        precondition(
+            firstBackupSource == nil || (isNew && repository.kind != .local),
+            "a first backup opens a new server location only"
+        )
         self.firstBackupSource = firstBackupSource
-        var repository = repository
-        if firstBackupSource != nil { repository.kind = .sftp }
         _draft = State(initialValue: repository)
         _password = State(initialValue: password)
         _confirmPassword = State(initialValue: confirmPassword)
@@ -107,20 +100,6 @@ struct RepositoryEditorSheet: View {
         var text: String {
             switch self {
             case let .ok(message), let .failure(message): message
-            }
-        }
-
-        var symbolName: String {
-            switch self {
-            case .ok: "checkmark.circle.fill"
-            case .failure: "xmark.octagon.fill"
-            }
-        }
-
-        var symbolColor: Color {
-            switch self {
-            case .ok: .secondary
-            case .failure: Theme.danger
             }
         }
 
@@ -153,9 +132,13 @@ struct RepositoryEditorSheet: View {
             // of the scrolled form it landed below the fold.
             if let status {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: status.symbolName)
-                        .foregroundStyle(status.symbolColor)
-                        .accessibilityHidden(true)
+                    // A failure alone carries a glyph: an answer that worked
+                    // is plain secondary text.
+                    if case .failure = status {
+                        Image(systemName: "xmark.octagon.fill")
+                            .foregroundStyle(Theme.danger)
+                            .accessibilityHidden(true)
+                    }
                     Text(status.text)
                         .foregroundStyle(status.textStyle)
                         .textSelection(.enabled)
@@ -231,25 +214,6 @@ struct RepositoryEditorSheet: View {
             mountedShare = share
             holdsBackups = holds
         }
-        .task(id: RcloneRead(kind: draft.kind, count: rcloneReadCount)) {
-            // Requeried on every return to the rclone kind: remotes are edited
-            // outside the app, so a list from a previous visit may be stale.
-            guard draft.kind == .rclone, isNew else {
-                rcloneSetup = nil
-                return
-            }
-            let setup = await loadRcloneSetup()
-            // A cancelled query must not write over its successor's fresher list.
-            guard !Task.isCancelled else { return }
-            rcloneSetup = setup
-            // A remote removed in Terminal meanwhile is no longer a choice.
-            if case let .remotes(remotes) = setup, !remotes.contains(where: { $0.name == draft.rcloneRemote }) {
-                draft.rcloneRemote = ""
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            if isNew, draft.kind == .rclone { rcloneReadCount += 1 }
-        }
         .confirmationDialog(
             "Discard changes?",
             isPresented: $isConfirmingDiscard,
@@ -288,7 +252,7 @@ struct RepositoryEditorSheet: View {
                 // above each kind, so one control carries both questions.
                 // A saved repository's kind is part of where it is, fixed
                 // with its location (`locationFields`).
-                if isNew {
+                if isNew, firstBackupSource == nil {
                     kindPicker
                     Text(draft.kind.summary)
                         .font(.caption)
@@ -338,11 +302,7 @@ struct RepositoryEditorSheet: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     } else if let label = draft.secretFieldLabel {
-                        if draft.kind == .rest {
-                            // A server without logins leaves both blank.
-                            TextField("User", text: $draft.restUser, prompt: Text("Optional"))
-                            SecureField(label, text: $providerSecret, prompt: Text("Optional"))
-                        } else if draft.kind == .s3 {
+                        if draft.kind == .s3 {
                             TextField("Access key ID", text: $draft.s3AccessKeyID, prompt: Text("Required"))
                             SecureField(label, text: $providerSecret, prompt: Text("Required"))
                         }
@@ -421,20 +381,14 @@ struct RepositoryEditorSheet: View {
 
     private var kindPicker: some View {
         Picker("Type", selection: $draft.kind) {
-            if firstBackupSource == nil {
-                Section("On this Mac") {
-                    Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-                }
+            Section("On this Mac") {
+                Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
             }
             Section("On another computer") {
                 Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
-                Text(Repository.Kind.rest.displayName).tag(Repository.Kind.rest)
             }
             Section("In the cloud") {
                 Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
-            }
-            Section("Through a gateway") {
-                Text(Repository.Kind.rclone.displayName).tag(Repository.Kind.rclone)
             }
         }
     }
@@ -492,56 +446,6 @@ struct RepositoryEditorSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        case .rest:
-            TextField("URL", text: $draft.restURL, prompt: Text("https://host:8000/"))
-                // A URL pasted with its login sheds it into User and the
-                // Keychain, so the configuration file never holds the
-                // password.
-                .onChange(of: draft.restURL) { _, url in
-                    guard let split = Repository.splittingRESTCredentials(url) else { return }
-                    draft.restURL = split.url
-                    draft.restUser = split.user
-                    if let password = split.password { providerSecret = password }
-                }
-        case .rclone:
-            rcloneFields
-        }
-    }
-
-    /// Only the remotes rclone already has: setting one up is rclone's job,
-    /// so a remote that is not there yet sends the user to rclone config.
-    /// Not a text field: a `:backend:` connection string can be saved as a
-    /// named remote instead (the user's call).
-    @ViewBuilder
-    private var rcloneFields: some View {
-        switch rcloneSetup {
-        case nil:
-            LabeledContent("Remote") { ProgressView().controlSize(.small) }
-        case .damaged:
-            Text(ResticError.rcloneMissing).foregroundStyle(.secondary)
-        case let .unreadable(message):
-            Text(message).foregroundStyle(.secondary)
-        case let .remotes(remotes) where remotes.isEmpty:
-            VStack(alignment: .leading, spacing: 6) {
-                Text(RcloneSetup.noRemotes)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Reveal rclone") {
-                    NSWorkspace.shared.activateFileViewerSelecting([RcloneBinary.bundled.url])
-                }
-                .controlSize(.small)
-            }
-        case let .remotes(remotes):
-            Picker("Remote", selection: $draft.rcloneRemote) {
-                if draft.rcloneRemote.isEmpty { Text("Choose").tag("") }
-                ForEach(remotes, id: \.name) { remote in
-                    Text(remote.menuTitle).tag(remote.name)
-                }
-            }
-            TextField("Path", text: $draft.rclonePath, prompt: Text("backups/mac"))
-            Text("To set up another remote, use rclone config in Terminal.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -626,11 +530,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    private func loadRcloneSetup() async -> RcloneSetup {
-        guard let rclone = RcloneBinary.runnable else { return .damaged }
-        return await RcloneRemoteLister(runner: model.runner).list(binary: rclone.url)
-    }
-
     /// The typed password, else the stored one; neither throws
     /// `passwordMissing` — the run path's answer — so an empty password never
     /// reaches restic, whose own refusal advises `--insecure-no-password`.
@@ -657,37 +556,15 @@ struct RepositoryEditorSheet: View {
     private func probe(initializeIfMissing: Bool) async -> Bool {
         status = nil
 
-        // restic shells out to rclone for this backend; catch a missing helper
-        // here rather than letting it surface as an opaque failure from restic.
-        if draft.requiresRcloneBinary,
-           RcloneBinary.runnable == nil
-        {
-            status = .failure(ResticError.rcloneMissing)
-            return false
-        }
-
         do {
-            let service = try model.service()
             let context = RepositoryContext(
                 repository: draft,
                 password: try effectivePassword(),
                 providerSecret: providerSecret.isEmpty ? nil : providerSecret
             )
-
-            if try await service.repositoryExists(context, timeout: EditorRequirements.probeTimeout) {
-                status = .ok("Connected to the existing backups.")
-                return true
-            }
-            guard initializeIfMissing else {
-                status = .failure(EditorRequirements.noRepositoryHere)
-                return false
-            }
-            _ = try await service.initializeRepository(context)
-            status = .ok("Created a new backup location.")
+            let created = try await model.openRepository(context, creatingIfMissing: initializeIfMissing)
+            status = .ok(created ? "Created a new backup location." : "Connected to the existing backups.")
             return true
-        } catch ResticError.timedOut {
-            status = .failure("No answer from the location in \(Int(EditorRequirements.probeTimeout)) seconds. Check that it is reachable.")
-            return false
         } catch {
             status = .failure(error.localizedDescription)
             return false
@@ -723,33 +600,39 @@ struct RepositoryEditorSheet: View {
         let keepsStoredSecret = EditorRequirements.keepsStoredProviderSecret(
             secretFieldLabel: draft.secretFieldLabel, readFailed: secretsReadFailed, typedSecret: providerSecret
         )
+        // A saved location's unchanged password stays as stored: a changed
+        // one is a failed backup's fix, and `upsert` reruns them.
+        let keepsStoredPassword = password.isEmpty || (!isNew && password == initialPassword)
         await model.upsert(
             repository: draft,
-            password: password.isEmpty ? nil : password,
+            password: keepsStoredPassword ? nil : password,
             providerSecret: keepsStoredSecret ? nil : providerSecret
         )
-        // The repository is saved from here on: a share password that does
-        // not save is said by the app, and the sheet closes as saved — kept
-        // open, it would offer Add Repository and ask to discard a
-        // repository the sidebar already shows.
-        if !sharePassword.isEmpty, let share = folderShare?.share {
-            do {
-                try await model.saveNetworkShare(share, password: sharePassword)
-            } catch {
-                model.post(Banner(
-                    title: "Couldn’t save the password for “\(share.url)”",
-                    message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
-                    level: .error
-                ))
-            }
-            sharePassword = ""
-        }
+        await saveSharePassword()
         await model.flushSave()
         // Not awaited: a large remote's listing can take minutes, and the
         // sheet would sit disabled through them.
         model.scheduleSnapshotRefresh(repositoryID: draft.id)
         if isNew { onCreated(draft.id) }
         dismiss()
+    }
+
+    /// The repository is saved by now: a share password that
+    /// does not save is said by the app, and the sheet closes as saved —
+    /// kept open, it would offer Add Repository and ask to discard a
+    /// repository the sidebar already shows.
+    private func saveSharePassword() async {
+        guard !sharePassword.isEmpty, let share = folderShare?.share else { return }
+        do {
+            try await model.saveNetworkShare(share, password: sharePassword)
+        } catch {
+            model.post(Banner(
+                title: "Couldn’t save the password for “\(share.url)”",
+                message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
+                level: .error
+            ))
+        }
+        sharePassword = ""
     }
 }
 
@@ -761,9 +644,7 @@ extension Repository.Kind {
         switch self {
         case .local: "A folder or an external drive attached to this Mac."
         case .sftp: "A NAS or server you reach over SSH."
-        case .rest: "A machine running the restic REST server."
         case .s3: "Amazon S3, Backblaze B2, Wasabi, MinIO, Cloudflare R2 and other S3-compatible services."
-        case .rclone: "Any of rclone’s many backends, through a remote you configure once."
         }
     }
 }

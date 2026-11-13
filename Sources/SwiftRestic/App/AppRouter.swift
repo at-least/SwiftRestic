@@ -13,7 +13,6 @@ final class AppRouter {
     /// no sheet is already up — refused with a beep otherwise.
     enum Intent: Equatable {
         case newPlan
-        case newPlanIn(UUID)
         case newRepository
         case showFind
         case runSelectedPlan
@@ -26,6 +25,7 @@ final class AppRouter {
         case stopPlan(UUID)
         case editPlan(UUID)
         case editRepository(UUID)
+        case enterPassword(UUID)
         case confirm(CommandConfirmation)
         /// Verify Backups, from every surface that offers it: at once, with
         /// no question — a check only reads, and a backup asked for
@@ -33,6 +33,10 @@ final class AppRouter {
         /// place a check shows its progress and Cancel; a check that passes
         /// posts no banner.
         case verifyBackups(UUID)
+        /// Clean Up Again and a full location's Clean Up Now, from Activity's
+        /// drawer and a failed run's fix, the only ways to it: at once, as
+        /// Verify Backups — the failed run already asked for it.
+        case cleanUp(UUID)
     }
 
     var selection: SidebarItem?
@@ -52,15 +56,9 @@ final class AppRouter {
     /// run (the plan page's Last backup) turns it off.
     var activityShowsProblemsOnly = false
 
-    /// Transient, never persisted: whether a plan's Files tree lists, after
-    /// each folder's own items, what only its backups hold — items deleted
-    /// from this Mac since. The tree's own checkbox and View ▸ Show Deleted
-    /// Items, off at every launch (the user's call).
-    var filesShowsDeletedItems = false
-
-    /// A folder a backup's tree should open and select when it next loads
-    /// this exact record — the Files view's Show in Backups, which leaves
-    /// the folder or file the user was reading and must not lose their place.
+    /// An item a backup's tree should open its folders to and select when
+    /// it next loads this exact record — a search hit, Search All Backups'
+    /// row, an unread item's earlier copy.
     private struct RestoreFocus: Equatable {
         var repositoryID: UUID
         var snapshotID: String
@@ -71,7 +69,7 @@ final class AppRouter {
     /// never steer an unrelated load; the pane spends it on its next load.
     private var restoreFocus: RestoreFocus?
 
-    /// The toolbar's Overview | Backups | Files, one choice for every page
+    /// The toolbar's Overview | Backups, one choice for every page
     /// (the user's call, 2026-10-24): switching plans keeps the view. Read
     /// through `tab(of:)`, never directly — a page without the chosen view
     /// shows another. Transient: every page opens on its overview after a
@@ -83,20 +81,22 @@ final class AppRouter {
     /// opens on the newest backup after a launch.
     var backupSelection: [SidebarItem: String] = [:]
 
-    /// The folders open in the Files views' trees, every chain's together:
-    /// a node names its chain, so one set serves them all. Transient, as the
-    /// tabs are.
-    var openFolders: Set<FileNode> = []
-
-    /// The folder or file each chain's Files view has selected, by the
-    /// chain's roots (`FileNode.roots`). Transient.
+    /// The item whose versions each chain's Backups tab shows under its
+    /// tree, by the chain's roots (`FileNode.roots`): a file picked in the
+    /// tree or a search hit. Transient.
     var filesSelection: [FileNode: FileNode] = [:]
 
-    /// What each chain's Files view is searching for, by the chain's roots,
-    /// as typed in the toolbar's search field; empty or absent shows the
-    /// tree. Transient, as the selection is: a search left on a page is
-    /// there when the page is shown again.
+    /// What each chain's Backups tab is searching for, by the chain's
+    /// roots, as typed in the toolbar's search field; empty or absent shows
+    /// the backup's tree. Transient, as the selection is: a search left on a
+    /// page is there when the page is shown again.
     var filesSearchText: [FileNode: String] = [:]
+
+    /// The search `roots`' Backups tab runs: the typed text, trimmed; empty
+    /// shows the tree.
+    func filesSearchQuery(for roots: FileNode) -> String {
+        (filesSearchText[roots] ?? "").trimmingCharacters(in: .whitespaces)
+    }
 
     /// The page whose toolbar search field takes the keyboard focus next —
     /// ⌘F, and Search All Backups on arrival. The page spends it once its
@@ -110,7 +110,7 @@ final class AppRouter {
     }
 
     func searchFiles(on page: SidebarItem) {
-        setTab(.files, of: page)
+        setTab(.backups, of: page)
         searchFocus = page
     }
 
@@ -134,7 +134,7 @@ final class AppRouter {
         selection = .findFiles
     }
 
-    /// Search All Backups' This Plan: the plan's Files tab, the query kept.
+    /// Search All Backups' This Plan: the plan's Backups tab, the query kept.
     func returnToPlanSearch() {
         guard let origin = findOrigin else { return }
         filesSearchText[origin.roots] = findQuery
@@ -143,22 +143,15 @@ final class AppRouter {
     }
 
     /// The backup each file's pane opens at — the version left at, or the
-    /// one Show Versions named — so coming back to the file from another page
-    /// finds it as it was read. Transient; a pane reads it as it opens, never
-    /// while shown.
+    /// backup the file was picked in — so coming back to the file from
+    /// another page finds it as it was read. Transient; a pane reads it as it
+    /// opens, never while shown.
     @ObservationIgnored var filesChosenVersion: [FileNode: String] = [:]
 
-    /// Bumped by Show Versions, so the Files pane opens again — at the
-    /// backup it names — even for the item already selected, whose pane
-    /// would otherwise keep its backup.
+    /// Bumped by `showVersions`, so the file's pane opens again — at the
+    /// backup it names — even for the file already selected, whose pane
+    /// would otherwise keep its version.
     private(set) var filesPaneOpenings = 0
-
-    /// An item the Files tab was asked to show — Show Versions', a search
-    /// hit picked, one opened from the pane — waiting for the tab's tree to
-    /// read the levels on its way: one it lists only as deleted turns Show
-    /// Deleted Items on, so it has a row (the user's call).
-    /// Transient; the tab spends it (`FilesTree.reveal`).
-    var filesRevealRequest: FileNode?
 
     /// The chosen view where `page` offers it.
     func tab(of page: SidebarItem) -> PageTab {
@@ -173,25 +166,12 @@ final class AppRouter {
         pageTab = tab
     }
 
-    func showVersions(path: String, isDirectory: Bool, in record: Snapshot, repositoryID: UUID, page: SidebarItem) {
-        let chain = SnapshotIndex.chainKey(for: record)
-        let item = FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory)
-        setTab(.files, of: page)
-        openFolders(above: item, from: record.paths)
-        // A search left on the tab would list its hits over the tree.
-        filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = nil
-        filesSelection[FileNode.roots(repositoryID: repositoryID, chainKey: chain)] = item
-        filesRevealRequest = item
-        filesChosenVersion[item] = record.id
+    /// A file picked in a backup's tree: its versions under the tree,
+    /// opening at the backup it was picked in.
+    func showVersions(of item: FileNode, at backupID: String) {
+        filesSelection[FileNode.roots(repositoryID: item.repositoryID, chainKey: item.chainKey)] = item
+        filesChosenVersion[item] = backupID
         filesPaneOpenings += 1
-        selection = page
-    }
-
-    func openFolders(above item: FileNode, from tops: [String]) {
-        // The chain holds `item` itself last; the selection opens it.
-        for folder in Format.pathChain(of: item.path, roots: tops).dropLast() {
-            openFolders.insert(FileNode(repositoryID: item.repositoryID, chainKey: item.chainKey, path: folder, isDirectory: true))
-        }
     }
 
     func tabBinding(for page: SidebarItem) -> Binding<PageTab> {
@@ -221,10 +201,14 @@ final class AppRouter {
     }
 
     /// A plain route clears an older focus request rather than inheriting
-    /// it.
+    /// it. A plan's search left on the tab would list its hits over the
+    /// tree the route lands on, so it ends.
     func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
+        }
+        if case let .plan(planID) = page {
+            filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(planID))] = nil
         }
         backupSelection[page] = snapshotID
         // A group's page is its backups, with no tab to turn; the choice
@@ -293,13 +277,11 @@ final class AppRouter {
 enum PageTab: Hashable, CaseIterable {
     case overview
     case backups
-    case files
 
     var menuTitle: String {
         switch self {
         case .overview: "Overview"
         case .backups: "Backups"
-        case .files: "Files"
         }
     }
 }
@@ -312,7 +294,6 @@ enum PageTab: Hashable, CaseIterable {
 enum CommandConfirmation: Hashable, Identifiable {
     case deletePlan(UUID)
     case deleteRepository(UUID)
-    case prune(UUID)
 
     var id: Self { self }
 }

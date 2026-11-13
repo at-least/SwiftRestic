@@ -36,7 +36,7 @@ final class PlanEditorUITests: XCTestCase {
         app.buttons[AccessibilityID.Plan.backUpNow].click()
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue(beginningWith: "2 backups · since ", timeout: 120))
 
-        UITest.restorePlanFolder(into: restored, in: app)
+        UITest.restorePlanFolder(folders, into: restored, in: app)
         XCTAssertNotNil(UITest.waitForFile(named: "hello.txt", under: restored, timeout: 5))
         XCTAssertNil(UITest.waitForFile(named: "secret.txt", under: restored, timeout: 5))
         attachScreenshot()

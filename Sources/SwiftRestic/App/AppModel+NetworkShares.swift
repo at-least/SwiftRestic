@@ -30,6 +30,13 @@ extension AppModel {
         } else {
             configuration.settings.networkShares.append(saved)
         }
+        // The password is the fix of each failed backup that needed the
+        // share: into a location on it, or of a folder on it.
+        let repositoryIDs = Set(
+            configuration.repositories.filter { $0.driveVolumeName == share.volumeName }.map(\.id)
+                + configuration.plans.filter { VolumePresence.volumeName(of: $0.resolvedPath) == share.volumeName }.compactMap(\.repositoryID)
+        )
+        for repositoryID in repositoryIDs { rerunFailedBackups(in: repositoryID) }
     }
 
     /// Forgets a share: its password first, then the share — a Keychain
@@ -62,14 +69,13 @@ extension AppModel {
 
     /// A read that needs a local repository on a network share — the
     /// retention preview — reconnects its saved share first when it is
-    /// away, as a run does; still away, it throws in the run's words
-    /// (`ShareNotReconnected`). A volume with no saved share is left to the
-    /// read, as before.
+    /// away, as a run does; still away, it throws in the run's words. A
+    /// volume with no saved share is left to the read, as before.
     func reconnectShare(before repository: Repository) async throws {
         guard await isVolumeMissing(repository), let volume = repository.driveVolumeName else { return }
         let failures = await reconnectShares(volumes: [volume]).filter { $0.failureReason != nil }
         guard failures.isEmpty else {
-            throw ShareNotReconnected(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume))
+            throw MessageError(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath], reconnectFailures: failures.reasonsByVolume))
         }
     }
 
@@ -145,9 +151,4 @@ extension AppConfiguration {
         Set(plans.compactMap { VolumePresence.volumeName(of: $0.resolvedPath) }
             + repositories.compactMap(\.driveVolumeName))
     }
-}
-
-private struct ShareNotReconnected: LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
 }

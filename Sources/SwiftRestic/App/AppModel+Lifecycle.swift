@@ -30,7 +30,11 @@ extension AppModel {
         if backups > 0 {
             reasons.append(backups == 1 ? "A backup is running." : "\(backups) backups are running.")
         }
-        if !maintenance.isEmpty { reasons.append("Maintenance is running.") }
+        for task in MaintenanceTask.allCases {
+            let running = maintenance.values.filter { $0.task == task }.count
+            if running == 1 { reasons.append("\(task.runningClause).") }
+            if running > 1 { reasons.append("\(running) \(task.displayName.lowercased())s are running.") }
+        }
         if isRestoring { reasons.append("A restore is running.") }
         if console.isRunning { reasons.append("A console command is running.") }
         return reasons
@@ -132,8 +136,12 @@ extension AppModel {
             // every tolerant-decode substitution before the banner naming them
             // could be read — and burned a rotation generation on every clean
             // launch besides.
+            var read = loaded.configuration
+            for index in read.repositories.indices {
+                read.repositories[index].extraEnvironment = repositoryEnvironment[read.repositories[index].id] ?? [:]
+            }
             suppressConfigurationSave = true
-            configuration = loaded.configuration
+            configuration = read
             suppressConfigurationSave = false
             // A recovered load is not a clean one: the user is reading a
             // copy, and the next save replaces whatever was wrong with the

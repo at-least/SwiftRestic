@@ -7,8 +7,8 @@ written by agents for agents, and the code itself is the documentation.
 
 SwiftRestic is a native macOS backup app in the spirit of Arq, with
 [restic](https://restic.net) doing the work underneath. It backs up folders
-on a schedule to local disks, SFTP, S3-compatible storage such as Backblaze B2,
-rclone remotes and restic REST servers; browses and restores any backup; keeps
+on a schedule to local disks, SFTP servers and S3-compatible storage such as
+Backblaze B2; browses and restores any backup; keeps
 a searchable index of every file in every backup; removes old backups, frees
 their space and verifies each backup location; and reports through macOS
 notifications, webhooks, Slack, Discord and Healthchecks.io.
@@ -16,13 +16,9 @@ notifications, webhooks, Slack, Discord and Healthchecks.io.
 ## Requirements
 
 - macOS 15 or later.
-- Nothing else for most people. restic 0.19.1 and rclone 1.76.0 are inside
-  the app, and the app runs only those copies, whatever else is on the Mac.
-  Both update with app updates; their licenses (restic BSD 2-Clause, rclone
-  MIT) are in the About window.
-- An rclone remote is still set up outside the app, with `rclone config` in
-  Terminal — your own rclone, or the one in the app bundle at
-  `SwiftRestic.app/Contents/Helpers/rclone`.
+- Nothing else. restic 0.19.1 is inside the app, and the app runs only that
+  copy, whatever else is on the Mac. It updates with app updates; its
+  license (BSD 2-Clause) is in the About window.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
   withholds `~/Documents`, `~/Desktop` and the like and backups end
   incomplete. The app asks for it when you set up your first backup.
@@ -36,10 +32,9 @@ brew install xcodegen
 open SwiftRestic.xcodeproj     # or work in Xcode
 ```
 
-The build downloads the pinned restic and rclone into `.build/` once and
-checks their SHA-256. To move to a new one, change the version and both
-checksums in `Tools/fetch-restic.sh` or `Tools/fetch-rclone.sh`, then run
-the tests.
+The build downloads the pinned restic into `.build/` once and checks its
+SHA-256. To move to a new one, change the version and both checksums in
+`Tools/fetch-restic.sh`, then run the tests.
 
 Debug builds are signed with the author's Apple Development certificate. On
 another Mac, build ad hoc:
@@ -61,8 +56,7 @@ and for the restic inside it.
   `config.json`. It holds the path of every file in every backup, unencrypted,
   and is rebuilt from the location on request.
 - Each run's log: `Logs/` beside `config.json`, deleted with its run record.
-  It holds the restic command lines and restic's messages, never a password
-  or a script's output.
+  It holds the restic command lines and restic's messages, never a password.
 
 ## Good to know
 
@@ -83,11 +77,6 @@ and for the restic inside it.
   without a passphrase, or an `~/.ssh/config` entry with an `IdentityFile`.
   A new server's host key is accepted on first connection
   (`StrictHostKeyChecking=accept-new`); a key that changes later is refused.
-- Scripts run before or after a plan's backup, through `/bin/sh -c` with the
-  app's privileges. They are told about the run through `SWIFTRESTIC_*`
-  environment variables; `SWIFTRESTIC_OUTCOME` says how it ended. Only the
-  first line of a failing script's output is kept, and it never leaves this
-  Mac.
 - The UI is English only.
 
 ## For agents

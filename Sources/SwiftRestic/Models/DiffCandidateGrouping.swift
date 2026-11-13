@@ -1,6 +1,6 @@
 import Foundation
 
-/// The months the Files pane's picker and the Backups tab's list read, as pure
+/// The months the Backups tab's picker and list read, as pure
 /// functions the test bundle can pin: the tests compile no views, so the
 /// bucketing the views render lives here with the model.
 ///

@@ -2,10 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The restore pane: one backup record's file tree, beside a page's Backups
-/// tab's list. The app's one snapshot-first browser — the run drawer's
-/// Browse, a group's page and the Files view's Show in Backups all land here
-/// (`AppRouter.showBackup`) — so the Change column, Show Changes Only and
-/// drag-to-Finder never depend on which button you came through.
+/// tab's list. The app's one browser of what the backups hold — the run
+/// drawer's Browse, Activity's Show in Backups, a search's hit and Search
+/// All Backups' rows all land here (`AppRouter.showBackup`) — so the Change
+/// column, Show Changes Only and drag-to-Finder never depend on which
+/// button you came through. A file picked in it is handed to `onPick`,
+/// whose versions the tab shows under the tree.
 ///
 /// The list beside it owns the timeline; a record is identified, not
 /// chosen, here. Switching records keeps the folder you are in, and the
@@ -15,9 +17,13 @@ import UniformTypeIdentifiers
 struct RestorePaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(FilesTree.self) private var filesTree
 
     let repositoryID: UUID
     let snapshotID: String
+    /// The one file selected — in the tree, or in the list of changes,
+    /// by the backup that holds it — or nil; told once the tree is read.
+    let onPick: (RestorePanePick?) -> Void
 
     @State private var tree = FileTree(roots: [])
     /// The folder the tree is focused on — kept across record switches.
@@ -31,6 +37,9 @@ struct RestorePaneView: View {
     /// The backup's changes against the one before, deletions among them:
     /// what Show Changes Only lists.
     @State private var changeList = BackupChanges(changes: [:])
+    /// The tree's rows this Mac no longer holds, for a backup made on this
+    /// Mac (`DiskFile.localPath`): dimmed, as a search's deleted hits are.
+    @State private var notOnThisMac: Set<PathKey> = []
     /// Kept across record switches: flipping through the list then shows what
     /// each backup changed.
     @State private var showsChangesOnly = false
@@ -103,6 +112,12 @@ struct RestorePaneView: View {
         // tree already holds their rows, and re-running the diff on every
         // chevron click would make a large repository feel broken.
         .task(id: snapshotID) { await loadLevel() }
+        .onChange(of: pickReport) { _, report in
+            guard !report.isLoading else { return }
+            onPick(report.pick)
+        }
+        // Again as rows open and as the disk may have changed.
+        .task(id: presenceKey) { await readPresence() }
         .previewSession(previewer)
         // The copy belongs to the backup on screen.
         .onChange(of: snapshotID) { previewer.end() }
@@ -149,8 +164,8 @@ struct RestorePaneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Show Changes Only, in the footer's leading side as the Files tab
-    /// keeps Show Deleted Items, over a backup with one before it to
+    /// Show Changes Only, on the footer’s leading side, over a backup with
+    /// one before it to
     /// compare with: its count, and the data this backup added, answer why
     /// it grew.
     @ViewBuilder
@@ -246,10 +261,15 @@ struct RestorePaneView: View {
                             Spacer().frame(width: 20)
                         }
                     }
+                    let isGone = notOnThisMac.contains(PathKey(row.node.path))
                     FileKindIcon(type: row.node.iconType)
+                        .opacity(isGone ? 0.5 : 1)
                         .accessibilityLabel(row.node.kindName)
                     Text(row.node.name)
                         .lineLimit(1)
+                        .foregroundStyle(isGone ? .secondary : .primary)
+                        .help(isGone ? "Not on this Mac" : "")
+                        .accessibilityValue(isGone ? "not on this Mac" : "")
                     Spacer()
                     if hasChangeColumn {
                         changeBadge(for: row.node.path)
@@ -300,24 +320,25 @@ struct RestorePaneView: View {
             }
             .listStyle(.inset)
             .help("Drag an item to Finder to restore it there")
+            .accessibilityIdentifier(AccessibilityID.RestorePane.tree)
             .focusOnClick($listIsFocused)
             // Double-click, the list's way: it expands a folder, as the
             // chevron does, and leaves a file alone. The list also sends
             // Return here — Return is spent in `handleKeyPress` first.
             .contextMenu(forSelectionType: String.self) { ids in
                 restoreContextItem(ids) { ids.compactMap { tree.row(id: $0)?.node } }
-                if ids.count == 1, let id = ids.first, let node = tree.row(id: id)?.node {
-                    if !node.isDirectory {
-                        showVersionsItem(path: node.path, isDirectory: false)
-                        // The tree's node is restic's own, size included.
-                        previewItem { node }
-                    }
+                if ids.count == 1, let id = ids.first, let node = tree.row(id: id)?.node, !node.isDirectory {
+                    // The tree's node is restic's own, size included.
+                    previewItem { node }
                 }
             } primaryAction: { ids in
                 guard ids.count == 1, let id = ids.first,
                       let node = tree.row(id: id)?.node, node.isDirectory
                 else { return }
                 expand(path: node.path)
+            }
+            .onKeyPress(.space, phases: .down) { press in
+                previewer.space(press, start: previewable.map { node in { startPreview { node } } })
             }
             .onKeyPress(phases: .down) { press in
                 // Left's parent may sit above the visible rows; the list
@@ -346,8 +367,7 @@ struct RestorePaneView: View {
         Button {
             expand(path: row.node.path)
         } label: {
-            Image(systemName: row.expanded ? "chevron.down" : "chevron.right")
-                .font(.caption.weight(.semibold))
+            FoldChevron(isExpanded: row.expanded)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
         }
@@ -407,16 +427,6 @@ struct RestorePaneView: View {
                     Button("Restore To…") { restoreChanges(rows, choosingDestination: true) }
                         .disabled(model.isRestoring)
                 }
-                if rows.count == 1, let row = rows.first, !row.change.isDirectory {
-                    showVersionsItem(path: row.path, isDirectory: false)
-                }
-            } primaryAction: { ids in
-                guard ids.count == 1, let row = changeList.rows.first(where: { ids.contains($0.id) }),
-                      !row.change.isDirectory,
-                      let holder = holder(of: row),
-                      let page = model.shelves(for: repositoryID).versionsPage(of: holder)
-                else { return }
-                router.showVersions(path: row.path, isDirectory: false, in: holder, repositoryID: repositoryID, page: page)
             }
             .onKeyPress(.return, phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
@@ -462,30 +472,54 @@ struct RestorePaneView: View {
 
     @ViewBuilder
     private func previewItem(_ node: @escaping @MainActor () async throws -> SnapshotNode) -> some View {
-        if let record {
-            Button("Preview") {
-                previewer.start(model, repositoryID: repositoryID, snapshotID: record.id, node: node)
-            }
-            .disabled(!model.isResticAvailable || previewer.isCopying)
+        if record != nil {
+            Button("Preview") { startPreview(node) }
+                .disabled(!model.isResticAvailable || previewer.isCopying)
         }
     }
 
-    /// Show Versions: the item through every backup of its history, on the
-    /// Files tab of its plan's page, opening at this backup. Not offered for
-    /// a group's backup under Other backups, whose page has no Files tab.
-    @ViewBuilder
-    private func showVersionsItem(path: String, isDirectory: Bool) -> some View {
-        if let record, let page = model.shelves(for: repositoryID).versionsPage(of: record) {
-            Button("Show Versions") {
-                router.showVersions(
-                    path: path,
-                    isDirectory: isDirectory,
-                    in: record,
-                    repositoryID: repositoryID,
-                    page: page
-                )
-            }
+    private func startPreview(_ node: @escaping @MainActor () async throws -> SnapshotNode) {
+        guard let record else { return }
+        previewer.start(model, repositoryID: repositoryID, snapshotID: record.id, node: node)
+    }
+
+    /// The one file selected in the tree, which Space looks at.
+    private var previewable: SnapshotNode? {
+        guard model.isResticAvailable, let node = selectedRow, !node.isDirectory else { return nil }
+        return node
+    }
+
+    private var pickReport: PickReport {
+        PickReport(isLoading: isLoadingTree, pick: pick)
+    }
+
+    private var presenceKey: PresenceKey {
+        PresenceKey(rows: tree.rows.map(\.id), loaded: loadedSnapshotID, diskGeneration: filesTree.diskGeneration)
+    }
+
+    /// Which of the tree's rows this Mac no longer holds, for a backup made
+    /// here: off the main actor, one listing per folder (`DiskFolder.present`).
+    private func readPresence() async {
+        guard let record, loadedSnapshotID == record.id else { return }
+        let local: [String] = tree.rows.compactMap { row in
+            DiskFile.localPath(of: row.node.path, newestBackup: record, localHostname: model.localHostname)
         }
+        let present = await Task.detached(priority: .userInitiated) { DiskFolder.present(local) }.value
+        guard !Task.isCancelled else { return }
+        notOnThisMac = Set(local.map { PathKey($0) }).subtracting(present)
+    }
+
+    /// What `onPick` is told: the one file selected, in the tree by the
+    /// backup on screen, in the list of changes by the backup holding it.
+    private var pick: RestorePanePick? {
+        if isListingChanges(comparison) {
+            let rows = selectedChanges
+            guard rows.count == 1, let row = rows.first, !row.change.isDirectory, let holder = holder(of: row)
+            else { return nil }
+            return RestorePanePick(path: row.path, backupID: holder.id)
+        }
+        guard let node = selectedRow, !node.isDirectory, let loadedSnapshotID else { return nil }
+        return RestorePanePick(path: node.path, backupID: loadedSnapshotID)
     }
 
     /// Right-click Restore and Restore To… on the clicked rows — the menu's
@@ -528,9 +562,11 @@ struct RestorePaneView: View {
             changesToggle(record: record, comparison: comparison)
             Spacer(minLength: 12)
             Button("Restore To…") { restoreSelection(choosingDestination: true) }
+                .accessibilityIdentifier(AccessibilityID.RestorePane.restoreTo)
                 .disabled(!hasSelection || model.isRestoring || record == nil)
                 .help("Restore the selected items from this backup to a folder you choose")
             Button("Restore") { restoreSelection() }
+                .accessibilityIdentifier(AccessibilityID.RestorePane.restore)
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!hasSelection || model.isRestoring || record == nil)
@@ -776,6 +812,7 @@ struct RestorePaneView: View {
                     )
                     guard !Task.isCancelled else { return }
                     tree.replaceChildren(of: needed, nodes: nodes)
+                    readAhead(nodes, record: record)
                 } catch {
                     // The folder is in the tree, so its listing failed:
                     // say why, not that the folder is missing.
@@ -813,6 +850,26 @@ struct RestorePaneView: View {
         fetchChildren(of: path, needed: needed, record: record)
     }
 
+    /// An opened folder's files, as many as one folder's worth of rows,
+    /// read ahead (`AppModel.warmFileHistory`), so a click on one finds its
+    /// versions' sizes and dates read. Only once the index has read every
+    /// backup: until then the versions, and the backups they name, still
+    /// move. The read-ahead is extra: when the index can't say, a click
+    /// asks for its own file.
+    private func readAhead(_ nodes: [SnapshotNode], record: Snapshot) {
+        let chain = SnapshotIndex.chainKey(for: record)
+        let files = nodes.lazy.filter { !$0.isDirectory }.prefix(Self.readAheadLimit).map {
+            FileNode(repositoryID: repositoryID, chainKey: chain, path: $0.path, isDirectory: false)
+        }
+        guard !files.isEmpty else { return }
+        Task {
+            guard (try? await model.indexIsComplete(repositoryID: repositoryID)) == true else { return }
+            model.warmFileHistory(Array(files))
+        }
+    }
+
+    private static let readAheadLimit = 200
+
     /// Lists `needed`, the folder `path`'s opening asked for, into the tree.
     private func fetchChildren(of path: String, needed: String, record: Snapshot) {
         // One fetch per directory at a time: a double-click racing itself
@@ -832,6 +889,7 @@ struct RestorePaneView: View {
                 // tree must stay that record's.
                 guard loadedSnapshotID == record.id, !Task.isCancelled else { return }
                 tree.replaceChildren(of: needed, nodes: nodes)
+                readAhead(nodes, record: record)
                 // A folder that answers heals the pane: `loadError` replaces
                 // the whole browser, so a transient failure must not outlive
                 // the next successful read.
@@ -942,7 +1000,7 @@ private struct IncompleteSnapshotStrip: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(unreadable > 0
                     ? "This backup is incomplete: \(Format.plural(unreadable, "item")) couldn’t be read when it was made."
-                    : "This backup is incomplete: some of the source data couldn’t be read when it was made.")
+                    : "This backup is incomplete: some files couldn’t be read when it was made.")
                     .font(.callout.weight(.medium))
                     // Not height-pinned, for BannerView's reason: the pane
                     // does not scroll, and a pinned text answers the split
@@ -950,19 +1008,13 @@ private struct IncompleteSnapshotStrip: View {
                     // Only the pane's minimum width keeps this one safe.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     if let baseline, let path = run.unreadableItemPaths?[PathKey(line)],
-                       let isDirectory = heldBefore[PathKey(path)],
-                       let page = model.shelves(for: repositoryID).versionsPage(of: baseline) {
-                        // A row that goes somewhere: the item's versions,
-                        // opening at the backup before, which has it — on
-                        // its plan's Files tab; a group's backups have none.
+                       heldBefore[PathKey(path)] != nil,
+                       let page = model.page(ofBackup: baseline.id, in: repositoryID) {
+                        // A row that goes somewhere: the backup before,
+                        // which has it, open at the item — a file's
+                        // versions under the tree.
                         Button {
-                            router.showVersions(
-                                path: path,
-                                isDirectory: isDirectory,
-                                in: baseline,
-                                repositoryID: repositoryID,
-                                page: page
-                            )
+                            router.showBackup(baseline.id, on: page, repositoryID: repositoryID, focusPath: path)
                         } label: {
                             Text(words(for: line, in: run))
                                 .lineLimit(1)
@@ -970,7 +1022,7 @@ private struct IncompleteSnapshotStrip: View {
                                 .font(.caption)
                         }
                         .buttonStyle(.link)
-                        .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show its versions")
+                        .help("\(line)\nNot read by this backup — the backup of \(Format.timestamp(baseline.time)) has it. Show it there")
                     } else {
                         Text(words(for: line, in: run))
                             .font(.caption)
@@ -1125,5 +1177,38 @@ private struct FailureUnavailableView: View {
         } description: {
             Text(message).textSelection(.enabled)
         }
+    }
+}
+
+/// A file picked in a backup's tree, by the backup it was picked in.
+struct RestorePanePick: Equatable {
+    let path: String
+    let backupID: String
+}
+
+/// The pick as `onPick` hears it: only once the tree is read, so a record
+/// switch does not close the versions under the tree while it loads.
+private struct PickReport: Equatable {
+    let isLoading: Bool
+    let pick: RestorePanePick?
+}
+
+/// What the tree's look at this Mac is keyed by: the rows on screen, the
+/// record they were built for and the disk's turn.
+private struct PresenceKey: Equatable {
+    let rows: [String]
+    let loaded: String?
+    let diskGeneration: UInt64
+}
+
+/// The row around it is the button.
+private struct FoldChevron: View {
+    let isExpanded: Bool
+
+    var body: some View {
+        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 }

@@ -105,15 +105,25 @@ enum UITest {
         return nil
     }
 
-    /// The plan's folder as of its newest backup, restored from its Files tab
-    /// through Restore To… into `folder` (the destination sheet's folder
-    /// choice). Returns once the restore is over: Restore is back on.
-    static func restorePlanFolder(into folder: URL, in app: XCUIApplication) {
-        app.radioButtons["Files"].click()
-        let restoreButton = app.buttons[AccessibilityID.FilesPane.restore]
+    /// The plan's Backups tab, its newest backup's tree read: the backed-up
+    /// folder's row, its contents open under it.
+    static func showNewestBackup(_ folders: UITestFolders, in app: XCUIApplication) -> XCUIElement {
+        app.radioButtons["Backups"].click()
+        let tree = app.outlines[AccessibilityID.RestorePane.tree]
+        XCTAssertTrue(tree.staticTexts["hello.txt"].firstMatch.waitForExistence(timeout: 30))
+        return tree.staticTexts[folders.source.lastPathComponent].firstMatch
+    }
+
+    /// The plan's folder as of its newest backup, selected in its tree and
+    /// restored through Restore To… into `folder`, chosen in the folder
+    /// panel this Mac's backup opens straight away. Returns once the restore
+    /// is over: Restore is back on.
+    static func restorePlanFolder(_ folders: UITestFolders, into folder: URL, in app: XCUIApplication) {
+        showNewestBackup(folders, in: app).click()
+        let restoreButton = app.buttons[AccessibilityID.RestorePane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
-        restoreToButton(AccessibilityID.FilesPane.restoreTo, in: app).click()
-        restoreInSheet(into: folder, in: app)
+        restoreToButton(AccessibilityID.RestorePane.restoreTo, in: app).click()
+        choose(folder, in: app)
         XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
         XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
     }
@@ -123,19 +133,6 @@ enum UITest {
         let button = app.buttons[identifier]
         XCTAssertTrue(button.waitForEnabled())
         return button
-    }
-
-    /// The destination sheet a Restore To… opens: Choose…, `folder` chosen,
-    /// Restore. Choose… selects the folder choice, whatever the sheet
-    /// defaulted to. The restore itself runs on after the sheet closes.
-    static func restoreInSheet(into folder: URL, in app: XCUIApplication) {
-        let chooseFolder = app.buttons[AccessibilityID.RestoreSheet.chooseFolder]
-        XCTAssertTrue(chooseFolder.waitForExistence(timeout: 10))
-        chooseFolder.click()
-        choose(folder, in: app)
-        let restore = app.buttons[AccessibilityID.RestoreSheet.restore]
-        XCTAssertTrue(restore.waitForEnabled())
-        restore.click()
     }
 
     /// The open panel the app's FilePicker runs, driven element by element:

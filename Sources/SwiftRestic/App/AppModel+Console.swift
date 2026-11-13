@@ -18,7 +18,7 @@ extension AppModel {
     /// A command that may change the backups (`mayChangeSnapshots`: a
     /// forget, a rewrite, a tag, a copy…) re-reads the repository's listing
     /// afterwards, however it ended — a forget can fail part-way — as a
-    /// check or prune does, so the sidebar, the Files tabs and the counts
+    /// check or prune does, so the sidebar, the Backups tab and the counts
     /// do not list what restic no longer holds until the next refresh.
     func runConsoleCommand(repositoryID: UUID, arguments: [String]) async -> String {
         // `self-update` would overwrite the bundled restic and break the

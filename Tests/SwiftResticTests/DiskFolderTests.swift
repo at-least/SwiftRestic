@@ -35,10 +35,6 @@ struct DiskFolderTests {
         // Swift's == would take the NFC spelling for it too: the bytes are
         // what the index keys on.
         #expect(Array(items[2].name.utf8) == Array(nfd.utf8))
-
-        #expect(try DiskFolder.isDirectory(root + "/real"))
-        #expect(try !DiskFolder.isDirectory(root + "/link"))
-        #expect(try !DiskFolder.isDirectory(root + "/flagged"))
     }
 
     @Test("a folder that can't be listed says why: nothing there, a drive away, its permissions, or macOS")
@@ -49,7 +45,6 @@ struct DiskFolderTests {
             try? FileManager.default.removeItem(atPath: root)
         }
         #expect(throws: FolderAbsence.missing(name: "nope")) { try DiskFolder.list(root + "/nope") }
-        #expect(throws: FolderAbsence.missing(name: "nope")) { try DiskFolder.isDirectory(root + "/nope") }
         #expect(FileManager.default.createFile(atPath: root + "/file", contents: Data()))
         #expect(throws: FolderAbsence.missing(name: "file")) { try DiskFolder.list(root + "/file") }
 
@@ -60,7 +55,6 @@ struct DiskFolderTests {
 
         let volume = "SwiftResticNoSuchVolume-\(UUID().uuidString)"
         #expect(throws: FolderAbsence.volumeAway(volume: volume)) { try DiskFolder.list("/Volumes/\(volume)/Data") }
-        #expect(throws: FolderAbsence.volumeAway(volume: volume)) { try DiskFolder.isDirectory("/Volumes/\(volume)/Data") }
 
         // macOS's privacy protection answers EPERM, which a test cannot
         // provoke: the code, and a listing's error over it.
@@ -108,54 +102,4 @@ struct DiskFolderTests {
         #expect(present == [PathKey(root + "/report.txt"), PathKey(nfd), PathKey(root + "/locked/inside")])
     }
 
-    @Test("each absence has its headline and its reason; a refusal has its fix, by Full Disk Access now")
-    func absenceWords() {
-        let away = FolderAbsence.volumeAway(volume: "TinyDisk")
-        #expect(away.title == "“TinyDisk” is not connected")
-        #expect(away.detail(fullDiskAccess: .notGranted) == "The folder is on it.")
-        let gone = FolderAbsence.missing(name: "Documents")
-        #expect(gone.title == "“Documents” is not on this Mac")
-        #expect(gone.detail(fullDiskAccess: .notGranted) == "It was moved, renamed or deleted.")
-        let unreadable = FolderAbsence.unreadable(name: "Documents", reason: "Input/output error")
-        #expect(unreadable.detail(fullDiskAccess: .granted) == "Input/output error")
-        // A drive to connect and a folder to put back: steps, no button —
-        // the folder's in a failed backup's words; the system's own error
-        // has none.
-        for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {
-            #expect(away.remedy(fullDiskAccess: access)
-                == FolderAbsence.Remedy(steps: "Connect “TinyDisk” to see the folder here.", fix: nil))
-            #expect(gone.remedy(fullDiskAccess: access)
-                == FolderAbsence.Remedy(steps: "Put it back, or back it up where it is now with a new plan.", fix: nil))
-            #expect(unreadable.remedy(fullDiskAccess: access) == nil, "\(access)")
-        }
-        #expect(RunRecord.folderGoneMessage(path: "/Users/x/Documents")
-            == "“Documents” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
-
-        // macOS's block: the grant, while SwiftRestic lacks it — or the
-        // probe found nothing to say it has it.
-        let blocked = FolderAbsence.blockedByMacOS(name: "Documents")
-        #expect(blocked.title == "SwiftRestic can’t read “Documents”")
-        let grant = FolderAbsence.Remedy(
-            steps: "Turn SwiftRestic on in System Settings ▸ Privacy & Security ▸ Full Disk Access, then quit and reopen SwiftRestic.",
-            fix: .openFullDiskAccessSettings
-        )
-        for access: FullDiskAccessStatus in [.notGranted, .unknown] {
-            #expect(blocked.detail(fullDiskAccess: access) == "macOS blocked it: SwiftRestic needs Full Disk Access.")
-            #expect(blocked.remedy(fullDiskAccess: access) == grant)
-        }
-        // With the grant on, macOS protects it itself: no fix to offer.
-        #expect(blocked.detail(fullDiskAccess: .granted)
-            == "macOS blocked it even with Full Disk Access on — it is likely protected by macOS itself.")
-        #expect(blocked.remedy(fullDiskAccess: .granted) == nil)
-
-        let denied = FolderAbsence.deniedByFilePermissions(name: "Documents")
-        #expect(denied.title == "SwiftRestic can’t read “Documents”")
-        for access: FullDiskAccessStatus in [.granted, .notGranted, .unknown] {
-            #expect(denied.detail(fullDiskAccess: access) == "It can’t be read with your account’s file permissions.")
-            #expect(denied.remedy(fullDiskAccess: access) == FolderAbsence.Remedy(
-                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File ▸ Get Info, and give your account Read access under Sharing & Permissions.",
-                fix: .revealInFinder
-            ))
-        }
-    }
 }

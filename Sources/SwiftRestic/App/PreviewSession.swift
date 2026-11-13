@@ -112,6 +112,22 @@ final class PreviewSession {
     }
 }
 
+extension PreviewSession {
+    /// Space, Finder's Quick Look key, on a list: closes the preview on
+    /// screen, else runs `start` — nil when the selection is not one file
+    /// that can be looked at, and Space keeps its list meaning.
+    func space(_ press: KeyPress, start: (() -> Void)?) -> KeyPress.Result {
+        guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]) else { return .ignored }
+        if url != nil || isCopying {
+            end()
+            return .handled
+        }
+        guard let start else { return .ignored }
+        start()
+        return .handled
+    }
+}
+
 extension View {
     func previewSession(_ session: PreviewSession) -> some View {
         @Bindable var session = session

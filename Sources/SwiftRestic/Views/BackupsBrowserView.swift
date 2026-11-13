@@ -1,10 +1,14 @@
+import AppKit
 import SwiftUI
 
 /// A page's Backups tab: the page's backups, newest first, on the leading
 /// side — a section per month once the history passes one — and the open
-/// one's files on the trailing side (`RestorePaneView`), the Files tab's own
-/// layout. Not the sidebar's, folded under their plan: the HIG's Sidebars
-/// ("In general, show no more than two levels of hierarchy in a sidebar.
+/// one's files on the trailing side (`RestorePaneView`), with the versions
+/// of the file picked in them under the tree (`FilesPaneView`): Time
+/// Machine's way, one moment's folders beside the moments. While a plan's
+/// search field holds a query, its hits stand in the tree's place
+/// (`FilesSearchView`). Not the sidebar's, folded under their plan: the
+/// HIG's Sidebars ("In general, show no more than two levels of hierarchy in a sidebar.
 /// When a data hierarchy is deeper than two levels, consider using a split
 /// view interface that includes a content list between the sidebar items
 /// and detail view") — this list is that content list, and its edge drags.
@@ -14,13 +18,14 @@ import SwiftUI
 struct BackupsBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
+    @Environment(FilesTree.self) private var filesTree
     let page: SidebarItem
     let repositoryID: UUID
     /// The page's backups, newest first.
     let backups: [Snapshot]
 
     /// The list's width, dragged at its edge — the window's, kept across
-    /// pages while it is open, as the Files tab's tree's is.
+    /// pages while it is open.
     @SceneStorage("BackupsListWidth") private var listWidth: Double = 230
     /// The view's own width, which bounds the drag: the pane keeps room for
     /// its tree.
@@ -43,17 +48,79 @@ struct BackupsBrowserView: View {
         if case let .plan(planID) = page { planID } else { nil }
     }
 
+    /// The chain the open backup belongs to, whose items' versions the pane
+    /// under the tree reads — and, on a plan's page, the plan's search.
+    private var roots: FileNode? {
+        if let searchRoots = model.filesSearchRoots(for: page) { return searchRoots }
+        return open.map { FileNode.roots(repositoryID: repositoryID, chainKey: SnapshotIndex.chainKey(for: $0)) }
+    }
+
+    private var isSearching: Bool {
+        guard let roots else { return false }
+        return !router.filesSearchQuery(for: roots).isEmpty
+    }
+
     var body: some View {
-        // An HStack, not HSplitView: the Files tab's reason — the split
-        // would not narrow the pane below the width it first laid out at.
+        // An HStack, not HSplitView: the split would not narrow the pane
+        // below the width it first laid out at, so a wider list pushes the
+        // window's content past its edges — the sidebar and the pane's
+        // buttons clip.
         HStack(spacing: 0) {
             list
                 .frame(width: min(max(listWidth, listBounds.lowerBound), listBounds.upperBound))
             TreeEdge(width: $listWidth, bounds: listBounds)
-            pane
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                pane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                itemPane
+            }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // The disk is not watched: what the tab shows of this Mac is read
+        // again when the tab shows, when SwiftRestic comes to the front —
+        // another app may have changed a folder meanwhile — and when a
+        // volume comes or goes.
+        .onChange(of: page, initial: true) { filesTree.diskMayHaveChanged() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
+            filesTree.diskMayHaveChanged()
+        }
+    }
+
+    /// The versions of the item picked in the tree or the search, under
+    /// them; nothing while none is.
+    @ViewBuilder
+    private var itemPane: some View {
+        if let roots, let item = router.filesSelection[roots] {
+            Divider()
+            FilesPaneView(node: item)
+                // Each item's version state is its own, and a pick in the
+                // tree opens it anew at the backup it was picked in.
+                .id(FilesPaneIdentity(node: item, opening: router.filesPaneOpenings))
+                .frame(height: Self.itemPaneHeight)
+        }
+    }
+
+    /// Room for the item's name and path and a few versions, leaving the
+    /// tree above the larger part of a window at its default size.
+    private static let itemPaneHeight: CGFloat = 300
+
+    /// A file picked in the tree, or none: the pane under it follows.
+    private func pick(_ picked: RestorePanePick?) {
+        guard let roots else { return }
+        guard let picked else {
+            router.filesSelection[roots] = nil
+            return
+        }
+        router.showVersions(
+            of: FileNode(repositoryID: repositoryID, chainKey: roots.chainKey, path: picked.path, isDirectory: false),
+            at: picked.backupID
+        )
     }
 
     @ViewBuilder
@@ -84,7 +151,7 @@ struct BackupsBrowserView: View {
                     }
                 }
                 .listStyle(.inset)
-                // A backup a route opened — a Files tab's Show in Backups, a
+                // A backup a route opened — a search hit, Search All Backups, a
                 // run's Browse — may sit a year down the list: brought into
                 // view, a turn later because the list may gain its row in
                 // this update. A click's row is in view already, and the
@@ -107,10 +174,13 @@ struct BackupsBrowserView: View {
 
     @ViewBuilder
     private var pane: some View {
-        if let open {
+        if let open, let roots, isSearching {
+            FilesSearchView(roots: roots, page: page, openBackup: open)
+        } else if let open {
             RestorePaneView(
                 repositoryID: repositoryID,
-                snapshotID: open.id
+                snapshotID: open.id,
+                onPick: pick
             )
                 // Folder state is one page's: another page — another plan's of
                 // the same repository too, which the root shows in the same
@@ -155,7 +225,7 @@ private struct BackupRow: View {
             // slot-holder stay in the row — VoiceOver keeps its
             // Complete/Incomplete word — without taking the date's width.
             .overlay(alignment: .trailing) {
-                SnapshotCompletenessMark(run: run)
+                SnapshotCompletenessMark(run: run, isMuted: true)
                     .font(.caption)
                     .frame(width: Self.markWidth)
             }
@@ -187,40 +257,8 @@ private struct BackupsStatusRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else if case let .notConnected(volume) = outcome {
-            VStack(alignment: .leading, spacing: 4) {
-                // A normal state: no glyph.
-                Text(SnapshotListingOutcome.connectText(volume: volume))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                RunFixButton(fix: .locate(repositoryID))
-                    .controlSize(.small)
-            }
-        } else if let message = outcome.failureMessage {
-            VStack(alignment: .leading, spacing: 4) {
-                // Orange only on the glyph, the words secondary — the
-                // plan rows' contrast rule.
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityHidden(true)
-                    Text(Format.firstSentence(message))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .font(.caption)
-                if let fix = outcome.failureFix(repositoryID: repositoryID) {
-                    RunFixButton(fix: fix)
-                        .controlSize(.small)
-                } else {
-                    Button("Try Again") {
-                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                    }
-                    .controlSize(.small)
-                }
-            }
+        } else if outcome != .loaded {
+            SnapshotListingCaveat(outcome: outcome, repositoryID: repositoryID)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 // A plan's page says which kind of empty this is, as the
@@ -241,5 +279,36 @@ private struct BackupsStatusRow: View {
                 }
             }
         }
+    }
+}
+
+private struct FilesPaneIdentity: Hashable {
+    let node: FileNode
+    let opening: Int
+}
+
+/// A column's trailing edge, which drags its width within `bounds`.
+private struct TreeEdge: View {
+    @Binding var width: Double
+    let bounds: ClosedRange<Double>
+    @State private var startWidth: Double?
+
+    var body: some View {
+        Divider()
+            .overlay {
+                Color.clear
+                    .frame(width: 8)
+                    .contentShape(Rectangle())
+                    .pointerStyle(.columnResize)
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let start = startWidth ?? width
+                                startWidth = start
+                                width = min(max(start + drag.translation.width, bounds.lowerBound), bounds.upperBound)
+                            }
+                            .onEnded { _ in startWidth = nil }
+                    )
+            }
     }
 }

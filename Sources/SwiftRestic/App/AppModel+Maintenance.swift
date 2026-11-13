@@ -72,6 +72,7 @@ extension AppModel {
                 )
             }
             self?.unwindMaintenanceRun(repositoryID)
+            if task == .prune { self?.rerunBackupsAfterCleanup(in: repositoryID) }
         }, in: .maintenance(repositoryID))
     }
 
@@ -132,9 +133,9 @@ extension AppModel: MaintenanceRunEngine.Sink {
         maintenanceAwaitingDrive.insert(repositoryID)
     }
 
-    /// A failure — a check that found errors is one where hooks are
-    /// concerned — posts no banner: the repository page's Last check or Last cleanup and
-    /// Activity's badge say it.
+    /// A failure — a check that found errors is one — posts no banner: the
+    /// repository page's Last check or Last cleanup and Activity's badge say
+    /// it.
     func deliver(record: RunRecord, repository: Repository, transcript: RunTranscript.Contents) async {
         var record = record
         await seal(&record, transcript: transcript)

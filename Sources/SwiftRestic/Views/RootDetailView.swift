@@ -113,9 +113,9 @@ struct RootDetailView: View {
     }
 }
 
-/// The banner queue, once, above every pane — a plan's Files tab and the
+/// The banner queue, once, above every pane — a plan's Backups tab and the
 /// console included, where each page had carried its own copy and some
-/// none: a restore started from a Files tab finished out of sight. Its own
+/// none: a restore started from a Backups tab finished out of sight. Its own
 /// view, so a banner never re-renders the pane. Never height-pinned
 /// (BannerView's rule); newer banners claim height first, so when the
 /// column runs short the oldest is the one cut, never the news just in.

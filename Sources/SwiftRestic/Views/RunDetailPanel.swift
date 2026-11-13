@@ -109,9 +109,9 @@ struct RunDetailPanel: View {
             repositoryRow
         default:
             repositoryRow
-            // A check's verdict, or what a retention run removed:
-            // Copy Details' Result line.
-            if run.kind == .check || run.kind == .forget, let result = run.detailText {
+            // A check's verdict, what a retention run removed, or what a
+            // cleanup freed: the copied details' Result line.
+            if run.kind == .check || run.kind == .forget || run.kind == .prune, let result = run.detailText {
                 DetailRow("Result") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(result).textSelection(.enabled)
@@ -152,15 +152,13 @@ struct RunDetailPanel: View {
 
     private var hasMessages: Bool {
         (run.failureMessage != nil && run.failureMessage != run.outcome.displayName)
-            || (run.kind == .prune && run.detailText != nil)
-            || !run.itemErrors.isEmpty || !run.hookMessages.isEmpty
+            || !run.itemErrors.isEmpty
     }
 
-    /// What the run left in words: the failure, prune's output tail, what to do about the unreadable items, restic's item
-    /// lines, and the hooks' own lines — which stay here, on this Mac, and
-    /// never reach Copy Details. The unreadable items come under restic's
-    /// count and end with how many were not stored, the way Copy Details
-    /// and the Restore strip say it.
+    /// What the run left in words: the failure, what to do about the
+    /// unreadable items, restic's item lines. The unreadable items come under
+    /// restic's count and end with how many were not stored, the way the
+    /// copied details and the Restore strip say it.
     @ViewBuilder
     private var messages: some View {
         let (unreadable, unlisted) = run.unreadableItemListing()
@@ -168,12 +166,6 @@ struct RunDetailPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let failure = run.failureMessage, failure != run.outcome.displayName {
                     Text(failure)
-                        .textSelection(.enabled)
-                }
-                if run.kind == .prune, let detail = run.detailText {
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
                 // Why the items could not be read and what fixes it, ahead
@@ -198,12 +190,6 @@ struct RunDetailPanel: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
-                ForEach(Array(run.hookMessages.enumerated()), id: \.offset) { _, message in
-                    Text(message)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
             }
         }
     }
@@ -220,7 +206,7 @@ struct RunDetailPanel: View {
                 Button(retry.title) {
                     switch retry {
                     case let .check(id): router.request(.verifyBackups(id))
-                    case let .prune(id): router.request(.confirm(.prune(id)))
+                    case let .prune(id): router.request(.cleanUp(id))
                     }
                 }
                 .disabled(!model.repositoryCommands(for: .repository(retry.repositoryID)).canMaintain)
@@ -244,22 +230,14 @@ struct RunDetailPanel: View {
             Button("Show Log") { onShowLog(run) }
                 .disabled(!run.hasLog)
                 .modifier(TileHelp(help: run.hasLog ? nil : "No log was saved for this run"))
-            Button("Copy Details") {
-                let text = RunRecordPresentation.detailsText(
-                    for: run,
-                    repositoryName: repositoryName,
-                    versionsNow: .current(resticVersion: model.resticVersion)
-                )
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-            }
         }
         .controlSize(.small)
     }
 }
 
-/// A failure's one known fix: an editor sheet or a confirmed command, asked
-/// as the menus ask (`AppRouter.request`); Locate's folder panel opens here.
+/// A failure's one known fix: an editor sheet or the command itself, asked
+/// as the menus ask (`AppRouter.request`); Locate's and Choose New
+/// Location's panels open here.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppModel.self) private var model
@@ -268,9 +246,10 @@ struct RunFixButton: View {
     var body: some View {
         Button(fix.title) {
             switch fix {
-            case let .editRepository(id), let .editRepositoryShare(id):
+            case let .editRepositoryShare(id):
                 router.request(.editRepository(id))
-            case let .newPlan(id): router.request(.newPlanIn(id))
+            case let .chooseNewLocation(planID): chooseNewLocation(planID)
+            case let .enterPassword(id): router.request(.enterPassword(id))
             case .addRepository: router.request(.newRepository)
             case let .locate(id): locate(id)
             case let .editPlanShare(id): router.request(.editPlan(id))
@@ -278,7 +257,7 @@ struct RunFixButton: View {
                 // The switch is on the plan page's Overview.
                 router.setTab(.overview, of: .plan(id))
                 router.selection = .plan(id)
-            case let .pruneNow(id): router.request(.confirm(.prune(id)))
+            case let .pruneNow(id): router.request(.cleanUp(id))
             }
         }
         .modifier(TileHelp(help: fix.help))
@@ -296,6 +275,17 @@ struct RunFixButton: View {
             }
         }
     }
+
+    private func chooseNewLocation(_ planID: UUID) {
+        guard let plan = model.plan(id: planID),
+              let url = FilePicker.chooseDirectory(message: "Choose where “\(model.label(of: plan))” is now")
+        else { return }
+        do {
+            router.selection = .plan(try model.movePlan(id: planID, toPath: url.path))
+        } catch {
+            model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
+        }
+    }
 }
 
 /// Opens the restic console on a repository whose check found damage. It
@@ -307,13 +297,12 @@ struct ConsoleRouteButton: View {
     let repositoryID: UUID
 
     var body: some View {
-        Button("Show restic Console") {
+        Button("restic Console") {
             model.pointConsole(at: repositoryID)
             openWindow(id: SwiftResticApp.consoleWindowID)
         }
-        // The Location menu's console item's own rule.
         .disabled(!model.isResticAvailable)
-        .help("Type repair index, then repair snapshots. The password is supplied")
+        .help("In the console, type repair index, then repair snapshots. SwiftRestic enters the password.")
     }
 }
 

@@ -13,17 +13,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             }
         }
 
-        /// The first word of a webhook's or chat channel's `summary`, which
-        /// people and filters have read as these words; a rename on screen
-        /// never changes what a channel receives.
-        var channelSummaryName: String {
-            switch self {
-            case .forget: "Retention"
-            case .prune: "Cleanup"
-            default: rawValue.capitalized
-            }
-        }
-
         /// The webhook payload's `operation`, which receivers match on: the
         /// words it carried before the app called a prune a cleanup, so a
         /// rename on screen never changes what a filter reads.
@@ -112,8 +101,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// restic's exit code for the run's own command — the `backup` (0, or 3
     /// when some source data could not be read), else the first exit the
     /// run's transcript saw: a failed backup's, a check's, a prune's, a
-    /// restore's. Nil when restic never reached an exit (a before-hook
-    /// abort, a launch failure, a stop by cancel or a cap) and on records
+    /// restore's. Nil when restic never reached an exit (a launch failure,
+    /// a stop by cancel or a cap) and on records
     /// from before this field existed.
     var exitCode: Int32?
     /// The unreadable items by cause — macOS's privacy protection or the
@@ -126,23 +115,18 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// again" from "macOS protects these anyway". Backups only; nil on
     /// records from before it was stamped.
     var fullDiskAccessAtRun: FullDiskAccessStatus?
-    /// Kept apart from `itemErrors`: a hook is an arbitrary user script and
-    /// its output can contain anything it printed — a verbose `curl` echoes
-    /// its own `Authorization` header. These stay local and are never sent
-    /// to a webhook or chat channel.
-    var hookMessages: [String] = []
     var failureMessage: String?
-    /// restic's first sentence, for Copy Details: `failureMessage` says what
+    /// restic's first sentence, for the copied details: `failureMessage` says what
     /// to do instead (`ResticError.resticDetail`).
     var resticDetail: String?
     /// A plain-text result: the tail of what `prune` printed (it has no JSON
     /// output in restic 0.19.1, so this is the only record of what it did; the drawer shows
     /// it among the run's messages), a check's verdict, or what Apply
     /// Retention Now removed — the Result row of a check or a forget in
-    /// the drawer and Copy Details (a check's in its log too), and a
+    /// the drawer and the copied details (a check's in its log too), and a
     /// forget's Activity Detail and banner.
     var detailText: String?
-    /// restic's `version` line when the run was stored, for Copy Details and
+    /// restic's `version` line when the run was stored, for the copied details and
     /// the log header. Nil on records from before it was kept.
     var resticVersion: String?
     /// Whether `Logs/<id>.log` was written for this run. False on records
@@ -263,7 +247,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         exitCode = c.optional(.exitCode)
         itemErrorTally = c.optional(.itemErrorTally)
         fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)
-        hookMessages = c.value(.hookMessages, default: [])
         // Records from before a stop read "Stopped" carry the old word, which
         // would no longer match the outcome and show as a second message.
         let storedFailure: String? = c.optional(.failureMessage)
@@ -336,8 +319,8 @@ extension RunRecord {
     /// Nil unless this is a backup that wrote a snapshot. restic's exit code
     /// alone decides: 3 means some source data could not be read
     /// (`restic backup --help`: "incomplete snapshot created"), and nothing
-    /// else leaves a snapshot short — retention skips, decoding gaps and
-    /// failing hooks all come after a whole snapshot, so the outcome is no
+    /// else leaves a snapshot short — retention skips and decoding gaps
+    /// both come after a whole snapshot, so the outcome is no
     /// guide. A record from before the exit code was stored is incomplete
     /// only if it named an unreadable item; otherwise it proves nothing
     /// either way and reads unknown, never complete.
@@ -376,8 +359,7 @@ extension RunRecord {
         itemErrors.dropFirst(unreadableItems.count)
     }
 
-    /// `trailingItemErrors` as the app says them. A channel still receives
-    /// the stored line (`retentionSkippedPrefix`).
+    /// `trailingItemErrors` as the app and its channels say them.
     var trailingItemErrorsOnScreen: [String] {
         trailingItemErrors.map { line in
             guard line.hasPrefix(Self.retentionSkippedPrefix) else { return line }
@@ -462,21 +444,18 @@ extension RunRecord {
     }
 
     /// Why a backup failed when the plan's folder is not on this Mac and no
-    /// drive it could wait for is away: named, and what to do — a plan's
-    /// path is fixed, so where the folder is now takes a new plan.
+    /// drive it could wait for is away: named, and what to do — the
+    /// record's fix, Choose New Location… (`AppModel.movePlan`), replaces
+    /// the plan with one for where the folder is now.
     static func folderGoneMessage(path: String) -> String {
         "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted. "
-            + folderGoneAdvice
+            + "Put it back, or use Choose New Location… to back it up where it is now."
     }
-
-    /// What to do about a plan's folder gone from this Mac — a failed
-    /// backup's words and the Files tab's (`FolderAbsence.remedy`).
-    static let folderGoneAdvice = "Put it back, or back it up where it is now with a new plan."
 
     /// This failure as the continuation of `previous`, the plan's newest
     /// backup before it, failed for the same cause only the user clears —
     /// the same folders gone (`missingSources`) or network shares refused
-    /// (`refusedShares`) — and carrying no hook's complaint: one record,
+    /// (`refusedShares`): one record,
     /// this run's, counting the runs as a standing skip does
     /// (`continuingSkip(of:)`, whose fields it shares). An hourly plan whose
     /// folder was deleted, or whose share's password changed, is one row and
@@ -504,7 +483,6 @@ extension RunRecord {
     private func continuesPlanBackup(_ previous: RunRecord) -> Bool {
         kind == .backup && previous.kind == .backup
             && planID != nil && previous.planID == planID && previous.repositoryID == repositoryID
-            && previous.hookMessages.isEmpty
     }
 
     private func merged(after previous: RunRecord) -> RunRecord {
@@ -516,8 +494,7 @@ extension RunRecord {
 
     /// This skipped backup as the continuation of `previous` — the plan's
     /// newest backup before it, skipped for the same reason, the same
-    /// stored lines (a retention skip is news) and `previous` carrying no
-    /// hook's complaint: one record, this run's, counting `previous`'s runs
+    /// stored lines (a retention skip is news): one record, this run's, counting `previous`'s runs
     /// and keeping when the skips began. An hourly plan whose drive is away
     /// a week is one row, not 168, and leaves the history cap to real runs.
     /// Nil when it does not continue it.
@@ -534,10 +511,14 @@ extension RunRecord {
     /// it was the user's stop or the app quitting, and anything else as
     /// `.failed` with the error's message. Callers keep their own side effects:
     /// stamps, banners, bookkeeping.
-    mutating func setOutcome(from error: Error, cancellationMessage: String) {
+    mutating func setOutcome(
+        from error: Error,
+        cancellationMessage: String,
+        location: (name: String, kind: Repository.Kind)?
+    ) {
         let cancelled = ResticError.isCancellation(error)
         outcome = cancelled ? .cancelled : .failed
-        failureMessage = cancelled ? cancellationMessage : error.localizedDescription
+        failureMessage = cancelled ? cancellationMessage : ResticError.words(for: error, location: location)
         resticDetail = (error as? ResticError)?.resticDetail
     }
 }

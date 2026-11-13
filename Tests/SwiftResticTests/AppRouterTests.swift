@@ -42,9 +42,9 @@ struct AppRouterTests {
         let b = UUID()
         let plan = UUID()
 
-        router.request(.confirm(.prune(a)))
-        router.request(.confirm(.prune(b)))
-        #expect(router.takePendingIntent() == .confirm(.prune(b)))
+        router.request(.cleanUp(a))
+        router.request(.cleanUp(b))
+        #expect(router.takePendingIntent() == .cleanUp(b))
 
         for intent: AppRouter.Intent in [
             .stopPlan(plan),
@@ -55,7 +55,7 @@ struct AppRouterTests {
             router.request(intent)
             #expect(router.takePendingIntent() == intent)
         }
-        #expect(CommandConfirmation.prune(a).id == .prune(a))
+        #expect(CommandConfirmation.deleteRepository(a).id == .deleteRepository(a))
     }
 
     @Test("Verify Backups and Clean Up land on the location's page, the only place their progress shows")
@@ -108,9 +108,9 @@ struct AppRouterTests {
     func targetedIntentsWaitAndAreConsumedOnce() {
         let router = AppRouter()
         let repository = UUID()
-        router.request(.newPlanIn(repository))
-        #expect(router.pendingIntent == .newPlanIn(repository))
-        #expect(router.takePendingIntent() == .newPlanIn(repository))
+        router.request(.editRepository(repository))
+        #expect(router.pendingIntent == .editRepository(repository))
+        #expect(router.takePendingIntent() == .editRepository(repository))
         #expect(router.pendingIntent == nil)
         #expect(router.takePendingIntent() == nil)
 
@@ -129,13 +129,14 @@ struct AppRouterTests {
         #expect(router.tab(of: plan) == .overview)
         #expect(router.tab(of: group) == .overview)
 
-        router.tabBinding(for: plan).wrappedValue = .files
-        #expect(router.tab(of: plan) == .files)
-        #expect(router.tab(of: other) == .files)
+        router.tabBinding(for: plan).wrappedValue = .backups
+        #expect(router.tab(of: plan) == .backups)
+        #expect(router.tab(of: other) == .backups)
+        router.tabBinding(for: plan).wrappedValue = .overview
         router.showBackup("s0", on: group, repositoryID: UUID())
         #expect(router.selection == group)
         #expect(router.backupSelection[group] == "s0")
-        #expect(router.tab(of: other) == .files)
+        #expect(router.tab(of: other) == .overview)
 
         router.showBackup("s1", on: other, repositoryID: UUID())
         #expect(router.tab(of: plan) == .backups)
@@ -143,12 +144,12 @@ struct AppRouterTests {
         #expect(router.tab(of: .activity) == .overview)
     }
 
-    @Test("a plan's page offers Overview, Backups and Files; every other page, a group's of either kind too, none")
+    @Test("a plan's page offers Overview and Backups; every other page, a group's of either kind too, none")
     func pagesOfferTheirTabs() {
         let router = AppRouter()
         let repositoryID = UUID()
         let plan = SidebarItem.plan(UUID())
-        #expect(plan.pageTabs == [.overview, .backups, .files])
+        #expect(plan.pageTabs == [.overview, .backups])
         let group = SidebarItem.otherGroup(repositoryID: repositoryID, id: .plan(UUID()))
         let key = SnapshotLineage.Key(hostname: "mac", paths: ["/Data/Music"])
         let lineage = SidebarItem.otherGroup(repositoryID: repositoryID, id: .lineage(key))
@@ -158,13 +159,13 @@ struct AppRouterTests {
         }
     }
 
-    @Test("⇧⌘F on a page turns it to its Files tab and asks that page's toolbar field, and no other, for the focus")
+    @Test("⇧⌘F on a page turns it to its Backups tab and asks that page's toolbar field, and no other, for the focus")
     func searchFilesFocusesThePagesField() {
         let router = AppRouter()
         let page = SidebarItem.plan(UUID())
         router.selection = page
         router.searchFiles(on: page)
-        #expect(router.tab(of: page) == .files)
+        #expect(router.tab(of: page) == .backups)
         #expect(router.selection == page)
         #expect(router.searchFocus == page)
     }
@@ -185,35 +186,11 @@ struct AppRouterTests {
         #expect(router.findQuery == "invoice")
         router.returnToPlanSearch()
         #expect(router.selection == plan)
-        #expect(router.tab(of: plan) == .files)
+        #expect(router.tab(of: plan) == .backups)
         #expect(router.searchFocus == plan)
         #expect(router.filesSearchText[roots] == "invoice")
     }
 
-    @Test("a search's hit opens the folders above it down from the deepest top holding it, and a whole-disk top ends the walk")
-    func openFoldersAboveAHit() {
-        let repositoryID = UUID()
-        let chain = "swiftrestic-plan-aaaa"
-        func node(_ path: String, folder: Bool = true) -> FileNode {
-            FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: folder)
-        }
-        let router = AppRouter()
-        router.openFolders(above: node("/Data/Photos/2026/Trip/beach.jpg", folder: false), from: ["/Data", "/Data/Photos/2026"])
-        #expect(router.openFolders == [node("/Data/Photos/2026"), node("/Data/Photos/2026/Trip")])
-
-        // The root is its own parent: a backup of the whole disk opens down
-        // to it and stops.
-        let disk = AppRouter()
-        disk.openFolders(above: node("/Users/x.txt", folder: false), from: ["/"])
-        #expect(disk.openFolders == [node("/"), node("/Users")])
-
-        // A top itself, and a path no top holds — bytes, not a string
-        // prefix — open nothing.
-        let none = AppRouter()
-        none.openFolders(above: node("/Data"), from: ["/Data"])
-        none.openFolders(above: node("/Data2/x.txt", folder: false), from: ["/Data"])
-        #expect(none.openFolders.isEmpty)
-    }
 
     private func revalidated(
         _ selection: SidebarItem?,

@@ -5,9 +5,9 @@ import Foundation
 /// row.
 enum RunFix: Equatable {
     /// The repository's password is missing, or restic exit 12: the stored
-    /// one does not open it. Its editor opens with the password field
-    /// showing (`AppModel.passwordRefused`).
-    case editRepository(UUID)
+    /// one does not open it. A prompt for the password alone
+    /// (`PasswordPromptSheet`).
+    case enterPassword(UUID)
     /// restic exit 10 on a server or in the cloud: no repository is at its
     /// location. Those locations are fixed, so where it is now takes a new
     /// repository.
@@ -17,8 +17,9 @@ enum RunFix: Equatable {
     case locate(UUID)
     /// The plan's folder is not on this Mac (`RunRecord.missingSources`):
     /// a plan's path is fixed, so where the folder is now takes a new plan
-    /// in the same repository.
-    case newPlan(UUID)
+    /// in the same repository, in place of this one
+    /// (`AppModel.movePlan(id:toPath:)`).
+    case chooseNewLocation(planID: UUID)
     /// The repository's network share refused to reconnect
     /// (`RunRecord.refusedShares`): its editor holds the share's password.
     case editRepositoryShare(UUID)
@@ -27,7 +28,7 @@ enum RunFix: Equatable {
     case editPlanShare(UUID)
     /// The repository's disk filled up during a backup
     /// (`RunRecord.repositoryFull`): a prune frees what the failed run
-    /// uploaded.
+    /// uploaded. It runs at once: the failure already asked for it.
     case pruneNow(UUID)
     /// The location refused to delete what the plan's retention chose
     /// (`RunRecord.retentionRefused`): the plan page's Remove old backups
@@ -36,14 +37,14 @@ enum RunFix: Equatable {
 
     var title: String {
         switch self {
-        case .editRepository: "Enter Password…"
-        case .editRepositoryShare: "Edit Backup Location…"
+        case .enterPassword: "Enter Password…"
+        case .editRepositoryShare: "Edit Location…"
         case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
-        case .newPlan: "Back Up a Folder…"
+        case .chooseNewLocation: "Choose New Location…"
         case .editPlanShare: "Edit Plan…"
         case .showPlan: "Show Plan"
-        case .pruneNow: "Clean Up Now…"
+        case .pruneNow: "Clean Up Now"
         }
     }
 
@@ -51,8 +52,8 @@ enum RunFix: Equatable {
     /// nil where that message already says it.
     var help: String? {
         switch self {
-        case .editRepository, .addRepository, .locate, .newPlan, .pruneNow: nil
-        case .editRepositoryShare: "The share’s saved password is in Edit Backup Location"
+        case .enterPassword, .addRepository, .locate, .chooseNewLocation, .pruneNow: nil
+        case .editRepositoryShare: "The share’s saved password is in Edit Location"
         case .editPlanShare: "The share’s saved password is in the plan editor, next to the folder"
         case .showPlan: "Remove old backups automatically is on the plan page"
         }
@@ -66,7 +67,7 @@ struct UnreadableItemWords: Equatable {
 }
 
 /// A check or prune that did not end clean, run again from the drawer where
-/// its verdict is read: a check at once, a prune through its confirmation.
+/// its verdict is read, at once: the failed run already asked for it.
 enum MaintenanceRetry: Equatable {
     case check(UUID)
     case prune(UUID)
@@ -74,7 +75,7 @@ enum MaintenanceRetry: Equatable {
     var title: String {
         switch self {
         case .check: "Verify Again"
-        case .prune: "Clean Up Again…"
+        case .prune: "Clean Up Again"
         }
     }
 
@@ -86,7 +87,7 @@ enum MaintenanceRetry: Equatable {
 }
 
 /// A run's words outside its log: the Activity Detail column, the drawer's
-/// rows, Copy Details, and the name every app-wide surface calls the run by.
+/// rows, the copied details, and the name every app-wide surface calls the run by.
 /// The one place a run's one-line summary is worded, built on the plan
 /// page's facts (`PlanStatus.facts(for:)`) so Activity and the plan row
 /// cannot disagree.
@@ -124,7 +125,10 @@ enum RunRecordPresentation {
             return planExists ? .showPlan(planID) : nil
         }
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
-        if run.missingSources != nil { return .newPlan(repositoryID) }
+        if run.missingSources != nil {
+            guard let planID = run.planID, planExists else { return nil }
+            return .chooseNewLocation(planID: planID)
+        }
         // A network share that refused: whichever editor holds its password
         // — the repository's for its own folder's share, else the plan's.
         if let refusedShares = run.refusedShares {
@@ -133,7 +137,7 @@ enum RunRecordPresentation {
             return .editPlanShare(planID)
         }
         if run.repositoryFull == true { return .pruneNow(repositoryID) }
-        if run.exitCode == ResticError.wrongPasswordCode { return .editRepository(repositoryID) }
+        if run.exitCode == ResticError.wrongPasswordCode { return .enterPassword(repositoryID) }
         if run.exitCode == ResticError.repositoryMissingCode {
             return repositoryIsLocal ? .locate(repositoryID) : .addRepository
         }
@@ -222,7 +226,7 @@ enum RunRecordPresentation {
     /// restic's count, never the stored lines), else what it did.
     static func detail(for run: RunRecord) -> String {
         // The first sentence: restic's multi-line tail stays in the drawer,
-        // the plan page and Copy Details, which show the whole message.
+        // the plan page and the copied details, which show the whole message.
         if let failure = run.failureMessage {
             let reason = Format.firstSentence(failure)
             // A standing failure for the same folders gone, as a skip.
@@ -230,8 +234,7 @@ enum RunRecordPresentation {
             let sentence = Format.fullSentence(reason)
             return "\(sentence) Failed \(count) times since \(Format.timestamp(since))."
         }
-        // Why there was nothing to back up, before any hook's complaint,
-        // and how long it has stood.
+        // Why there was nothing to back up, and how long it has stood.
         if run.kind == .backup, run.outcome == .skipped, let reason = run.detailText {
             guard let count = run.skipCount, let since = run.skippedSince else { return reason }
             return "\(reason) Skipped \(count) times since \(Format.timestamp(since))."
@@ -245,31 +248,29 @@ enum RunRecordPresentation {
             if run.outcome == .completedWithErrors, let line = run.trailingItemErrorsOnScreen.first {
                 return line
             }
-            return "\(Format.count(run.filesNew)) new, \(Format.count(run.filesChanged)) changed"
+            return "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed"
         case .restore:
             return restoreDetail(run) ?? run.outcome.displayName
-        case .forget:
-            // The record's own count ("Removed 2 backups."), one short line.
+        case .forget, .prune:
+            // The record's own count ("Removed 2 backups.", "Freed 1.2 GB."),
+            // one short line; a cleanup whose amount restic's output did
+            // not say has none.
             return run.detailText ?? run.outcome.displayName
         case .check:
-            // The verdict the run recorded — "2 errors — repair index, then
-            // repair snapshots, in the restic Console can recover some
-            // damage." or "No errors found." — its first
+            // The verdict the run recorded — "2 errors found. Some damage
+            // can be repaired…" or "No errors found." — its first
             // sentence; a record from before the verdict falls to the
-            // outcome. The glyph already says the outcome; the count and the
-            // fix are what the column adds. No final period: the column's
-            // other entries ("2 unreadable items", "0 new, 1 changed") carry
+            // outcome. The glyph already says the outcome; the count is
+            // what the column adds. No final period: the column's
+            // other entries ("2 unreadable items", "0 new · 1 changed") carry
             // none, and the sentence cut drops one before a second sentence.
             guard let verdict = run.detailText else { return run.outcome.displayName }
             return Format.withoutFinalPeriod(Format.firstSentence(verdict))
-        case .prune:
-            return run.outcome.displayName
         }
     }
 
     /// The Detail column's words for a row that continues a line — the
-    /// Maintenance section's "22 hours ago · 2 errors — repair index, then
-    /// repair snapshots, in the restic Console can recover some damage" —
+    /// Maintenance section's "22 hours ago · 2 errors found" —
     /// the outcome lowercased when the detail is
     /// only the outcome.
     static func verdictClause(for run: RunRecord) -> String {
@@ -333,7 +334,7 @@ enum RunRecordPresentation {
         count == 1 ? "kept as it was" : "kept as they were"
     }
 
-    /// restic's exit code for the drawer and Copy Details, bare: the
+    /// restic's exit code for the drawer and the copied details, bare: the
     /// failure text above it already says what went wrong, and a gloss
     /// would be wrong for some commands (`forget`'s 3 is a refused
     /// deletion, `check`'s 1 a damaged-repository verdict). Nil for 0,
@@ -351,7 +352,7 @@ enum RunRecordPresentation {
             || run.bytesProcessed > 0 || run.dataAdded > 0
     }
 
-    /// A backup's file counts, the drawer's and Copy Details' one wording:
+    /// A backup's file counts, the drawer's and copied details' one wording:
     /// "1 new · 0 changed · 2 unchanged".
     static func backupFiles(_ run: RunRecord) -> String {
         "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed · \(Format.count(run.filesUnmodified)) unchanged"
@@ -370,10 +371,9 @@ enum RunRecordPresentation {
         return text + " · \(Format.bytes(run.bytesProcessed))"
     }
 
-    /// Copy Details: the run as plain text for a forum post or an issue —
-    /// what ran, how it ended, restic's exit code and the versions. Scripts
-    /// appear as a count only: their output can carry secrets and stays on
-    /// this Mac, in the drawer.
+    /// Edit ▸ Copy on an Activity row: the run as plain text for a forum
+    /// post or an issue — what ran, how it ended, restic's exit code and the
+    /// versions.
     static func detailsText(for run: RunRecord, repositoryName: String?, versionsNow: RunLogVersions) -> String {
         var lines = [
             "\(subject(of: run)) — \(run.outcome.displayName)",
@@ -415,11 +415,10 @@ enum RunRecordPresentation {
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
                 lines.append("Files: \(restoreFiles(run))")
             }
-        case .check, .forget:
-            // A check's verdict, or what a retention run removed.
+        case .check, .forget, .prune:
+            // A check's verdict, what a retention run removed, or what a
+            // cleanup freed.
             if let result = run.detailText { lines.append("Result: \(result)") }
-        case .prune:
-            break
         }
         if let code = run.exitCode, let text = exitCodeText(code) {
             lines.append("restic exit: \(text)")
@@ -432,9 +431,6 @@ enum RunRecordPresentation {
         }
         // The decoding gap and the retention skip explain themselves.
         lines += run.trailingItemErrorsOnScreen
-        if !run.hookMessages.isEmpty {
-            lines.append("Scripts: \(Format.count(run.hookMessages.count)) failed")
-        }
         if let version = run.resticVersion { lines.append(version) }
         lines.append("Copied from \(versionsNow.app) on \(versionsNow.macOS)")
         return lines.joined(separator: "\n")

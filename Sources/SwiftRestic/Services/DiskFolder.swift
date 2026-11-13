@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-/// A folder of this Mac as it is now: what a plan's Files tab lists, each
-/// item beside what the backups hold of it (`FilesTree`). A listed name has
+/// A folder of this Mac as it is now, which says whether this Mac still
+/// holds what a backup or a search names (`present`). A listed name has
 /// the bytes the file system gave it, which restic records too — an NFC
 /// and an NFD name each came back byte for byte from a listing and from
 /// `restic ls --json` on APFS — so a listed path and an
@@ -45,13 +45,6 @@ enum DiskFolder {
         }
     }
 
-    /// By `lstat`, so a link is the link.
-    static func isDirectory(_ path: String) throws -> Bool {
-        var info = stat()
-        guard lstat(path, &info) == 0 else { throw FolderAbsence(path: path, code: errno) }
-        return info.st_mode & S_IFMT == S_IFDIR
-    }
-
     /// Whether anything is at `path` — false only when `lstat` finds
     /// nothing there, so an item whose folder SwiftRestic may not read is
     /// not taken for gone.
@@ -61,9 +54,8 @@ enum DiskFolder {
         return errno != ENOENT && errno != ENOTDIR
     }
 
-    /// Which of `paths` this Mac holds now, as a plan's tree tells it: by
-    /// the bytes of each name in its folder's listing (`FilesTree.entries`),
-    /// one listing per folder. `lstat` would find "Report.txt" for
+    /// Which of `paths` this Mac holds now: by the bytes of each name in its
+    /// folder's listing, one listing per folder. `lstat` would find "Report.txt" for
     /// "report.txt", and an NFC name for its NFD spelling — one name to the
     /// file system, two to restic. A missing folder's items are gone; one
     /// SwiftRestic may not list keeps `exists`' rule, so an item in it is
@@ -102,10 +94,8 @@ enum DiskFolder {
     }
 }
 
-/// Why a folder of this Mac cannot be listed, in the Files tab's words —
-/// the drive away and the folder gone as a backup's skip and failure say
-/// them (`RunRecord`), macOS's privacy protection and the file permissions
-/// as an unreadable item's diagnosis does (`ItemErrorDiagnosis`).
+/// Why a folder of this Mac cannot be listed: a drive away and a folder
+/// gone take what it held for gone; a refusal does not (`present`).
 enum FolderAbsence: Error, Equatable, Sendable {
     case volumeAway(volume: String)
     case missing(name: String)
@@ -137,76 +127,6 @@ enum FolderAbsence: Error, Equatable, Sendable {
             self.init(path: path, code: Int32(underlying.code))
         } else {
             self = .unreadable(name: ResticPath.basename(of: path), reason: Format.firstSentence(error.localizedDescription))
-        }
-    }
-
-    var title: String {
-        switch self {
-        case let .volumeAway(volume): "“\(volume)” is not connected"
-        case let .missing(name): "“\(name)” is not on this Mac"
-        case let .blockedByMacOS(name), let .deniedByFilePermissions(name), let .unreadable(name, _):
-            "SwiftRestic can’t read “\(name)”"
-        }
-    }
-
-    /// The sentence under it: why. macOS's block reads by SwiftRestic's
-    /// Full Disk Access now, as an unreadable item's diagnosis does
-    /// (`ItemErrorDiagnosis`): with the grant on, macOS protects the folder
-    /// itself.
-    func detail(fullDiskAccess: FullDiskAccessStatus) -> String {
-        switch self {
-        case .volumeAway: "The folder is on it."
-        case .missing: "It was moved, renamed or deleted."
-        case .blockedByMacOS:
-            fullDiskAccess == .granted
-                ? "macOS blocked it even with Full Disk Access on — it is likely protected by macOS itself."
-                : "macOS blocked it: SwiftRestic needs Full Disk Access."
-        case .deniedByFilePermissions: "It can’t be read with your account’s file permissions."
-        case let .unreadable(_, reason): reason
-        }
-    }
-
-    /// What the user can do about it: the steps, and the one fix to press
-    /// beside them where the app has one. Nil where there is nothing to do
-    /// — macOS's own protection, the system's own error.
-    struct Remedy: Equatable, Sendable {
-        enum Fix: Equatable, Sendable {
-            case openFullDiskAccessSettings
-            /// The folder selected in Finder, where Get Info is.
-            case revealInFinder
-        }
-
-        let steps: String
-        /// Nil for steps the user takes away from the app: a drive to
-        /// connect, a folder to put back.
-        let fix: Fix?
-    }
-
-    /// What to do about it. A drive away is to connect; a folder gone, to
-    /// put back or back up with a new plan, a failed backup's words
-    /// (`RunRecord.folderGoneAdvice`) — no button for either (the user's
-    /// call). UNVERIFIED (third-party guides; not tried on
-    /// macOS 27): macOS applies a Full Disk Access grant to an app already
-    /// open once it restarts — System Settings offers "Quit & Reopen" — so
-    /// those steps end there. The file permissions are the folder's own,
-    /// which only Finder's Get Info (or its owner) changes.
-    func remedy(fullDiskAccess: FullDiskAccessStatus) -> Remedy? {
-        switch self {
-        case let .volumeAway(volume):
-            Remedy(steps: "Connect “\(volume)” to see the folder here.", fix: nil)
-        case .missing:
-            Remedy(steps: RunRecord.folderGoneAdvice, fix: nil)
-        case .blockedByMacOS where fullDiskAccess != .granted:
-            Remedy(
-                steps: "Turn SwiftRestic on in System Settings ▸ Privacy & Security ▸ Full Disk Access, then quit and reopen SwiftRestic.",
-                fix: .openFullDiskAccessSettings
-            )
-        case .deniedByFilePermissions:
-            Remedy(
-                steps: "Full Disk Access doesn’t change that: select it in Finder, choose File ▸ Get Info, and give your account Read access under Sharing & Permissions.",
-                fix: .revealInFinder
-            )
-        case .blockedByMacOS, .unreadable: nil
         }
     }
 }

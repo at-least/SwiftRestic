@@ -25,10 +25,6 @@ struct RepositoryCommandState: Equatable {
     var canAddRepository = false
     var canNewPlan = false
     var canFind = false
-    var canRefreshAll = false
-    /// restic Console, the menu's and the sidebar row's: the console
-    /// picks its own repository, so it needs only one to exist.
-    var canOpenConsole = false
     /// Check, Clean Up: restic work that must not collide with a backup
     /// or another job on it.
     var canMaintain = false
@@ -84,8 +80,6 @@ extension AppModel {
         state.canAddRepository = isResticAvailable
         state.canNewPlan = isResticAvailable || !configuration.repositories.isEmpty
         state.canFind = !configuration.repositories.isEmpty && isResticAvailable
-        state.canRefreshAll = state.canFind
-        state.canOpenConsole = state.canFind
         guard let id = commandRepositoryID(for: selection) else { return state }
         state.repositoryID = id
         state.canMaintain = isResticAvailable && !busyRepositoryIDs.contains(id)
@@ -112,9 +106,9 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
-    /// The Files tab ⌘F searches on this selection, by the roots its tree
-    /// hangs from: a plan's with a repository set, the one page whose Files
-    /// tab lists a tree. Nil on every other pane, where it opens Search All
+    /// The Backups tab ⌘F searches on this selection, by the roots its search
+    /// hangs from: a plan's with a repository set, the one page whose
+    /// search lists one chain. Nil on every other pane, where it opens Search All
     /// Backups.
     func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
         guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
@@ -153,12 +147,6 @@ extension AppModel {
                 // From the model, so the disclosed consequences cannot drift
                 // from what removal does.
                 message: removalConsequences(for: id)
-            )
-        case let .prune(id):
-            guard let repository = repository(id: id) else { return nil }
-            return ConfirmationCopy(
-                title: "Clean up “\(label(of: repository))” now?",
-                message: "The data of removed backups is deleted for good. Backups to it wait until the cleanup finishes."
             )
         }
     }

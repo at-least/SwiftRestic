@@ -12,6 +12,8 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
+    /// Enter Password…, a missing or refused password's fix.
+    @State private var enteringPassword: Repository?
     /// Back Up a Folder…'s folder, chosen: the first-run sheet's.
     @State private var firstBackupSource: FirstBackupSource?
     /// The first-run sheet was left for the repository editor's server and
@@ -21,8 +23,7 @@ struct RootView: View {
     /// The one confirmation up, from whichever surface asked — the menu
     /// bar, a sidebar menu, Activity's drawer. See `CommandPresentations`.
     @State private var pendingConfirmation: CommandConfirmation?
-    /// The Files views' levels, read once and shared by every page's Files
-    /// tab: a level read for one is read for the next.
+    /// The disk's turn every page's Backups tab reads this Mac by.
     @State private var filesTree = FilesTree()
     /// The adopt sheet, raised from a group's context menu or page — one
     /// presentation for both, so selecting the new plan afterwards lives
@@ -85,7 +86,7 @@ struct RootView: View {
     private func presented<V: View>(over content: V) -> some View {
         content
         .sheet(item: $editingPlan) { plan in
-            PlanEditorSheet(plan: plan, mode: .editing)
+            PlanEditorSheet(plan: plan)
                 .environment(model)
         }
         // Not sheet(isPresented:) beside a separate source: its content kept
@@ -94,9 +95,7 @@ struct RootView: View {
         .sheet(item: $firstBackupSource, onDismiss: continueWithServerOrCloud) { firstBackup in
             FirstBackupSheet(
                 source: firstBackup.path,
-                destination: FirstBackupDestination.initial(
-                    onScreen: firstBackup.repositoryID, among: model.configuration.repositories
-                ),
+                destination: firstBackup.destination,
                 onCreated: { router.selection = .plan($0) },
                 onServerOrCloud: { firstBackupHandoff = $0 }
             )
@@ -121,12 +120,15 @@ struct RootView: View {
             )
             .environment(model)
         }
+        .sheet(item: $enteringPassword) { repository in
+            PasswordPromptSheet(repository: repository)
+                .environment(model)
+        }
         // Adopt's landing is the new plan's own page on its Backups tab —
         // the click's whole result in one place: the history, now the plan's.
         .sheet(item: $adoptingPlan) { plan in
-            PlanEditorSheet(
-                plan: plan,
-                mode: .adopt,
+            AdoptPlanSheet(
+                draft: plan,
                 onAdopted: { planID in
                     router.setTab(.backups, of: .plan(planID))
                     router.selection = .plan(planID)
@@ -222,9 +224,10 @@ struct RootView: View {
         AccessibilityNotification.Announcement(text).post()
     }
 
-    /// Back Up a Folder…, from whichever control: the folder panel, then the
-    /// first-run sheet, its destination `repositoryID` when the ask came
-    /// from a location. A cancelled panel opens nothing.
+    /// Back Up a Folder…, from whichever control: the folder panel, its
+    /// pop-up on `repositoryID` when the ask came from a location, then the
+    /// first-run sheet unless the panel's answer was the last one. A
+    /// cancelled panel opens nothing.
     private func startBackUpAFolder(in repositoryID: UUID?) {
         // With no location yet its Back Up asks restic; the page behind says
         // how to get it.
@@ -236,17 +239,28 @@ struct RootView: View {
         // and a panel run inside one gets no keys (`FirstBackupSheet`'s
         // Other…).
         let source = $firstBackupSource
+        let repositories = model.configuration.repositories
+        let locations = repositories.map { BackUpAFolderPanel.Location(id: $0.id, label: model.label(of: $0)) }
+        let initial = FirstBackupDestination.initial(onScreen: repositoryID, among: repositories)
+        let model = model
+        let router = router
         RunLoop.main.perform(inModes: [.default]) {
             MainActor.assumeIsolated {
-                guard let url = FilePicker.chooseDirectory(message: "Choose the folder to back up") else { return }
-                source.wrappedValue = FirstBackupSource(path: url.path, repositoryID: repositoryID)
+                guard let answer = BackUpAFolderPanel.run(locations: locations, initial: initial) else { return }
+                if let planID = model.backUpWithoutSheet(source: answer.source, destination: answer.destination) {
+                    router.selection = .plan(planID)
+                } else {
+                    source.wrappedValue = FirstBackupSource(path: answer.source, destination: answer.destination)
+                }
             }
         }
     }
 
     private func continueWithServerOrCloud() {
-        guard firstBackupHandoff != nil else { return }
-        editingRepository = Repository()
+        guard let handoff = firstBackupHandoff else { return }
+        var repository = Repository()
+        repository.kind = handoff.kind
+        editingRepository = repository
     }
 
     private func addRepository() {
@@ -283,7 +297,10 @@ struct RootView: View {
         // An empty configuration's sheet, so ahead of the guard below.
         if ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_PANE"] == "firstBackup", !model.isBootstrapping {
             didApplyCaptureOverride = true
-            firstBackupSource = FirstBackupSource(path: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] ?? NSHomeDirectory())
+            firstBackupSource = FirstBackupSource(
+                path: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] ?? NSHomeDirectory(),
+                destination: FirstBackupDestination.initial(onScreen: nil, among: model.configuration.repositories)
+            )
             return
         }
         guard !model.configuration.plans.isEmpty || !model.configuration.repositories.isEmpty
@@ -297,39 +314,23 @@ struct RootView: View {
             // SWIFTRESTIC_CAPTURE_FIND: a search in place on arrival.
             router.openFind(query: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"])
         // ⌘F on the first plan's page, through the menu's own route: the
-        // page turns to its Files tab, the search field focused.
+        // page turns to its Backups tab, the search field focused.
         case "filesSearch":
             router.selection = model.configuration.plans.first.map { .plan($0.id) }
             router.request(.showFind)
-        // The first plan's page on its Files tab, its path open and
-        // selected — or SWIFTRESTIC_CAPTURE_ITEM, an absolute path under
-        // it (a folder spelled with a trailing slash), with every folder
-        // above it open.
+        // The first plan's page on its Backups tab — with
+        // SWIFTRESTIC_CAPTURE_ITEM, an absolute path in its newest backup,
+        // that backup open at the item, a file's versions under the tree.
         case "files":
-            guard let plan = model.configuration.plans.first, let repositoryID = plan.repositoryID,
-                  !plan.path.isEmpty
-            else { preconditionFailure("files needs a plan with a repository and a path") }
-            let source = plan.path
+            guard let plan = model.configuration.plans.first, let repositoryID = plan.repositoryID
+            else { preconditionFailure("files needs a plan with a repository") }
             router.selection = .plan(plan.id)
-            router.setTab(.files, of: .plan(plan.id))
-            let chain = ResticService.planTag(plan.id)
-            let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
-            func folder(_ path: String) -> FileNode {
-                FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: true)
-            }
-            router.openFolders.insert(folder(source))
-            router.filesSelection[roots] = folder(source)
+            router.setTab(.backups, of: .plan(plan.id))
+            let roots = FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id))
             if let item = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] {
-                let isDirectory = ResticPath.isDirectorySpelling(item)
-                let path = ResticPath.normalized(item)
-                var above = ResticPath.parent(of: path)
-                while above.utf8.count > source.utf8.count {
-                    router.openFolders.insert(folder(above))
-                    above = ResticPath.parent(of: above)
-                }
-                router.filesSelection[roots] = FileNode(
-                    repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: isDirectory
-                )
+                guard let newest = model.latestSnapshot(in: repositoryID, planID: plan.id)
+                else { preconditionFailure("SWIFTRESTIC_CAPTURE_ITEM needs the plan's backups listed") }
+                router.showBackup(newest.id, on: .plan(plan.id), repositoryID: repositoryID, focusPath: ResticPath.normalized(item))
             }
             // SWIFTRESTIC_CAPTURE_SEARCH: the tab's search field holding a
             // query, its hits in the tree's place.
@@ -353,8 +354,7 @@ struct RootView: View {
             pendingCaptureGroupPane = .moved
         case "lineage":
             pendingCaptureGroupPane = .lineage
-        // Same sheet on its first tab: captures a specific kind's fields, e.g.
-        // the rclone Remote row and its suggestion menu.
+        // Same sheet on its first tab: captures a specific kind's fields.
         case "repositoryEditor": editingRepository = model.configuration.repositories.first
         // Lets a capture run photograph the *new*-repository sheet, whose
         // destination-before-kind picker only exists before a repository exists.
@@ -366,12 +366,10 @@ struct RootView: View {
         applyCaptureTab()
     }
 
-    /// `SWIFTRESTIC_CAPTURE_TAB=files` or `backups`: the page the run
-    /// selected, on that tab. A selection without that tab — any tab on a
-    /// page with none, Files on a group's — ignores it.
+    /// `SWIFTRESTIC_CAPTURE_TAB=backups`: the page the run selected, on
+    /// that tab. A page with no tabs ignores it.
     private func applyCaptureTab() {
         let tab: PageTab? = switch ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_TAB"] {
-        case "files": .files
         case "backups": .backups
         default: nil
         }
@@ -428,7 +426,7 @@ struct RootView: View {
     /// Applies one consumed intent. An ask arriving while a sheet is up is
     /// dropped with a beep — macOS's "not now" — since two sheets cannot
     /// present at once, and because the main menu stays live under a sheet:
-    /// a Remove from SwiftRestic would leave the editor saving against a repository
+    /// a Remove Location would leave the editor saving against a repository
     /// that is gone. The panes' own sheets (a restore's destination) are
     /// invisible from here, so AppKit is asked: SwiftUI
     /// presents every sheet as the window's attached sheet. Each ask is
@@ -436,7 +434,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || firstBackupSource != nil
+        let sheetsUp = editingPlan != nil || editingRepository != nil || enteringPassword != nil || firstBackupSource != nil
             || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -448,12 +446,10 @@ struct RootView: View {
             // Into the location on screen — the one the Location menu
             // acts on.
             startBackUpAFolder(in: model.commandRepositoryID(for: router.selection))
-        case let .newPlanIn(id):
-            startBackUpAFolder(in: model.repository(id: id)?.id)
         case .newRepository:
             addRepository()
         case .showFind:
-            // A plan's page searches its own files on its Files tab, the
+            // A plan's page searches its own files on its Backups tab, the
             // toolbar's field focused; every other pane all backups.
             if let page = router.selection, model.filesSearchRoots(for: page) != nil {
                 router.searchFiles(on: page)
@@ -468,6 +464,8 @@ struct RootView: View {
             editingPlan = model.plan(id: id)
         case let .editRepository(id):
             editingRepository = model.repository(id: id)
+        case let .enterPassword(id):
+            enteringPassword = model.repository(id: id)
         case let .confirm(confirmation):
             if model.confirmationCopy(for: confirmation) != nil {
                 pendingConfirmation = confirmation
@@ -475,6 +473,10 @@ struct RootView: View {
         case let .verifyBackups(id):
             guard model.repositoryCommands(for: .repository(id)).canMaintain else { return }
             model.runMaintenance(repositoryID: id, task: .check)
+            router.showMaintenance(of: id)
+        case let .cleanUp(id):
+            guard model.repositoryCommands(for: .repository(id)).canMaintain else { return }
+            model.runMaintenance(repositoryID: id, task: .prune)
             router.showMaintenance(of: id)
         }
     }
@@ -498,6 +500,6 @@ struct RootView: View {
 private struct FirstBackupSource: Identifiable {
     let id = UUID()
     let path: String
-    /// The location the ask came from: the sheet's destination.
-    var repositoryID: UUID?
+    /// What the sheet opens on: the panel's location, nil to ask.
+    let destination: FirstBackupDestination?
 }

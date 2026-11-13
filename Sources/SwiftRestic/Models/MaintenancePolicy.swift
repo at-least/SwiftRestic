@@ -23,7 +23,7 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
     func scheduledDataSubset(for kind: Repository.Kind) -> CheckDataSubset? {
         switch kind {
         case .local, .sftp: .slice(min(max(1, nextCheckDataSlice), Self.rotatingSlices), of: Self.rotatingSlices)
-        case .rest, .s3, .rclone: nil
+        case .s3: nil
         }
     }
 
@@ -77,6 +77,12 @@ enum MaintenanceTask: String, Codable, Sendable, Hashable, CaseIterable {
         case .prune: "Cleanup"
         case .check: "Verification"
         }
+    }
+
+    /// "A verification is running", the clause the quit and removal
+    /// dialogs build on.
+    var runningClause: String {
+        "A \(displayName.lowercased()) is running"
     }
 
     var inFlightTitle: String {

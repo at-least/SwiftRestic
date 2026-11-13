@@ -58,17 +58,10 @@ extension AppModel {
         return listingGeneration
     }
 
-    /// Throws when the index fails: the Files view says so, rather than
+    /// Throws when the index fails: the Backups tab says so, rather than
     /// reading a broken index as "no backup holds it".
     func indexedHolders(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
-    }
-
-    /// Throws when the index fails: the Files view says so beside the
-    /// fallback it lists instead, rather than reading a broken index as an
-    /// empty folder.
-    func indexedChildren(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexChild] {
-        try await indexCoordinator.children(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
 
     func indexedContentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
@@ -80,7 +73,7 @@ extension AppModel {
     }
 
     /// Whether the index has read every listed snapshot of the repository —
-    /// the Files view's and the searches' completeness signal. Not complete
+    /// the Backups tab's and the searches' completeness signal. Not complete
     /// when it has not taken the listing on screen yet, whose answers still
     /// describe the listing before — blind to what this one added or forgot.
     /// Throws when the index cannot answer: read as "still reading", a broken
@@ -166,7 +159,7 @@ extension AppModel {
         return AllBackupsSearch(answers)
     }
 
-    /// A Files tab's search: instant basename hits over what one chain ever
+    /// The Backups tab's search: instant basename hits over what one chain ever
     /// held — items its newest backup no longer has included — each as the
     /// tree lists it, capped by `capped`. Throws when the index itself
     /// fails, as the other searches do.

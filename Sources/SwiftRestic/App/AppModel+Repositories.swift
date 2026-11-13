@@ -12,13 +12,21 @@ extension AppModel {
         return false
     }
 
+    /// A non-empty `password` replaces the stored one; nil keeps it. A new
+    /// password for a location already saved is a failed backup's fix: once
+    /// the Keychain holds it, the location's failed backups run again.
     func upsert(repository: Repository, password: String?, providerSecret: String?) async {
+        let isSaved = self.repository(id: repository.id) != nil
+        var fixesBackups = false
         do {
             try await secrets.save(repository.id, password, providerSecret)
             // Cleared only on a successful save: a Keychain failure must not
             // have the model schedule upkeep for a repository whose password
             // never actually landed.
-            if password?.isEmpty == false { repositoriesMissingPassword.remove(repository.id) }
+            if password?.isEmpty == false {
+                repositoriesMissingPassword.remove(repository.id)
+                fixesBackups = isSaved
+            }
         } catch {
             // Name the repository: a Keychain failure for one repository
             // must not read as a problem with another's.
@@ -40,7 +48,7 @@ extension AppModel {
         } else {
             configuration.repositories.append(repository)
         }
-
+        if fixesBackups { rerunFailedBackups(in: repository.id) }
     }
 
     /// What removing this repository does to work in flight — the removal
@@ -55,7 +63,7 @@ extension AppModel {
             removedPlanNames: plans.map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: plans.filter { activity[$0.id] != nil }.map { label(of: $0) },
-            isMaintaining: maintenance[repositoryID] != nil,
+            runningMaintenance: maintenance[repositoryID]?.task,
             isConsoleRunning: console.runningRepositoryID == repositoryID
         )
     }
@@ -70,7 +78,7 @@ extension AppModel {
         removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
-        isMaintaining: Bool,
+        runningMaintenance: MaintenanceTask?,
         isConsoleRunning: Bool
     ) -> String {
         var consequences = ""
@@ -90,8 +98,8 @@ extension AppModel {
                 ? " A backup of \(names[0]) is running and will be stopped."
                 : " Backups of \(Format.list(names)) are running and will be stopped."
         }
-        if isMaintaining {
-            consequences += " Maintenance is running and will be stopped."
+        if let runningMaintenance {
+            consequences += " \(runningMaintenance.runningClause) and will be stopped."
         }
         if isConsoleRunning {
             consequences += " A console command is running and will be stopped."
@@ -241,7 +249,7 @@ extension AppModel {
         for repository: Repository
     ) async throws -> (service: any ResticClient, context: RepositoryContext) {
         // A read of a repository on a saved network share that is away —
-        // the Files tab, a restore, the console — reconnects it
+        // the Backups tab, a restore, the console — reconnects it
         // first, as a run does; still away, it throws in the run's words.
         try await reconnectShare(before: repository)
         let service = try service()
@@ -269,6 +277,51 @@ extension AppModel {
         guard case let .ready(binary, _) = resticState else { throw ResticError.damagedInstall }
         return ResticService(runner: runner, binary: binary.url)
     }
+
+    /// The location editor's check and the password prompt's: restic opens
+    /// the repository with `context`'s credentials before anything is kept.
+    /// With nothing there, `creatingIfMissing` creates one, else it is
+    /// refused in `EditorRequirements.noRepositoryHere`'s words; a timeout
+    /// in `EditorRequirements.probeTimedOut`'s. Returns whether it created
+    /// one.
+    func openRepository(_ context: RepositoryContext, creatingIfMissing: Bool) async throws -> Bool {
+        let service = try service()
+        do {
+            if try await service.repositoryExists(context, timeout: EditorRequirements.probeTimeout) { return false }
+        } catch ResticError.timedOut {
+            throw MessageError(message: EditorRequirements.probeTimedOut)
+        }
+        guard creatingIfMissing else { throw MessageError(message: EditorRequirements.noRepositoryHere) }
+        _ = try await service.initializeRepository(context)
+        return true
+    }
+
+    /// The password prompt's Open (`PasswordPromptSheet`): restic opens the
+    /// repository with `password` (`openRepository`) before the Keychain
+    /// keeps it, so a refused one never replaces the stored one. Throws in
+    /// the prompt's words.
+    func enterPassword(_ password: String, forRepository repositoryID: UUID) async throws {
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        let context = RepositoryContext(
+            repository: repository,
+            password: password,
+            providerSecret: try await storedSecrets(for: repositoryID).providerSecret
+        )
+        do {
+            _ = try await openRepository(context, creatingIfMissing: false)
+        } catch let ResticError.commandFailed(code, _) where code == ResticError.wrongPasswordCode {
+            throw MessageError(message: ResticError.wrongPassword(location: label(of: repository)))
+        }
+        await upsert(repository: repository, password: password, providerSecret: nil)
+        scheduleSnapshotRefresh(repositoryID: repositoryID)
+    }
+}
+
+/// An error whose whole content is the sentence the user reads.
+struct MessageError: LocalizedError {
+    let message: String
+
+    var errorDescription: String? { message }
 }
 
 private struct PasswordNotStored: LocalizedError {

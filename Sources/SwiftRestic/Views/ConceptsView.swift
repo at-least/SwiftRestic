@@ -18,11 +18,11 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Get a file back",
-            text: "Choose Edit ▸ Find (⌘F) and type its name. Or select it on the plan’s Files tab and click Restore. To bring back everything from one moment, open the backup on the Backups tab, select its top folders, and click Restore."
+            text: "Choose Edit ▸ Find (⌘F) and type its name. Or open the plan’s Backups tab, pick a backup in the list, and select the file: its earlier versions appear below. Click Restore to put it back where it was, or Restore To… to choose a folder. To bring back everything from one moment, select the backup’s top folders and click Restore."
         ),
         Topic(
             title: "When a backup fails",
-            text: "Activity lists every backup, verification, cleanup and restore. Select one to see what happened, with Show Log and Copy Details below it, and a button for the fix when there is one. A backup that couldn’t read some files still saves the rest and is marked Completed with warnings."
+            text: "Activity lists every backup, verification, cleanup and restore. Select one to see what happened, with Show Log below it and a button for the fix when there is one. Edit ▸ Copy copies its details. A backup that couldn’t read some files still saves the rest and is marked Completed with warnings."
         ),
         Topic(
             title: "Keep old backups tidy",

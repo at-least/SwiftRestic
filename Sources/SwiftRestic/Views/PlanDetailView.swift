@@ -18,7 +18,6 @@ struct PlanDetailView: View {
                 switch router.tab(of: .plan(planID)) {
                 case .overview: content(plan)
                 case .backups: backups(plan)
-                case .files: files(plan)
                 }
             } else {
                 ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
@@ -112,7 +111,8 @@ struct PlanDetailView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .help(message)
                         }
-                        if !summary.facts.isEmpty {
+                        // The listed items below say what the count would.
+                        if !summary.facts.isEmpty, summary.items.isEmpty {
                             Text(summary.facts.joined(separator: " · "))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -186,7 +186,7 @@ struct PlanDetailView: View {
                 Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID), repositoryID: plan.repositoryID) }
             }
             scheduleSection(plan)
-            // The rest of the plan — what it leaves out, its scripts — in
+            // The rest of the plan — what it leaves out — in
             // the editor, as System Settings keeps a pane's rarer settings
             // behind Options….
             Section {
@@ -236,18 +236,6 @@ struct PlanDetailView: View {
             // Not Edit Plan…: the editor shows a saved plan's repository
             // without a picker and refuses to save one without a repository.
             Button("Remove Plan…") { router.request(.confirm(.deletePlan(planID))) }
-        }
-    }
-
-    @ViewBuilder
-    private func files(_ plan: BackupPlan) -> some View {
-        if let repositoryID = plan.repositoryID {
-            FilesBrowserView(
-                roots: FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id)),
-                page: .plan(plan.id)
-            )
-        } else {
-            noRepository
         }
     }
 
@@ -323,17 +311,14 @@ struct PlanDetailView: View {
         }
     }
 
-    /// A link to the run's record when the plan has one; history it arrived
-    /// with shows the backup's own moment as plain text.
-    @ViewBuilder
     private func lastBackupValue(_ plan: BackupPlan, snapshots: [Snapshot]) -> some View {
         // The one moment every surface's "Last backup" counts from
         // (PlanStatus.lastBackupAt) — the sidebar caption's and the
         // Status line's own derivation, so history the plan arrived
         // with is not "Never" here.
         let value = Format.ago(PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: snapshots.first?.time), now: now)
-        // The destination must be the run the value claims — the newest
-        // backup that stamped `lastSuccessAt` (PlanStatus.lastBackupRun).
+        // The run the value claims — the newest backup that stamped
+        // `lastSuccessAt` (PlanStatus.lastBackupRun).
         let lastSuccessfulRun = PlanStatus.lastBackupRun(planID: plan.id, in: model.configuration.runs)
         // The run record is the primary source. When the global history cap
         // has evicted this plan's newest record — a busy plan can do that to
@@ -341,20 +326,12 @@ struct PlanDetailView: View {
         // no run exists, the newest snapshot's own summary answers the same
         // question, because a snapshot carries what its backup added.
         let added = (lastSuccessfulRun?.dataAdded ?? snapshots.first?.dataAdded).flatMap { $0 > 0 ? $0 : nil }
-        let text = added.map { "\(value) · added \(Format.bytes($0))" } ?? value
-        if let lastSuccessfulRun {
-            // A clean run: Activity shows all if its Problems filter would
-            // hide it.
-            Button(text) { router.focusRun(lastSuccessfulRun.id) }
-            .buttonStyle(.link)
-            .help("Show this backup’s run in Activity")
-            .accessibilityLabel("Last backup \(text). Show its run in Activity")
-        } else {
-            Text(text)
-        }
+        return Text(added.map { "\(value) · added \(Format.bytes($0))" } ?? value)
     }
 
-    /// "—" until the listing succeeds; the caveat says why. An empty plan says
+    /// "—" until the listing succeeds; the caveat says why. While a listing
+    /// is read, a value read before stays with no spinner beside it; with
+    /// none yet, "Reading backups…". An empty plan says
     /// which kind of empty: a location holding other backups must not read as
     /// "nothing there".
     @ViewBuilder
@@ -379,24 +356,14 @@ struct PlanDetailView: View {
                             : PlanStatus.noneFromThisPlanFact
                     )
                     .foregroundStyle(.secondary)
-                case .notConnected, .passwordRefused:
-                    // The caveat holds the fix.
-                    Text("—")
-                case let .failed(_, fix):
-                    Text("—")
-                    // A known fix sits on the caveat; trying again can't help.
-                    if fix == nil {
-                        Button("Try Again") {
-                            Task { await model.refreshSnapshots(repositoryID: repositoryID) }
-                        }
-                        .controlSize(.small)
-                        .disabled(model.loadingSnapshots.contains(repositoryID))
+                case .notConnected, .passwordRefused, .failed, .idle:
+                    // The caveat holds the fix, or Try Again.
+                    if model.loadingSnapshots.contains(repositoryID) {
+                        Text("Reading backups…")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("—")
                     }
-                case .idle:
-                    Text("—")
-                }
-                if model.loadingSnapshots.contains(repositoryID) {
-                    ProgressView().controlSize(.small)
                 }
             }
         } else {

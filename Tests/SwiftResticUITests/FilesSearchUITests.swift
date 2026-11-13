@@ -1,6 +1,6 @@
 import XCTest
 
-/// A plan's search (⌘F on its Files tab) lists what its backups hold, each
+/// A plan's search (⌘F on its Backups tab) lists what its backups hold, each
 /// word matching the start of a word in a name.
 final class FilesSearchUITests: XCTestCase {
     override func setUp() {
@@ -13,9 +13,9 @@ final class FilesSearchUITests: XCTestCase {
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
 
-        app.radioButtons["Files"].click()
-        XCTAssertTrue(app.buttons[AccessibilityID.FilesPane.restore].waitForEnabled())
+        _ = UITest.showNewestBackup(folders, in: app)
         app.typeKey("f", modifierFlags: [.command])
+
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.typeText("hello")

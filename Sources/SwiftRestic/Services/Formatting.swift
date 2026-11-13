@@ -192,7 +192,7 @@ enum Format {
     }
 
     /// The day an item a chain's newest backup no longer holds was last
-    /// backed up, short for its row in a Files tab — "until Oct 2", the year
+    /// backed up, short for its row in the Backups tab — "until Oct 2", the year
     /// said only when it is not this one. The row's tooltip carries the
     /// full moment.
     static func until(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
@@ -281,7 +281,7 @@ enum Format {
             let unreadable = run?.itemErrorCount ?? 0
             return unreadable > 0
                 ? "Incomplete: \(plural(unreadable, "item")) couldn’t be read"
-                : "Incomplete: some of the source data couldn’t be read"
+                : "Incomplete: some files couldn’t be read"
         case .complete?:
             return "Complete"
         case .unknown?, nil:

@@ -73,7 +73,8 @@ struct AppModelTests {
         let model = AppModel(
             store: store,
             secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
-            resticExecutable: try stub?.url ?? PinnedRestic.binary().url
+            resticExecutable: try stub?.url ?? PinnedRestic.binary().url,
+            repositoryEnvironment: [repository.id: repository.extraEnvironment]
         )
         await model.bootstrap()
 
@@ -593,7 +594,77 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a backup whose folder is gone from this Mac fails with a new plan in its repository as the fix, and its repeats are one record")
+    @Test("Choose New Location makes a plan for the folder where it is now, with the old plan's settings, and removes the old plan")
+    func chooseNewLocationReplacesThePlan() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].excludePatterns = ["*.tmp"]
+        model.configuration.plans[index].retention.keepDaily = 9
+        let movedFolder = harness.root.appendingPathComponent("moved")
+        try FileManager.default.createDirectory(at: movedFolder, withIntermediateDirectories: true)
+
+        let newID = try model.movePlan(id: harness.plan.id, toPath: movedFolder.path)
+        #expect(model.plan(id: harness.plan.id) == nil)
+        let moved = try #require(model.plan(id: newID))
+        #expect(newID != harness.plan.id)
+        #expect(moved.path == movedFolder.path)
+        #expect(moved.repositoryID == harness.repository.id)
+        #expect(moved.excludePatterns == ["*.tmp"])
+        #expect(moved.retention.keepDaily == 9)
+        #expect(moved.lastRunAt == nil)
+        #expect(model.configuration.plans.map(\.id) == [newID])
+
+        // A folder the location already has a plan for is refused, and
+        // nothing changes.
+        var other = BackupPlan()
+        other.repositoryID = harness.repository.id
+        other.path = harness.sourceDirectory.path
+        model.upsert(plan: other)
+        #expect(throws: MessageError.self) { try model.movePlan(id: newID, toPath: harness.sourceDirectory.path) }
+        #expect(model.plan(id: newID) != nil)
+
+        await model.shutdown()
+    }
+
+    @Test("a cleanup that succeeds on a location a backup found full runs that backup again; other cleanups rerun nothing")
+    func cleanupRerunsTheFullLocationsBackup() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        // Scheduled and just stamped, so the tick leaves it alone.
+        model.configuration.plans[index].schedule.frequency = .daily
+        model.configuration.plans[index].lastRunAt = .now
+        let plan = model.configuration.plans[index]
+        func record(_ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome, full: Bool = false) -> RunRecord {
+            var record = RunRecord(kind: kind, planID: kind == .backup ? plan.id : nil, planName: "source", repositoryID: harness.repository.id)
+            record.outcome = outcome
+            if full { record.repositoryFull = true }
+            return record
+        }
+
+        // Newest first: a failure that was not a full location.
+        model.configuration.runs = [record(.prune, .succeeded), record(.backup, .failed)]
+        model.rerunBackupsAfterCleanup(in: harness.repository.id)
+        #expect(!model.isRunning(planID: plan.id))
+
+        // A cleanup that failed frees nothing.
+        model.configuration.runs = [record(.prune, .failed), record(.backup, .failed, full: true)]
+        model.rerunBackupsAfterCleanup(in: harness.repository.id)
+        #expect(!model.isRunning(planID: plan.id))
+
+        model.configuration.runs = [record(.prune, .succeeded), record(.backup, .failed, full: true)]
+        model.rerunBackupsAfterCleanup(in: harness.repository.id)
+        #expect(model.isRunning(planID: plan.id))
+        await model.waitForRun(planID: plan.id)
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
+
+        await model.shutdown()
+    }
+
+    @Test("a backup whose folder is gone from this Mac fails with Choose New Location as the fix, and its repeats are one record")
     func everySourceGoneFromThisMacFails() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -609,8 +680,8 @@ struct AppModelTests {
         #expect(record.outcome == .failed)
         #expect(record.missingSources == [gone])
         #expect(record.failureMessage
-            == "“gone” is not on this Mac — it was moved, renamed or deleted. Put it back, or back it up where it is now with a new plan.")
-        #expect(model.fix(for: record) == .newPlan(try #require(harness.plan.repositoryID)))
+            == "“gone” is not on this Mac — it was moved, renamed or deleted. Put it back, or use Choose New Location… to back it up where it is now.")
+        #expect(model.fix(for: record) == .chooseNewLocation(planID: harness.plan.id))
         #expect(model.currentProblem(for: harness.plan.id) != nil)
         let plan = try #require(model.plan(id: harness.plan.id))
         #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
@@ -970,94 +1041,6 @@ struct AppModelTests {
         #expect(record.failureMessage != nil)
         #expect(model.plan(id: harness.plan.id)?.lastSuccessAt == nil)
         #expect(model.plan(id: harness.plan.id)?.lastRunAt != nil)
-
-        await model.shutdown()
-    }
-
-    @Test("an after-success hook runs and is told about the snapshot")
-    func afterSuccessHookRuns() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-
-        let markerPath = harness.root.appendingPathComponent("hook-output.txt").path
-        var hook = BackupHook()
-        hook.event = .afterBackup
-        hook.command = #"printf '%s %s' "$SWIFTRESTIC_OUTCOME" "$SWIFTRESTIC_SNAPSHOT_ID" > "\#(markerPath)""#
-
-        var plan = harness.plan
-        plan.hooks = [hook]
-        model.upsert(plan: plan)
-
-        model.runBackup(planID: plan.id)
-        await model.waitForRun(planID: plan.id)
-
-        let record = try #require(model.configuration.runs.first)
-        #expect(record.outcome == .succeeded)
-        let snapshotID = try #require(record.snapshotID)
-
-        let written = try String(contentsOfFile: markerPath, encoding: .utf8)
-        #expect(written == "succeeded \(snapshotID)")
-
-        await model.shutdown()
-    }
-
-    @Test("a before-backup hook set to cancel stops the backup happening at all")
-    func abortingHookPreventsBackup() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-
-        var hook = BackupHook()
-        hook.event = .beforeBackup
-        hook.command = "echo 'not today' >&2; exit 1"
-
-        var plan = harness.plan
-        plan.hooks = [hook]
-        model.upsert(plan: plan)
-
-        model.runBackup(planID: plan.id)
-        await model.waitForRun(planID: plan.id)
-
-        let record = try #require(model.configuration.runs.first)
-        #expect(record.outcome == .failed)
-        #expect(record.snapshotID == nil)
-        #expect(record.hookMessages.contains { $0.contains("echo") })
-        // Hook output must not be filed as a restic warning: that is what gets
-        // sent to external notification channels.
-        #expect(record.itemErrors.isEmpty)
-        // Nothing may have been written to the repository.
-        #expect(model.snapshots(for: harness.repository.id, planID: plan.id).isEmpty)
-        #expect(model.plan(id: plan.id)?.lastSuccessAt == nil)
-
-        await model.shutdown()
-    }
-
-    @Test("a failing after-any hook is recorded but does not undo the backup")
-    func failingAfterHookDoesNotFailTheRun() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-
-        var hook = BackupHook()
-        hook.event = .afterBackup
-        hook.command = "exit 9"
-
-        var plan = harness.plan
-        plan.hooks = [hook]
-        model.upsert(plan: plan)
-
-        model.runBackup(planID: plan.id)
-        await model.waitForRun(planID: plan.id)
-
-        let record = try #require(model.configuration.runs.first)
-        // The snapshot exists, so the run is not a failure — but the hook's exit
-        // code has to be visible somewhere.
-        #expect(record.outcome != .failed)
-        #expect(record.snapshotID != nil)
-        #expect(record.hookMessages.contains { $0.contains("“exit”") && $0.contains("failed (exit code 9)") })
-        #expect(record.itemErrors.isEmpty)
-        #expect(model.plan(id: plan.id)?.lastSuccessAt != nil)
 
         await model.shutdown()
     }

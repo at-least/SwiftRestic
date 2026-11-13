@@ -148,18 +148,11 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func repositoryContextMenu(_ repository: Repository) -> some View {
-        let commands = model.repositoryCommands(for: .repository(repository.id))
         Button("Back Up a Folder…") { onNewPlan(repository.id) }
         Divider()
-        Button("Edit Backup Location…") { onEditRepository(repository) }
-        // Left out, not dimmed, while it can't run, as the plan row's
-        // commands.
-        if commands.canMaintain {
-            Divider()
-            Button("Verify Backups") { router.request(.verifyBackups(repository.id)) }
-        }
+        Button("Edit Location…") { onEditRepository(repository) }
         Divider()
-        Button("Remove from SwiftRestic…", role: .destructive) {
+        Button("Remove Location…", role: .destructive) {
             onRemoveRepository(repository)
         }
     }
@@ -444,11 +437,6 @@ private struct PlanSidebarRow: View {
                     captionLine(caption)
                 }
             }
-            // State trails identity, the sidebar's one reading rule —
-            // Activity's badge follows it too. A trailing marker takes only
-            // leftover space, so it can never push the title.
-            Spacer(minLength: 0)
-            marker
         }
     }
 
@@ -463,8 +451,7 @@ private struct PlanSidebarRow: View {
             }
             // The whole line when it fits, its shorter spelling when
             // one exists ("Warnings — 2 days ago"), and only then the
-            // middle cut: the trailing marker narrows the column,
-            // and a tail cut would take "ago" — when it happened.
+            // middle cut: a tail cut would take "ago" — when it happened.
             // The tooltip and VoiceOver keep the whole line.
             Group {
                 if let shortText = caption.shortText {
@@ -485,13 +472,6 @@ private struct PlanSidebarRow: View {
             .accessibilityLabel(caption.text)
         }
         .font(.caption)
-    }
-
-    @ViewBuilder
-    private var marker: some View {
-        if model.isRunning(planID: plan.id) {
-            ProgressView().controlSize(.small)
-        }
     }
 }
 

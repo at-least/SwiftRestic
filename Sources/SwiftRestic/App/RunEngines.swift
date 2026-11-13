@@ -1,37 +1,5 @@
 import Foundation
 
-private func note(
-    _ outcomes: [HookRunner.Outcome],
-    into record: inout RunRecord,
-    transcript: RunTranscript
-) {
-    record.hookMessages.append(
-        contentsOf: outcomes.filter { !$0.succeeded && !$0.cancelled }.map(\.summary)
-    )
-    for outcome in outcomes { transcript.note(outcome.logLine) }
-}
-
-/// A cancelled run runs no after-hook — firing a script then would surprise
-/// the user who asked for the stop. A failing hook never undoes the run:
-/// success whose hook failed reads as completed-with-errors, which arms the
-/// problem dot and notifyOnFailure, and `finishedAt` is re-stamped so the
-/// record includes the hooks.
-private func runAfterHooks(
-    _ allHooks: [BackupHook],
-    context: HookRunner.Context,
-    hooks: HookRunner,
-    record: inout RunRecord,
-    transcript: RunTranscript
-) async {
-    guard record.outcome != .cancelled, allHooks.contains(where: \.isRunnable) else { return }
-    let result = await hooks.runHooks(allHooks, event: .afterBackup, context: context)
-    note(result.outcomes, into: &record, transcript: transcript)
-    if !record.hookMessages.isEmpty, record.outcome == .succeeded {
-        record.outcome = .completedWithErrors
-    }
-    record.finishedAt = .now
-}
-
 /// Runs restic work under the run's transcript; a lock in its way is
 /// unlocked and the work run once more, unasked. `restic unlock` removes
 /// only stale locks — with restic 0.19.1 a running backup's lock survived
@@ -87,8 +55,7 @@ enum BackupStamp: Equatable, Sendable {
 }
 
 /// The pre-run gate the backup and maintenance engines walk, stated once:
-/// the saved shares `paths` need are reconnected first (the hooks may have
-/// mounted them); a share that refused fails the run in the skip's words,
+/// the saved shares `paths` need are reconnected first; a share that refused fails the run in the skip's words,
 /// never asking restic, the editor that holds the share's password being
 /// the fix; a local repository's drive that is away skips the run —
 /// restic's "does not exist" could not tell it from a moved folder (both
@@ -156,7 +123,7 @@ enum ReachabilityGate {
 @MainActor
 protocol RunEngineSink: AnyObject {
     /// What every surface calls the repository (`AppModel.label(of:)`): the
-    /// run's record and hooks say it.
+    /// run's record says it.
     func label(of repository: Repository) -> String
     func service() throws -> any ResticClient
     func context(for repository: Repository) async throws -> RepositoryContext
@@ -184,7 +151,7 @@ extension RunEngineSink {
     }
 }
 
-/// One backup run's lifecycle, so the sequencing — hooks → start ping →
+/// One backup run's lifecycle, so the sequencing — gate → start ping →
 /// backup → retention → closing refresh → record — is unit-testable against
 /// a mock engine.
 ///
@@ -201,7 +168,7 @@ enum BackupRunEngine {
         /// app quitting.
         var cancellationMessage: String { get }
         /// What every surface calls the plan (`AppModel.label(of:)`): the
-        /// run's record, hooks and notifications say it.
+        /// run's record and notifications say it.
         func label(of plan: BackupPlan) -> String
         /// Nil-anchored like the activity entry itself: a phase for a plan
         /// whose run has already unwound is dropped, never resurrected.
@@ -231,7 +198,6 @@ enum BackupRunEngine {
         /// Stores and announces a finished run: its log, run history,
         /// banner, user notification, external channels.
         func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
-        func makeHookRunner() -> HookRunner
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -244,49 +210,18 @@ enum BackupRunEngine {
             repositoryID: repository.id,
             startedAt: startedAt
         )
-        let hooks = sink.makeHookRunner()
         // What restic said, for the run's log: bound around the restic
-        // service calls only — hooks shield themselves, and the closing
-        // refresh is not part of the run.
+        // service calls only — the closing refresh is not part of the run.
         let transcript = RunTranscript()
-        var hookContext = HookRunner.Context(
-            event: .beforeBackup,
-            planName: planLabel,
-            planID: plan.id.uuidString,
-            repositoryName: sink.label(of: repository),
-            repositoryID: repository.id.uuidString,
-            outcome: "starting"
-        )
         // Why each away share this run needed could not be reconnected, by
         // volume name, for the skip's words.
         var reconnectFailures: [String: String] = [:]
 
         // Every exit but a missing password leaves through the tail below
-        // (`break run`), so the after-hooks and delivery run once.
+        // (`break run`), so delivery runs once.
         run: do {
             let service = try sink.service()
             let context = try await sink.context(for: repository)
-
-            if plan.hooks.contains(where: { $0.event == .beforeBackup && $0.isRunnable }) {
-                sink.setActivityPhase(.runningHooks, for: plan.id)
-                let result = await hooks.runHooks(plan.hooks, event: .beforeBackup, context: hookContext)
-                note(result.outcomes, into: &record, transcript: transcript)
-                if result.cancelled {
-                    // The user stopped the run while a hook was still going:
-                    // a cancellation, never a hook verdict, so the aborted-run
-                    // machinery below must not fire.
-                    throw ResticError.cancelled
-                }
-                if result.shouldAbort {
-                    record.outcome = .failed
-                    record.failureMessage =
-                        "The backup didn’t run because its before-backup script failed."
-                    // Stamped although nothing ran: a hook that always refuses
-                    // would otherwise be retried every minute.
-                    sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
-                    break run
-                }
-            }
 
             // The gate: this run's shares — the repository's folder, the
             // plan's — reconnected, a refusal failed in the skip's words,
@@ -392,7 +327,10 @@ enum BackupRunEngine {
                     // as every stop is, never as the lock failure below. The
                     // snapshot stands and is already stamped, so nothing
                     // stamps the run again.
-                    record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+                    record.setOutcome(
+                        from: error, cancellationMessage: sink.cancellationMessage,
+                        location: (sink.label(of: repository), repository.kind)
+                    )
                     transcript.note("Stopped removing old backups")
                 } catch {
                     // `forget` needs an exclusive repository lock while `backup`
@@ -441,7 +379,10 @@ enum BackupRunEngine {
             }
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         } catch {
-            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+            record.setOutcome(
+                from: error, cancellationMessage: sink.cancellationMessage,
+                location: (sink.label(of: repository), repository.kind)
+            )
             if ResticError.isRepositoryLocked(error) {
                 record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: "backup")
             }
@@ -461,35 +402,16 @@ enum BackupRunEngine {
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         }
 
-        hookContext.snapshotID = record.snapshotID
-        hookContext.filesNew = record.filesNew
-        hookContext.filesChanged = record.filesChanged
-        hookContext.bytesProcessed = record.bytesProcessed
-        hookContext.dataAdded = record.dataAdded
-        await finish(
-            record: &record, plan: plan, hooks: hooks, context: hookContext,
-            transcript: transcript, sink: sink
-        )
+        await finish(record: &record, plan: plan, transcript: transcript, sink: sink)
     }
 
     private static func finish(
         record: inout RunRecord,
         plan: BackupPlan,
-        hooks: HookRunner,
-        context: HookRunner.Context,
         transcript: RunTranscript,
         sink: Sink
     ) async {
         record.finishedAt = .now
-
-        var hookContext = context
-        hookContext.outcome = record.outcome.rawValue
-        hookContext.errorMessage = record.failureMessage
-        hookContext.durationSeconds = record.duration
-        await runAfterHooks(
-            plan.hooks, context: hookContext,
-            hooks: hooks, record: &record, transcript: transcript
-        )
 
         // The success path took the backup's own code; anything that threw
         // gets the first exit restic reached, and nil when it reached none.
@@ -600,21 +522,23 @@ enum MaintenanceRunEngine {
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                // One sentence — a dash, not a period, before the commands —
-                // so Format.firstSentence carries the whole verdict to the
-                // Detail column and the Maintenance row; restic's prune
-                // advice stays a second sentence. The commands as the
-                // console takes them: it supplies `restic` itself.
+                // The count is the first sentence, which the Result column
+                // and the Maintenance row show; the repair steps follow for
+                // the drawer. The commands as the console takes them: it
+                // supplies `restic` itself.
                 record.detailText = errors == 0
                     ? "No errors found."
-                    : "\(Format.plural(errors, "error")) — repair index, then repair snapshots, in the restic Console can recover some damage."
+                    : "\(Format.plural(errors, "error")) found. Some damage can be repaired in the restic Console: repair index, then repair snapshots."
                 if summary?.suggestPrune == true {
                     record.detailText? += " A cleanup is suggested."
                 }
             case .prune:
-                record.detailText = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
+                let output = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
                     try await service.prune(context, onRawLine: nil)
                 }
+                // Nothing freed says nothing: "Freed Zero KB." reads as a fault.
+                record.detailText = ResticService.pruneFreedBytes(in: output)
+                    .flatMap { $0 > 0 ? "Freed \(Format.bytes($0))." : nil }
                 record.outcome = .succeeded
             }
         } catch ResticError.passwordMissing {
@@ -624,7 +548,10 @@ enum MaintenanceRunEngine {
             sink.markPasswordMissing(repositoryID: repository.id)
             return
         } catch {
-            record.setOutcome(from: error, cancellationMessage: sink.cancellationMessage)
+            record.setOutcome(
+                from: error, cancellationMessage: sink.cancellationMessage,
+                location: (sink.label(of: repository), repository.kind)
+            )
             if ResticError.isRepositoryLocked(error) {
                 record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: task.displayName.lowercased())
             }

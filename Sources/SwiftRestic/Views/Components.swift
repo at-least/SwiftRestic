@@ -138,7 +138,7 @@ struct NetworkSharePasswordRows: View {
 
 /// A form caption whose teaching text sits behind an info button: the
 /// summary line is always visible, the rest for whoever wants it — the
-/// same on-demand depth the app gives hook variables and diff metadata.
+/// same on-demand depth the app gives diff metadata.
 struct ExpandableCaption: View {
     let summary: String
     /// What reveals on demand; written to read continuously after the summary.
@@ -211,8 +211,8 @@ struct OperationProgressView: View {
                     .accessibilityLabel(Text(title))
             }
 
-            // Once restic has reported any numbers: before that — a plan's
-            // before-backup hooks, restic starting up — the title already
+            // Once restic has reported any numbers: before that — restic
+            // starting up — the title already
             // says what is happening.
             if let caption = Self.caption(progress) {
                 Text(caption)
@@ -262,10 +262,13 @@ struct WarningLine: View {
 
 
 /// Why a Snapshots value may read "—", in visible text: under the plan page's
-/// Backups section, and as the repository page's Status section body. The tooltips carry the same
+/// Backups section, as the repository page's Status section body, and in a
+/// Backups tab's empty list. The tooltips carry the same
 /// lines, but a reason only a hovering mouse user can reach is no reason at
-/// all for a keyboard or VoiceOver user.
+/// all for a keyboard or VoiceOver user. A failed read's one way forward
+/// sits under its words: the known fix, or Try Again.
 struct SnapshotListingCaveat: View {
+    @Environment(AppModel.self) private var model
     let outcome: SnapshotListingOutcome
     let repositoryID: UUID?
 
@@ -301,6 +304,12 @@ struct SnapshotListingCaveat: View {
                 if let fix = repositoryID.flatMap(outcome.failureFix(repositoryID:)) {
                     RunFixButton(fix: fix)
                         .controlSize(.small)
+                } else if let repositoryID {
+                    Button("Try Again") {
+                        Task { await model.refreshSnapshots(repositoryID: repositoryID) }
+                    }
+                    .controlSize(.small)
+                    .disabled(model.loadingSnapshots.contains(repositoryID))
                 }
             }
         } else if outcome == .idle {
@@ -326,6 +335,10 @@ struct SnapshotListingCaveat: View {
 /// as its own static text in both.
 struct SnapshotCompletenessMark: View {
     let run: RunRecord?
+    /// A list of backups draws the triangle in `.secondary`: orange on every
+    /// incomplete row read as alarm down the whole list. The open backup's
+    /// strip keeps the orange.
+    var isMuted = false
 
     private static let outcome = RunRecord.Outcome.completedWithErrors
     private static let symbolName = outcome.symbolName!
@@ -335,7 +348,7 @@ struct SnapshotCompletenessMark: View {
         case .incomplete?:
             let label = Format.snapshotCompleteness(run) ?? ""
             Image(systemName: Self.symbolName)
-                .foregroundStyle(StatusPalette.status(Self.outcome))
+                .foregroundStyle(isMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(StatusPalette.status(Self.outcome)))
                 .help(label)
                 .accessibilityLabel(label)
         case .complete?:
@@ -538,16 +551,23 @@ enum FilePicker {
     /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
     /// own memory of the last folder.
     @MainActor
-    static func chooseDirectory(message: String, directoryURL: URL? = nil) -> URL? {
+    static func chooseDirectory(message: String, directoryURL: URL? = nil, prompt: String = "Choose") -> URL? {
+        let panel = directoryPanel(message: message, prompt: prompt)
+        if let directoryURL { panel.directoryURL = directoryURL }
+        return panel.runModal() == .OK ? panel.urls.first : nil
+    }
+
+    /// One folder, which the panel can also create.
+    @MainActor
+    static func directoryPanel(message: String, prompt: String) -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.message = message
-        panel.prompt = "Choose"
-        if let directoryURL { panel.directoryURL = directoryURL }
-        return panel.runModal() == .OK ? panel.urls.first : nil
+        panel.prompt = prompt
+        return panel
     }
 }
 
@@ -643,7 +663,7 @@ struct UnreadableItemLine: View {
         let plan = run.planID.flatMap { model.plan(id: $0) }
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             // By name, where and why; restic's whole line in the tooltip,
-            // Copy Details and the log. A line with no stored path stays
+            // the copied details and the log. A line with no stored path stays
             // restic's own.
             if let words = RunRecordPresentation.unreadableItemWords(line: line, path: path, sources: plan.map { [$0.path] } ?? []) {
                 VStack(alignment: .leading, spacing: 1) {

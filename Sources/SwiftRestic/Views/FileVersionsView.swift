@@ -2,15 +2,13 @@ import QuickLook
 import QuickLookUI
 import SwiftUI
 
-/// A file of the Files view, by version: each content it had through its
-/// chain's history, newest first — the backups that held it unchanged
+/// A file picked on a Backups tab, by version: each content it had through
+/// its chain's history, newest first — the backups that held it unchanged
 /// (`ContentVersion`, from the index) — with when it was modified and how
 /// big it was, from one `restic find` of its path in each version's newest
-/// backup. Pick one to preview it, restore it or open it in its backup;
-/// drag one to Finder.
+/// backup. Pick one to restore it, Space to look at it; drag one to Finder.
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     @Environment(FilesTree.self) private var filesTree
     let node: FileNode
     /// Newest first.
@@ -136,6 +134,8 @@ struct FileVersionsView: View {
                         .disabled(model.isRestoring)
                     Button("Restore To…") { restoreVersion(version, choosingDestination: true) }
                         .disabled(model.isRestoring)
+                    Button("Preview") { preview(version) }
+                        .disabled(previewBlock(for: version) != nil || previewer.isCopying)
                 }
             } primaryAction: { _ in
                 restoreChosen()
@@ -147,14 +147,18 @@ struct FileVersionsView: View {
                 restoreChosen()
                 return .handled
             }
+            .onKeyPress(.space, phases: .down) { press in
+                previewer.space(press, start: chosen.flatMap { version in
+                    previewBlock(for: version) == nil ? { preview(version) } : nil
+                })
+            }
             .help("Drag a version to Finder to restore it there")
         }
     }
 
-    /// The pane's foot: Show in Backups at the left beside the reads'
-    /// errors — a way to another view of the same moment, not an action on
-    /// the file — and at the right the chosen version's ways out, Preview
-    /// and Restore.
+    /// The pane's foot: the reads' errors at the left, and at the right the
+    /// chosen version's ways out. Preview is Space and the row's menu, as
+    /// Quick Look is in Finder.
     private var footer: some View {
         VStack(spacing: 10) {
             HStack {
@@ -168,29 +172,12 @@ struct FileVersionsView: View {
                         .font(.caption)
                         .help(failure.message)
                 }
-                Button("Show in Backups") {
-                    guard let backup = chosen?.snapshots.first,
-                          let page = model.page(ofBackup: backup.id, in: node.repositoryID)
-                    else { return }
-                    router.showBackup(
-                        backup.id,
-                        on: page,
-                        repositoryID: node.repositoryID,
-                        focusPath: ResticPath.parent(of: node.path)
-                    )
-                }
-                .disabled(chosen == nil)
-                .help("Open this version’s backup on the Backups tab, at this file’s folder")
                 Spacer()
                 if previewer.isCopying {
                     ProgressView()
                         .controlSize(.small)
                         .help("Copying the chosen version for the preview")
                 }
-                let blocked = chosen.flatMap { previewBlock(for: $0) }
-                Button("Preview") { preview() }
-                    .disabled(chosen == nil || blocked != nil || previewer.isCopying)
-                    .help(blocked ?? "Look at the chosen version with Quick Look before restoring it")
                 Button("Restore To…") { chosen.map { restoreVersion($0, choosingDestination: true) } }
                     .accessibilityIdentifier(AccessibilityID.FileVersions.restoreTo)
                     .disabled(chosen == nil || model.isRestoring)
@@ -276,10 +263,10 @@ struct FileVersionsView: View {
         return VersionPreview.unavailableReason(size: detail(of: version)?.size, isReading: isReadingDetails)
     }
 
-    /// Copies the chosen version out and hands it to Quick Look. The button
-    /// waits for the size, so the node is the find's.
-    private func preview() {
-        guard let chosen, let (backup, file) = restorable(chosen) else { return }
+    /// Copies the version out and hands it to Quick Look. Offered only once
+    /// the size is read (`previewBlock`), so the node is the find's.
+    private func preview(_ version: ContentVersion) {
+        guard let (backup, file) = restorable(version) else { return }
         previewer.start(model, repositoryID: node.repositoryID, snapshotID: backup.id) { file }
     }
 

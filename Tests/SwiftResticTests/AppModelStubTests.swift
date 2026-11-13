@@ -22,7 +22,6 @@ struct AppModelStubTests {
     private func makeHarness(
         mode: String,
         password: String? = "test-password",
-        planHooks: [BackupHook] = [],
         channels: [NotificationChannel] = [],
         // Never the real NetFS: a saved share's reconnect is refused.
         shareMounter: ShareMounter = ShareMounter { _, _ in .failed(EAUTH) },
@@ -58,7 +57,6 @@ struct AppModelStubTests {
         // Manual, so only the test decides when a backup happens and the
         // scheduler's 60 s tick cannot inject one mid-assertion.
         plan.schedule.frequency = .manual
-        plan.hooks = planHooks
 
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
@@ -72,7 +70,10 @@ struct AppModelStubTests {
         // password is expressed.
         var secrets: [UUID: (password: String, providerSecret: String?)] = [:]
         if let password { secrets[repository.id] = (password: password, providerSecret: nil) }
-        let model = AppModel(store: store, secrets: .inMemory(secrets), shareMounter: shareMounter, volumeProbe: volumeProbe, resticExecutable: stub.url)
+        let model = AppModel(
+            store: store, secrets: .inMemory(secrets), shareMounter: shareMounter, volumeProbe: volumeProbe, resticExecutable: stub.url,
+            repositoryEnvironment: [repository.id: repository.extraEnvironment]
+        )
         await model.bootstrap()
 
         return Harness(model: model, root: root, repository: repository, plan: plan, stub: stub)
@@ -1301,11 +1302,8 @@ struct AppModelStubTests {
 
         var capture = NotificationChannel()
         capture.url = "http://127.0.0.1:\(server.port)/hook"
-        var leaky = BackupHook()
-        leaky.event = .afterBackup
-        leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
 
-        let harness = try await makeHarness(mode: "tccblocked", planHooks: [leaky], channels: [capture])
+        let harness = try await makeHarness(mode: "tccblocked", channels: [capture])
         defer { try? FileManager.default.removeItem(at: harness.root) }
         // Injected: the real probe answers for whatever launched the tests.
         harness.model.fullDiskAccessProbe = { .notGranted }
@@ -1335,8 +1333,6 @@ struct AppModelStubTests {
         let body = try #require(bodies.first, "no webhook payload ever arrived")
         let object = try #require(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
         #expect((object["hint"] as? String)?.contains("Full Disk Access") == true, "payload was \(body)")
-        #expect(record.hookMessages.contains { $0.contains("hook-secret-token") }, "the afterAny hook never ran")
-        #expect(!body.contains("hook-secret-token"), "hook output reached the webhook: \(body)")
 
         await harness.model.shutdown()
     }
@@ -1884,26 +1880,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("an after-backup hook runs when the backup fails, and reads failed")
-    func afterBackupHookSeesFailure() async throws {
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftResticHookFailed-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let marker = base.resolvingSymlinksInPath().appendingPathComponent("outcome.txt")
-        var hook = BackupHook()
-        hook.event = .afterBackup
-        hook.command = #"printf '%s' "$SWIFTRESTIC_OUTCOME" > "\#(marker.path)""#
-
-        let harness = try await makeHarness(mode: "plainfail", planHooks: [hook])
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        harness.model.runBackup(planID: harness.plan.id)
-        await harness.model.waitForRun(planID: harness.plan.id)
-
-        #expect(harness.model.configuration.runs.first?.outcome == .failed)
-        #expect(try String(contentsOf: marker, encoding: .utf8) == "failed")
-        await harness.model.shutdown()
-    }
-
     @Test("a status queued behind the end of copying does not put the numbers back")
     func lateProgressAfterCopyingIsDropped() async throws {
         let harness = try await makeHarness(mode: "hang-backup")
@@ -2142,14 +2118,56 @@ struct AppModelStubTests {
 
         let outcome = harness.model.snapshotListingOutcome(for: harness.repository.id)
         #expect(outcome == .passwordRefused(repositoryName: "Stub Repo"))
-        #expect(outcome.failureMessage == "This password doesn’t open “Stub Repo”.")
-        #expect(outcome.failureFix(repositoryID: harness.repository.id) == .editRepository(harness.repository.id), "trying again can't help")
+        #expect(outcome.failureMessage == "The password doesn’t open “Stub Repo”.")
+        #expect(outcome.failureFix(repositoryID: harness.repository.id) == .enterPassword(harness.repository.id), "trying again can't help")
         #expect(harness.model.resolvedContexts[harness.repository.id] == nil, "the refused password stays cached instead of being read from the Keychain again")
 
         await harness.model.shutdown()
     }
 
-    @Test("the webhook gets restic's warnings and never a hook's output")
+    @Test("Enter Password… keeps a password only once restic opens the location with it")
+    func enterPasswordIsCheckedFirst() async throws {
+        let harness = try await makeHarness(mode: "wrongpassword")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let id = harness.repository.id
+
+        await #expect {
+            try await harness.model.enterPassword("still-wrong", forRepository: id)
+        } throws: { error in
+            error.localizedDescription == "The password doesn’t open “Stub Repo”."
+        }
+        #expect(try await harness.model.storedSecrets(for: id).password == "test-password", "a refused password replaced the stored one")
+
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "default"
+        try await harness.model.enterPassword("the-right-one", forRepository: id)
+        #expect(try await harness.model.storedSecrets(for: id).password == "the-right-one")
+
+        await harness.model.shutdown()
+    }
+
+    @Test("Enter Password… with a password that opens the location runs its failed scheduled backup again")
+    func enterPasswordRerunsFailedBackups() async throws {
+        let harness = try await makeHarness(mode: "wrongpassword")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let planID = harness.plan.id
+
+        model.runBackup(planID: planID)
+        await model.waitForRun(planID: planID)
+        #expect(model.configuration.runs.first?.outcome == .failed)
+
+        // Scheduled, and stamped by the run just now: only the fix can start it.
+        model.configuration.plans[0].schedule.frequency = .daily
+        model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "default"
+        try await model.enterPassword("the-right-one", forRepository: harness.repository.id)
+        #expect(model.isRunning(planID: planID), "the failed backup did not run again")
+        await model.waitForRun(planID: planID)
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
+
+        await model.shutdown()
+    }
+
+    @Test("the webhook gets restic's warnings")
     func broadcastWiring() async throws {
         // One-shot loopback HTTP server: whatever actually leaves the app
         // lands here, so the guarantee can be asserted against the wire.
@@ -2158,10 +2176,6 @@ struct AppModelStubTests {
         await server.start()
         let port = server.port
 
-        var leaky = BackupHook()
-        leaky.event = .afterBackup
-        leaky.command = "echo 'Authorization: Bearer hook-secret-token' >&2; exit 1"
-
         var good = NotificationChannel()
         good.url = "http://127.0.0.1:\(port)/hook"
         // A second channel nothing is listening on: its failure must surface
@@ -2169,7 +2183,7 @@ struct AppModelStubTests {
         var dead = NotificationChannel()
         dead.url = "http://127.0.0.1:1/hook"
 
-        let harness = try await makeHarness(mode: "warn", planHooks: [leaky], channels: [good, dead])
+        let harness = try await makeHarness(mode: "warn", channels: [good, dead])
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
         harness.model.runBackup(planID: harness.plan.id)
@@ -2183,16 +2197,6 @@ struct AppModelStubTests {
         }
         let body = try #require(bodies.first, "no webhook payload ever arrived")
 
-        // The precondition that makes the negative assertions below mean
-        // anything: the hook really ran, its output captured in-process.
-        // Without it, a regression that stopped running afterAny hooks makes
-        // the token vanish everywhere and the assertions pass vacuously.
-        let record = try #require(harness.model.configuration.runs.first)
-        #expect(
-            record.hookMessages.contains { $0.contains("hook-secret-token") },
-            "the afterAny hook never ran: \(record.hookMessages)"
-        )
-
         let object = try #require(
             JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
             "payload was not the webhook's JSON object: \(body)"
@@ -2204,11 +2208,6 @@ struct AppModelStubTests {
             warnings.contains { $0.contains("/etc/secret-target") },
             "restic's own warning did not reach the channel: \(warnings)"
         )
-        // The security half of the guarantee: the hook's stderr — including the
-        // fake credential it printed — must not leave the machine.
-        #expect(!body.contains("hook-secret-token"), "hook output reached the webhook: \(body)")
-        #expect(!body.contains("leaky"), "the hook's name reached the webhook: \(body)")
-
         // The unreachable channel must be reported, not dropped on the floor.
         #expect(
             harness.model.banners.contains { $0.title.contains("Couldn’t send") } == true,
@@ -2336,7 +2335,8 @@ struct AppModelStubTests {
         let relaunched = AppModel(
             store: ConfigStore(directory: harness.root.appendingPathComponent("config")),
             secrets: .inMemory([harness.repository.id: (password: "test-password", providerSecret: nil)]),
-            resticExecutable: harness.stub.url
+            resticExecutable: harness.stub.url,
+            repositoryEnvironment: [harness.repository.id: harness.repository.extraEnvironment]
         )
         await relaunched.bootstrap()
         #expect(relaunched.snapshots(for: harness.repository.id).count == 3)

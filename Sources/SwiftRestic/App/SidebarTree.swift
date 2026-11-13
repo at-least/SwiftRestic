@@ -183,19 +183,6 @@ struct BackupShelves: Equatable {
         return .otherGroup(repositoryID: repositoryID, id: record.otherGroupID)
     }
 
-    /// The page whose Files tab holds `record`'s items by version — Show
-    /// Versions' destination: the plan of this repository that made it.
-    /// Nil under Other backups, whose pages have no Files tab.
-    ///
-    /// Not `owner(of:)`: the index files a backup under its chain
-    /// (`SnapshotIndex.chainKey`), its first plan tag in restic's order, and
-    /// a backup carrying two plans' tags is in that plan's Files tab alone,
-    /// whatever order the plans are in.
-    func versionsPage(of record: Snapshot) -> SidebarItem? {
-        let chain = SnapshotIndex.chainKey(for: record)
-        return plans.first { ResticService.planTag($0.id) == chain }.map { .plan($0.id) }
-    }
-
     /// The one configured plan a group under Other backups belongs to: it
     /// backs up to another repository now, which is why its backups here are
     /// not under it. Nil for a group no configuration sets up (a deleted

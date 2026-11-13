@@ -178,12 +178,11 @@ extension AppModel {
             snapshotID: record.snapshotID,
             // A skipped run's reason is its detail, not a failure.
             errorMessage: record.failureMessage ?? (record.outcome == .skipped ? record.detailText : nil),
-            // restic's own warnings only. `hookMessages` deliberately does not
-            // leave the machine. The excerpts are for the message body; the
-            // count is what the summary announces.
-            warnings: Array(record.itemErrors.prefix(5)),
+            // restic's own warnings only. The excerpts are for the message
+            // body; the count is what the summary announces.
+            warnings: Array((record.unreadableItems + record.trailingItemErrorsOnScreen).prefix(5)),
             warningCount: record.itemErrorCount > 0 ? record.itemErrorCount : nil,
-            // Diagnosed from restic's item errors too, never the hooks.
+            // Diagnosed from restic's item errors too.
             hint: ItemErrorDiagnosis.headline(for: record),
             filesNew: record.filesNew,
             bytesProcessed: record.bytesProcessed,
@@ -294,7 +293,7 @@ extension AppModel {
 
     /// The local notification's text. A warning counts restic's unreadable
     /// items and names the fix when the app knows one; a warning with none —
-    /// a skipped retention step, a failing hook, an unnamed exit 3 — says
+    /// a skipped retention step, an unnamed exit 3 — says
     /// what Activity's Detail column says, never "0 unreadable items", and
     /// never counts the retention line as one.
     static func notificationBody(for record: RunRecord) -> String {

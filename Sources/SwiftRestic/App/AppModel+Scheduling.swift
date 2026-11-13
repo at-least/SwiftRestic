@@ -80,7 +80,7 @@ extension AppModel {
 
     /// The repositories whose upkeep waits for its drive (`markDriveAway`)
     /// while the drive is still away; one whose drive is back — mounted by
-    /// the user, a backup's hook or reconnect, a read — leaves the set, and
+    /// the user, a backup's reconnect, a read — leaves the set, and
     /// its task, unstamped and so still due, starts on this tick.
     private func maintenanceStillAwaitingDrive() async -> Set<UUID> {
         var back: Set<UUID> = []
@@ -156,16 +156,48 @@ extension AppModel {
         }
     }
 
-    func runSkippedPlansAfterMount() async {
-        guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
-        var newest: [UUID: RunRecord.Outcome] = [:]
+    /// Each plan's newest backup record.
+    private var newestBackupRuns: [UUID: RunRecord] {
+        var newest: [UUID: RunRecord] = [:]
         // Newest first.
         for run in configuration.runs where run.kind == .backup {
-            if let planID = run.planID, newest[planID] == nil { newest[planID] = run.outcome }
+            if let planID = run.planID, newest[planID] == nil { newest[planID] = run }
         }
+        return newest
+    }
+
+    /// A fix that worked — a password saved, the location found, a share's
+    /// password saved — runs again the backups it was for
+    /// (`Scheduler.rerunAfterFix`), one at a time, as the mount's catch-up
+    /// does, and not under a hold.
+    func rerunFailedBackups(in repositoryID: UUID) {
+        guard !isShuttingDown, isResticAvailable, scheduleHold(repositoryID: repositoryID) == nil else { return }
+        let planIDs = Scheduler.rerunAfterFix(
+            plans: plans(in: repositoryID),
+            newestBackupOutcome: newestBackupRuns.mapValues(\.outcome),
+            running: runningPlanIDs
+        )
+        runBackups(planIDs: planIDs, askedByUser: false)
+    }
+
+    /// A cleanup that succeeded on a location a backup found full is that
+    /// backup's fix. Any other cleanup reruns nothing: a scheduled one would
+    /// otherwise retry every failure on its location.
+    func rerunBackupsAfterCleanup(in repositoryID: UUID) {
+        let cleanup = configuration.runs.first { $0.kind == .prune && $0.repositoryID == repositoryID }
+        guard cleanup?.outcome == .succeeded else { return }
+        let newest = newestBackupRuns
+        let wasFull = plans(in: repositoryID).contains {
+            newest[$0.id]?.outcome == .failed && newest[$0.id]?.repositoryFull == true
+        }
+        if wasFull { rerunFailedBackups(in: repositoryID) }
+    }
+
+    func runSkippedPlansAfterMount() async {
+        guard !isShuttingDown, scheduleHold == nil, isResticAvailable else { return }
         let planIDs = await Scheduler.catchUpAfterMount(
             plans: configuration.plans.filter { scheduleHold(repositoryID: $0.repositoryID) == nil },
-            newestBackupOutcome: newest,
+            newestBackupOutcome: newestBackupRuns.mapValues(\.outcome),
             running: runningPlanIDs,
             // Off the main actor, as every presence read: a stalled share
             // holds a stat for seconds.

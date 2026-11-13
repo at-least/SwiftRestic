@@ -59,9 +59,10 @@ enum ResticError: Error, LocalizedError, Equatable {
             let base: String?
             switch code {
             case Self.wrongPasswordCode:
-                // The fix, not restic's diagnosis, which leaves Retry as the
-                // only next step: Retry can never succeed here.
-                base = "The password doesn’t open this backup location. Check it in Edit Backup Location."
+                // Not restic's diagnosis, which leaves Retry as the only next
+                // step: Retry can never succeed here. A run names the
+                // location (`words(for:location:)`).
+                base = "The password doesn’t open this backup location."
             case Self.repositoryMissingCode, Self.repositoryLockedCode:
                 // Exit 10's are the Add Backup Location button's own words, so
                 // the banner and the notification say what the drawer's button
@@ -76,12 +77,11 @@ enum ResticError: Error, LocalizedError, Equatable {
             }
             if let base { return base }
             if let advice = Self.sshHostKeyAdvice(message) { return advice }
-            if let words = Self.rcloneWords(message) { return words }
             let known = Self.exitCodeWords(code)
             if message.isEmpty { return "\(known ?? "It stopped unexpectedly"). Show Log has the details." }
             let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
             // Exit 1 is restic's every fatal error: the reason alone, as a
-            // sentence. Copy Details keeps restic's line (`resticDetail`).
+            // sentence. The copied details keep restic's line (`resticDetail`).
             if code == 1 { return reason.prefix(1).uppercased() + reason.dropFirst() }
             return known.map { "\($0) — \(reason)" } ?? reason
         case .cancelled:
@@ -125,7 +125,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     private static let fatalWord = "Fatal: "
 
     /// restic's own first sentence behind a failure whose `errorDescription`
-    /// says the fix instead: kept on the run for Copy Details
+    /// says the fix instead: kept on the run for the copied details
     /// (`RunRecord.resticDetail`). The log has the whole of it.
     var resticDetail: String? {
         guard case let .commandFailed(_, message) = self else { return nil }
@@ -148,29 +148,27 @@ enum ResticError: Error, LocalizedError, Equatable {
         return "SSH refused this server’s key. Show Log has what SSH said."
     }
 
-    static func rcloneWords(_ message: String) -> String? {
-        if message.contains(#"exec: "rclone": executable file not found"#) { return rcloneMissing }
-        // restic's line says only "error talking HTTP to rclone"; rclone's
-        // own verdict (`ResticRunResult.rcloneComplaint`) is the news.
-        if let complaint = message.split(separator: "\n").last(where: { $0.hasPrefix("rclone: ") }) {
-            return "\(Format.withoutFinalPeriod(String(complaint)))."
+    /// A failure said about one location — what a run's record shows: a
+    /// refused password names the location, and a disk's missing backups
+    /// ask after the disk, Locate beside them (`RunFix.locate`).
+    static func words(for error: any Error, location: (name: String, kind: Repository.Kind)?) -> String {
+        if let location, case let .commandFailed(code, _)? = error as? ResticError {
+            if code == wrongPasswordCode { return wrongPassword(location: location.name) }
+            if code == repositoryMissingCode, location.kind == .local { return diskBackupsMissing }
         }
-        // restic waits a minute (its rclone.timeout) for rclone to answer,
-        // and a remote that never answers gives rclone nothing to say yet.
-        if message.contains("error talking HTTP to rclone"), message.contains("context deadline exceeded") {
-            return "rclone did not answer within a minute — its remote may be unreachable."
-        }
-        return nil
+        return error.localizedDescription
     }
 
-    /// What a missing rclone is called everywhere: the repository editor's
-    /// check before restic runs, and a run's failure after. With rclone
-    /// inside the app, a missing one is a damaged install — nothing on the
-    /// Mac stands in.
-    static let rcloneMissing = ResticError.damagedInstall.localizedDescription
+    static func wrongPassword(location: String) -> String {
+        "The password doesn’t open “\(location)”."
+    }
 
-    /// Exit 10's cause and fix, for every kind of location; a disk's also
-    /// gets Locate beside it (`RunFix.locate`).
+    /// Exit 10 on a disk: the listing's words too
+    /// (`AppModel.missingRepositoryReason`).
+    static let diskBackupsMissing = "Backups not found. Is the disk connected? If it moved, locate it."
+
+    /// Exit 10's cause and fix on a server or in the cloud, and wherever
+    /// the location is not known.
     private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
     /// A failure's words on screen, for the codes whose console line names
@@ -216,7 +214,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// own `cancelled` — rather than a failure. The reading the run records
     /// and the index backfill share (the backfill adds only its own task's
     /// cancellation). Call sites that stop on one of the two by name — a
-    /// hook, a refresh, the diff view — still catch it themselves.
+    /// refresh, the diff view — still catch it themselves.
     static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? ResticError) == .cancelled
     }

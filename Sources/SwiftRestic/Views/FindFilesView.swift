@@ -248,7 +248,7 @@ struct FindFilesView: View {
         }
         .focusOnClick($resultsAreFocused)
         // An explicit right-click route to the restore the footer button
-        // offers. Double-click shows a file's versions, which moves no data:
+        // offers. Double-click shows the item in its backup, which moves no data:
         // an accidental double-tap must not start moving bytes.
         .contextMenu(forSelectionType: AllBackupsSearch.Row.ID.self) { ids in
             // The rows clicked are passed directly: a right-click on an
@@ -259,21 +259,12 @@ struct FindFilesView: View {
                     .disabled(model.isRestoring)
                 Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
                     .disabled(model.isRestoring)
-                if let open = showVersions(of: row) {
-                    Button("Show Versions", action: open)
-                }
                 if let open = showInBackups(row) {
                     Button("Show in Backups", action: open)
                 }
                 if !row.isDirectory {
-                    // The index carries no size, which the preview's size
-                    // gate reads: restic lists the file first.
-                    Button("Preview") {
-                        previewer.start(model, repositoryID: row.repositoryID, snapshotID: row.snapshotID) { [model] in
-                            try await model.listedNode(repositoryID: row.repositoryID, snapshotID: row.snapshotID, path: row.path)
-                        }
-                    }
-                    .disabled(!model.isResticAvailable || previewer.isCopying)
+                    Button("Preview") { preview(row) }
+                        .disabled(!model.isResticAvailable || previewer.isCopying)
                 }
             } else if picked.count > 1, Self.oneRepository(picked) {
                 Button("Restore") { restoreSelection(picked) }
@@ -283,9 +274,14 @@ struct FindFilesView: View {
             }
         } primaryAction: { ids in
             guard ids.count == 1, let row = rows.first(where: { ids.contains($0.id) }),
-                  let open = showVersions(of: row)
+                  let open = showInBackups(row)
             else { return }
             open()
+        }
+        .onKeyPress(.space, phases: .down) { press in
+            let picked = selectedRows
+            let file = picked.count == 1 && !picked[0].isDirectory && model.isResticAvailable ? picked.first : nil
+            return previewer.space(press, start: file.map { row in { preview(row) } })
         }
         // The table hands Return to its double-click action too: spent here
         // first, Return stays the footer's Restore.
@@ -350,25 +346,20 @@ struct FindFilesView: View {
         Set(rows.map(\.repositoryID)).count <= 1
     }
 
-    /// Show Versions for a file's row — onto the Files tab of the plan that
-    /// holds its history — or nil for a folder, for a backup no longer listed,
-    /// or one no plan made (a group under Other backups has no Files tab).
-    private func showVersions(of row: AllBackupsSearch.Row) -> (() -> Void)? {
-        guard !row.isDirectory,
-              let record = model.snapshots(for: row.repositoryID).first(where: { $0.id == row.snapshotID }),
-              let page = model.shelves(for: row.repositoryID).versionsPage(of: record)
-        else { return nil }
+    /// The row's backup on its page's Backups view, the item selected — a
+    /// file's versions beside it; nil for a backup no longer listed.
+    private func showInBackups(_ row: AllBackupsSearch.Row) -> (() -> Void)? {
+        guard let page = model.page(ofBackup: row.snapshotID, in: row.repositoryID) else { return nil }
         return {
-            router.showVersions(
-                path: row.path, isDirectory: false, in: record, repositoryID: row.repositoryID, page: page
-            )
+            router.showBackup(row.snapshotID, on: page, repositoryID: row.repositoryID, focusPath: row.path)
         }
     }
 
-    private func showInBackups(_ row: AllBackupsSearch.Row) -> (() -> Void)? {
-        guard row.isDirectory, let page = model.page(ofBackup: row.snapshotID, in: row.repositoryID) else { return nil }
-        return {
-            router.showBackup(row.snapshotID, on: page, repositoryID: row.repositoryID, focusPath: row.path)
+    /// The index carries no size, which the preview's size gate reads:
+    /// restic lists the file first.
+    private func preview(_ row: AllBackupsSearch.Row) {
+        previewer.start(model, repositoryID: row.repositoryID, snapshotID: row.snapshotID) { [model] in
+            try await model.listedNode(repositoryID: row.repositoryID, snapshotID: row.snapshotID, path: row.path)
         }
     }
 

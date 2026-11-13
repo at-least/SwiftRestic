@@ -145,4 +145,26 @@ struct RestoreDestinationTests {
         #expect(RestoreOverwritePolicy.keepExisting.resticValue == "never")
         #expect(RestoreOverwritePolicy.replaceExisting.resticValue == "always")
     }
+
+    @Test("Restore To… of this Mac's backup opens the folder panel; another Mac's backup opens the sheet either way")
+    func route() {
+        #expect(RestoreDestinationRules.route(choosingDestination: true, madeOnThisMac: true) == .folderPanel)
+        #expect(RestoreDestinationRules.route(choosingDestination: false, madeOnThisMac: true) == .originalLocation)
+        #expect(RestoreDestinationRules.route(choosingDestination: true, madeOnThisMac: false) == .sheet)
+        #expect(RestoreDestinationRules.route(choosingDestination: false, madeOnThisMac: false) == .sheet)
+    }
+
+    @Test("names collide only for several items into one folder")
+    func collidingNamesIntoFolders() {
+        let documents = URL(fileURLWithPath: "/Users/x/Documents", isDirectory: true)
+        let desktop = URL(fileURLWithPath: "/Users/x/Desktop", isDirectory: true)
+        let twins = RestoreSubject.items([
+            RestoreItem(name: "Notes.txt", path: "/Users/x/Documents/Notes.txt", isDirectory: false),
+            RestoreItem(name: "Notes.txt", path: "/Users/x/Desktop/Notes.txt", isDirectory: false),
+        ])
+        #expect(RestoreDestinationRules.collidingNames(twins, into: [desktop, desktop]) == ["Notes.txt"])
+        #expect(RestoreDestinationRules.collidingNames(twins, into: [documents, desktop]).isEmpty)
+        let single = RestoreSubject.item(name: "Notes.txt", path: "/Users/x/Documents/Notes.txt", isDirectory: false)
+        #expect(RestoreDestinationRules.collidingNames(single, into: [desktop]).isEmpty)
+    }
 }

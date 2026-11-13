@@ -9,14 +9,13 @@ struct PlanActivity: Sendable, Equatable {
         case starting
         case backingUp
         case applyingRetention
-        case runningHooks
         case notifying
         case cancelling
 
         /// restic's copy has ended: its numbers no longer move.
         var isPastCopying: Bool {
             switch self {
-            case .applyingRetention, .runningHooks, .notifying: true
+            case .applyingRetention, .notifying: true
             case .starting, .backingUp, .cancelling: false
             }
         }
@@ -26,7 +25,6 @@ struct PlanActivity: Sendable, Equatable {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
             case .applyingRetention: "Removing old backups…"
-            case .runningHooks: "Running scripts…"
             case .notifying: "Sending notifications…"
             case .cancelling: "Stopping…"
             }
@@ -127,7 +125,7 @@ enum SidebarItem: Hashable {
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     /// Search All Backups: a page with no row — the toolbar's search field
     /// is its way in, and a row would be a second one — reached by Edit ▸ Find
-    /// (⌘F) off a page with no Files tab, a repository's page's search field,
+    /// (⌘F) off a page other than a plan's, a repository's page's search field,
     /// and a plan's search's All Backups. Not a sheet: its restores would
     /// stack a second sheet on it.
     case findFiles
@@ -136,8 +134,8 @@ enum SidebarItem: Hashable {
 
 extension SidebarItem {
     /// The views the page's toolbar switches between: a plan's Overview |
-    /// Backups | Files, and none for every other page. A group under Other
-    /// backups is one view, its backups.
+    /// Backups, and none for every other page. A group under Other backups
+    /// is one view, its backups.
     var pageTabs: [PageTab] {
         switch self {
         case .plan: PageTab.allCases
@@ -153,7 +151,7 @@ extension SidebarItem {
     }
 }
 
-/// One item of a Files tab's tree: a path in one chain's history — a
+/// One item of a chain's history on a Backups tab: a path in it — a
 /// plan's tag, or an untagged lineage's key (`SnapshotIndex.chainKey`) — in
 /// one repository, as a folder or a file. Identity is byte-exact
 /// (`PathKey`), as every index read's is: two names that differ only in
@@ -198,8 +196,8 @@ enum SnapshotListingOutcome: Equatable {
     /// previous listing succeeded) stay visible next to it. `fix` is the one
     /// action that helps; without one, trying again is all there is.
     case failed(String, fix: RunFix? = nil)
-    /// restic exit 12: the saved password does not open the location. Its
-    /// editor opens on the password field (`AppModel.passwordRefused`).
+    /// restic exit 12: the saved password does not open the location. Enter
+    /// Password… asks for it (`PasswordPromptSheet`).
     case passwordRefused(repositoryName: String)
     /// A disk location whose volume is not mounted: a normal state, not a
     /// failed read, said without the warning glyph and without "Can’t read
@@ -221,13 +219,13 @@ enum SnapshotListingOutcome: Equatable {
     func failureFix(repositoryID: UUID) -> RunFix? {
         switch self {
         case let .failed(_, fix): fix
-        case .passwordRefused: .editRepository(repositoryID)
+        case .passwordRefused: .enterPassword(repositoryID)
         case .idle, .loaded, .notConnected: nil
         }
     }
 
     static func passwordRefusedText(repositoryName: String) -> String {
-        "This password doesn’t open “\(repositoryName)”."
+        ResticError.wrongPassword(location: repositoryName)
     }
 
     static func connectText(volume: String) -> String {

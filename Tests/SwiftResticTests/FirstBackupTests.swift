@@ -233,6 +233,38 @@ struct FirstBackupTests {
         #expect(plan.announcesFirstBackup)
     }
 
+    @Test("the folder panel's location is the last answer unless it breaks a rule or the folder needs Full Disk Access")
+    func backUpWithoutSheet() throws {
+        let (model, root) = try makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.resticState = .damaged
+        var disk = Repository()
+        disk.localPath = root.appendingPathComponent("repo").path
+        model.configuration.repositories = [disk]
+        model.fullDiskAccess = .notGranted
+        let source = root.appendingPathComponent("Projects").path
+
+        #expect(model.backUpWithoutSheet(source: source, destination: nil) == nil)
+        #expect(model.backUpWithoutSheet(source: source, destination: .folder("/Volumes/Disk/SwiftRestic Backups")) == nil)
+        // Backups inside the folder being backed up: the sheet says why.
+        #expect(model.backUpWithoutSheet(source: root.path, destination: .location(disk.id)) == nil)
+        // The sheet carries the Full Disk Access notice.
+        let documents = NSHomeDirectory() + "/Documents"
+        #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) == nil)
+        #expect(model.configuration.plans.isEmpty)
+
+        let planID = try #require(model.backUpWithoutSheet(source: source, destination: .location(disk.id)))
+        let plan = try #require(model.plan(id: planID))
+        #expect(plan.path == source)
+        #expect(plan.repositoryID == disk.id)
+        #expect(plan.announcesFirstBackup)
+        // A second plan for the same folder breaks a rule.
+        #expect(model.backUpWithoutSheet(source: source, destination: .location(disk.id)) == nil)
+
+        model.fullDiskAccess = .granted
+        #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) != nil)
+    }
+
     @Test("the first success is announced once, whatever the setting; another plan's is not")
     func firstSuccessAnnouncedOnce() async {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
@@ -537,16 +569,5 @@ struct RepositoryBackUpNowTests {
             rows: [row], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil, now: .now
         )
         #expect(summary?.attentionLines == [UpToDateLine(planID: plan.id, text: "Music: No backups yet")])
-    }
-}
-
-@Suite("Show Deleted Items' count")
-@MainActor
-struct ShowDeletedTitleTests {
-    @Test("the checkbox says how many are behind it")
-    func title() {
-        #expect(FilesTree.showDeletedTitle(hidden: 0) == "Show Deleted Items")
-        #expect(FilesTree.showDeletedTitle(hidden: 1) == "Show 1 Deleted Item")
-        #expect(FilesTree.showDeletedTitle(hidden: 3) == "Show 3 Deleted Items")
     }
 }

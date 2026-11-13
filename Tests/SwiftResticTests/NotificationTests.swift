@@ -164,16 +164,16 @@ struct NotificationTests {
         #expect(channel(.webhook, url: "").displayName == "Address")
     }
 
-    @Test("an older build's channels: a switched-off one doesn't start sending")
+    @Test("stored channels read back as written")
     func storedChannels() throws {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data("""
         {"notificationChannels": [
-          {"kind": "slack", "url": "https://hooks.slack.com/a", "name": "Team", "isEnabled": true, "notifyOnSuccess": false, "notifyOnFailure": false},
-          {"kind": "webhook", "url": "https://example.com/off", "isEnabled": false},
-          {"kind": "webhook", "url": "https://example.com/old"}
+          {"id": "7A1B0C2D-0000-4000-8000-000000000001", "url": "https://hooks.slack.com/a"},
+          {"id": "7A1B0C2D-0000-4000-8000-000000000002", "url": "https://example.com/hook"}
         ]}
         """.utf8))
-        #expect(settings.notificationChannels.map(\.url) == ["https://hooks.slack.com/a", "https://example.com/old"])
+        #expect(settings.notificationChannels.map(\.url) == ["https://hooks.slack.com/a", "https://example.com/hook"])
+        #expect(settings.notificationChannels.map(\.kind) == [.slack, .webhook])
     }
 
     @Test("the summary line names the plan and what happened")
@@ -193,7 +193,7 @@ struct NotificationTests {
         // A check or prune reports the repository in planName as well; the
         // rule's same-name guard leaves it said once.
         let check = NotificationEvent(stage: .failed, planName: "NAS", repositoryName: "NAS", kind: .check, errorMessage: "locked")
-        #expect(check.summary == "Check failed: NAS — locked", "summary was \(check.summary)")
+        #expect(check.summary == "Verification failed: NAS — locked", "summary was \(check.summary)")
         #expect(!check.summary.contains("NAS (NAS)"))
         let bare = NotificationEvent(stage: .failed, planName: "", repositoryName: "NAS", kind: .prune, errorMessage: "locked")
         #expect(bare.summary == "Cleanup failed: NAS — locked", "summary was \(bare.summary)")
@@ -214,7 +214,7 @@ struct NotificationTests {
         )
         #expect(
             NotificationEvent(stage: .cancelled, planName: "Documents", repositoryName: "NAS", kind: .backup).summary
-                == "Backup cancelled: Documents (NAS)"
+                == "Backup stopped: Documents (NAS)"
         )
     }
 
@@ -225,7 +225,7 @@ struct NotificationTests {
         check.outcome = .succeeded
         check.finishedAt = check.startedAt.addingTimeInterval(4)
         let checkSummary = AppModel.notificationEvent(for: check, repositoryName: "NAS").summary
-        #expect(checkSummary == "Check succeeded: NAS in \(Format.duration(4))", "summary was \(checkSummary)")
+        #expect(checkSummary == "Verification succeeded: NAS in \(Format.duration(4))", "summary was \(checkSummary)")
         var backup = RunRecord(kind: .backup, planName: "Docs")
         backup.outcome = .succeeded
         backup.dataAdded = 0
@@ -367,13 +367,8 @@ struct NotificationSafetyTests {
 
     @Test("the webhook payload carries only what the event holds")
     func webhookCarriesOnlyTheEvent() throws {
-        // Payload-level half of the hook-privacy guarantee: whatever the event
-        // does not hold cannot reach the wire. The other half — that AppModel
-        // builds run events from `itemErrors` alone, never `hookMessages` — is
-        // pinned end to end by AppModelStubTests' broadcast test.
         var record = RunRecord(kind: .backup, planName: "Docs")
         record.itemErrors = ["/etc/secrets: permission denied"]
-        record.hookMessages = ["Hook “upload” exited 1 — Authorization: Bearer sk-live-abcdef"]
 
         let event = NotificationEvent(
             stage: .warned,
@@ -388,23 +383,6 @@ struct NotificationSafetyTests {
         let request = try #require(NotificationPayload.request(for: webhook, event: event))
         let body = try #require(request.bodyString)
         #expect(body.contains("permission denied"))
-        #expect(!body.contains("Bearer"))
-        #expect(!body.contains("upload"))
-    }
-
-    @Test("a failing hook's summary keeps only its first line")
-    func hookSummaryIsTruncated() {
-        // Later lines are where a verbose HTTP client prints headers, and this
-        // string is written to config.json.
-        let outcome = HookRunner.Outcome(
-            hookName: "upload",
-            exitCode: 4,
-            output: "connecting…\nAuthorization: Bearer sk-live-abcdef\ndone",
-            timedOut: false
-        )
-        #expect(outcome.summary.contains("failed (exit code 4)"))
-        #expect(outcome.summary.contains("connecting"))
-        #expect(!outcome.summary.contains("Bearer"))
     }
 }
 
@@ -503,12 +481,24 @@ struct WarningCountTests {
         // A retention-only record: its one stored line is the retention skip,
         // so the outcome carries no number — the line itself follows.
         var retention = event
-        retention.warnings = [RunRecord.retentionSkippedPrefix + "locked"]
+        retention.warnings = [RunRecord.retentionSkippedOnScreenPrefix + "locked"]
         retention.warningCount = nil
         #expect(
-            retention.summary == "Backup completed with warnings: Documents (NAS) — Retention skipped: locked",
+            retention.summary == "Backup completed with warnings: Documents (NAS) — Old backups not removed: locked",
             "summary was: \(retention.summary)"
         )
+    }
+
+    @MainActor
+    @Test("a channel's warnings say the stored retention line in the app's words, after the unreadable items")
+    func warningsUseOnScreenWording() {
+        var record = RunRecord(kind: .backup, planName: "Documents")
+        record.outcome = .completedWithErrors
+        record.itemErrors = ["/a: open /a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
+        record.itemErrorCount = 1
+        let event = AppModel.notificationEvent(for: record, repositoryName: "NAS")
+        #expect(event.warnings == ["/a: open /a: permission denied", "Old backups not removed: locked"])
+        #expect(event.summary.split(separator: "\n").first == "Backup completed with 1 warning: Documents (NAS) — /a: open /a: permission denied", "the hint follows on its own line")
     }
 }
 
@@ -597,13 +587,8 @@ struct RepeatedProblemNotificationTests {
         }
         #expect(!refused("Photos 2024").isSameProblem(as: refused("Photos 2023")))
         #expect(refused("NAS").isSameProblem(as: refused("NAS")))
-        // A warning's other lines and hook complaints with their numbers
-        // aside; its unreadable items exactly — two files are two problems.
-        var timedOut = warned(60)
-        timedOut.hookMessages = ["After-success hook exited with status 28: curl: (28) Operation timed out after 1010 milliseconds with 0 bytes received"]
-        var timedOutBefore = warned(0)
-        timedOutBefore.hookMessages = ["After-success hook exited with status 28: curl: (28) Operation timed out after 1007 milliseconds with 0 bytes received"]
-        #expect(timedOut.isSameProblem(as: timedOutBefore))
+        // A warning's other lines with their numbers aside; its unreadable
+        // items exactly — two files are two problems.
         var gap = warned(60)
         gap.itemErrors.append("3 restic messages could not be decoded — a restic update may have changed its output; the run’s numbers may be incomplete.")
         var gapBefore = warned(0)
@@ -642,12 +627,10 @@ struct RepeatedProblemNotificationTests {
             == [2, nil, nil, 1, 1])
         // A failure merged into a standing one counts the runs it stands for,
         // on top of an earlier failure for the same cause it did not merge
-        // into (a hook's complaint on that one stops the merge).
+        // into.
         var merged = failed(600)
         merged.skipCount = 3
-        var complained = failed(300)
-        complained.hookMessages = ["After-failure hook exited with status 1"]
-        #expect(counts([merged, complained, failed(200)]) == [5, 2, 1])
+        #expect(counts([merged, failed(300), failed(200)]) == [5, 2, 1])
         // A stored stretch stands — the backups it counted may be trimmed
         // since — and the next one continues it.
         var kept = warned(300)

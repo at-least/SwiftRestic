@@ -1,6 +1,6 @@
 import Foundation
 
-/// What a file's version row in a Files pane says of how it follows the
+/// What a file's version row in the Backups tab says of how it follows the
 /// version below it: how its size moved — the magnitude of the change, the
 /// one thing a list of versions cannot show by itself — or, where nothing
 /// proves the two differ, that they may be the same content.

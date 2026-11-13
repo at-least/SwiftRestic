@@ -4,9 +4,9 @@ import SwiftUI
 /// (`pageTabPicker`) and its search field at the trailing side
 /// (`pageSearch`, `allBackupsSearch`) — the pieces PlanDetailView,
 /// RepositoryDetailView and OtherGroupView share, none of them
-/// FilesBrowserView's own.
+/// BackupsBrowserView's own.
 extension View {
-    /// A plan's page's Overview | Backups | Files in the middle of the window
+    /// A plan's page's Overview | Backups in the middle of the window
     /// toolbar:
     /// Apple's guidance for switching a main window's view (the HIG's
     /// center area holds the common controls), clear of the trailing
@@ -15,13 +15,13 @@ extension View {
         toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: selection) {
-                    // The View menu's words too (⌘1–⌘3).
+                    // The View menu’s words too (⌘1–⌘2).
                     ForEach(tabs, id: \.self) { tab in
                         Text(tab.menuTitle).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
-                // Each segment as wide as the three's were.
+                // Each segment 80 pt wide.
                 .frame(width: 80 * CGFloat(tabs.count))
             }
         }
@@ -32,16 +32,16 @@ extension View {
     /// A plan's page's search, in the window toolbar's trailing field — the
     /// HIG's place for it ("Put a search field at the trailing side of the
     /// toolbar for many common uses"): the plan's files across every backup.
-    /// Typed on another tab, the page turns to Files, where the hits list. ⌘F
+    /// Typed on Overview, the page turns to Backups, where the hits list. ⌘F
     /// focuses it (`AppRouter.searchFocus`).
     func pageSearch(page: SidebarItem, roots: FileNode?, prompt: String) -> some View {
         modifier(PageSearch(page: page, roots: roots, prompt: prompt))
     }
 
-    /// The toolbar's field on a page with no Files tab: its first keystroke
+    /// The toolbar's field on a page other than a plan's: its first keystroke
     /// turns the page to Search All Backups, the query in that page's field
     /// in the same place, answered as it is typed — as a plan's page turns
-    /// to its Files tab.
+    /// to its Backups tab.
     func allBackupsSearch() -> some View {
         modifier(AllBackupsSearchField())
     }
@@ -90,8 +90,8 @@ private struct PageSearch: ViewModifier {
             set: { newValue in
                 guard let roots else { return }
                 router.filesSearchText[roots] = newValue
-                if !newValue.isEmpty, router.tab(of: page) != .files {
-                    router.setTab(.files, of: page)
+                if !newValue.isEmpty, router.tab(of: page) != .backups {
+                    router.setTab(.backups, of: page)
                 }
             }
         )

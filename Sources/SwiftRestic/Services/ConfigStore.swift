@@ -7,8 +7,6 @@ struct AppSettings: Codable, Sendable, Hashable {
     var schedulePause: SchedulePause?
     var notificationChannels: [NotificationChannel] = []
     var networkShares: [NetworkShare] = []
-    /// The console's last commands, newest first. Persisted so a command
-    /// that worked survives closing the sheet.
 
     init() {}
 
@@ -22,7 +20,7 @@ struct AppSettings: Codable, Sendable, Hashable {
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
-        notificationChannels = c.value(.notificationChannels, default: [StoredChannel]()).compactMap(\.channel)
+        notificationChannels = c.value(.notificationChannels, default: [NotificationChannel]())
         networkShares = c.value(.networkShares, default: networkShares)
     }
 }
@@ -39,11 +37,7 @@ struct AppConfiguration: Codable, Sendable {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
         repositories = c.value(.repositories, default: repositories)
-        // The one line that cannot take its property as the fallback: the
-        // file stores `StoredPlan`s, whose decode unfolds older builds'
-        // `sources` into one plan per folder — read as the property's
-        // `[BackupPlan]`, that split would be lost.
-        plans = c.value(.plans, default: [StoredPlan]()).flatMap(\.plans)
+        plans = c.value(.plans, default: plans)
         // Records written before stretches were stored get theirs here, so
         // every backup problem in memory has one.
         runs = RunRecord.fillingProblemStretches(c.value(.runs, default: runs))
@@ -52,61 +46,6 @@ struct AppConfiguration: Codable, Sendable {
 
     func repository(id: UUID?) -> Repository? {
         repositories.withID(id)
-    }
-}
-
-/// A plan as a configuration holds it. Older builds saved a
-/// list of folders per plan (`sources`); a plan is one path now, so a list
-/// becomes one plan per folder, in its order, each folder once. The first
-/// keeps the plan's id — the tag its backups carry, so its history stays
-/// its own — and its stamps. The others are new plans with its settings and
-/// its slot (`lastRunAt`), so they wait for it instead of all starting at
-/// launch; no backup carries their ids yet, so they have no last backup.
-/// The plans are saved one path each with the next save. A plan saved with
-/// older builds' single developer switch on (`excludeDeveloperFiles`) gets
-/// both switches on, so its backups leave out what they did; its list sheds
-/// the rules they now pass.
-private struct StoredPlan: Decodable {
-    var plan: BackupPlan
-    var sources: [String] = []
-    var legacySkipsDeveloperFiles = false
-
-    private enum LegacyKeys: String, CodingKey {
-        case sources
-        case excludeDeveloperFiles
-    }
-
-    init(from decoder: any Decoder) throws {
-        plan = try BackupPlan(from: decoder)
-        let c = try decoder.container(keyedBy: LegacyKeys.self)
-        sources = BackupPlan.withoutDuplicates(c.value(.sources, default: []))
-        legacySkipsDeveloperFiles = c.value(.excludeDeveloperFiles, default: false)
-    }
-
-    var plans: [BackupPlan] {
-        split.map { plan in
-            var plan = plan
-            if legacySkipsDeveloperFiles {
-                plan.skipsDeveloperFiles = true
-                plan.skipsMachines = true
-                plan.excludePatterns = plan.withoutSwitchRules(plan.excludePatterns)
-            }
-            return plan
-        }
-    }
-
-    private var split: [BackupPlan] {
-        guard plan.path.isEmpty, let first = sources.first else { return [plan] }
-        var original = plan
-        original.path = first
-        return [original] + sources.dropFirst().map { source in
-            var copy = plan
-            copy.id = UUID()
-            copy.path = source
-            copy.lastSuccessAt = nil
-            copy.staleAlertedFor = nil
-            return copy
-        }
     }
 }
 

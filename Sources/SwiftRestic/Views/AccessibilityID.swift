@@ -15,6 +15,10 @@ enum AccessibilityID {
         static let backUp = "firstBackup.backUp"
     }
 
+    enum BackUpAFolderPanel {
+        static let destination = "backUpAFolderPanel.destination"
+    }
+
     enum Plan {
         static let total = "plan.total"
         static let backUpNow = "plan.backUpNow"
@@ -36,6 +40,12 @@ enum AccessibilityID {
         static let restoreTo = "filesPane.restoreTo"
     }
 
+    enum RestorePane {
+        static let tree = "restorePane.tree"
+        static let restore = "restorePane.restore"
+        static let restoreTo = "restorePane.restoreTo"
+    }
+
     enum FilesSearch {
         static let results = "filesSearch.results"
     }
@@ -52,6 +62,12 @@ enum AccessibilityID {
         static let confirmPassword = "repositoryEditor.confirmPassword"
         static let requirement = "repositoryEditor.requirement"
         static let save = "repositoryEditor.save"
+    }
+
+    enum PasswordPrompt {
+        static let password = "passwordPrompt.password"
+        static let failure = "passwordPrompt.failure"
+        static let open = "passwordPrompt.open"
     }
 
     enum Repository {
