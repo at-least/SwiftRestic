@@ -168,7 +168,7 @@ struct ResticErrorTests {
         #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is stored for “NAS”.")
     }
 
-    @Test("a launch failure, an unreadable answer and an unrestored item say what to do next, without naming restic")
+    @Test("a launch failure, an unreadable answer and an unrestored item each say what happened, without naming restic")
     func appFailuresInTheReadersWords() {
         #expect(ResticError.processLaunchFailed("The file “restic” doesn’t exist").errorDescription
             == "SwiftRestic couldn’t start the backup: The file “restic” doesn’t exist. If this keeps happening, install SwiftRestic again.")
