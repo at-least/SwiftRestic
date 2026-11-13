@@ -113,7 +113,7 @@ run_xcodebuild() {
     if [ "$action" != build ]; then
         test_arguments=(-parallel-testing-enabled YES -resultBundlePath "$bundle")
     fi
-    xcodebuild "${xcodebuild_arguments[@]}" "$action" "${test_arguments[@]}" "$@" 2>&1 \
+    xcodebuild "${xcodebuild_arguments[@]}" "$action" ${test_arguments[@]+"${test_arguments[@]}"} "$@" 2>&1 \
       | tee "$log" \
       | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed" \
       || result=${PIPESTATUS[0]}
