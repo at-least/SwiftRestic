@@ -188,17 +188,6 @@ enum Format {
         return newer > older ? "+\(magnitude)" : "−\(magnitude)"
     }
 
-    /// The day an item a chain's newest backup no longer holds was last
-    /// backed up, short for a search hit's tag — "until Oct 2", the year
-    /// said only when it is not this one.
-    static func until(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        let style = style(calendar)
-        let day = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-            ? date.formatted(style.month(.abbreviated).day())
-            : date.formatted(style.year().month(.abbreviated).day())
-        return "until \(day)"
-    }
-
     /// A next-run moment, spelled short for the plan page's Next backup
     /// value — truncating `timestamp`'s full form loses its AM/PM, the one
     /// part that says morning or evening. Near days lead with the day name,

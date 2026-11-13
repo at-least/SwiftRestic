@@ -84,10 +84,6 @@ struct BackupRunEngineTests {
             log.append("mark:\(stamp)")
         }
 
-        func addStartPing(_ event: NotificationEvent) {
-            log.append("ping:\(event.stage)")
-        }
-
         var refreshCancelled: [Bool] = []
         func refreshSnapshots(repositoryID: UUID) async {
             log.append("refresh")
@@ -103,7 +99,7 @@ struct BackupRunEngineTests {
             log.append("away:\(away):\(reason)")
         }
 
-        func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+        func deliver(record: RunRecord, transcript: RunTranscript.Contents) async {
             log.append("deliver:\(record.outcome)")
             deliveredRecords.append(record)
             deliveredTranscripts.append(transcript)
@@ -114,11 +110,10 @@ struct BackupRunEngineTests {
         }
     }
 
-    private func makePlan(retentionEnabled: Bool = true) -> BackupPlan {
+    private func makePlan() -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = Repository().id
         plan.path = "/tmp/engine-source"
-        if !retentionEnabled { plan.retention.isEnabled = false }
         return plan
     }
 
@@ -130,20 +125,18 @@ struct BackupRunEngineTests {
         return BackupOutcome(summary: summary, itemErrors: [], exitCode: 0)
     }
 
-    @Test("a clean run pings, backs up, applies retention, refreshes, delivers")
+    @Test("a clean run backs up, applies retention, refreshes, delivers")
     func cleanRunSequencing() async throws {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(.success(successOutcome()))
         let plan = makePlan()
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
-        // The ping must precede the backup (a monitor's timer starts at the
-        // ping), the success stamp must land before anything later can fail
-        // the run, retention must follow a produced snapshot, and the
-        // closing refresh must follow retention (lock ordering).
+        // The success stamp must land before anything later can fail the
+        // run, retention must follow a produced snapshot, and the closing
+        // refresh must follow retention (lock ordering).
         #expect(sink.log == [
             "context",
-            "ping:started",
             "phase:backingUp",
             "reporter-built",
             "mark:whole",
@@ -232,7 +225,7 @@ struct BackupRunEngineTests {
         #expect(!here.log.contains { $0.hasPrefix("reconnect") }, "log was \(here.log)")
     }
 
-    @Test("a backup that fills its repository's disk fails in plain words, marked for Clean Up Now")
+    @Test("a backup that fills its repository's disk fails in plain words, marked for Free Up Space")
     func repositoryDiskFull() async throws {
         let sink = RecordingSink()
         var repository = Repository()
@@ -256,21 +249,6 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
 
         #expect(!sink.log.contains { $0.hasPrefix("phase:applyingRetention") })
-        #expect(sink.deliveredRecords[0].outcome == .succeeded)
-    }
-
-    @Test("a retention policy with no rules never reaches restic, though the run succeeds")
-    func unsafeRetentionIsNeverRun() async throws {
-        let sink = RecordingSink()
-        let client = MockResticClient().onBackup(.success(successOutcome()))
-        var plan = makePlan()
-        plan.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 0, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
-        )
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
-
-        #expect(!client.callLog.contains("forget"))
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
     }
 
@@ -306,7 +284,7 @@ struct BackupRunEngineTests {
         // repository, its own lock live: the line says so, never the stale-
         // lock advice a failed run's exit 11 carries, which would send the
         // user to remove a lock nothing left behind.
-        #expect(record.itemErrors == ["Retention skipped: another backup or job was using the location. Old backups are removed after the next backup."])
+        #expect(record.itemErrors == ["Retention skipped: the location was busy. They’re removed after the next backup."])
         // The snapshot was written; the run itself stays marked successful.
         #expect(sink.log.contains("mark:whole"))
     }
@@ -327,13 +305,12 @@ struct BackupRunEngineTests {
         #expect(record.detailText == "“127.0.0.1” cannot be reached (connection refused).")
         #expect(client.callLog.isEmpty)
         // Stamped, as a drive away is, so an hourly plan does not retry
-        // every minute; the listing learns why at once; no start ping.
+        // every minute; the listing learns why at once.
         #expect(sink.log.contains("mark:nothing"))
         #expect(sink.log.contains("away:server:“127.0.0.1” cannot be reached (connection refused)."))
-        #expect(!sink.log.contains { $0.hasPrefix("ping:") })
     }
 
-    @Test("a Stop while the server is asked ends the run there: no start ping, restic never asked, recorded as stopped")
+    @Test("a Stop while the server is asked ends the run there: restic never asked, recorded as stopped")
     func stopDuringProbeEndsTheRun() async throws {
         let sink = RecordingSink()
         sink.duringProbe = { withUnsafeCurrentTask { $0?.cancel() } }
@@ -351,7 +328,6 @@ struct BackupRunEngineTests {
         #expect(record.outcome == .cancelled, "outcome was \(record.outcome)")
         #expect(record.failureMessage == "cancelled in test")
         #expect(client.callLog.isEmpty, "restic was asked: \(client.callLog)")
-        #expect(!sink.log.contains("ping:started"), "log was \(sink.log)")
         #expect(!sink.log.contains("phase:backingUp"), "log was \(sink.log)")
     }
 
@@ -386,10 +362,8 @@ struct BackupRunEngineTests {
         let record = sink.deliveredRecords[0]
         #expect(record.outcome == .completedWithErrors)
         #expect(record.itemErrors == [
-            "Retention skipped: The location refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
-                + "Turn off removing old backups, or allow deletions on this storage.",
+            "Retention skipped: This storage doesn’t allow deleting (403 Forbidden), so 1 old backup stays. Allow deletions on the storage.",
         ])
-        #expect(record.retentionRefused == 1)
         #expect(sink.log.contains("mark:whole"))
     }
 
@@ -476,7 +450,7 @@ struct BackupRunEngineTests {
         await BackupRunEngine.perform(plan: makePlan(), repository: Repository(), sink: sink.serving(client))
 
         let summary = PlanStatus.summary(of: try #require(sink.deliveredRecords.first))
-        #expect(summary.headline == "Backup completed with warnings")
+        #expect(summary.headline == "Some files skipped")
         // The card lists the item itself, with its fixes; no message repeats
         // it, and with every item listed the facts drop the count too.
         #expect(summary.items == ["/etc/x: permission denied"])
@@ -898,10 +872,10 @@ struct MaintenanceRunEngineTests {
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
-        // The Result column shows the count; the repair steps and restic's
+        // The Result column shows the count; the way to Repair… and restic's
         // advice stay in the drawer.
         #expect(sink.deliveredRecords[0].detailText
-            == "1 error found. Some damage can be repaired in the restic Console: repair index, then repair snapshots. A cleanup is suggested.")
+            == "1 error found. Click Repair… to fix them. Freeing space is suggested.")
         #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0]) == "1 error found")
     }
 
@@ -993,7 +967,7 @@ struct MaintenanceRunEngineTests {
             let record = try #require(sink.deliveredRecords.first)
             #expect(record.outcome == .succeeded)
             #expect(record.detailText == nil, "a cleanup's Detail says “\(record.detailText ?? "")” for restic's “\(output)”")
-            #expect(RunRecordPresentation.detail(for: record) == record.outcome.displayName)
+            #expect(RunRecordPresentation.detail(for: record) == record.outcomeName)
         }
     }
 

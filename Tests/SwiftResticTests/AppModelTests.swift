@@ -305,7 +305,7 @@ struct AppModelTests {
         #expect(model.configuration.runs.allSatisfy { $0.kind != .restore })
         let banner = try #require(model.banners.first { $0.title == "Couldn’t restore “gone.txt”" })
         #expect(banner.isError)
-        #expect(banner.message == "“gone.txt” is no longer listed in the chosen backup — refresh and try again.")
+        #expect(banner.message == "“gone.txt” isn’t in this backup any more. Select the backup again, then restore.")
 
         await model.shutdown()
     }
@@ -593,8 +593,8 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("Choose New Location makes a plan for the folder where it is now, with the old plan's settings, and removes the old plan")
-    func chooseNewLocationReplacesThePlan() async throws {
+    @Test("Locate Folder makes a plan for the folder where it is now, with the old plan's settings, and removes the old plan")
+    func locateFolderReplacesThePlan() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
@@ -648,7 +648,7 @@ struct AppModelTests {
         }
         func expectNoRerun(_ runs: [RunRecord], _ why: Comment) {
             model.configuration.runs = runs
-            model.rerunBackupsAfterCleanup(in: harness.repository.id)
+            model.rerunBackupsAfterFreeingSpace(in: harness.repository.id)
             #expect(!model.isRunning(planID: plan.id), why)
         }
 
@@ -663,7 +663,7 @@ struct AppModelTests {
             [record(.prune, .succeeded), record(.backup, .succeeded), record(.backup, .failed, full: true)],
             "a backup that succeeded since the full location ran again"
         )
-        model.pauseBackups(for: .untilResumed)
+        model.pauseBackups(for: .untilTomorrow)
         expectNoRerun([record(.prune, .succeeded), record(.backup, .failed, full: true)], "a paused backup ran again")
         model.resumeBackups()
 
@@ -678,7 +678,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a backup whose folder is gone from this Mac fails with Choose New Location as the fix, and its repeats are one record")
+    @Test("a backup whose folder is gone from this Mac fails with Locate Folder as the fix, and its repeats are one record")
     func everySourceGoneFromThisMacFails() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -694,8 +694,8 @@ struct AppModelTests {
         #expect(record.outcome == .failed)
         #expect(record.missingSources == [gone])
         #expect(record.failureMessage
-            == "“gone” is not on this Mac — it was moved, renamed or deleted. Put it back, or use Choose New Location… to back it up where it is now.")
-        #expect(model.fix(for: record) == .chooseNewLocation(planID: harness.plan.id))
+            == "“gone” is not on this Mac — it was moved, renamed or deleted. Put it back, or click Locate Folder… to back it up where it is now.")
+        #expect(model.fix(for: record) == .locateFolder(planID: harness.plan.id))
         #expect(model.currentProblem(for: harness.plan.id) != nil)
         let plan = try #require(model.plan(id: harness.plan.id))
         #expect(plan.lastRunAt != nil, "the slot is stamped, so the plan does not re-fire every tick")
@@ -787,7 +787,7 @@ struct AppModelTests {
         // A mount of its drive re-reads it while backups are paused; another
         // drive's leaves it alone. (The drive is still away here, so the
         // re-read answers the same words — what shows it ran.)
-        model.pauseBackups(for: .untilResumed)
+        model.pauseBackups(for: .untilTomorrow)
         model.snapshotListingOutcomes[id] = .loaded
         model.refreshRepositories(onVolume: "/Volumes/Some Other Drive")
         await model.tasks.drain()
@@ -861,7 +861,7 @@ struct AppModelTests {
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let first = try #require(model.configuration.runs.first)
-        #expect(try await model.loadRunLog(first) != nil)
+        #expect(try model.runLogs.read(first.id) != nil)
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
 
@@ -871,9 +871,9 @@ struct AppModelTests {
         #expect(standing.id != first.id)
         #expect(standing.skipCount == 2)
         #expect(standing.skippedSince == first.startedAt)
-        #expect(try await model.loadRunLog(standing) != nil)
+        #expect(try model.runLogs.read(standing.id) != nil)
         await model.tasks.drain()
-        #expect(try await model.loadRunLog(first) == nil, "the replaced run's log leaves with it")
+        #expect(try model.runLogs.read(first.id) == nil, "the replaced run's log leaves with it")
 
         await model.shutdown()
     }
@@ -893,16 +893,14 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("the Skip switches pass restic their rules and markers while on, beside the plan's own patterns, and nothing while off")
-    func skipSwitchesReachRestic() async throws {
+    @Test("every plan passes restic the always-applied rules and markers beside its own patterns, and no simulator or virtual machine rule")
+    func appliedExcludesReachRestic() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
 
         model.configuration.plans[index].excludePatterns = ["*.iso"]
-        model.configuration.plans[index].skipsDeveloperFiles = true
-        model.configuration.plans[index].skipsMachines = false
         model.runBackup(planID: harness.plan.id)
         await model.waitForRun(planID: harness.plan.id)
         let with = try #require(model.configuration.runs.first)
@@ -923,23 +921,6 @@ struct AppModelTests {
         // No marker for a virtualenv: an in-place one's sits beside the
         // user's code.
         #expect(on.contains("pyvenv.cfg") == false)
-
-        model.configuration.plans[index].skipsDeveloperFiles = false
-        model.configuration.plans[index].skipsMachines = true
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-        let without = try #require(model.configuration.runs.first)
-        #expect(without.id != with.id)
-        let off = try #require(try model.runLogs.read(without.id))
-        // The argument, never the bare pattern: a run's log holds restic's
-        // every word, and the run's retention step echoes the snapshots'
-        // recorded excludes — the switch-on run's, minutes old, among
-        // them.
-        #expect(off.contains("--exclude *.iso"))
-        #expect(off.contains("--exclude .DS_Store"))
-        #expect(off.contains("--exclude-if-present") == false)
-        #expect(off.contains("--exclude **/__pycache__") == false)
-        #expect(off.contains("--exclude \(NSHomeDirectory())/.android/avd"))
 
         await model.shutdown()
     }
@@ -1343,11 +1324,9 @@ struct UpsertStampTests {
         model.configuration.plans[0].lastRunAt = ranAt
         model.configuration.plans[0].lastSuccessAt = ranAt
 
-        // The plan page changes How often and the switch while the editor is
-        // open; the editor's draft, taken before all that, is saved with its
-        // own edit.
+        // The plan page changes How often while the editor is open; the
+        // editor's draft, taken before that, is saved with its own edit.
         model.configuration.plans[0].schedule.frequency = .weekly
-        model.configuration.plans[0].retention.isEnabled = false
         var staleDraft = plan
         staleDraft.excludePatterns = ["/tmp/cache"]
         model.upsert(plan: staleDraft)
@@ -1355,7 +1334,6 @@ struct UpsertStampTests {
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
         #expect(model.configuration.plans[0].schedule.frequency == .weekly, "the editor's save reverted How often from the plan page")
-        #expect(model.configuration.plans[0].retention.isEnabled == false, "the editor's save reverted Remove old backups automatically from the plan page")
         #expect(model.configuration.plans[0].excludePatterns == ["/tmp/cache"])
     }
 
@@ -1417,8 +1395,9 @@ struct PausingTests {
         let model = makeModel("SwiftResticPausing").model
 
         #expect(model.scheduleHold == nil)
-        model.pauseBackups(for: .untilResumed)
-        #expect(model.scheduleHold == .paused(until: nil))
+        let now = Date.now
+        model.pauseBackups(for: .oneHour, now: now)
+        #expect(model.scheduleHold == .paused(until: now.addingTimeInterval(3600)))
         model.resumeBackups()
         #expect(model.scheduleHold == nil)
         #expect(model.configuration.settings.schedulePause == nil)
@@ -1427,14 +1406,10 @@ struct PausingTests {
         model.configuration.settings.schedulePause = SchedulePause(until: later.addingTimeInterval(-60))
         model.expireLapsedPauses(now: later)
         #expect(model.configuration.settings.schedulePause == nil)
-        // An open-ended pause never lapses.
-        model.configuration.settings.schedulePause = SchedulePause(until: nil)
-        model.expireLapsedPauses(now: later)
-        #expect(model.configuration.settings.schedulePause == SchedulePause(until: nil))
     }
 
     @Test("a metered network holds only what would use it, and a pause still holds everything")
-    func meteredNetworkHoldsNetworkRepositoriesOnly() {
+    func meteredNetworkHoldsNetworkRepositoriesOnly() throws {
         let model = makeModel("SwiftResticMetered").model
         var disk = Repository()
         disk.kind = .local
@@ -1466,9 +1441,10 @@ struct PausingTests {
         model.configuration.plans = [onDisk, toCloud]
         #expect(model.overallScheduleHold == .onMeteredNetwork)
 
-        model.pauseBackups(for: .untilResumed)
-        #expect(model.scheduleHold(repositoryID: disk.id) == .paused(until: nil))
-        #expect(model.overallScheduleHold == .paused(until: nil))
+        model.pauseBackups(for: .untilTomorrow)
+        let end = try #require(model.configuration.settings.schedulePause?.until)
+        #expect(model.scheduleHold(repositoryID: disk.id) == .paused(until: end))
+        #expect(model.overallScheduleHold == .paused(until: end))
     }
 
 }
@@ -1548,19 +1524,6 @@ struct StartAtLoginSurfaceTests {
             "\(ScheduleHold.paused(until: end).summary(now: now)). Documents (NAS) is next due \(Format.relative(end))."
         ))
         #expect(!timed.contains(" ago"))
-
-        // An open-ended hold sets no date. A slot still ahead keeps its
-        // date, which the scheduler keeps only if the hold lifts by then —
-        // so the hold is named, as the tray's line names it …
-        model.pauseBackups(for: .untilResumed, now: now)
-        model.configuration.plans[0].lastRunAt = now
-        let next = try #require(model.configuration.plans[0].schedule.nextRunDate(after: now, now: now))
-        let paused = try #require(model.quitScheduleNotice(now: now))
-        #expect(paused.hasPrefix("Backups paused until you resume. Documents (NAS) is next due \(Format.relative(next))."))
-        // … and a due run waits, never "due now".
-        model.configuration.plans[0].lastRunAt = nil
-        let pausedDue = try #require(model.quitScheduleNotice(now: now))
-        #expect(pausedDue.hasPrefix("Backups paused until you resume. Documents (NAS) is waiting to run."))
 
         // Only a hold in force at `now` counts.
         model.resumeBackups()
@@ -1911,16 +1874,14 @@ struct ConfigurationSaveTests {
 
         let saves = (1 ... 3).map { index in
             Task { @MainActor in
-                var channel = NotificationChannel()
-                channel.url = "https://save\(index).invalid"
-                model.configuration.settings.notificationChannels = [channel]
+                model.configuration.settings.schedulePause = SchedulePause(until: Date(timeIntervalSince1970: Double(index)))
                 await model.flushSave()
             }
         }
         for save in saves { await save.value }
 
         let saved = try await ConfigStore(directory: root).load().configuration
-        #expect(saved.settings.notificationChannels.map(\.url) == ["https://save3.invalid"])
+        #expect(saved.settings.schedulePause == SchedulePause(until: Date(timeIntervalSince1970: 3)))
     }
 
     @Test("a configuration write that fails is announced, and does not latch the unreadable state")
@@ -1956,7 +1917,7 @@ extension ConfigurationSaveTests {
             .appendingPathComponent("SwiftResticSaveDuringLoad-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         var stored = AppConfiguration()
-        stored.settings.notifyOnSuccess = true
+        stored.settings.schedulePause = SchedulePause(until: .now.addingTimeInterval(3600))
         stored.runs = (0 ..< 200_000).map { RunRecord(kind: .backup, planName: "Plan \($0)") }
         try await ConfigStore(directory: root).save(stored)
 
@@ -1964,15 +1925,13 @@ extension ConfigurationSaveTests {
         let boot = Task { await model.bootstrap() }
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.configuration.runs.isEmpty, "the load finished before the edit; the test proves nothing")
-        model.configuration.settings.notifyOnSuccess = false
+        model.configuration.settings.schedulePause = nil
         await model.flushSave()
         // Read at once: bootstrap's own saves, if any, are debounced.
-        struct Settings: Decodable {
-            struct Values: Decodable { let notifyOnSuccess: Bool }
-            let settings: Values
-        }
         let live = try Data(contentsOf: root.appendingPathComponent("config.json"))
-        #expect(try JSONDecoder().decode(Settings.self, from: live).settings.notifyOnSuccess)
+        let object = try #require(JSONSerialization.jsonObject(with: live) as? [String: Any])
+        let settings = try #require(object["settings"] as? [String: Any])
+        #expect(settings["schedulePause"] != nil, "the edit made during the load was saved over it")
         await boot.value
     }
 }
@@ -2349,7 +2308,7 @@ struct UnreadableConfigurationTests {
             return (names, try names.map { try Data(contentsOf: configDirectory.appendingPathComponent($0)) })
         }
         let before = try snapshot()
-        model.configuration.settings.notifyOnSuccess.toggle()
+        model.configuration.settings.schedulePause = SchedulePause(until: .now.addingTimeInterval(3600))
         await model.flushSave()
         let after = try snapshot()
         #expect(after.names == before.names, "a save changed the configuration files")

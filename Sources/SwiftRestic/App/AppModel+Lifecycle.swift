@@ -29,8 +29,7 @@ extension AppModel {
         }
         for task in MaintenanceTask.allCases {
             let running = maintenance.values.filter { $0.task == task }.count
-            if running == 1 { reasons.append("\(task.runningClause).") }
-            if running > 1 { reasons.append("\(running) \(task.displayName.lowercased())s are running.") }
+            if running > 0 { reasons.append("\(task.runningClause(count: running)).") }
         }
         if isRestoring { reasons.append("A restore is running.") }
         if console.isRunning { reasons.append("A console command is running.") }

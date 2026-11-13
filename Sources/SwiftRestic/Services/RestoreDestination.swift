@@ -100,7 +100,8 @@ enum RestoreDestinationRules {
     /// and no file-system normalisation — `standardizingPath` answers
     /// `/tmp` for an existing `/private/tmp` and would fail an honest path.
     /// Its last component must survive the landing rule unchanged, or the
-    /// item would land beside itself. The parent must exist and be writable.
+    /// item would land beside itself. The parent must be writable, or be
+    /// missing under a writable folder the restore makes it in.
     static func originalLocation(
         for subject: RestoreSubject,
         directoryExists: (String) -> Bool,
@@ -147,11 +148,23 @@ enum RestoreDestinationRules {
         let last = components[components.count - 1]
         guard ResticService.sanitizedRestoreName(name) == last else { return badPath }
         let parent = components.count == 2 ? "/" : components.dropLast().joined(separator: "/")
-        guard directoryExists(parent) else {
-            return .unavailable(reason: "“\(parent)” isn’t on this Mac.")
-        }
-        guard isWritable(parent) else {
-            return .unavailable(reason: "SwiftRestic can’t write to “\(parent)”.")
+        if directoryExists(parent) {
+            guard isWritable(parent) else {
+                return .unavailable(reason: "SwiftRestic can’t write to “\(parent)”.")
+            }
+        } else {
+            // Time Machine's way: the folders gone since the backup are made
+            // again (the restore creates its directory), under the nearest
+            // one still here. Never under / or /Volumes: there the missing
+            // folder is another Mac's or a volume not mounted.
+            let ancestors = components.indices.dropFirst(2).dropLast().reversed()
+                .map { components[..<$0].joined(separator: "/") }
+            guard let nearest = ancestors.first(where: directoryExists), nearest != "/Volumes" else {
+                return .unavailable(reason: "“\(parent)” isn’t on this Mac.")
+            }
+            guard isWritable(nearest) else {
+                return .unavailable(reason: "SwiftRestic can’t write to “\(nearest)”.")
+            }
         }
         let directory = URL(fileURLWithPath: parent, isDirectory: true)
         return .available(directories: [directory], landings: [ResticService.restoredItemURL(named: name, in: directory)])

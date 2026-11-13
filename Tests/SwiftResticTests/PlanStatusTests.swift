@@ -88,18 +88,12 @@ struct PlanStatusTests {
         let unheld = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
         #expect(unheld.value == "Due now")
 
-        let paused = PlanStatus.nextBackupTile(
-            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), now: now
-        )
-        #expect(paused.value == "Waiting")
-        #expect(paused.help == "This plan is due and runs once backups resume", "help was \(String(describing: paused.help))")
-
         let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
         #expect(metered.value == "Waiting")
         #expect(metered.help == "This plan is due and runs once this Mac is on another network")
     }
 
-    @Test("under an open-ended hold a plan not yet due reads Waiting: no date it would really run at")
+    @Test("under an open-ended hold (a metered network) a plan not yet due reads Waiting: no date it would really run at")
     func heldFuturePlanWaits() {
         var plan = completeDailyPlan()
         plan.lastRunAt = now
@@ -108,12 +102,6 @@ struct PlanStatusTests {
             for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: now.addingTimeInterval(3_600)), now: now
         )
         #expect(timed.value != "Waiting")
-
-        let paused = PlanStatus.nextBackupTile(
-            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), now: now
-        )
-        #expect(paused.value == "Waiting")
-        #expect(paused.help == "This plan runs once backups resume")
 
         let metered = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, now: now)
         #expect(metered.value == "Waiting")
@@ -133,7 +121,7 @@ struct PlanStatusTests {
         #expect(running.value == "Running now")
         // A Back Up Now while backups are held runs too, and stamps the slot.
         let held = PlanStatus.nextBackupTile(
-            for: plan, existingRepositoryIDs: [repositoryID], hold: .paused(until: nil), isBackingUp: true, now: now
+            for: plan, existingRepositoryIDs: [repositoryID], hold: .onMeteredNetwork, isBackingUp: true, now: now
         )
         #expect(held.value == "Running now")
 
@@ -235,15 +223,15 @@ struct PlanStatusTests {
         #expect(running?.text == "Backing up…")
     }
 
-    @Test("a completed-with-errors caption has a short spelling for a narrow column; other outcomes none")
+    @Test("a backup that skipped files has a short caption for a narrow column; other outcomes none")
     func captionShortForm() throws {
         let plan = completeDailyPlan()
         let withErrors = try #require(PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: run(.completedWithErrors),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         ))
-        #expect(withErrors.text.hasPrefix("Completed with warnings — "))
-        #expect(withErrors.shortText == "Warnings — " + withErrors.text.dropFirst("Completed with warnings — ".count))
+        #expect(withErrors.text.hasPrefix("Some files skipped — "))
+        #expect(withErrors.shortText == "Files skipped — " + withErrors.text.dropFirst("Some files skipped — ".count))
         let failed = PlanStatus.sidebarCaption(
             for: plan, activity: nil, problem: run(.failed),
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
@@ -353,7 +341,7 @@ struct PlanStatusTests {
         partial.itemErrorCount = 120
 
         let summary = PlanStatus.summary(of: partial)
-        #expect(summary.headline == "Backup completed with warnings")
+        #expect(summary.headline == "Some files skipped")
         // The card lists the first five items with their fixes and leaves
         // the rest — restic's count less the listed — to Activity; the
         // message explains what the items do not (here the retention line).

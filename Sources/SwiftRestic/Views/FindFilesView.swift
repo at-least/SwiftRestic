@@ -3,7 +3,8 @@ import UniformTypeIdentifiers
 
 /// Search All Backups: every repository's index, as the query is typed in the
 /// toolbar field — the "I deleted something months ago and don't know which
-/// backup has it" case. A page, not a sheet: its restores would stack a second
+/// backup has it" case. The app's one search: ⌘F and every page's search
+/// field land here. A page, not a sheet: its restores would stack a second
 /// sheet on it.
 ///
 /// The index is the one engine: instant, no network, works with the disk
@@ -28,6 +29,9 @@ struct FindFilesView: View {
     /// Return would go nowhere instead of reaching Restore.
     @FocusState private var resultsAreFocused: Bool
     @State private var destinationRequest: RestoreDestinationRequest?
+    /// The Plan column (`planNames(of:)`), worked out as an answer lands or
+    /// the shelves change, not on every render; nil with one plan.
+    @State private var rowPlanNames: [AllBackupsSearch.Row.ID: String]?
 
     private var query: String {
         router.findQuery.trimmingCharacters(in: .whitespaces)
@@ -50,10 +54,6 @@ struct FindFilesView: View {
     var body: some View {
         @Bindable var router = router
         VStack(spacing: 0) {
-            if let origin = router.findOrigin, model.filesSearchRoots(for: origin.page) == origin.roots {
-                scopeBar
-                Divider()
-            }
             if let search, !search.failures.isEmpty || !search.stillReading.isEmpty {
                 standing(search)
                 Divider()
@@ -76,9 +76,9 @@ struct FindFilesView: View {
         .searchFocused($searchIsFocused)
         .previewSession(previewer)
         .restoreFlow($destinationRequest)
-        .onChange(of: router.searchFocus, initial: true) { _, page in
-            guard page == .findFiles else { return }
-            router.searchFocus = nil
+        .onChange(of: router.focusesFindField, initial: true) { _, asked in
+            guard asked else { return }
+            router.focusesFindField = false
             searchIsFocused = true
         }
         // As it is typed, a keystroke's pause first so a word typed is one
@@ -101,6 +101,12 @@ struct FindFilesView: View {
             }
             await searchUntilSettled()
         }
+        .onChange(of: model.backupShelves) { refreshPlanNames() }
+        .onChange(of: model.configuration.plans.count) { refreshPlanNames() }
+    }
+
+    private func refreshPlanNames() {
+        rowPlanNames = model.configuration.plans.count > 1 ? planNames(of: rows) : nil
     }
 
     private func searchUntilSettled() async {
@@ -109,6 +115,7 @@ struct FindFilesView: View {
             let found = await model.searchAllBackups(pattern: asked)
             guard !Task.isCancelled else { return }
             answer = (asked, found)
+            refreshPlanNames()
             selection.formIntersection(found.rows.map(\.id))
             guard !found.stillReading.isEmpty else { return }
             do {
@@ -117,15 +124,6 @@ struct FindFilesView: View {
                 return
             }
         }
-    }
-
-    /// Back to the plan the search came from, its query kept.
-    private var scopeBar: some View {
-        HStack(spacing: 12) {
-            SearchScopePicker(scope: .allBackups) { router.returnToPlanSearch() }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
     }
 
     /// What this answer could not cover, by repository. A broken index is its
@@ -205,7 +203,8 @@ struct FindFilesView: View {
     }
 
     private func table(_ rows: [AllBackupsSearch.Row]) -> some View {
-        Table(rows, selection: $selection) {
+        let plans = rowPlanNames
+        return Table(rows, selection: $selection) {
             TableColumn("File") { row in
                 HStack(spacing: 6) {
                     FileKindIcon(type: .backedUp(name: row.name, isDirectory: row.isDirectory))
@@ -220,6 +219,16 @@ struct FindFilesView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
+            }
+
+            // With one plan, every row is that plan's.
+            if let plans {
+                TableColumn("Plan") { row in
+                    Text(plans[row.id] ?? "—")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .width(min: 80, ideal: 120)
             }
 
             if model.configuration.repositories.count > 1 {
@@ -246,6 +255,7 @@ struct FindFilesView: View {
             }
             .width(min: 60, ideal: 70)
         }
+        .accessibilityIdentifier(AccessibilityID.FindFiles.results)
         .focusOnClick($resultsAreFocused)
         // An explicit right-click route to the restore the footer button
         // offers. Double-click shows the item in its backup, which moves no data:
@@ -293,6 +303,22 @@ struct FindFilesView: View {
         }
     }
 
+    /// Each row's plan, or the group under Other backups its backup is
+    /// shelved in, by the row's ID: one pass over each repository's
+    /// listing, not one per cell.
+    private func planNames(of rows: [AllBackupsSearch.Row]) -> [AllBackupsSearch.Row.ID: String] {
+        var names: [AllBackupsSearch.Row.ID: String] = [:]
+        for (repositoryID, repositoryRows) in Dictionary(grouping: rows, by: \.repositoryID) {
+            let wanted = Set(repositoryRows.map(\.snapshotID))
+            var labels: [String: String] = [:]
+            for snapshot in model.snapshots(for: repositoryID) where wanted.contains(snapshot.id) {
+                labels[snapshot.id] = model.recordLabel(of: snapshot, repositoryID: repositoryID)?.title
+            }
+            for row in repositoryRows { names[row.id] = labels[row.snapshotID] }
+        }
+        return names
+    }
+
     private var footer: some View {
         HStack {
             if !rows.isEmpty {
@@ -303,7 +329,7 @@ struct FindFilesView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     if search?.isTruncated == true {
-                        Text(FilesSearchAnswer.searchTruncated)
+                        Text(IndexWords.searchTruncated)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -317,9 +343,6 @@ struct FindFilesView: View {
                     .help(failure.message)
             }
             Spacer()
-            Button("Restore To…") { restoreSelection(selectedRows, choosingDestination: true) }
-                .disabled(!canRestoreSelection)
-                .help("Restore the selected items to a folder you choose")
             Button("Restore") { restoreSelection(selectedRows) }
                 .buttonStyle(.borderedProminent)
                 // Same grammar as the Restore pane: Return restores, asking
@@ -363,11 +386,12 @@ struct FindFilesView: View {
         }
     }
 
-    /// What the page restores, for File ▸ Restore: the selected rows.
+    /// What the page restores, for File ▸ Restore and Restore To…: the
+    /// selected rows.
     private var restore: RestoreCommand {
         RestoreCommand(
             isEnabled: canRestoreSelection,
-            run: { restoreSelection(selectedRows) }
+            run: { restoreSelection(selectedRows, choosingDestination: $0) }
         )
     }
 

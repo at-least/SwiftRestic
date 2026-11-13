@@ -112,7 +112,7 @@ extension AppModel {
         configuration.plans.removeAll { $0.id == id }
     }
 
-    /// Choose New Location…: a plan's path is fixed (`BackupPlan.path`), so
+    /// Locate Folder…: a plan's path is fixed (`BackupPlan.path`), so
     /// the new folder gets a new plan with these settings and this one is
     /// removed; its backups stay in the location, under Other backups.
     func movePlan(id: UUID, toPath path: String) throws -> UUID {

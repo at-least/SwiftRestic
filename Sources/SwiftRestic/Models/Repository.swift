@@ -35,9 +35,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var sftpHost: String = ""
     var sftpPath: String = ""
 
-    var s3Endpoint: String = "s3.amazonaws.com"
-    /// The Bucket field as typed: `my-bucket`, or `my-bucket/mac` for a
-    /// folder in it.
+    /// Typed as part of the Bucket field (`s3BucketField`).
+    var s3Endpoint: String = Self.awsEndpoint
+    /// `my-bucket`, or `my-bucket/mac` for a folder in it.
     var s3Bucket: String = ""
     var s3AccessKeyID: String = ""
 
@@ -64,7 +64,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         localPath = c.value(.localPath, default: "")
         sftpHost = c.value(.sftpHost, default: "")
         sftpPath = c.value(.sftpPath, default: "")
-        s3Endpoint = c.value(.s3Endpoint, default: "s3.amazonaws.com")
+        s3Endpoint = c.value(.s3Endpoint, default: Self.awsEndpoint)
         s3Bucket = c.value(.s3Bucket, default: "")
         s3AccessKeyID = c.value(.s3AccessKeyID, default: "")
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
@@ -94,9 +94,50 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             let user = sftpUser.isEmpty ? "" : "\(Self.percentEncoded(sftpUser, .urlUserAllowed))@"
             return "sftp://\(user)\(sftpHostName):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
-            let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
+            let endpoint = s3Endpoint.isEmpty ? Self.awsEndpoint : s3Endpoint
             return "s3:\(endpoint)/\(Self.trimSlashes(s3Bucket))"
         }
+    }
+
+    static let awsEndpoint = "s3.amazonaws.com"
+
+    /// The editor's one Bucket field: `my-bucket` on AWS, or `host/bucket`
+    /// elsewhere (`s3.us-west-004.backblazeb2.com/my-bucket`,
+    /// `http://minio.lan:9000/my-bucket`). The text before the first `/` is
+    /// the endpoint when it has a dot, a port's colon or a scheme: a bucket
+    /// name has neither a colon nor a scheme, and AWS bucket names with dots
+    /// are the accepted miss.
+    var s3BucketField: String {
+        get {
+            s3Endpoint.isEmpty || s3Endpoint == Self.awsEndpoint ? s3Bucket : "\(s3Endpoint)/\(s3Bucket)"
+        }
+        set {
+            let scheme = ["https://", "http://"].first { newValue.lowercased().hasPrefix($0) }
+            let rest = newValue.dropFirst(scheme?.count ?? 0)
+            if let slash = rest.firstIndex(of: "/") {
+                let host = rest[..<slash]
+                if scheme != nil || host.contains(".") || host.contains(":") {
+                    s3Endpoint = String(newValue[..<slash])
+                    s3Bucket = String(rest[rest.index(after: slash)...])
+                    return
+                }
+            }
+            s3Endpoint = Self.awsEndpoint
+            s3Bucket = newValue
+        }
+    }
+
+    /// Where a server or cloud location's backups are now: the same kind,
+    /// server and credentials, a new identity, its password asked again.
+    func replacement() -> Repository {
+        var replacement = Repository()
+        replacement.kind = kind
+        replacement.sftpHost = sftpHost
+        replacement.sftpPath = sftpPath
+        replacement.s3Endpoint = s3Endpoint
+        replacement.s3Bucket = s3Bucket
+        replacement.s3AccessKeyID = s3AccessKeyID
+        return replacement
     }
 
     private static func trimSlashes(_ value: String) -> String {
@@ -181,7 +222,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .sftp:
             return "\(sftpUserHost):\(sftpPath)"
         case .s3:
-            let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
+            let endpoint = s3Endpoint.isEmpty ? Self.awsEndpoint : s3Endpoint
             return "\(Self.trimSlashes(s3Bucket)) on \(endpoint)"
         }
     }
@@ -197,9 +238,10 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         }
     }
 
-    /// What the model writes after each check and cleanup comes from the
-    /// stored repository, not the editor's older copy: a check that finished
-    /// mid-edit would otherwise be repeated by the scheduler.
+    /// What the model writes after each verification and Free Up Space
+    /// comes from the stored repository, not the editor's older copy: a
+    /// check that finished mid-edit would otherwise be repeated by the
+    /// scheduler.
     func merging(draft: Repository) -> Repository {
         var merged = draft
         merged.maintenance.lastCheckAt = maintenance.lastCheckAt

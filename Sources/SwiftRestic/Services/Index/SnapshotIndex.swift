@@ -29,19 +29,6 @@ struct IndexVersion: Sendable, Hashable, Identifiable {
     var time: Date
 }
 
-/// One hit of a search within a chain (`search(matching:inChain:limit:)`),
-/// the Backups tab's ⌘F results, or one entry directly under a folder
-/// somewhere in the chain's indexed history (`children(ofPath:inChain:)`).
-struct IndexChild: Sendable, Equatable {
-    var path: String
-    /// The kind in `newest`: a path can change kind over its history.
-    var isDirectory: Bool
-    var newest: IndexVersion
-    /// Whether the chain's newest indexed snapshot holds it — false for an
-    /// item a later backup no longer had: deleted, moved, or excluded since.
-    var isInNewest: Bool
-}
-
 /// One content of a path in a chain: the indexed snapshots holding it with
 /// nothing to say it changed between them — a row of the Backups tab's
 /// version list, where a file backed up daily for a year and edited twice
@@ -668,44 +655,15 @@ final class SnapshotIndex: @unchecked Sendable {
         }
     }
 
-    /// `versions(ofPath:)` restricted to one chain — the Backups tab's plan
-    /// filter, in SQL. An unknown chain key answers `[]`.
+    /// `versions(ofPath:)` restricted to one chain. An unknown chain key
+    /// answers `[]`. No production caller: the tests' chain-scoped oracle,
+    /// which `contentVersions` and `versionSummaries` are held to.
     func versions(ofPath path: String, inChain chainKey: String) async throws -> [IndexVersion] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
             guard let node = try lookup.node(for: path) else { return [] }
             return try Row.fetchAll(db.cachedStatement(sql: SQL.versionsInChain), arguments: [node, chainKey])
                 .map(Self.version(from:))
-        }
-    }
-
-    /// Everything one chain's indexed snapshots ever held directly under
-    /// `path`, by name bytewise — items a later backup no longer had
-    /// included, marked by `isInNewest`. `/` lists the root's children; an
-    /// unknown path or chain answers `[]`. Two snapshots of one chain at the
-    /// same microsecond tie arbitrarily for `newest`.
-    /// No production caller — the Backups tab's tree lists the backup's own
-    /// folders through restic and the browse cache; this is the tests' view
-    /// of the chain history.
-    func children(ofPath path: String, inChain chainKey: String) async throws -> [IndexChild] {
-        try await pool.read { db in
-            var lookup = try NodeLookup(db)
-            guard let parent = try lookup.folder(for: path) else { return [] }
-            guard let newestSeq = try Int64.fetchOne(
-                db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey]
-            ) else { return [] }
-            let prefix = path == "/" ? "" : path
-            return try Row.fetchAll(db.cachedStatement(sql: SQL.childrenInChain), arguments: [chainKey, parent])
-                .map { row in
-                    let name: String = row[0]
-                    let seq: Int64 = row[2]
-                    return IndexChild(
-                        path: prefix + "/" + name,
-                        isDirectory: row[1],
-                        newest: IndexVersion(id: row[3], time: Self.date(micros: row[4])),
-                        isInNewest: seq == newestSeq
-                    )
-                }
         }
     }
 
@@ -800,7 +758,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// bytes asked for (`PathKey`), so canonically equal spellings keep
     /// their own answers. Search All Backups reads the summaries inside its search
     /// (`searchWithSummaries`); this path-keyed form is what the tests hold
-    /// that read to, as `versions(ofPath:inChain:)` is the Backups tab's read.
+    /// that read to.
     func versionSummaries(ofPaths paths: [String]) async throws -> [PathKey: VersionSummary] {
         try await pool.read { db in
             var lookup = try NodeLookup(db)
@@ -942,34 +900,6 @@ final class SnapshotIndex: @unchecked Sendable {
             }
         }
         return result
-    }
-
-    /// Basename search within one chain — the Backups tab's: `searchPaths`'s
-    /// walk and order, keeping only the paths an indexed snapshot of the
-    /// chain holds, so the limit counts the chain's hits alone and a chain
-    /// whose names sort late still gets its own. Each hit's kind and newest
-    /// backup are the chain's. An unknown chain answers `[]`.
-    func search(matching query: String, inChain chainKey: String, limit: Int) async throws -> [IndexChild] {
-        let match = Self.ftsQuery(from: query)
-        guard !match.isEmpty, limit > 0 else { return [] }
-        return try await pool.read { db in
-            guard let chain = try Row.fetchOne(db.cachedStatement(sql: SQL.chainByKey), arguments: [chainKey]),
-                  let newestSeq = try Int64.fetchOne(db.cachedStatement(sql: SQL.chainNewestIndexed), arguments: [chainKey])
-            else { return [] }
-            let chainID: Int64 = chain[0]
-            let newestInChain = try db.cachedStatement(sql: SQL.newestInChain)
-            return try Self.walk(db, match: match, limit: limit) { node in
-                try Row.fetchOne(newestInChain, arguments: [node, chainID])
-            }.map { found in
-                let seq: Int64 = found.kept[1]
-                return IndexChild(
-                    path: found.path,
-                    isDirectory: found.kept[0],
-                    newest: IndexVersion(id: found.kept[2], time: Self.date(micros: found.kept[3])),
-                    isInNewest: seq == newestSeq
-                )
-            }
-        }
     }
 
     /// The search `searchPaths` describes, inside the caller's read: each
@@ -1183,12 +1113,6 @@ final class SnapshotIndex: @unchecked Sendable {
                 try Int64.fetchOne(lookup, arguments: [parent, name]).map { (id: $0, created: false) }
             }?.last?.id
             return node == SnapshotIndex.rootID ? nil : node
-        }
-
-        /// `node(for:)`, except `/` answers the root: the folder whose
-        /// children a listing reads.
-        mutating func folder(for path: String) throws -> Int64? {
-            path == "/" ? SnapshotIndex.rootID : try node(for: path)
         }
 
         /// The node of each resolvable path, mapped back to the spelling

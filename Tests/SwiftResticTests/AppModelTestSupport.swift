@@ -32,8 +32,6 @@ extension BackupPlan {
     /// plan passes.
     mutating func skipNothing() {
         excludePatterns = []
-        skipsDeveloperFiles = false
-        skipsMachines = false
     }
 }
 

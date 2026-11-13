@@ -4,9 +4,7 @@ import SwiftUI
 /// A page's Backups tab: the page's backups on the leading side, the open
 /// one's files on the trailing side (`RestorePaneView`), and the versions of
 /// the file picked there under the tree (`FilesPaneView`): Time Machine's
-/// way, one moment's folders beside the moments. While a plan's search field
-/// holds a query, its hits stand in the tree's place (`FilesSearchView`).
-/// The backups are not folded under their plan in the sidebar: the HIG's
+/// way, one moment's folders beside the moments. The backups are not folded under their plan in the sidebar: the HIG's
 /// Sidebars asks for no more than two levels there and a content list
 /// between sidebar and detail beyond that, which this list is.
 ///
@@ -27,6 +25,7 @@ struct BackupsBrowserView: View {
     /// The view's own width, which bounds the drag: the pane keeps room for
     /// its tree.
     @State private var width: CGFloat = 0
+    @State private var chosenVersion = ChosenVersionRestore()
 
     /// The backup the tab has open: the page's pick while the listing still
     /// holds it, else the newest — so a pick retention removed gives way to
@@ -45,16 +44,10 @@ struct BackupsBrowserView: View {
         if case let .plan(planID) = page { planID } else { nil }
     }
 
-    /// The chain the open backup belongs to, whose items' versions the pane
-    /// under the tree reads — and, on a plan's page, the plan's search.
+    /// The chain the open backup belongs to, whose files' versions the pane
+    /// under the tree reads.
     private var roots: FileNode? {
-        if let searchRoots = model.filesSearchRoots(for: page) { return searchRoots }
-        return open.map { FileNode.roots(repositoryID: repositoryID, chainKey: SnapshotIndex.chainKey(for: $0)) }
-    }
-
-    private var isSearching: Bool {
-        guard let roots else { return false }
-        return !router.filesSearchQuery(for: roots).isEmpty
+        open.map { FileNode.roots(repositoryID: repositoryID, chainKey: SnapshotIndex.chainKey(for: $0)) }
     }
 
     var body: some View {
@@ -66,11 +59,8 @@ struct BackupsBrowserView: View {
             list
                 .frame(width: min(max(listWidth, listBounds.lowerBound), listBounds.upperBound))
             TreeEdge(width: $listWidth, bounds: listBounds)
-            VStack(spacing: 0) {
-                pane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                itemPane
-            }
+            pane
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // The disk is not watched: what the tab shows of this Mac is read
@@ -89,13 +79,13 @@ struct BackupsBrowserView: View {
         }
     }
 
-    /// The versions of the item picked in the tree or the search, under
-    /// them; nothing while none is.
+    /// The versions of the file picked in the tree, under it; nothing while
+    /// none is.
     @ViewBuilder
     private var itemPane: some View {
         if let roots, let item = router.filesSelection[roots] {
             Divider()
-            FilesPaneView(node: item)
+            FilesPaneView(node: item, chosenVersion: chosenVersion)
                 // Each item's version state is its own, and a pick in the
                 // tree opens it anew at the backup it was picked in.
                 .id(FilesPaneIdentity(node: item, opening: router.filesPaneOpenings))
@@ -130,21 +120,23 @@ struct BackupsBrowserView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             let openID = open?.id
+            // Past one month, a section per month, so a deep history has
+            // landmarks.
+            let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time)
+            let moments = BackupRowMoments.labels(for: backups.map(\.time), sectioned: months != nil)
             ScrollViewReader { proxy in
                 List(selection: Binding(
                     get: { openID },
                     set: { router.backupSelection[page] = $0 }
                 )) {
-                    // Past one month, a section per month, so a deep history
-                    // has landmarks.
-                    if let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time) {
+                    if let months {
                         ForEach(months, id: \.label) { month in
                             Section(month.label) {
-                                rows(month.items, sectioned: true)
+                                rows(month.items, moments: moments)
                             }
                         }
                     } else {
-                        rows(backups, sectioned: false)
+                        rows(backups, moments: moments)
                     }
                 }
                 .listStyle(.inset)
@@ -160,9 +152,11 @@ struct BackupsBrowserView: View {
         }
     }
 
-    private func rows(_ snapshots: [Snapshot], sectioned: Bool) -> some View {
+    /// `moments`: `BackupRowMoments.labels` of the whole list, which holds
+    /// every row's.
+    private func rows(_ snapshots: [Snapshot], moments: [Date: String]) -> some View {
         ForEach(snapshots) { snapshot in
-            BackupRow(snapshot: snapshot, run: model.backupRun(forSnapshot: snapshot.id), isSectioned: sectioned)
+            BackupRow(moment: moments[snapshot.time]!, run: model.backupRun(forSnapshot: snapshot.id))
                 .tag(snapshot.id)
                 .id(snapshot.id)
         }
@@ -170,13 +164,13 @@ struct BackupsBrowserView: View {
 
     @ViewBuilder
     private var pane: some View {
-        if let open, let roots, isSearching {
-            FilesSearchView(roots: roots, page: page, openBackup: open)
-        } else if let open {
+        if let open {
             RestorePaneView(
                 repositoryID: repositoryID,
                 snapshotID: open.id,
-                onPick: pick
+                onPick: pick,
+                chosenVersion: chosenVersion,
+                versionsPane: itemPane
             )
                 // Folder state is one page's: another page — another plan's of
                 // the same repository too, which the root shows in the same
@@ -197,19 +191,15 @@ struct BackupsBrowserView: View {
     }
 }
 
-/// One backup in a Backups tab's list — its moment, and the completeness
-/// mark when restic could not read all of it: the whole record at list
-/// size, as Arq's is.
+/// One backup in a Backups tab's list — its moment (`BackupRowMoments`),
+/// and the completeness mark when restic could not read all of it: the
+/// whole record at list size, as Arq's is.
 private struct BackupRow: View {
-    let snapshot: Snapshot
+    let moment: String
     let run: RunRecord?
-    /// The list sits under "October 2026" section headers, so the row drops
-    /// the year its header says; a flat single-month list keeps the full
-    /// stamp.
-    let isSectioned: Bool
 
     var body: some View {
-        Text(isSectioned ? Format.dayTime(snapshot.time) : Format.timestamp(snapshot.time))
+        Text(moment)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             // State trails identity, the sidebar's rule: the mark sits at
@@ -219,7 +209,7 @@ private struct BackupRow: View {
             // slot-holder stay in the row — VoiceOver keeps its
             // Complete/Incomplete word — without taking the date's width.
             .overlay(alignment: .trailing) {
-                SnapshotCompletenessMark(run: run, isMuted: true)
+                SnapshotCompletenessMark(run: run)
                     .font(.caption)
                     .frame(width: Self.markWidth)
             }

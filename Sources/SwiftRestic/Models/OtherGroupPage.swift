@@ -19,23 +19,18 @@ struct OtherGroupPageSummary: Equatable {
         self.title = title
         self.isAdoptable = isAdoptable
 
+        let restorable = snapshots.count == 1 ? "You can restore from it." : "You can restore from them."
         if planID == nil {
-            explanation = snapshots.count == 1
-                ? "Made outside SwiftRestic, so it can’t be continued."
-                : "Made outside SwiftRestic, so they can’t be continued."
+            explanation = "Made by another app. \(restorable)"
         } else if isMovedPlan {
-            explanation = snapshots.count == 1
-                ? "From a plan that now backs up somewhere else, so it can’t be continued here."
-                : "From a plan that now backs up somewhere else, so they can’t be continued here."
+            explanation = "From a plan that now backs up to another location. \(restorable)"
+        } else if !isAdoptable {
+            // Not adoptable here only because a plan backs up one folder.
+            explanation = "From a backup of several folders. \(restorable)"
         } else {
             // Another Mac's living plan and a deleted plan leave the same tag
             // behind, so the sentence offers both.
             explanation = "From a plan that isn’t set up here — removed, or still running on another Mac."
-            if !isAdoptable {
-                explanation += snapshots.count == 1
-                    ? " It holds several folders and a plan backs up one, so it can’t be continued."
-                    : " They hold several folders and a plan backs up one, so they can’t be continued."
-            }
         }
     }
 }

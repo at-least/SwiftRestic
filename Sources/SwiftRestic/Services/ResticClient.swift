@@ -92,10 +92,6 @@ protocol ResticClient: Sendable {
     @discardableResult
     func forget(_ context: RepositoryContext, plan: BackupPlan) async throws -> Int
 
-    /// `forget --dry-run --no-lock` with the same rules: what `forget` would
-    /// remove, read without a lock.
-    func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview
-
     /// `overwrite` has no default, here or below: every caller states what
     /// happens to a file already at the destination.
     @discardableResult

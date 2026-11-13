@@ -28,7 +28,8 @@ final class ConsoleModel {
     private(set) var output = ""
     private(set) var isRunning = false
     /// The repository the in-flight command runs against, captured at submit:
-    /// the picker may move on while it runs, and deletion needs the run's own
+    /// another location's Repair… may point the console elsewhere while it
+    /// runs, and deletion needs the run's own
     /// answer to "would cancelling this still the removed repository's work?".
     private(set) var runningRepositoryID: UUID?
     /// Newest first, as typed, for this session only — what ↑ and ↓ walk.

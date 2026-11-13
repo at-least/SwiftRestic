@@ -62,6 +62,15 @@ struct FileTree: Equatable {
         return path
     }
 
+    /// `toggleExpanded`, except an open folder stays open: a reveal's step
+    /// through a tree the user has already opened.
+    mutating func expand(path: String) -> String? {
+        guard let index = index(of: path), rows[index].node.isDirectory
+        else { return nil }
+        rows[index].expanded = true
+        return rows[index].childrenLoaded ? nil : path
+    }
+
     /// Idempotent: stale descendant rows — a fetch landing twice after a
     /// double-click race, or an earlier deeper walk — are replaced. A folder
     /// collapsed while its fetch was in flight refuses the late listing (the

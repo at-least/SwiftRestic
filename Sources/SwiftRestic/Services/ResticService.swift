@@ -459,7 +459,7 @@ struct ResticService: ResticClient {
     }
 
     /// Feeds the index after each backup and the Backups tab's Change
-    /// column and Show Changes Only. The stream is unbounded, so the
+    /// column. The stream is unbounded, so the
     /// callback must consume incrementally. `+` means present only in
     /// `newer`. `--no-lock` for `walkSnapshot`'s reason.
     func walkDiff(
@@ -529,7 +529,7 @@ struct ResticService: ResticClient {
         }
         // As arguments, not an --exclude-file: restic expands $VAR in a
         // file's lines (0.19.1, probed: a folder named "a$HOME" stayed in).
-        for marker in plan.developerMarkers {
+        for marker in BackupPlan.excludeMarkers {
             args += ["--exclude-if-present", marker]
         }
         args += ["--exclude-caches", "--exclude-cloud-files"]
@@ -620,22 +620,17 @@ struct ResticService: ResticClient {
         return entries
     }
 
-    /// One argument list for dry and real, so the preview can never evaluate
-    /// different rules from the forget it previews. The dry run adds
-    /// `--no-lock`: without it a dry forget needs the exclusive lock (exit 11
-    /// while a backup holds its shared one), and restic refuses `--no-lock`
-    /// on a real forget (exit 1).
-    static func forgetArguments(plan: BackupPlan, dryRun: Bool) -> [String] {
-        let args = ["forget", "--json", "--tag", planTag(plan.id)] + plan.retention.forgetArguments
-        return dryRun ? args + ["--dry-run", "--no-lock"] : args
+    static func forgetArguments(plan: BackupPlan) -> [String] {
+        let keep = plan.retention.forgetArguments
+        // restic reads `forget` with no `--keep-*` rule as "delete every
+        // snapshot".
+        precondition(!keep.isEmpty, "retention has no --keep-* rule")
+        return ["forget", "--json", "--tag", planTag(plan.id)] + keep
     }
 
-    /// Does nothing when the policy has no `--keep-*` rule, which restic
-    /// would read as "delete everything".
     @discardableResult
     func forget(_ context: RepositoryContext, plan: BackupPlan) async throws -> Int {
-        guard plan.retention.isSafeToRun else { return 0 }
-        let args = Self.forgetArguments(plan: plan, dryRun: false)
+        let args = Self.forgetArguments(plan: plan)
 
         let result = try await run(
             context,
@@ -654,7 +649,7 @@ struct ResticService: ResticClient {
     /// under "remove", deleted or not), then one "unable to remove
     /// snapshot/<id> from the repository" line per snapshot it could not
     /// delete, so the ones that went are the difference; its `--prune` is
-    /// then skipped, so the space waits for the next cleanup. Without those
+    /// then skipped, so the space waits for the next Free Up Space. Without those
     /// lines, or with JSON that does not decode, it stays restic's failure:
     /// no count is claimed unread.
     static func removalFailure(_ result: ResticRunResult) -> ResticError {
@@ -668,21 +663,6 @@ struct ResticService: ResticClient {
         let reason = lines.first { $0.hasPrefix("Remove(") && $0.contains(") failed: ") }
             .flatMap { $0.components(separatedBy: ": ").last } ?? ""
         return .snapshotsNotRemoved(removed: max(0, chosen - refused), refused: refused, reason: reason)
-    }
-
-    /// Without removing or locking: the plan editor's preview, safe beside a
-    /// backup. A policy with no rule previews nothing, as `forget` refuses
-    /// it.
-    func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
-        guard plan.retention.isSafeToRun else { return RetentionPreview(kept: [], removed: []) }
-        let result = try await run(
-            context,
-            ResticInvocation(
-                arguments: Self.forgetArguments(plan: plan, dryRun: true),
-                retainFullOutput: true
-            )
-        )
-        return try RetentionPreview(forgetOutput: result.stdout)
     }
 
     /// Undecodable output throws rather than reading as zero: "removed 0
@@ -706,8 +686,8 @@ struct ResticService: ResticClient {
 
     enum StagedFileCommit: Equatable {
         case committed
-        /// The target was taken; the staged output is left for the caller's
-        /// cleanup.
+        /// The target was taken; the staged output is left for the caller
+        /// to remove.
         case keptExisting
     }
 

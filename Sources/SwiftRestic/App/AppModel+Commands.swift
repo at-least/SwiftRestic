@@ -96,12 +96,6 @@ extension AppModel {
         return repository(id: id)?.id
     }
 
-    /// Nil where ⌘F opens Search All Backups instead.
-    func filesSearchRoots(for selection: SidebarItem?) -> FileNode? {
-        guard case let .plan(id) = selection, let repositoryID = plan(id: id)?.repositoryID else { return nil }
-        return FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(id))
-    }
-
     /// Names its target: raised from row menus and the menu bar, where
     /// "this" says nothing.
     func confirmationCopy(for confirmation: CommandConfirmation) -> ConfirmationCopy? {

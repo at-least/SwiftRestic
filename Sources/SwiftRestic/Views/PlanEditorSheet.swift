@@ -20,8 +20,7 @@ struct PlanEditorSheet: View {
     /// one as it is.
     @State private var sharePasswords: [String: String] = [:]
 
-    /// How often and Remove old backups automatically are not here: the
-    /// plan's page changes them as they are set.
+    /// How often is not here: the plan's page changes it as it is set.
     init(plan: BackupPlan) {
         _draft = State(initialValue: plan)
     }
@@ -30,7 +29,6 @@ struct PlanEditorSheet: View {
         VStack(spacing: 0) {
             identityHeader
             form
-
 
             Divider()
 
@@ -183,29 +181,17 @@ struct PlanEditorSheet: View {
 
     private var form: some View {
         Form {
-            // The user's own list first: below the switches, its + would
-            // sit under the sheet's fold.
-            Section("Excluded Items") {
-                PathListEditor(paths: $draft.excludePatterns)
-            }
-            // What the app leaves out; the list above holds only what the
-            // user added.
+            // The list holds only what the user added; the footer names what
+            // the app leaves out.
             Section {
+                PathListEditor(paths: $draft.excludePatterns)
+            } header: {
+                Text("Excluded Items")
+            } footer: {
                 Text(PlanSkips.always)
                     .foregroundStyle(.secondary)
                     .help(PlanSkips.alwaysHelp)
-                Toggle(isOn: $draft.skipsDeveloperFiles) {
-                    Text(PlanSkips.developerFiles)
-                    Text(PlanSkips.developerFilesCaption)
-                }
-                Toggle(isOn: $draft.skipsMachines) {
-                    Text(PlanSkips.machines)
-                    Text(PlanSkips.machinesCaption)
-                }
-            } header: {
-                Text("Also exclude")
             }
-            .editorSwitches()
         }
         .formStyle(.grouped)
     }

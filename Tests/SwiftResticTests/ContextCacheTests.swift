@@ -106,7 +106,7 @@ struct ContextCacheTests {
     func settingsChanges() async throws {
         let (model, loads, repository) = makeHarness()
         _ = try await model.context(for: repository)
-        model.configuration.settings.notifyOnSuccess.toggle()
+        model.configuration.settings.schedulePause = SchedulePause(until: .now.addingTimeInterval(3600))
         _ = try await model.context(for: repository)
         #expect(loads.value == 1, "a setting no context reads must not invalidate it")
     }

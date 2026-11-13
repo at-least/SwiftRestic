@@ -5,9 +5,39 @@ import SwiftUI
 /// (`AppModel.enterPassword`). Edit Location… keeps the whole editor.
 struct PasswordPromptSheet: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
 
     let repository: Repository
+
+    var body: some View {
+        PasswordPrompt(
+            prompt: "Enter the password for “\(model.label(of: repository))”.",
+            save: { try await model.enterPassword($0, forRepository: repository.id) }
+        )
+    }
+}
+
+/// The fix for a network share that refused to reconnect
+/// (`RunFix.enterSharePassword`): its password alone.
+/// Saving reruns the failed backups that needed the share
+/// (`AppModel.saveNetworkShare`).
+struct SharePasswordPromptSheet: View {
+    @Environment(AppModel.self) private var model
+
+    let share: NetworkShare
+
+    var body: some View {
+        PasswordPrompt(
+            prompt: "Enter the password for the network share “\(share.url)”.",
+            save: { try await model.saveNetworkShare(MountedShare(volumeName: share.volumeName, url: share.url), password: $0) }
+        )
+    }
+}
+
+private struct PasswordPrompt: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let prompt: String
+    let save: @MainActor (String) async throws -> Void
 
     @State private var password = ""
     @State private var isWorking = false
@@ -15,18 +45,19 @@ struct PasswordPromptSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Enter the password for “\(model.label(of: repository))”.")
+            Text(prompt)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
-            SecureField("Password", text: $password)
-                .accessibilityIdentifier(AccessibilityID.PasswordPrompt.password)
-                .disabled(isWorking)
-            if let failure {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "xmark.octagon.fill")
-                        .foregroundStyle(Theme.danger)
-                        .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                SecureField("Password", text: $password)
+                    .accessibilityIdentifier(AccessibilityID.PasswordPrompt.password)
+                    .disabled(isWorking)
+                // A form's inline error: red words under the field it is
+                // about, no glyph — the octagon is a failed run's.
+                if let failure {
                     Text(failure)
+                        .font(.callout)
+                        .foregroundStyle(Theme.danger)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier(AccessibilityID.PasswordPrompt.failure)
@@ -38,8 +69,8 @@ struct PasswordPromptSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(isWorking)
-                Button("Open") { Task { await open() } }
-                    .accessibilityIdentifier(AccessibilityID.PasswordPrompt.open)
+                Button("Save Password") { Task { await submit() } }
+                    .accessibilityIdentifier(AccessibilityID.PasswordPrompt.save)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(password.isEmpty || isWorking)
@@ -51,13 +82,13 @@ struct PasswordPromptSheet: View {
         .onChange(of: password) { failure = nil }
     }
 
-    private func open() async {
+    private func submit() async {
         guard !password.isEmpty, !isWorking else { return }
         isWorking = true
         defer { isWorking = false }
         failure = nil
         do {
-            try await model.enterPassword(password, forRepository: repository.id)
+            try await save(password)
             dismiss()
         } catch {
             failure = error.localizedDescription

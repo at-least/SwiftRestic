@@ -53,9 +53,11 @@ enum UITest {
         XCTAssertFalse(backUp.isEnabled)
 
         // One disk on the Mac is the sheet's answer on its own, so the next
-        // question is the password.
+        // question is the password: its empty Required fields ask it, with
+        // no line beside the button.
         XCTAssertTrue(app.popUpButtons[AccessibilityID.FirstBackup.destination].waitForValue(folders.disk.lastPathComponent))
-        XCTAssertTrue(requirement.waitForValue("Set a password to save it."))
+        XCTAssertFalse(requirement.exists)
+        XCTAssertFalse(backUp.isEnabled)
 
         let password = app.secureTextFields[AccessibilityID.FirstBackup.password]
         password.click()
@@ -122,17 +124,19 @@ enum UITest {
         showNewestBackup(folders, in: app).click()
         let restoreButton = app.buttons[AccessibilityID.RestorePane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
-        restoreToButton(AccessibilityID.RestorePane.restoreTo, in: app).click()
+        chooseRestoreTo(in: app)
         choose(folder, in: app)
         XCTAssertNotNil(waitForFile(named: "hello.txt", under: folder))
         XCTAssertTrue(restoreButton.waitForEnabled(timeout: 120))
     }
 
-    /// A pane's Restore To…, by its identifier, once it can be clicked.
-    static func restoreToButton(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
-        let button = app.buttons[identifier]
-        XCTAssertTrue(button.waitForEnabled())
-        return button
+    /// File ▸ Restore To… for the pane with the keyboard focus, once it
+    /// can be chosen: the bottom bar has Restore alone.
+    static func chooseRestoreTo(in app: XCUIApplication) {
+        app.menuBars.menuBarItems["File"].click()
+        let item = app.menuBars.menuItems["Restore To…"]
+        XCTAssertTrue(item.waitForEnabled())
+        item.click()
     }
 
     /// The open panel the app's FilePicker runs, driven element by element:

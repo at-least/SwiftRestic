@@ -75,9 +75,7 @@ struct AdoptTests {
         #expect(shelves.adoptableGroups(localHost: model.localHostname).isEmpty)
         let page = try #require(shelves.otherGroupPage(.plan(planID), repositories: [repository], localHost: model.localHostname))
         #expect(!page.isAdoptable)
-        #expect(page.explanation
-            == "From a plan that isn’t set up here — removed, or still running on another Mac."
-                + " It holds several folders and a plan backs up one, so it can’t be continued.")
+        #expect(page.explanation == "From a backup of several folders. You can restore from it.")
 
         // A newer backup of one folder is the history a plan continues.
         let one = try snapshot("one", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag])
@@ -115,64 +113,42 @@ struct AdoptTests {
         #expect(model.label(of: draft) == "Docs")
         #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
-        // No switch's rule was recorded: both switches read off.
-        #expect(!draft.skipsDeveloperFiles && !draft.skipsMachines)
         #expect(draft.tags == ["travel"])
         // The app has never run this plan; its stamps say so.
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
 
-    @Test("a history made with the developer switch on adopts with the switch on, the list keeping the user's own rows")
-    func developerRulesAdoptAsTheSwitch() async throws {
+    @Test("a history made with the developer rules adopts with them left to the plan, the list keeping the user's own rows")
+    func developerRulesAdoptAsApplied() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
         let model = makeModel()
         let repository = makeRepository()
         // restic records each rule as the run passed it, tilde expanded, and
         // not the marker; the plan's own rows come first.
+        let developer = ExcludeRule.developer.map(\.pattern)
         for path in ["/Data/Docs", NSHomeDirectory()] {
-            let recorded = ["*.iso"] + BackupPlan.developerExcludes.map { ResticService.expandTilde($0) }
+            let recorded = ["*.iso"] + developer.map { ResticService.expandTilde($0) }
             // Each its own ID: the listing keeps a snapshot it already holds.
             let made = try snapshot("on" + path, time: "2026-10-01T10:00:00Z", paths: [path], tags: [tag], excludes: recorded)
             loadModel(model, repository: repository, listing: [made])
             let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-            #expect(draft.skipsDeveloperFiles, "path \(path)")
-            #expect(!draft.skipsMachines, "path \(path)")
             // In the app's spelling, so each reads as its rule.
             #expect(draft.path == path)
             #expect(draft.excludePatterns == ["*.iso"], "path \(path)")
         }
 
-        // A rule added by a later build is missing from an older history:
-        // the switch still reads as on, and passes it from now on.
-        let all = BackupPlan.developerExcludes
-        let older = ["*.iso"] + all.dropFirst()
-        let made1 = try snapshot("older", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: older)
-        loadModel(model, repository: repository, listing: [made1])
-        let olderDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(olderDraft.skipsDeveloperFiles)
-        #expect(olderDraft.excludePatterns == ["*.iso"])
-        #expect(olderDraft.excludesToPass.contains(all[0]))
-
-        // Only the Python rules recorded: the switch reads on, and the
-        // machines' stays off.
-        let pythonOnly = ["*.iso"] + ExcludeRule.developer.filter { $0.category == .python }.map(\.pattern)
-        let made2 = try snapshot("python", time: "2026-10-01T10:00:00Z", paths: ["/Data/Docs"], tags: [tag], excludes: pythonOnly)
-        loadModel(model, repository: repository, listing: [made2])
-        let pythonDraft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(pythonDraft.skipsDeveloperFiles && !pythonDraft.skipsMachines)
-        #expect(pythonDraft.excludePatterns == ["*.iso"])
-
-        // Part of the set is the user's own rows, copied as they were.
+        // A few developer rules recorded as the user's own rows: every plan
+        // passes them anyway, so they leave the list.
         let partial = ["*.iso", "**/.venv", "**/__pycache__"]
         let made = try snapshot("off", time: "2026-10-01T10:00:00Z", tags: [tag], excludes: partial)
         loadModel(model, repository: repository, listing: [made])
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(!draft.skipsDeveloperFiles)
-        #expect(draft.excludePatterns == partial)
+        #expect(draft.excludePatterns == ["*.iso"])
+        #expect(draft.excludesToPass.contains("**/.venv"))
     }
 
-    @Test("a default restic recorded with its tilde expanded reads as its switch; other rows stay as recorded")
+    @Test("a default restic recorded with its tilde expanded reads as applied; other rows stay as recorded")
     func expandedDefaultsAdoptInTheirOwnSpelling() async throws {
         let planID = UUID()
         let tag = ResticService.planTag(planID)
@@ -227,7 +203,6 @@ struct AdoptTests {
 
         let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
         #expect(draft.retention == BackupPlan().retention)
-        #expect(draft.retention.isEnabled)
     }
 
     @Test("a UUID that names a configured plan is its moved history, never adoptable")
@@ -409,6 +384,60 @@ struct AdoptTests {
         #expect(model.banners.first?.isError == false)
     }
 
+    @Test("Back Up a Folder… continues the folder's own history: a former plan's, this Mac's, exactly this folder")
+    func firstPlanContinuesItsHistory() throws {
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+        let listing = try [
+            snapshot("h2", time: "2026-10-02T02:00:00Z", paths: ["/Data/Docs"], tags: [tag, "work"]),
+            snapshot("h1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Docs"], tags: [tag]),
+        ]
+        let model = makeModel()
+        let repository = makeRepository()
+        loadModel(model, repository: repository, listing: listing)
+
+        let created = model.createFirstPlan(source: "/Data/Docs", repositoryID: repository.id)
+
+        #expect(created == planID)
+        #expect(model.configuration.plans.map(\.id) == [planID])
+        let plan = try #require(model.plan(id: planID))
+        #expect(plan.path == "/Data/Docs" && plan.repositoryID == repository.id)
+        #expect(plan.tags == ["work"])
+        #expect(plan.schedule.frequency == BackupPlan().schedule.frequency)
+        #expect(model.shelves(for: repository.id).byPlan[planID]?.map(\.id) == ["h2", "h1"])
+        #expect(model.banners.first?.title == "Continuing “Docs”")
+    }
+
+    @Test("another Mac's history, another folder's, or one shared with another Mac starts a new plan beside it")
+    func firstPlanStartsANewHistory() throws {
+        func createdPlan(listing: [Snapshot], source: String = "/Data/Docs") -> (created: UUID, model: AppModel) {
+            let model = makeModel()
+            let repository = makeRepository()
+            loadModel(model, repository: repository, listing: listing)
+            return (model.createFirstPlan(source: source, repositoryID: repository.id), model)
+        }
+        let planID = UUID()
+        let tag = ResticService.planTag(planID)
+
+        let otherHost = try [snapshot("o1", time: "2026-10-02T02:00:00Z", host: "studio", tags: [tag])]
+        let otherFolder = try [snapshot("f1", time: "2026-10-02T02:00:00Z", paths: ["/Data/Docs/Old"], tags: [tag])]
+        let shared = try [
+            snapshot("s2", time: "2026-10-02T02:00:00Z", tags: [tag]),
+            snapshot("s1", time: "2026-09-28T02:00:00Z", host: "studio", tags: [tag]),
+        ]
+        // Untagged backups of the folder are no plan's history.
+        let untagged = try [snapshot("u1", time: "2026-10-02T02:00:00Z")]
+        for listing in [otherHost, otherFolder, shared, untagged] {
+            let (created, model) = createdPlan(listing: listing)
+            #expect(created != planID)
+            #expect(model.plan(id: created)?.path == "/Data/Docs")
+            #expect(model.plan(id: created)?.announcesFirstBackup == true)
+            #expect(model.configuration.plans.count == 1)
+        }
+        // The same history, asked for a sibling folder.
+        #expect(createdPlan(listing: try [snapshot("p1", time: "2026-10-02T02:00:00Z", tags: [tag])], source: "/Data/Doc").created != planID)
+    }
+
     @Test("the banner's singular variant")
     func bannerSingular() async throws {
         let planID = UUID()
@@ -510,31 +539,5 @@ struct AdoptHistorySpanTests {
         #expect(Format.historySpan(
             oldest: date("2025-12-30T10:00:00Z"), newest: date("2026-01-02T11:45:00Z"), calendar: calendar
         ) == "Dec 30, 2025 – Jan 2, 2026")
-    }
-}
-
-/// The plan page's dry-run line under Remove old backups automatically: what
-/// the next backup's removal leaves, never how many it removes.
-@Suite("Retention preview line")
-struct AdoptionPreviewLineTests {
-    private func snapshot(_ id: String) -> Snapshot {
-        try! snapshotFixture(
-            id: id, time: "2026-10-02T02:00:00Z", paths: ["/Data"], includeShortID: false, hostname: nil, tags: nil
-        )
-    }
-
-    @Test("a thinning policy says what the history becomes; a keeping one says it all stays")
-    func lineShapes() {
-        #expect(RetentionPreview(kept: [snapshot("b")], removed: [snapshot("a")]).outcomeLine
-            == "At the next backup, 2 backups become 1.")
-        #expect(RetentionPreview(kept: [snapshot("c"), snapshot("b")], removed: [snapshot("a")]).outcomeLine
-            == "At the next backup, 3 backups become 2.")
-        #expect(RetentionPreview(kept: [snapshot("b"), snapshot("a")], removed: []).outcomeLine
-            == "All 2 backups stay.")
-        #expect(RetentionPreview(kept: [snapshot("a")], removed: []).outcomeLine
-            == "The backup stays.")
-        // Nothing to judge: the honest empty, not a claim of survival.
-        #expect(RetentionPreview(kept: [], removed: []).outcomeLine
-            == "This plan has no backups in this location yet.")
     }
 }

@@ -47,12 +47,18 @@ struct RepositoryEditorSheet: View {
     /// The chosen folder already holds backups
     /// (`EditorRequirements.holdsBackups`), read off the main actor.
     @State private var holdsBackups = false
+    /// The Bucket field as typed: parsed into the draft on each change
+    /// (`Repository.s3BucketField`), never rewritten from it mid-typing.
+    @State private var bucketField: String
 
     private let isNew: Bool
     /// The folder the first-run sheet is backing up, when it handed off to
     /// this editor for a server kind: the kind is the one chosen there, with
     /// no Type pop-up, and the sheet is that folder's backup.
     private let firstBackupSource: String?
+    /// The server or cloud location whose backups went missing: this
+    /// editor adds where they are now, and its plans move here on Add.
+    private let replacing: UUID?
     /// Told the new repository's id once it is created and saved — never on
     /// an edit, a cancel or a failed probe — so the window can open the
     /// page that offers its first plan.
@@ -70,24 +76,29 @@ struct RepositoryEditorSheet: View {
 
     /// `firstBackupSource`, `password` and `confirmPassword`: what the
     /// first-run sheet held when it handed off to this editor, with
-    /// `repository` of the server kind chosen there.
+    /// `repository` of the server kind chosen there. `replacing`: the
+    /// missing location `repository` is the `Repository.replacement` of.
     init(
         repository: Repository,
         firstBackupSource: String? = nil,
         password: String = "",
         confirmPassword: String = "",
+        replacing: UUID? = nil,
         onCreated: @escaping (UUID) -> Void = { _ in }
     ) {
         // A new repository opens with its location blank: `Repository()`,
-        // or one of the first-run sheet's server kinds. A saved one always
-        // has its location (Save requires it).
-        isNew = !repository.isConfigurationComplete
+        // or one of the first-run sheet's server kinds; a replacement opens
+        // prefilled. A saved one always has its location (Save requires it).
+        isNew = replacing != nil || !repository.isConfigurationComplete
         precondition(
             firstBackupSource == nil || (isNew && repository.kind != .local),
             "a first backup opens a new server location only"
         )
+        precondition(replacing == nil || repository.kind != .local, "a missing folder is located, not replaced")
         self.firstBackupSource = firstBackupSource
+        self.replacing = replacing
         _draft = State(initialValue: repository)
+        _bucketField = State(initialValue: repository.s3BucketField)
         _password = State(initialValue: password)
         _confirmPassword = State(initialValue: confirmPassword)
         self.onCreated = onCreated
@@ -103,10 +114,11 @@ struct RepositoryEditorSheet: View {
             }
         }
 
-        var textStyle: HierarchicalShapeStyle {
+        /// A form's inline error is red text, without a glyph.
+        var textStyle: Color {
             switch self {
             case .ok: .secondary
-            case .failure: .primary
+            case .failure: Theme.danger
             }
         }
     }
@@ -131,20 +143,11 @@ struct RepositoryEditorSheet: View {
             // Save's or Change Password's answer, beside the buttons: at the
             // end of the scrolled form it would sit below the fold.
             if let status {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    // A failure alone carries a glyph: an answer that worked
-                    // is plain secondary text.
-                    if case .failure = status {
-                        Image(systemName: "xmark.octagon.fill")
-                            .foregroundStyle(Theme.danger)
-                            .accessibilityHidden(true)
-                    }
-                    Text(status.text)
-                        .foregroundStyle(status.textStyle)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(status.text)
+                    .foregroundStyle(status.textStyle)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], 12)
             }
 
@@ -189,7 +192,7 @@ struct RepositoryEditorSheet: View {
             // load must already register as a change.
             initial = draft
             entersPassword = !isNew && model.passwordRefused(repositoryID: draft.id)
-            await loadExistingSecrets()
+            await loadStoredSecrets()
             // The stored secrets are the sheet's baseline, not edits to be
             // warned about.
             initialPassword = password
@@ -404,8 +407,8 @@ struct RepositoryEditorSheet: View {
         if isNew {
             whereFields
         } else {
-            // The section's title names it.
-            Text(draft.displayLocation)
+            // The section's title names it; a bucket reads as it is typed.
+            Text(draft.kind == .s3 ? draft.s3BucketField : draft.displayLocation)
                 .textSelection(.enabled)
                 .lineLimit(2)
                 .truncationMode(.middle)
@@ -440,9 +443,9 @@ struct RepositoryEditorSheet: View {
             TextField("Server", text: $draft.sftpHost, prompt: Text("backup@nas.local or backup@nas.local:2222"))
             TextField("Path", text: $draft.sftpPath, prompt: Text("/volume1/SwiftRestic Backups"))
         case .s3:
-            TextField("Endpoint", text: $draft.s3Endpoint, prompt: Text("s3.amazonaws.com"))
-            TextField("Bucket", text: $draft.s3Bucket, prompt: Text("my-bucket or my-bucket/mac"))
-            Text("For Backblaze B2, use the bucket’s endpoint, such as s3.us-west-004.backblazeb2.com, and an application key.")
+            TextField("Bucket", text: $bucketField, prompt: Text("my-bucket"))
+                .onChange(of: bucketField) { draft.s3BucketField = $1 }
+            Text("my-bucket on Amazon S3, or the server and bucket, such as s3.us-west-004.backblazeb2.com/my-bucket.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -500,21 +503,27 @@ struct RepositoryEditorSheet: View {
         return "Required"
     }
 
-    private func loadExistingSecrets() async {
-        guard !isNew else { return }
+    /// A saved location's secrets, or, for a replacement, the missing
+    /// location's provider secret alone, so it asks only for its password.
+    /// Not over what was typed while the Keychain answered: that is already
+    /// the user's edit.
+    private func loadStoredSecrets() async {
+        guard let owner = replacing ?? (isNew ? nil : draft.id) else { return }
         do {
-            let secrets = try await model.storedSecrets(for: draft.id)
-            // Not over what was typed while the Keychain answered: that is
-            // already the user's edit. A refused password is not put back in
-            // the field it is to be replaced in.
+            let secrets = try await model.storedSecrets(for: owner)
+            if providerSecret.isEmpty {
+                providerSecret = secrets.providerSecret ?? ""
+            }
+            guard replacing == nil else { return }
+            // A refused password is not put back in the field it is to be
+            // replaced in.
             if password.isEmpty, !entersPassword {
                 password = secrets.password ?? ""
                 confirmPassword = password
             }
-            if providerSecret.isEmpty {
-                providerSecret = secrets.providerSecret ?? ""
-            }
             storedSecrets = secrets
+        } catch where replacing != nil {
+            status = .failure("Couldn’t read the secret access key from your Keychain: \(error.localizedDescription)")
         } catch {
             // Blank fields alone would read as "no password stored".
             status = .failure("Couldn’t read the password from your Keychain: \(error.localizedDescription)")
@@ -570,7 +579,10 @@ struct RepositoryEditorSheet: View {
         // Created before it is saved, so a failed init leaves no unusable
         // entry in the sidebar.
         if isNew {
-            guard await probe(initializeIfMissing: true) else { return }
+            // A replacement opens backups already there: a mistyped bucket
+            // or path would otherwise become an empty repository, and every
+            // plan of the missing location would move into it.
+            guard await probe(initializeIfMissing: replacing == nil) else { return }
         } else if verifying, model.isResticAvailable, let initial,
                   EditorRequirements.editReachesRestic(
                       draft: draft,
@@ -601,10 +613,17 @@ struct RepositoryEditorSheet: View {
             providerSecret: keepsStoredSecret ? nil : providerSecret
         )
         await saveSharePassword()
+        if let replacing { model.movePlans(from: replacing, to: draft.id) }
         await model.flushSave()
-        // Not awaited: a large remote's listing can take minutes, and the
-        // sheet would sit disabled through them.
-        model.scheduleSnapshotRefresh(repositoryID: draft.id)
+        if firstBackupSource != nil {
+            // Read before the first-run sheet's plan is made: it may
+            // continue a history here (`AppModel.createFirstPlan`).
+            await model.refreshListing(repositoryID: draft.id)
+        } else {
+            // Not awaited: a large remote's listing can take minutes, and the
+            // sheet would sit disabled through them.
+            model.scheduleSnapshotRefresh(repositoryID: draft.id)
+        }
         if isNew { onCreated(draft.id) }
         dismiss()
     }
@@ -633,7 +652,7 @@ struct RepositoryEditorSheet: View {
 extension Repository.Kind {
     var summary: String {
         switch self {
-        case .local: "A folder or an external drive attached to this Mac."
+        case .local: "A folder or an external disk attached to this Mac."
         case .sftp: "A NAS or server you reach over SSH."
         case .s3: "Amazon S3, Backblaze B2, Wasabi, MinIO, Cloudflare R2 and other S3-compatible services."
         }

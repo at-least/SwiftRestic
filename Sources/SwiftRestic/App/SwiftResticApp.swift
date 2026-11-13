@@ -3,7 +3,7 @@ import SwiftUI
 import UserNotifications
 
 /// A notification's identifier is its run's ID (`AppModel.notify`): the
-/// click lands Activity on that run, the tray's problem line's route.
+/// click takes the tray's problem line's route (`TrayStatusItem.showRun`).
 extension AppDelegate: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -40,19 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notificationAwaitingWiring: String?
 
     private func openNotification(_ identifier: String) {
-        guard let model, let router else {
+        guard let model, let router, let tray else {
             notificationAwaitingWiring = identifier
             return
         }
         switch NotificationRoute.route(forIdentifier: identifier) {
         case let .plan(planID):
             if model.plan(id: planID) != nil { router.selection = .plan(planID) }
+            tray.openMainWindow()
         case let .run(runID):
-            router.focusRun(runID)
+            tray.showRun(runID)
         case nil:
             return
         }
-        tray?.openMainWindow()
     }
 
     /// Before launch finishes, as UserNotifications asks: a click that
@@ -261,7 +261,7 @@ struct SwiftResticApp: App {
         }
         .defaultSize(width: 480, height: 600)
 
-        // Opened only from the damage it repairs (`ConsoleRouteButton`):
+        // Opened only from the damage it repairs (`RepairButton`):
         // without commandsRemoved the Window menu lists it.
         Window("restic Console", id: Self.consoleWindowID) {
             ResticConsoleView()
@@ -371,8 +371,8 @@ struct SwiftResticApp: App {
         }
     }
 
-    /// Clean Up is no command: it runs on its schedule, and a full
-    /// location's fix and Activity's retry ask for one. Nothing destructive
+    /// Free Up Space is no command: it runs on its schedule, and a full
+    /// location's fix and Activity's retry ask for it. Nothing destructive
     /// has a key.
     private var locationMenu: some Commands {
         CommandMenu("Location") {

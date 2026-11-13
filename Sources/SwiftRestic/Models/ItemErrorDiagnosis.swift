@@ -152,8 +152,8 @@ enum ItemErrorDiagnosis {
         return paths.count == count ? paths : []
     }
 
-    /// The sentence a finished run's announcements carry — the banner, the
-    /// notification, the channels — or nil when there is nothing to advise.
+    /// The sentence a finished run's announcements carry — the banner and
+    /// the notification — or nil when there is nothing to advise.
     /// They go out as the run ends, so the state stamped on it is the state
     /// now.
     static func headline(for record: RunRecord) -> String? {

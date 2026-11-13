@@ -60,21 +60,24 @@ struct OverviewMetricsTests {
             now: utcDate("2026-09-05 12:00:00")
         )
 
-        // Unreadable first, then exposed, then pending, up to date last; ties
-        // inside a rank keep the plan order.
-        #expect(rows.map(\.planName) == ["Failed", "NoRepo", "Empty", "Adopted", "Checking", "Fine"])
+        // Unreadable first, then exposed, then pending (still being read,
+        // or not backed up yet), up to date last; ties inside a rank keep
+        // the plan order.
+        #expect(rows.map(\.planName) == ["Failed", "NoRepo", "Checking", "Empty", "Adopted", "Fine"])
         // The up-to-date line is relative-spelled and locale-owned, so it is
         // pinned by prefix below, not by literal.
         #expect(Array(rows.map(\.stateText).prefix(5)) == [
             "Can’t read backups — Repository /nas is not reachable",
             "No backup location set",
-            "No backups yet",
-            "None from this plan yet. This location holds others",
             "Verifying…",
+            "No backups yet",
+            "No backups of this folder yet.",
         ])
         #expect(rows.last?.stateText.hasPrefix("Last backup ") == true)
         #expect(rows.last?.isUpToDate == true)
         #expect(rows.filter(\.didFail).map(\.planName) == ["Failed"])
+        // A plan that has simply not backed up yet is pending, never a warning.
+        #expect(rows.filter(\.isAwaitingFirstBackup).map(\.planName) == ["Empty", "Adopted"])
         #expect(rows.first { $0.planName == "Failed" }?.lastBackupAt == nil)
     }
 
@@ -327,7 +330,7 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in warned }
         )
-        #expect(rows.first?.stateText.hasPrefix("\(RunRecord.Outcome.completedWithErrors.displayName) — ") == true)
+        #expect(rows.first?.stateText.hasPrefix("Some files skipped — ") == true)
         #expect(rows.first?.isUpToDate == true)
         // Up to date, so it never reaches the repository's mark: the
         // warning stays on the plan's own row.
@@ -529,6 +532,28 @@ struct OverviewMetricsTests {
         )
     }
 
+    @Test("a plan that has simply not backed up yet gets a line with no warning, and no warning anywhere; a problem's line carries its fix")
+    func awaitingFirstBackupIsNoWarning() {
+        let repository = UUID()
+        let music = UpToDateRow(
+            plan: plan("Music", repository: repository), among: [], stateText: "No backups yet",
+            isKnown: true, isUpToDate: false, didFail: false, isAwaitingFirstBackup: true
+        )
+        let code = UpToDateRow(
+            plan: plan("Code", repository: repository), among: [], stateText: "Some files skipped — 3 hours ago",
+            isKnown: true, isUpToDate: false, didFail: false, problemOutcome: .completedWithErrors
+        )
+        let summary = OverviewMetrics.upToDateSummary(
+            rows: [music, code], listingLoaded: true, otherBackupsCount: 0,
+            willNotRun: { _ in nil }, hold: nil, now: .now
+        )
+        #expect(summary?.awaitingLines.map(\.text) == ["Music: No backups yet"])
+        #expect(summary?.attentionLines == [
+            UpToDateLine(planID: code.planID, text: "Code: Some files skipped — 3 hours ago", isProblem: true)
+        ])
+        #expect(OverviewMetrics.needingAttention([music]).isEmpty, "the menu bar warned of a plan not backed up yet")
+    }
+
     @Test("the Status card names each plan that is not up to date in the sidebar warning's words, and a run in flight")
     func protectionNamesItsSubjects() {
         let repository = UUID()
@@ -599,7 +624,7 @@ struct OverviewMetricsTests {
         // and the line hides — with plans and without.
         #expect(OverviewMetrics.upToDateSummary(
             rows: rows, listingLoaded: false, otherBackupsCount: 2,
-            willNotRun: { _ in nil }, hold: .paused(until: nil), now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
+            willNotRun: { _ in nil }, hold: .onMeteredNetwork, now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         ) == nil)
         #expect(OverviewMetrics.upToDateSummary(
             rows: [], listingLoaded: false, otherBackupsCount: 2,
@@ -623,21 +648,22 @@ struct OverviewMetricsTests {
 
         // The hold joins here too: it holds this repository's checks and
         // prunes, plans or no plans.
+        let end = now.addingTimeInterval(3600)
         let held = OverviewMetrics.upToDateSummary(
-            rows: [], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: .paused(until: nil), now: now
+            rows: [], listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: .paused(until: end), now: now
         )
-        #expect(held?.text == "No plans yet · Backups paused until you resume")
+        #expect(held?.text == "No plans yet · " + ScheduleHold.paused(until: end).summary(now: now))
         #expect(held?.showsResume == true)
     }
 
-    @Test("the Snapshots value splits off the backups the sidebar shelves under Other backups, by that name")
+    @Test("the Snapshots value splits off the backups no plan here made")
     func snapshotsValueSplit() {
         // Other backups hold another Mac's, a deleted plan's and the
-        // console's alike: the line names the shelf, not a cause.
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true) == "11 · 6 in Other backups")
+        // console's alike: the line names no cause.
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true) == "11, 6 from elsewhere")
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0, repositoryHasPlans: true) == "11")
         // Plans, but none of the backups theirs: said, not left out.
-        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11, repositoryHasPlans: true) == "11 · all in Other backups")
+        #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11, repositoryHasPlans: true) == "11, none from plans here")
         // A plan-less repository's shelf is "Backups": nothing to split.
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 11, repositoryHasPlans: false) == "11")
         // How far back the history reaches, after the split; a single
@@ -646,7 +672,7 @@ struct OverviewMetricsTests {
         #expect(OverviewMetrics.snapshotsLine(total: 495, otherBackups: 0, repositoryHasPlans: true, since: oldest)
             == "495 · since \(Format.day(oldest))")
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true, since: oldest)
-            == "11 · 6 in Other backups · since \(Format.day(oldest))")
+            == "11, 6 from elsewhere · since \(Format.day(oldest))")
         #expect(OverviewMetrics.snapshotsLine(total: 1, otherBackups: 0, repositoryHasPlans: true, since: oldest) == "1")
         #expect(OverviewMetrics.snapshotsLine(total: 0, otherBackups: 0, repositoryHasPlans: true, since: nil) == "0")
     }

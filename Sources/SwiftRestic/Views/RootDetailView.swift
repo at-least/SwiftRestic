@@ -134,7 +134,7 @@ private struct WelcomeView: View {
     var body: some View {
         ContentUnavailableView {
             Label {
-                Text("SwiftRestic")
+                Text("No Backups Yet")
             } icon: {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()

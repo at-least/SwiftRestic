@@ -46,15 +46,13 @@ struct SidebarTreeTests {
         #expect(Set(all).count == all.count)
     }
 
-    @Test("a repository with no plan offers its first one where its plans would be")
-    func noPlanOffersOne() {
-        // The dead end: a new repository and nowhere to add a plan to it.
+    @Test("a repository with no plan has no rows under it but its backups")
+    func noPlanNoRows() {
         let test = UUID()
-        #expect(SidebarTree.children(of: test, in: [plan("Elsewhere", in: UUID())], hasOtherBackups: false)
-            == [.addPlan(repositoryID: test)])
+        #expect(SidebarTree.children(of: test, in: [plan("Elsewhere", in: UUID())], hasOtherBackups: false).isEmpty)
         // A repository that already held backups when it was added.
         #expect(SidebarTree.children(of: test, in: [], hasOtherBackups: true)
-            == [.addPlan(repositoryID: test), .otherBackups(repositoryID: test)])
+            == [.otherBackups(repositoryID: test)])
     }
 
     @Test("Other backups is just Backups while the repository has no plan to be other than")
@@ -448,7 +446,7 @@ struct SidebarTreeTests {
     }
 
     @MainActor
-    @Test("a file picked in a backup's tree shows its versions at that backup; a route to a backup ends the plan's search")
+    @Test("a file picked in a backup's tree shows its versions at that backup; a route opens the backup at the item")
     func showVersionsRoute() {
         let repositoryID = UUID()
         let planID = UUID()
@@ -466,11 +464,7 @@ struct SidebarTreeTests {
         #expect(router.filesPaneOpenings == opening + 1)
         #expect(router.filesChosenVersion[beach] == "b8")
 
-        // A search left in place would list its hits over the tree the
-        // route opens at the item.
-        router.filesSearchText[roots] = "beach"
         router.showBackup("b7", on: .plan(planID), repositoryID: repositoryID, focusPath: beach.path)
-        #expect(router.filesSearchText[roots] == nil)
         #expect(router.selection == .plan(planID))
         #expect(router.tab(of: .plan(planID)) == .backups)
         #expect(router.takeRestoreFocus(repositoryID: repositoryID, snapshotID: "b7") == beach.path)

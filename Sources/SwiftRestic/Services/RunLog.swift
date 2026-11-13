@@ -75,10 +75,10 @@ enum RunLog {
 
         lines.append("")
         lines.append(
-            "Finished \(stamp.string(from: record.finishedAt)) after \(Format.duration(record.duration)) — \(record.outcome.displayName)"
+            "Finished \(stamp.string(from: record.finishedAt)) after \(Format.duration(record.duration)) — \(record.outcomeName)"
         )
         // A cancellation's message only repeats the verdict.
-        if let failure = record.failureMessage, failure != record.outcome.displayName {
+        if let failure = record.failureMessage, failure != record.outcomeName {
             lines.append(failure)
         }
         if record.outcome == .skipped, let reason = record.detailText {

@@ -1257,29 +1257,6 @@ struct StubResticTests {
         #expect(summary?.suggestPrune == true)
     }
 
-    @Test("the retention preview is a lock-free dry run that never prunes")
-    func forgetPreviewRunsALockFreeDryRun() async throws {
-        let fixture = try makeFixture(mode: "default")
-        defer { cleanUp(fixture.root) }
-        let plan = fixture.plan
-
-        let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
-        // The default arm answers "[]": nothing kept, nothing removed.
-        #expect(preview == RetentionPreview(kept: [], removed: []))
-
-        let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
-        let start = try #require(
-            trace.split(separator: "\n").map(String.init).first { $0.hasPrefix("start args=[") && $0.contains("forget") },
-            "trace: \(trace)"
-        )
-        // Without --no-lock the dry run takes the exclusive lock: it exits
-        // 11 during a backup and would fail a backup that started meanwhile.
-        for flag in ["forget", "--dry-run", "--no-lock", "--json", "--tag \(ResticService.planTag(plan.id))"] {
-            #expect(start.contains(flag), "start line: \(start)")
-        }
-        #expect(!start.contains("--prune"), "start line: \(start)")
-    }
-
     @Test("the index's diff with a line that did not decode fails, never a short stream the index would close runs from")
     func walkDiffRefusesAGap() async throws {
         let fixture = try makeFixture(mode: "diffmalformed")

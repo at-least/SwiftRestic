@@ -8,40 +8,39 @@ enum RunFix: Equatable {
     /// (`PasswordPromptSheet`).
     case enterPassword(UUID)
     /// restic exit 10 on a server or in the cloud. Those locations are
-    /// fixed, so where the repository is now takes a new repository.
-    case addRepository
+    /// fixed, so where the repository is now takes a new repository, which
+    /// the missing one's plans move to (`AppModel.movePlans`).
+    case addRepository(UUID)
     /// restic exit 10 on a disk, or a drive that never comes back under its
     /// name: pick the folder it moved to (`AppModel.locateRepository`).
     case locate(UUID)
     /// The plan's folder is not on this Mac (`RunRecord.missingSources`). A
     /// plan's path is fixed, so the folder's new place takes a new plan in
     /// the same repository, replacing this one (`AppModel.movePlan(id:toPath:)`).
-    case chooseNewLocation(planID: UUID)
-    /// `RunRecord.refusedShares` names the repository's own share: its
-    /// editor holds the share's password.
-    case editRepositoryShare(UUID)
-    /// A share holding the plan's folder refused to reconnect: the plan
-    /// editor holds the share's password.
-    case editPlanShare(UUID)
+    case locateFolder(planID: UUID)
+    /// A network share in `RunRecord.refusedShares` refused to reconnect:
+    /// its password alone (`AppRouter.Intent.enterSharePassword`).
+    case enterSharePassword(ShareOwner)
     /// The disk filled up during a backup (`RunRecord.repositoryFull`): a
     /// prune frees what the failed run uploaded. Runs at once: the failure
     /// already asked for it.
-    case pruneNow(UUID)
-    /// The location refused the deletions retention chose
-    /// (`RunRecord.retentionRefused`): the plan page's Remove old backups
-    /// automatically switch turns retention off.
-    case showPlan(UUID)
+    case freeUpSpace(UUID)
+
+    /// What the refused share holds: the repository's own folder, else the
+    /// plan's.
+    enum ShareOwner: Equatable {
+        case repository(UUID)
+        case plan(UUID)
+    }
 
     var title: String {
         switch self {
         case .enterPassword: "Enter Password…"
-        case .editRepositoryShare: "Edit Location…"
+        case .enterSharePassword: "Enter Share Password…"
         case .addRepository: "Add Backup Location…"
         case .locate: "Locate…"
-        case .chooseNewLocation: "Choose New Location…"
-        case .editPlanShare: "Edit Plan…"
-        case .showPlan: "Show Plan"
-        case .pruneNow: "Clean Up Now"
+        case .locateFolder: "Locate Folder…"
+        case .freeUpSpace: "Free Up Space"
         }
     }
 
@@ -49,10 +48,8 @@ enum RunFix: Equatable {
     /// message already says it.
     var help: String? {
         switch self {
-        case .enterPassword, .addRepository, .locate, .chooseNewLocation, .pruneNow: nil
-        case .editRepositoryShare: "The share’s saved password is in Edit Location"
-        case .editPlanShare: "The share’s saved password is in the plan editor, next to the folder"
-        case .showPlan: "Remove old backups automatically is on the plan page"
+        case .enterPassword, .addRepository, .locate, .locateFolder, .freeUpSpace: nil
+        case .enterSharePassword: "SwiftRestic uses this password to reconnect the network share"
         }
     }
 }
@@ -72,7 +69,7 @@ enum MaintenanceRetry: Equatable {
     var title: String {
         switch self {
         case .check: "Verify Again"
-        case .prune: "Clean Up Again"
+        case .prune: "Free Up Space Again"
         }
     }
 
@@ -115,27 +112,22 @@ enum RunRecordPresentation {
         repositoryVolume: String? = nil,
         repositoryIsLocal: Bool = false
     ) -> RunFix? {
-        // After a backup the snapshot stands, so a refused retention is a
-        // warning, and the fix is offered all the same.
-        if run.retentionRefused != nil, repositoryExists, let planID = run.planID {
-            return planExists ? .showPlan(planID) : nil
-        }
         guard run.outcome == .failed, let repositoryID = run.repositoryID, repositoryExists else { return nil }
         if run.missingSources != nil {
             guard let planID = run.planID, planExists else { return nil }
-            return .chooseNewLocation(planID: planID)
+            return .locateFolder(planID: planID)
         }
-        // The repository's editor for its own folder's share, else the
-        // plan's.
         if let refusedShares = run.refusedShares {
-            if let repositoryVolume, refusedShares.contains(repositoryVolume) { return .editRepositoryShare(repositoryID) }
+            if let repositoryVolume, refusedShares.contains(repositoryVolume) {
+                return .enterSharePassword(.repository(repositoryID))
+            }
             guard let planID = run.planID, planExists else { return nil }
-            return .editPlanShare(planID)
+            return .enterSharePassword(.plan(planID))
         }
-        if run.repositoryFull == true { return .pruneNow(repositoryID) }
+        if run.repositoryFull == true { return .freeUpSpace(repositoryID) }
         if run.exitCode == ResticError.wrongPasswordCode { return .enterPassword(repositoryID) }
         if run.exitCode == ResticError.repositoryMissingCode {
-            return repositoryIsLocal ? .locate(repositoryID) : .addRepository
+            return repositoryIsLocal ? .locate(repositoryID) : .addRepository(repositoryID)
         }
         return nil
     }
@@ -162,8 +154,8 @@ enum RunRecordPresentation {
         planWithRepository(plan.label(among: plans), repositoryName: repositories.withID(plan.repositoryID).map { $0.label(among: repositories) })
     }
 
-    /// The run's name where a surface has one string for it (log sheet
-    /// header, notification title, tray problem line). Derived from IDs at
+    /// The run's name where a surface has one string for it (notification
+    /// title, tray problem line). Derived from IDs at
     /// render time because `planName` is overloaded storage: the plan for a
     /// backup, the repository for a check or prune, a step label for a
     /// restore. An ID that no longer resolves falls back to the stored name
@@ -188,16 +180,6 @@ enum RunRecordPresentation {
 
     private static func currentPlanName(of run: RunRecord, plans: [BackupPlan]) -> String {
         run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
-    }
-
-    /// Here rather than in the view so a test pins the header to the naming
-    /// rule.
-    static func logSheetTitle(
-        for run: RunRecord,
-        plans: [BackupPlan],
-        repositories: [Repository]
-    ) -> String {
-        "\(run.kind.displayName) log — \(displayName(for: run, plans: plans, repositories: repositories))"
     }
 
     /// Settings' "Next backup" line, in the tray headline's words.
@@ -234,16 +216,16 @@ enum RunRecordPresentation {
             }
             return "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed"
         case .restore:
-            return restoreDetail(run) ?? run.outcome.displayName
+            return restoreDetail(run) ?? run.outcomeName
         case .forget, .prune:
-            // A cleanup whose amount restic's output did not say has no
+            // Freed space whose amount restic's output did not say has no
             // count.
-            return run.detailText ?? run.outcome.displayName
+            return run.detailText ?? run.outcomeName
         case .check:
             // The glyph already says the outcome; the count is what the
             // column adds. No final period: the column's other entries ("2
             // unreadable items", "0 new · 1 changed") carry none.
-            guard let verdict = run.detailText else { return run.outcome.displayName }
+            guard let verdict = run.detailText else { return run.outcomeName }
             return Format.withoutFinalPeriod(Format.firstSentence(verdict))
         }
     }
@@ -252,7 +234,7 @@ enum RunRecordPresentation {
     /// the outcome lowercased when the detail is only the outcome.
     static func verdictClause(for run: RunRecord) -> String {
         let detail = detail(for: run)
-        return detail == run.outcome.displayName ? detail.lowercased() : detail
+        return detail == run.outcomeName ? detail.lowercased() : detail
     }
 
     /// The item's name, where it is (inside the plan folder that holds it,
@@ -341,11 +323,11 @@ enum RunRecordPresentation {
     /// post or an issue.
     static func detailsText(for run: RunRecord, repositoryName: String?, versionsNow: RunLogVersions) -> String {
         var lines = [
-            "\(subject(of: run)) — \(run.outcome.displayName)",
+            "\(subject(of: run)) — \(run.outcomeName)",
             "Started: \(Format.timestamp(run.startedAt)) (\(Format.duration(run.duration)))",
             "Location: \(repositoryName ?? "No longer set up in SwiftRestic")",
         ]
-        if let failure = run.failureMessage, failure != run.outcome.displayName {
+        if let failure = run.failureMessage, failure != run.outcomeName {
             lines.append("Error: \(failure)")
         }
         if let detail = run.resticDetail { lines.append("restic: \(detail)") }

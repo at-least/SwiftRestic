@@ -14,12 +14,17 @@ struct RootView: View {
     @State private var editingRepository: Repository?
     /// Enter Password…, a missing or refused password's fix.
     @State private var enteringPassword: Repository?
+    /// Enter Share Password…, a refused network share's fix.
+    @State private var enteringSharePassword: NetworkShare?
     /// Back Up a Folder…'s folder, chosen: the first-run sheet's.
     @State private var firstBackupSource: FirstBackupSource?
     /// The first-run sheet was left for the repository editor's server and
     /// cloud kinds: set from the sheet's handoff until the editor closes,
     /// its Back Up then creating the plan as the sheet's would.
     @State private var firstBackupHandoff: FirstBackupHandoff?
+    /// The missing location the repository editor is adding a replacement
+    /// for, until the editor closes.
+    @State private var replacedRepositoryID: UUID?
     /// The one confirmation up, from whichever surface asked
     /// (`CommandPresentations`).
     @State private var pendingConfirmation: CommandConfirmation?
@@ -99,7 +104,10 @@ struct RootView: View {
             )
             .environment(model)
         }
-        .sheet(item: $editingRepository, onDismiss: { firstBackupHandoff = nil }) { repository in
+        .sheet(item: $editingRepository, onDismiss: {
+            firstBackupHandoff = nil
+            replacedRepositoryID = nil
+        }) { repository in
             // A new repository lands on its own page, where "Back Up a
             // Folder" is the first thing it offers; one added for the
             // first-run sheet lands on the plan made in it.
@@ -108,6 +116,7 @@ struct RootView: View {
                 firstBackupSource: firstBackupHandoff?.source,
                 password: firstBackupHandoff?.password ?? "",
                 confirmPassword: firstBackupHandoff?.confirmPassword ?? "",
+                replacing: replacedRepositoryID,
                 onCreated: { id in
                     if let handoff = firstBackupHandoff {
                         router.selection = .plan(model.createFirstPlan(source: handoff.source, repositoryID: id))
@@ -120,6 +129,10 @@ struct RootView: View {
         }
         .sheet(item: $enteringPassword) { repository in
             PasswordPromptSheet(repository: repository)
+                .environment(model)
+        }
+        .sheet(item: $enteringSharePassword) { share in
+            SharePasswordPromptSheet(share: share)
                 .environment(model)
         }
         // Adopt lands on the new plan's Backups tab: the history, now the
@@ -308,11 +321,6 @@ struct RootView: View {
         case "find":
             // SWIFTRESTIC_CAPTURE_FIND: a search in place on arrival.
             router.openFind(query: ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_FIND"])
-        // ⌘F on the first plan's page, through the menu's own route: the
-        // page turns to its Backups tab, the search field focused.
-        case "filesSearch":
-            router.selection = model.configuration.plans.first.map { .plan($0.id) }
-            router.request(.showFind)
         // The first plan's page on its Backups tab — with
         // SWIFTRESTIC_CAPTURE_ITEM, an absolute path in its newest backup,
         // that backup open at the item, a file's versions under the tree.
@@ -321,16 +329,10 @@ struct RootView: View {
             else { preconditionFailure("files needs a plan with a repository") }
             router.selection = .plan(plan.id)
             router.setTab(.backups, of: .plan(plan.id))
-            let roots = FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(plan.id))
             if let item = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_ITEM"] {
                 guard let newest = model.latestSnapshot(in: repositoryID, planID: plan.id)
                 else { preconditionFailure("SWIFTRESTIC_CAPTURE_ITEM needs the plan's backups listed") }
                 router.showBackup(newest.id, on: .plan(plan.id), repositoryID: repositoryID, focusPath: ResticPath.normalized(item))
-            }
-            // SWIFTRESTIC_CAPTURE_SEARCH: the tab's search field holding a
-            // query, its hits in the tree's place.
-            if let query = ProcessInfo.processInfo.environment["SWIFTRESTIC_CAPTURE_SEARCH"] {
-                router.filesSearchText[roots] = query
             }
         case "concepts": openWindow(id: SwiftResticApp.helpWindowID)
         case "console": openWindow(id: SwiftResticApp.consoleWindowID)
@@ -426,7 +428,8 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || enteringPassword != nil || firstBackupSource != nil
+        let sheetsUp = editingPlan != nil || editingRepository != nil || enteringPassword != nil
+            || enteringSharePassword != nil || firstBackupSource != nil
             || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
         guard !sheetsUp else {
@@ -440,14 +443,15 @@ struct RootView: View {
             startBackUpAFolder(in: model.commandRepositoryID(for: router.selection))
         case .newRepository:
             addRepository()
-        case .showFind:
-            // A plan's page searches its own files on its Backups tab, the
-            // toolbar's field focused; every other pane all backups.
-            if let page = router.selection, model.filesSearchRoots(for: page) != nil {
-                router.searchFiles(on: page)
-            } else {
-                router.openFind()
+        case let .addRepository(replacing: id):
+            guard model.isResticAvailable, let missing = model.repository(id: id), missing.kind != .local else {
+                NSSound.beep()
+                return
             }
+            replacedRepositoryID = id
+            editingRepository = missing.replacement()
+        case .showFind:
+            router.openFind()
         case .runSelectedPlan:
             runSelectedPlan()
         case let .stopPlan(id):
@@ -458,6 +462,18 @@ struct RootView: View {
             editingRepository = model.repository(id: id)
         case let .enterPassword(id):
             enteringPassword = model.repository(id: id)
+        case let .enterSharePassword(.repository(id)):
+            if let share = model.savedShare(forRepository: id) {
+                enteringSharePassword = share
+            } else {
+                editingRepository = model.repository(id: id)
+            }
+        case let .enterSharePassword(.plan(id)):
+            if let share = model.savedShare(forPlan: id) {
+                enteringSharePassword = share
+            } else {
+                editingPlan = model.plan(id: id)
+            }
         case let .confirm(confirmation):
             if model.confirmationCopy(for: confirmation) != nil {
                 pendingConfirmation = confirmation
@@ -466,7 +482,7 @@ struct RootView: View {
             guard model.repositoryCommands(for: .repository(id)).canMaintain else { return }
             model.runMaintenance(repositoryID: id, task: .check)
             router.showMaintenance(of: id)
-        case let .cleanUp(id):
+        case let .freeUpSpace(id):
             guard model.repositoryCommands(for: .repository(id)).canMaintain else { return }
             model.runMaintenance(repositoryID: id, task: .prune)
             router.showMaintenance(of: id)

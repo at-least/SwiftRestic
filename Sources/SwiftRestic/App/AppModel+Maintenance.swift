@@ -15,7 +15,7 @@ extension AppModel {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
             let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
-            reasons[repositoryID] = "\(name) is running a \(work.task.displayName.lowercased()) — backups wait until it finishes."
+            reasons[repositoryID] = "\(name) \(work.task.locationClause) — backups wait until it finishes."
         }
         // Not by phase: Stop turns it to `.cancelling` while the restic
         // child, still holding the lock, dies.
@@ -66,7 +66,7 @@ extension AppModel {
                 )
             }
             self?.unwindMaintenanceRun(repositoryID)
-            if task == .prune { self?.rerunBackupsAfterCleanup(in: repositoryID) }
+            if task == .prune { self?.rerunBackupsAfterFreeingSpace(in: repositoryID) }
         }, in: .maintenance(repositoryID))
     }
 
@@ -131,16 +131,15 @@ extension AppModel: MaintenanceRunEngine.Sink {
         switch record.outcome {
         case .skipped:
             // Answered only when asked for; a scheduled one waits silently.
-            guard maintenance[repository.id]?.askedByUser == true else { break }
+            guard let activity = maintenance[repository.id], activity.askedByUser else { break }
             post(Banner(
-                title: "\(record.kind.displayName) of “\(label(of: repository))” skipped",
+                title: activity.task.skippedTitle(location: label(of: repository)),
                 message: record.detailText ?? "",
                 level: .notice
             ))
         case .succeeded, .completedWithErrors, .failed, .cancelled:
             break
         }
-        await broadcast(record: record, plan: nil)
     }
 
     /// A new task, not inheriting the caller's cancellation, which would

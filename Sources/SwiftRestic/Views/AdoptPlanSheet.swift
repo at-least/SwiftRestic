@@ -51,8 +51,6 @@ struct AdoptPlanSheet: View {
                     Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID).map { model.label(of: $0) } ?? "")
                 }
                 row("Schedule") { Text(draft.schedule.frequency.displayName) }
-                // The plan page's switch, by its name there.
-                row("Remove old backups automatically") { Text(draft.retention.isEnabled ? "On" : "Off") }
             }
             .font(.callout)
 

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct RepositoryDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     @Environment(\.now) private var now
     let repositoryID: UUID
     let onAddPlan: () -> Void
@@ -146,8 +145,8 @@ struct RepositoryDetailView: View {
                     run: check
                 )
             }
-            if Scheduler.cleansUp(repository, plans: model.configuration.plans) {
-                LabeledContent("Last cleanup") {
+            if Scheduler.freesSpace(repository, plans: model.configuration.plans) {
+                LabeledContent("Space last freed") {
                     MaintenanceRunValue(
                         text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
                         run: prune
@@ -158,26 +157,20 @@ struct RepositoryDetailView: View {
             // A verification that found damage: the console, where `restic
             // repair` runs with the password supplied.
             if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
-                ConsoleRouteButton(repositoryID: repositoryID)
+                RepairButton(repositoryID: repositoryID)
             }
 
             if model.repositoriesMissingPassword.contains(repositoryID) {
                 WarningLine(text: "Waiting for a password. Nothing is scheduled until one is saved.")
             }
         } header: {
-            HStack {
-                Text("Verification and Cleanup")
-                Spacer()
-                Button("Verify Backups") { router.request(.verifyBackups(repositoryID)) }
-                    .disabled(!model.repositoryCommands(for: .repository(repositoryID)).canMaintain)
-            }
-            .controlSize(.small)
+            Text("Verification and Space")
         }
     }
 }
 
 /// The words alone after a run that succeeded, else a link to the run in
-/// Activity, whose drawer holds the retry and the log.
+/// Activity, whose drawer holds the retry.
 private struct MaintenanceRunValue: View {
     @Environment(AppRouter.self) private var router
     let text: String

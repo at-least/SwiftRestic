@@ -154,21 +154,6 @@ struct FormattingTests {
         #expect(Format.sizeChange(from: 106, to: 106) == "Same size")
     }
 
-    @Test("an item's last backup day reads after until, with the year only when it is another one")
-    func untilDays() {
-        let calendar = newYorkCalendar()
-        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
-            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
-        }
-        let now = date(2026, 10, 5, 10)
-        // 11 PM in New York is the next morning in UTC: the calendar's zone
-        // names the day.
-        #expect(Format.until(date(2026, 10, 2, 23), now: now, calendar: calendar) == "until Oct 2")
-        let lastYear = Format.until(date(2025, 12, 30, 9), now: now, calendar: calendar)
-        #expect(lastYear.hasPrefix("until "))
-        #expect(lastYear.contains("Dec") && lastYear.contains("30") && lastYear.contains("2025"))
-    }
-
     @Test("a pause end reads naturally after until")
     func pauseEndSpelling() {
         let calendar = newYorkCalendar()
@@ -237,6 +222,23 @@ struct FormattingTests {
         #expect(!value.isEmpty)
         #expect(!value.contains("2025"))
         #expect(value.contains(":"))
+    }
+
+    @Test("backup list rows that would read the same minute as a neighbour show seconds, those rows only")
+    func backupRowMomentsShowSecondsOnlyWhenNeeded() {
+        let base = Date(timeIntervalSince1970: 1_758_999_960) // on the minute
+        // Newest first: two backups 20 s apart in one minute, then one an
+        // hour earlier.
+        let times = [base.addingTimeInterval(25), base.addingTimeInterval(5), base.addingTimeInterval(-3_600)]
+        for sectioned in [true, false] {
+            let minute = { (date: Date) in sectioned ? Format.dayTime(date) : Format.timestamp(date) }
+            #expect(minute(times[0]) == minute(times[1]), "the fixture's two backups must share a minute")
+            let labels = BackupRowMoments.labels(for: times, sectioned: sectioned)
+            #expect(labels[times[0]] != labels[times[1]], "sectioned \(sectioned): \(labels)")
+            #expect(labels[times[0]] != minute(times[0]))
+            #expect(labels[times[2]] == minute(times[2]))
+        }
+        #expect(BackupRowMoments.labels(for: [base], sectioned: true) == [base: Format.dayTime(base)])
     }
 
     @Test("rate refuses to divide by a meaningless duration")

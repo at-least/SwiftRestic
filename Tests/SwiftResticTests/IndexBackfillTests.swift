@@ -140,10 +140,6 @@ struct IndexBackfillTests {
         let changedVersions = try await coordinator.versions(ofPath: changed, repositoryID: repositoryID)
         #expect(changedVersions.map(\.id) == [secondID, firstID])
         #expect(try await coordinator.versions(ofPath: stable, repositoryID: repositoryID).map(\.id) == [secondID, firstID])
-        #expect(try await coordinator.versions(
-            ofPath: stable, inChain: ResticService.planTag(scene.plan.id), repositoryID: repositoryID
-        ).map(\.id) == [secondID, firstID])
-        #expect(try await coordinator.versions(ofPath: stable, inChain: "swiftrestic-plan-other", repositoryID: repositoryID).isEmpty)
 
         let asked = [changed, stable, "/data/never.indexed"]
         let summaries = try await coordinator.versionSummaries(ofPaths: asked, repositoryID: repositoryID)
@@ -369,8 +365,8 @@ private final class Counter: @unchecked Sendable {
 }
 
 extension IndexCoordinator {
-    /// Test-only — the app always asks within a plan's chain
-    /// (`versions(ofPath:inChain:repositoryID:)`).
+    /// Test-only: the store's chain-blind oracle through the coordinator's
+    /// read.
     nonisolated func versions(ofPath path: String, repositoryID: UUID) async throws -> [IndexVersion] {
         try await read(repositoryID) { try await $0.versions(ofPath: path) }
     }
@@ -591,53 +587,6 @@ struct IndexCoordinatorReadWrapperTests {
         await scene.backfill(client)
         #expect(try await scene.coordinator.isComplete(repositoryID: scene.repositoryID))
         return (scene, scene.coordinator, scene.repositoryID)
-    }
-
-    @Test("search keeps the chain's own hits in name order, cut by the limit, with isInNewest from the chain's newest indexed")
-    func searchWithinChain() async throws {
-        let (scene, coordinator, repositoryID) = try await makeScene()
-        defer { scene.remove() }
-        let planA = IndexTestData.planA
-
-        let hits = try await coordinator.search(
-            matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 5
-        )
-        #expect(hits.map(\.path) == ["/data/a.txt", "/data/b.txt", "/data/common.txt", "/data/x.txt"])
-        // a.txt's newest is s1, while the chain's newest indexed is s2.
-        #expect(hits.map(\.isInNewest) == [false, true, true, true])
-
-        #expect(
-            try await coordinator.search(matching: "txt", inChain: planA, repositoryID: repositoryID, limit: 1)
-                .map(\.path) == ["/data/a.txt"]
-        )
-        #expect(
-            try await coordinator.search(
-                matching: "txt", inChain: "swiftrestic-plan-other", repositoryID: repositoryID, limit: 5
-            ).isEmpty
-        )
-    }
-
-    @Test("children lists the chain's ever-held rows bytewise by name, kind and isInNewest from the chain's newest indexed")
-    func childrenWithinChain() async throws {
-        let (scene, coordinator, repositoryID) = try await makeScene()
-        defer { scene.remove() }
-        let planA = IndexTestData.planA
-
-        let children = try await coordinator.children(ofPath: "/data", inChain: planA, repositoryID: repositoryID)
-        #expect(children.map(\.path)
-            == ["/data/a.txt", "/data/b.txt", "/data/common.txt", "/data/dir", "/data/x.txt"])
-        // a.txt and dir are gone from the newest backup; their kind and
-        // newest are s1's.
-        #expect(children.map(\.isInNewest) == [false, true, true, false, true])
-        #expect(children.map { $0.newest.id } == ["s1", "s2", "s2", "s1", "s2"])
-
-        #expect(
-            try await coordinator.children(ofPath: "/data/a.txt", inChain: planA, repositoryID: repositoryID).isEmpty
-        )
-        #expect(
-            try await coordinator.children(ofPath: "/data", inChain: "swiftrestic-plan-other", repositoryID: repositoryID)
-                .isEmpty
-        )
     }
 
     @Test("content versions list a path's backups newest first, and a path no diff marked is one version")

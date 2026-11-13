@@ -34,11 +34,6 @@ extension AppModel {
         return listingGeneration
     }
 
-    /// Throws rather than reading a broken index as "no backup holds it".
-    func indexedHolders(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
-        try await indexCoordinator.versions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
-    }
-
     func indexedContentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await indexCoordinator.contentVersions(ofPath: path, inChain: chainKey, repositoryID: repositoryID)
     }
@@ -115,18 +110,6 @@ extension AppModel {
             }
         }
         return AllBackupsSearch(answers)
-    }
-
-    /// Over everything the chain ever held, including items its newest
-    /// backup no longer has.
-    func searchIndex(pattern: String, inChain chainKey: String, repositoryID: UUID) async throws -> (hits: [IndexChild], isTruncated: Bool) {
-        let found = try await indexCoordinator.search(
-            matching: pattern,
-            inChain: chainKey,
-            repositoryID: repositoryID,
-            limit: AppModel.indexSearchLimit + 1
-        )
-        return Self.capped(found)
     }
 
     /// A diff between two content-addressed snapshots never changes, so a

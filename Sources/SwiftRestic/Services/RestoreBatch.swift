@@ -9,7 +9,7 @@ protocol RestoreBatchItem {
 extension SnapshotNode: RestoreBatchItem {}
 
 /// Several items restored together — a multiple selection of the Restore
-/// pane, Search All Backups or Show Changes Only. The rules that turn the selection
+/// pane or Search All Backups. The rules that turn the selection
 /// into restic calls, apart from restic so they can be tested.
 ///
 /// Paths are compared by their bytes (`PathKey`), never as Swift strings:

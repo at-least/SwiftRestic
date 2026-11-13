@@ -137,9 +137,10 @@ enum MenuBarStatus {
             }
         }
         // The outcome's own words, as the sidebar, plan page and Activity say
-        // it. Notification bodies keep their count-bearing prose
-        // ("Completed with 2 unreadable items."), a sentence, not a label.
-        return "\(subject) \(newest.outcome.displayName.lowercased()) \(relative(newest.finishedAt))"
+        // it: "NAS failed …", "Photos: some files skipped …".
+        let outcome = newest.outcomeName.lowercased()
+        let verdict = newest.outcome == .failed ? " \(outcome)" : ": \(outcome)"
+        return "\(subject)\(verdict) \(relative(newest.finishedAt))"
     }
 
     /// `nil` while anything runs: the running lines replace it. Console work

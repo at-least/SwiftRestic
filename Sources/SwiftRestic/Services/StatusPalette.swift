@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// The colours a run's outcome wears, wherever its glyph shows, and
-/// borrowed for the diff's change kinds. Native system colours only.
+/// The colours a run's outcome wears, wherever its glyph shows. Native
+/// system colours only. Success is quiet, as `Theme` says: it wears no glyph,
+/// so its grey is never drawn.
 enum StatusPalette {
     static func status(_ outcome: RunRecord.Outcome) -> Color {
         switch outcome {
-        case .succeeded: .green
         case .completedWithErrors: .orange
         case .failed: .red
-        case .cancelled, .skipped: .gray
+        case .succeeded, .cancelled, .skipped: .gray
         }
     }
 }

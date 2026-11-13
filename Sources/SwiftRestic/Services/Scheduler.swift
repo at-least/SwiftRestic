@@ -4,8 +4,8 @@ import Foundation
 /// or a metered network, for runs that would use it. One value, so the tray,
 /// a repository's page, Settings and the plan page say what the scheduler does.
 enum ScheduleHold: Equatable, Sendable {
-    /// Pause Backups; `until` is `nil` for Until I Resume.
-    case paused(until: Date?)
+    /// Pause Backups.
+    case paused(until: Date)
     /// The network macOS reports as expensive or constrained.
     case onMeteredNetwork
 
@@ -20,10 +20,8 @@ enum ScheduleHold: Equatable, Sendable {
 
     func summary(now: Date = .now, calendar: Calendar = .current) -> String {
         switch self {
-        case let .paused(until?):
+        case let .paused(until):
             "Backups paused until \(Format.pauseEnd(until, now: now, calendar: calendar))"
-        case .paused(until: nil):
-            "Backups paused until you resume"
         case .onMeteredNetwork:
             "Backups paused on a metered network"
         }
@@ -67,8 +65,28 @@ enum Scheduler {
         newestBackupOutcome: [UUID: RunRecord.Outcome],
         running: Set<UUID>
     ) -> [UUID] {
+        rerun(plans, running: running) { newestBackupOutcome[$0] == .failed }
+    }
+
+    /// The plans Full Disk Access, once granted, runs again: each the
+    /// scheduler would start by itself whose newest backup ran without it
+    /// and missed files. Asked on every probe that finds it granted, so a
+    /// grant first seen before the configuration loaded is not lost; the
+    /// rerun's own record, stamped granted, ends it.
+    static func rerunAfterFullDiskAccess(
+        plans: [BackupPlan],
+        newestBackup: [UUID: RunRecord],
+        running: Set<UUID>
+    ) -> [UUID] {
+        rerun(plans, running: running) { planID in
+            guard let newest = newestBackup[planID] else { return false }
+            return newest.fullDiskAccessAtRun == .notGranted && newest.itemErrorCount > 0
+        }
+    }
+
+    private static func rerun(_ plans: [BackupPlan], running: Set<UUID>, newestBackupCalls: (UUID) -> Bool) -> [UUID] {
         plans
-            .filter { $0.runsOnSchedule && !running.contains($0.id) && newestBackupOutcome[$0.id] == .failed }
+            .filter { $0.runsOnSchedule && !running.contains($0.id) && newestBackupCalls($0.id) }
             .map(\.id)
     }
 
@@ -141,7 +159,7 @@ enum Scheduler {
         repositories.compactMap { repository in
             guard !busyRepositoryIDs.contains(repository.id) else { return nil }
             guard repository.isConfigurationComplete else { return nil }
-            for task in MaintenanceTask.allCases where task == .check || cleansUp(repository, plans: plans) {
+            for task in MaintenanceTask.allCases where task == .check || freesSpace(repository, plans: plans) {
                 if repository.maintenance.nextDate(for: task, addedAt: repository.createdAt) <= now {
                     return (repository, task)
                 }
@@ -150,12 +168,12 @@ enum Scheduler {
         }
     }
 
-    /// Only retention leaves anything for a cleanup to free.
-    static func cleansUp(_ repository: Repository, plans: [BackupPlan]) -> Bool {
-        plans.contains { $0.repositoryID == repository.id && $0.retention.isSafeToRun }
+    /// Only a plan's retention leaves anything to free.
+    static func freesSpace(_ repository: Repository, plans: [BackupPlan]) -> Bool {
+        plans.contains { $0.repositoryID == repository.id }
     }
 
-    /// A repository page's Last check or Last cleanup: the newest such run
+    /// A repository page's Last verified or Space last freed: the newest such run
     /// of the repository, how long ago it started and — when it did not
     /// succeed — how it ended ("3 days ago · failed"), since the stamp the
     /// scheduler keeps is written for every attempt. The stamp's moment
@@ -177,7 +195,7 @@ enum Scheduler {
         // restic repair can recover some damage" — so the page spells the
         // fact once.
         case .completedWithErrors: return "\(ago) · \(RunRecordPresentation.verdictClause(for: newest))"
-        case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcome.displayName.lowercased())"
+        case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcomeName.lowercased())"
         }
     }
 

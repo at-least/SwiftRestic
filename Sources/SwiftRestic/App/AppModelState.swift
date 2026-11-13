@@ -9,13 +9,12 @@ struct PlanActivity: Sendable, Equatable {
         case starting
         case backingUp
         case applyingRetention
-        case notifying
         case cancelling
 
         /// restic's copy has ended: its numbers no longer move.
         var isPastCopying: Bool {
             switch self {
-            case .applyingRetention, .notifying: true
+            case .applyingRetention: true
             case .starting, .backingUp, .cancelling: false
             }
         }
@@ -25,7 +24,6 @@ struct PlanActivity: Sendable, Equatable {
             case .starting: "Starting…"
             case .backingUp: "Backing up…"
             case .applyingRetention: "Removing old backups…"
-            case .notifying: "Sending notifications…"
             case .cancelling: "Stopping…"
             }
         }
@@ -119,8 +117,7 @@ enum SidebarItem: Hashable {
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     /// Search All Backups: a page with no row — the toolbar's search field
     /// is its way in, and a row would be a second one — reached by Edit ▸ Find
-    /// (⌘F) off a page other than a plan's, a repository's page's search field,
-    /// and a plan's search's All Backups. Not a sheet: its restores would
+    /// (⌘F) and every page's search field. Not a sheet: its restores would
     /// stack a second sheet on it.
     case findFiles
     case activity

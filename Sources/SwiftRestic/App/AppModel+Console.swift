@@ -6,7 +6,7 @@ extension AppModel {
     }
 
     /// Call before opening the window: its appear fills only an empty
-    /// picker.
+    /// location.
     func pointConsole(at repositoryID: UUID) {
         console.repositoryID = repositoryID
     }

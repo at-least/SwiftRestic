@@ -2,30 +2,6 @@ import Foundation
 import UserNotifications
 
 extension AppModel {
-    /// Shown inline beside Send Test, not as a banner on another window.
-    enum TestNotificationOutcome: Equatable, Sendable {
-        case delivered
-        case failed(String)
-    }
-
-    func sendTestNotification(_ channel: NotificationChannel) async -> TestNotificationOutcome {
-        precondition(channel.hasUsableURL, "Send Test is disabled for an unusable URL")
-        let event = NotificationEvent(
-            stage: .succeeded,
-            planName: "Test",
-            repositoryName: "SwiftRestic",
-            kind: .backup,
-            dataAdded: 1_234_567,
-            duration: 12
-        )
-        // On, with a URL the precondition checked: `request` declines nothing else.
-        let payload = NotificationPayload.request(for: channel, event: event)!
-        if let failure = await NotificationPoster.send(payload) {
-            return .failed(failure)
-        }
-        return .delivered
-    }
-
     /// `UNUserNotificationCenter.current()` traps when the running binary is not
     /// an application bundle, which is exactly the case under a test runner.
     static var supportsNotifications: Bool {
@@ -99,10 +75,10 @@ extension AppModel {
         record.kind == .backup && record.outcome == .succeeded && plan(id: record.planID)?.announcesFirstBackup == true
     }
 
+    /// Successes stay quiet except a plan's first (user decision).
     func wantsNotification(for record: RunRecord) -> Bool {
-        let settings = configuration.settings
         switch record.outcome {
-        case .succeeded: return settings.notifyOnSuccess || announcesFirstBackup(record)
+        case .succeeded: return announcesFirstBackup(record)
         case .completedWithErrors, .failed:
             // As stored: `append(record:)` counted it before the history cap
             // trimmed the backups before it, and a run merged into a standing
@@ -115,78 +91,6 @@ extension AppModel {
         // if it stays away.
         case .cancelled, .skipped: return false
         }
-    }
-
-    /// Awaited rather than detached so that quitting straight after a failed
-    /// backup still gets the alert out; a failure to deliver is shown to the user
-    /// but never written into the run record, which describes the backup itself.
-    func broadcast(record: RunRecord, plan: BackupPlan?) async {
-        let channels = configuration.settings.notificationChannels
-        let notifyOnSuccess = configuration.settings.notifyOnSuccess
-        guard channels.contains(where: \.hasUsableURL) else { return }
-
-        if let planID = plan?.id { setActivityPhase(.notifying, for: planID) }
-
-        let event = Self.notificationEvent(for: record, repositoryName: repository(id: record.repositoryID).map { label(of: $0) } ?? "")
-
-        // Detached: a stopped run delivers from its own cancelled task, and
-        // an inherited cancel fails every send at once — a monitor that
-        // heard /start would never hear /fail. Awaiting a detached task
-        // does not pass the cancel on; quit still waits for it.
-        let failures = await Task.detached {
-            await NotificationPoster.broadcast(event, to: channels, notifyOnSuccess: notifyOnSuccess)
-        }.value
-        if !failures.isEmpty {
-            // The banner queue is global: the title names the run.
-            let subject = RunRecordPresentation.displayName(
-                for: record,
-                plans: configuration.plans,
-                repositories: configuration.repositories
-            )
-            post(Banner(
-                title: "Couldn’t send \(Format.plural(failures.count, "notification"))"
-                    + (subject.isEmpty ? "" : " for \(subject)"),
-                message: failures.joined(separator: "\n"),
-                level: .warning
-            ))
-        }
-    }
-
-    static func notificationEvent(for record: RunRecord, repositoryName: String) -> NotificationEvent {
-        let stage: NotificationEvent.Stage
-        switch record.outcome {
-        case .succeeded: stage = .succeeded
-        case .completedWithErrors: stage = .warned
-        case .failed: stage = .failed
-        case .cancelled: stage = .cancelled
-        case .skipped: stage = .skipped
-        }
-        return NotificationEvent(
-            stage: stage,
-            planName: record.planName,
-            repositoryName: repositoryName,
-            kind: record.kind,
-            snapshotID: record.snapshotID,
-            // A skipped run's reason is its detail, not a failure.
-            errorMessage: record.failureMessage ?? (record.outcome == .skipped ? record.detailText : nil),
-            // restic's own warnings only: excerpts for the body, the full
-            // count for the summary.
-            warnings: Array((record.unreadableItems + record.trailingItemErrorsOnScreen).prefix(5)),
-            warningCount: record.itemErrorCount > 0 ? record.itemErrorCount : nil,
-            hint: ItemErrorDiagnosis.headline(for: record),
-            filesNew: record.filesNew,
-            bytesProcessed: record.bytesProcessed,
-            dataAdded: record.dataAdded,
-            duration: record.duration
-        )
-    }
-
-    func addStartPing(_ event: NotificationEvent) {
-        let channels = configuration.settings.notificationChannels
-        let notifyOnSuccess = configuration.settings.notifyOnSuccess
-        tasks.addBackground(Task.detached {
-            _ = await NotificationPoster.broadcast(event, to: channels, notifyOnSuccess: notifyOnSuccess)
-        })
     }
 
     func notify(about record: RunRecord, now: Date = .now) {
@@ -287,10 +191,12 @@ extension AppModel {
             return "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration))."
         case .completedWithErrors where record.itemErrorCount > 0:
             let hint = ItemErrorDiagnosis.headline(for: record).map { " " + $0 } ?? ""
-            return "Completed with \(Format.plural(record.itemErrorCount, "unreadable item")).\(hint)"
+            return "\(record.outcomeName): \(record.itemErrorCount) couldn’t be read.\(hint)"
         case .completedWithErrors:
             let detail = RunRecordPresentation.detail(for: record)
-            return "Completed with warnings: \(Format.fullSentence(detail))"
+            return detail == record.outcomeName
+                ? Format.fullSentence(detail)
+                : "\(record.outcomeName): \(Format.fullSentence(detail))"
         case .failed:
             return record.failureMessage.map { "Failed: \(Format.firstSentence($0))" } ?? "Failed."
         case .cancelled:

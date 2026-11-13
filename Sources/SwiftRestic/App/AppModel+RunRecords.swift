@@ -10,9 +10,8 @@ extension AppModel {
         RunLogStore(directory: store.directory.appendingPathComponent("Logs", isDirectory: true))
     }
 
-    /// Call before the record joins the history, so the two land together;
-    /// `hasLog` is false when the write failed. Detached: a log can be
-    /// hundreds of kilobytes.
+    /// Call before the record joins the history, so the two land together.
+    /// Detached: a log can be hundreds of kilobytes.
     func seal(_ record: inout RunRecord, transcript: RunTranscript.Contents) async {
         let versions = RunLogVersions.current(resticVersion: resticVersion)
         if !resticVersion.isEmpty { record.resticVersion = versions.restic }
@@ -21,7 +20,7 @@ extension AppModel {
         let kind = repository?.kind.displayName
         let logs = runLogs
         let sealed = record
-        record.hasLog = await Task.detached(priority: .utility) {
+        await Task.detached(priority: .utility) {
             let text = RunLog.render(
                 record: sealed,
                 repositoryName: name,
@@ -31,17 +30,12 @@ extension AppModel {
             )
             do {
                 try logs.write(text, for: sealed.id)
-                return true
             } catch {
-                return false
+                // The record still lands: it is what every surface reads,
+                // and nothing in the app reads the log (README's Logs/ is
+                // for a person or an agent debugging).
             }
         }.value
-    }
-
-    func loadRunLog(_ run: RunRecord) async throws -> String? {
-        let logs = runLogs
-        let id = run.id
-        return try await Task.detached(priority: .userInitiated) { try logs.read(id) }.value
     }
 
     func snapshotLink(for run: RunRecord) -> RunSnapshotLink? {

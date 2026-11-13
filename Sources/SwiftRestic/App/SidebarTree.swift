@@ -11,8 +11,6 @@ import Foundation
 /// repository's node, empty, under the others too.
 enum SidebarChild: Hashable {
     case plan(UUID)
-    /// "Back Up a Folder…", only while the repository has no plan.
-    case addPlan(repositoryID: UUID)
     /// The caption over `BackupShelves.others`, whose groups are each a page
     /// at the plans' level. Only while there are some.
     case otherBackups(repositoryID: UUID)
@@ -20,8 +18,7 @@ enum SidebarChild: Hashable {
 
 enum SidebarTree {
     static func children(of repositoryID: UUID, in plans: [BackupPlan], hasOtherBackups: Bool) -> [SidebarChild] {
-        let own = plans.filter { $0.repositoryID == repositoryID }.map { SidebarChild.plan($0.id) }
-        return (own.isEmpty ? [.addPlan(repositoryID: repositoryID)] : own)
+        plans.filter { $0.repositoryID == repositoryID }.map { SidebarChild.plan($0.id) }
             + (hasOtherBackups ? [.otherBackups(repositoryID: repositoryID)] : [])
     }
 

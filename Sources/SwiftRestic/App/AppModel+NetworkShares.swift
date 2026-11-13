@@ -15,6 +15,17 @@ extension AppModel {
         return saved.map { (MountedShare(volumeName: $0.volumeName, url: $0.url), true) }
     }
 
+    /// The saved share a repository's folder is on: the one a refused
+    /// reconnect names (`RunFix.enterSharePassword`).
+    func savedShare(forRepository id: UUID) -> NetworkShare? {
+        repository(id: id)?.driveVolumeName.flatMap(networkShare(forVolume:))
+    }
+
+    /// The saved share a plan's folder is on (`RunFix.enterSharePassword`).
+    func savedShare(forPlan id: UUID) -> NetworkShare? {
+        plan(id: id).flatMap { VolumePresence.volumeName(of: $0.resolvedPath) }.flatMap(networkShare(forVolume:))
+    }
+
     /// Keyed by volume name: a repository and a plan on one share keep one
     /// record. The password goes first: a share is never saved without one.
     func saveNetworkShare(_ share: MountedShare, password: String) async throws {

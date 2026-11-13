@@ -23,8 +23,7 @@ extension ChangeComparison {
         }
     }
 
-    /// A removal has no row in this backup's tree, so it is not marked;
-    /// Show Changes Only lists it.
+    /// A removal has no row in this backup's tree, so it is not marked.
     static func heldChanges(_ changes: [PathKey: ResticDiffChange]) -> [PathKey: ResticDiffChange] {
         changes.filter { $0.value.category != .removed }
     }

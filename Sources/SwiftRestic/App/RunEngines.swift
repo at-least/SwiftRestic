@@ -157,16 +157,13 @@ enum BackupRunEngine {
         /// main-actor class, not an existential or a generic parameter.
         func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void
         func markPlanRun(_ planID: UUID, at date: Date, wrote stamp: BackupStamp)
-        /// Must not be lost to a quit mid-backup. Channels are read at send
-        /// time, so one edited mid-run applies from this ping on.
-        func addStartPing(_ event: NotificationEvent)
         /// Must stay after retention: the snapshot index takes the listing
         /// the forget left.
         func refreshSnapshots(repositoryID: UUID) async
         /// The share's reconnect was already tried; a refresh would try it
         /// again.
         func noteRepositoryAway(repositoryID: UUID, away: ReachabilityGate.Away, reason: String)
-        func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async
+        func deliver(record: RunRecord, transcript: RunTranscript.Contents) async
     }
 
     static func perform(plan: BackupPlan, repository: Repository, sink: Sink) async {
@@ -219,20 +216,8 @@ enum BackupRunEngine {
                 break run
             }
 
-            // A Stop during the checks above, which do not answer a cancel:
-            // ended here, before a start ping for a run that will not run.
+            // A Stop during the checks above, which do not answer a cancel.
             if Task.isCancelled { throw ResticError.cancelled }
-
-            // Healthchecks measures the run against this ping, so it goes out
-            // before the backup starts, concurrently, so a slow endpoint
-            // cannot delay the backup.
-            let startEvent = NotificationEvent(
-                stage: .started,
-                planName: planLabel,
-                repositoryName: sink.label(of: repository),
-                kind: .backup
-            )
-            sink.addStartPing(startEvent)
 
             sink.setActivityPhase(.backingUp, for: plan.id)
             let outcome = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
@@ -274,7 +259,7 @@ enum BackupRunEngine {
 
             // Only after a backup that produced a snapshot, so a failed run
             // never triggers a forget against stale data.
-            if plan.retention.isSafeToRun, record.snapshotID != nil {
+            if record.snapshotID != nil {
                 sink.setActivityPhase(.applyingRetention, for: plan.id)
                 do {
                     let removed = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
@@ -298,11 +283,10 @@ enum BackupRunEngine {
                     // this warns instead of failing the backup.
                     record.outcome = .completedWithErrors
                     let reason = if ResticError.isRepositoryLocked(error) {
-                        "another backup or job was using the location. Old backups are removed after the next backup."
+                        "the location was busy. They’re removed after the next backup."
                     } else {
                         error.localizedDescription
                     }
-                    if case let ResticError.snapshotsNotRemoved(_, refused, _) = error { record.retentionRefused = refused }
                     let line = RunRecord.retentionSkippedPrefix + reason
                     record.itemErrors.append(line)
                     transcript.note(line)
@@ -339,7 +323,7 @@ enum BackupRunEngine {
             if ResticError.isRepositoryLocked(error) {
                 record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: "backup")
             }
-            // The repository's disk full gets Clean Up Now as its fix: on a
+            // The repository's disk full gets Free Up Space as its fix: on a
             // 40 MB disk image a 57 MB backup failed with 35 MB left behind,
             // which `restic prune` freed. A full disk elsewhere (restic's
             // cache on this Mac) keeps restic's own words.
@@ -353,12 +337,11 @@ enum BackupRunEngine {
             sink.markPlanRun(plan.id, at: startedAt, wrote: .nothing)
         }
 
-        await finish(record: &record, plan: plan, transcript: transcript, sink: sink)
+        await finish(record: &record, transcript: transcript, sink: sink)
     }
 
     private static func finish(
         record: inout RunRecord,
-        plan: BackupPlan,
         transcript: RunTranscript,
         sink: Sink
     ) async {
@@ -367,7 +350,7 @@ enum BackupRunEngine {
         // A run that threw gets the first exit restic reached.
         let contents = transcript.contents
         if record.exitCode == nil { record.exitCode = contents.firstExitCode }
-        await sink.deliver(record: record, plan: plan, transcript: contents)
+        await sink.deliver(record: record, transcript: contents)
     }
 }
 
@@ -463,14 +446,11 @@ enum MaintenanceRunEngine {
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                // The first sentence is what the short surfaces show. The
-                // commands are as the console takes them: it supplies
-                // `restic` itself.
                 record.detailText = errors == 0
                     ? "No errors found."
-                    : "\(Format.plural(errors, "error")) found. Some damage can be repaired in the restic Console: repair index, then repair snapshots."
+                    : "\(Format.plural(errors, "error")) found. Click Repair… to fix them."
                 if summary?.suggestPrune == true {
-                    record.detailText? += " A cleanup is suggested."
+                    record.detailText? += " Freeing space is suggested."
                 }
             case .prune:
                 let output = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
@@ -492,7 +472,7 @@ enum MaintenanceRunEngine {
                 location: (sink.label(of: repository), repository.kind)
             )
             if ResticError.isRepositoryLocked(error) {
-                record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: task.displayName.lowercased())
+                record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: task == .check ? "verification" : "scheduled time")
             }
             sink.noteAuthFailure(error, repositoryID: repository.id)
         }

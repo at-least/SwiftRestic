@@ -2,17 +2,13 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("a chain's items: identity, standing and search hits")
+@Suite("a chain's items: identity and standing")
 struct FilesTreeTests {
     private let repositoryID = UUID()
     private let chain = "swiftrestic-plan-aaaa"
 
     private func node(_ path: String, folder: Bool = true) -> FileNode {
         FileNode(repositoryID: repositoryID, chainKey: chain, path: path, isDirectory: folder)
-    }
-
-    private func entry(_ node: FileNode, _ standing: FileEntry.Standing = .onDisk) -> FileEntry {
-        FileEntry(node: node, standing: standing)
     }
 
 
@@ -76,81 +72,19 @@ struct FilesTreeTests {
         await model.indexCoordinator.shutdown()
     }
 
-    @Test("a search's hits list by name as Finder sorts names, one name's by path, each the tree row it selects, dimmed when no longer on this Mac")
-    func searchHitsOrder() {
-        let roots = FileNode.roots(repositoryID: repositoryID, chainKey: chain)
-        let day = IndexVersion(id: "s1", time: .now)
-        let hits = [
-            IndexChild(path: "/Docs/b/note10", isDirectory: false, newest: day, isInNewest: true),
-            IndexChild(path: "/Docs/a/note2", isDirectory: false, newest: day, isInNewest: false),
-            IndexChild(path: "/Docs/b/note2", isDirectory: false, newest: day, isInNewest: true),
-            IndexChild(path: "/Docs/Notes", isDirectory: true, newest: day, isInNewest: true),
-        ]
-        let present: Set<PathKey> = ["/Docs/b/note10", "/Docs/b/note2", "/Docs/Notes"]
-        let entries = FilesSearchAnswer.entries(hits, under: roots, present: present)
-        // note2 before note10, numbers as numbers; no folders-first.
-        #expect(entries.map(\.node.path) == ["/Docs/a/note2", "/Docs/b/note2", "/Docs/b/note10", "/Docs/Notes"])
-        // A hit is the very node the tree lists, so picking it selects that
-        // row's item; the one the disk no longer has is deleted.
-        #expect(entries[0] == FileEntry(node: node("/Docs/a/note2", folder: false), standing: .deleted(lastBackedUp: day)))
-        #expect(entries[1].standing == .onDisk)
-        #expect(entries[3].node == node("/Docs/Notes"))
-    }
-
-    @Test("each standing has its words: a hit's tag and tooltip, VoiceOver's, and the pane's")
+    @Test("each standing has the versions pane's words")
     func standingWords() {
         let when = Date(timeIntervalSince1970: 1_790_904_600)
         let stamp = Format.timestamp(when)
-        let here = entry(node("/Docs/a.txt", folder: false))
-        #expect(here.tag == nil)
-        #expect(here.help == "/Docs/a.txt")
-        #expect(here.spokenStanding == nil)
 
-        #expect(FileEntry.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
-        #expect(FileEntry.notBackedUpReason(notRead: "permission denied") == "The newest backup couldn’t read it (permission denied)")
-
-        let gone = entry(node("/Docs/old.txt", folder: false), .deleted(lastBackedUp: IndexVersion(id: "s1", time: when)))
-        #expect(gone.tag == Format.until(when))
-        #expect(gone.help == "Not on this Mac — last backed up \(stamp)")
-        #expect(gone.spokenStanding == "not on this Mac, last backed up \(stamp)")
+        #expect(FileStandingWords.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
+        #expect(FileStandingWords.notBackedUpReason(notRead: "permission denied") == "The newest backup couldn’t read it (permission denied)")
 
         // On this Mac, but missing from the newest backup an older one is
         // not: the pane's line.
-        #expect(FileEntry.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
-        #expect(FileEntry.standing(notRead: "permission denied", lastBackedUp: when)
+        #expect(FileStandingWords.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
+        #expect(FileStandingWords.standing(notRead: "permission denied", lastBackedUp: when)
             == "Not read by the newest backup (permission denied) — last backed up \(stamp)")
-    }
-
-    @Test("a search's footer says the ceiling first, then the index still reading, else nothing")
-    func searchHitsNote() {
-        #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: true) == nil)
-        #expect(FilesSearchAnswer.note(isTruncated: false, isComplete: false) == FilesSearchAnswer.searchStillReading)
-        #expect(FilesSearchAnswer.note(isTruncated: true, isComplete: false)
-            == "Not every match is shown — narrow the search to see the rest.")
-    }
-
-    @Test("a hit's folder line is read from the folder holding the plan's root, deepest holder winning, by bytes")
-    func folderLines() {
-        let documents = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Documents", isDirectory: true)
-        // Computed, not written: tilde abbreviation is against this Mac's home.
-        let tilde = { (path: String) in (path as NSString).abbreviatingWithTildeInPath }
-
-        // Under the root's parent: the part that tells the hits apart.
-        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/reports/a.txt", under: [documents]) == "Documents/reports")
-        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/a.txt", under: [documents]) == "Documents")
-        // The root itself sits at its parent — no shorter line exists.
-        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents", under: [documents]) == tilde("/Users/me"))
-        #expect(FilesSearchAnswer.folderLine(for: "/Volumes/Elsewhere/x.txt", under: [documents]) == tilde("/Volumes/Elsewhere"))
-
-        // Two roots, one inside the other: the deepest holder wins, so the
-        // prefix they share cannot eat the line.
-        let work = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Documents/Work", isDirectory: true)
-        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Documents/Work/oct/x.txt", under: [documents, work]) == "Work/oct")
-
-        // By bytes (`ResticPath`): an NFC root and an NFD hit are two
-        // spellings, never folded together.
-        let nfc = FileNode(repositoryID: repositoryID, chainKey: chain, path: "/Users/me/Doc\u{e9}", isDirectory: true)
-        #expect(FilesSearchAnswer.folderLine(for: "/Users/me/Doce\u{301}/a.txt", under: [nfc]) == tilde("/Users/me/Doce\u{301}"))
     }
 }
 

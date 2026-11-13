@@ -63,7 +63,7 @@ struct RunLogTests {
         #expect(lines.contains(#"07:58:18 out  {"message_type":"summary","files_new":1}"#))
         #expect(lines.contains("07:58:18 exit 3"))
         #expect(lines.contains("07:58:19 note Removed 0 backups"))
-        #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Completed with warnings"))
+        #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Some files skipped"))
         #expect(lines.contains("Backup 61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"))
         #expect(lines.contains("Files: 1 new · 0 changed · 2 unchanged"))
         #expect(lines.contains("Size: Checked \(Format.bytes(5000)) · \(Format.bytes(5300)) of new data"))

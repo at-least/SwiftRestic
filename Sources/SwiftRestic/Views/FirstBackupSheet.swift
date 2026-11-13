@@ -51,7 +51,7 @@ struct FirstBackupSheet: View {
         let missingRequirement = self.missingRequirement
         VStack(spacing: 0) {
             Form {
-                Section("What do you want to back up?") {
+                Section {
                     LabeledContent("Folder") {
                         HStack {
                             Text((source as NSString).abbreviatingWithTildeInPath)
@@ -66,8 +66,6 @@ struct FirstBackupSheet: View {
                             .accessibilityIdentifier(AccessibilityID.FirstBackup.changeSource)
                         }
                     }
-                }
-                Section("Where should the backups go?") {
                     destinationPicker
                 }
                 passwordSection
@@ -85,19 +83,16 @@ struct FirstBackupSheet: View {
             Divider()
 
             if let failure {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "xmark.octagon.fill")
-                        .foregroundStyle(Theme.danger)
-                        .accessibilityHidden(true)
-                    Text(failure)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // A form's inline error: red text, without a glyph.
+                Text(failure)
+                    .foregroundStyle(Theme.danger)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], 12)
             }
             HStack {
-                if let reason = missingRequirement {
+                if let reason = missingRequirement, !isAwaitingAnswer {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -113,6 +108,7 @@ struct FirstBackupSheet: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(missingRequirement != nil || isWorking)
+                    .modifier(TileHelp(help: missingRequirement))
             }
             .padding(12)
         }
@@ -151,7 +147,7 @@ struct FirstBackupSheet: View {
     private var destinationPicker: some View {
         let newDisks = self.newDisks
         return Picker("Back up to", selection: choice) {
-            if destination == nil { Text("Choose").tag(Choice.none) }
+            if destination == nil { Text("None").tag(Choice.none) }
             ForEach(repositories) { repository in
                 Text(model.label(of: repository)).tag(Choice.destination(.location(repository.id)))
             }
@@ -239,6 +235,13 @@ struct FirstBackupSheet: View {
             plans: model.configuration.plans,
             repositories: repositories
         )
+    }
+
+    /// A question still open shows as itself (None, an empty Required
+    /// field) and the greyed Back Up as its tooltip; the line beside the
+    /// button is for what a glance can't see.
+    private var isAwaitingAnswer: Bool {
+        source.isEmpty || destination == nil || (chosenFolder != nil && password.isEmpty)
     }
 
     private func readDisks() {

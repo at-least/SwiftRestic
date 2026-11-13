@@ -104,10 +104,10 @@ struct SkippedRunTests {
 
     @Test("a skipped run reads quietly: its own name, no alarm glyph, no numbers")
     func presentation() {
-        #expect(RunRecord.Outcome.skipped.displayName == "Skipped")
         #expect(RunRecord.Outcome.skipped.symbolName == "minus.circle")
         var run = RunRecord(kind: .backup, startedAt: now)
         run.outcome = .skipped
+        #expect(run.outcomeName == "Skipped")
         #expect(!RunRecordPresentation.hasBackupNumbers(run))
         // The copied run (Edit ▸ Copy) says why, where a backup's numbers
         // would be.
@@ -195,6 +195,41 @@ struct SkippedRunTests {
         #expect(Scheduler.rerunAfterFix(plans: plans, newestBackupOutcome: newest, running: [running.id]) == [failed.id])
     }
 
+    @Test("Full Disk Access runs again each scheduled plan whose newest backup ran without it and missed files, and nothing else")
+    func rerunAfterFullDiskAccess() {
+        func plan(_ frequency: Schedule.Frequency = .daily) -> BackupPlan {
+            var plan = BackupPlan()
+            plan.repositoryID = UUID()
+            plan.path = "/Users/me/Documents"
+            plan.schedule.frequency = frequency
+            return plan
+        }
+        func run(_ access: FullDiskAccessStatus?, missed: Int) -> RunRecord {
+            var record = RunRecord(kind: .backup, planName: "Documents")
+            record.fullDiskAccessAtRun = access
+            record.itemErrorCount = missed
+            return record
+        }
+        let missedWithout = plan()
+        let missedNothing = plan()
+        let missedWith = plan()
+        let accessUnknown = plan()
+        let neverRan = plan()
+        let manual = plan(.manual)
+        let running = plan()
+        let plans = [missedWithout, missedNothing, missedWith, accessUnknown, neverRan, manual, running]
+        let newest: [UUID: RunRecord] = [
+            missedWithout.id: run(.notGranted, missed: 3),
+            missedNothing.id: run(.notGranted, missed: 0),
+            missedWith.id: run(.granted, missed: 3),
+            accessUnknown.id: run(nil, missed: 3),
+            manual.id: run(.notGranted, missed: 3),
+            running.id: run(.notGranted, missed: 3),
+        ]
+        #expect(Scheduler.rerunAfterFullDiskAccess(plans: plans, newestBackup: newest, running: [running.id])
+            == [missedWithout.id])
+    }
+
     @Test("a backup an earlier build skipped around an away drive's folders still reads so, and that the rest was backed up")
     @MainActor
     func partlySkippedWords() throws {
@@ -219,24 +254,6 @@ struct SkippedRunTests {
             timeZone: try #require(TimeZone(identifier: "UTC"))
         )
         #expect(log.contains("— Skipped\n“Archive SSD” is not connected; the other folders were backed up."))
-
-        // It wrote a snapshot: a dead-man's switch hears it alive. A skip
-        // that wrote none does not.
-        var nothing = run
-        nothing.snapshotID = nil
-
-        var healthchecks = NotificationChannel()
-        healthchecks.url = "https://hc-ping.com/abc-123"
-        let alive = AppModel.notificationEvent(for: run, repositoryName: "Home NAS")
-        #expect(
-            alive.summary
-                == "Backup skipped: Documents (Home NAS) — “Archive SSD” is not connected; the other folders were backed up."
-        )
-        #expect(try #require(NotificationPayload.request(for: healthchecks, event: alive)).url.absoluteString
-            == "https://hc-ping.com/abc-123")
-        let skipped = AppModel.notificationEvent(for: nothing, repositoryName: "Home NAS")
-        #expect(try #require(NotificationPayload.request(for: healthchecks, event: skipped)).url.absoluteString
-            == "https://hc-ping.com/abc-123/fail")
     }
 
     @Test("a skip that continues the plan's last one — same reason — becomes one record that counts the runs")

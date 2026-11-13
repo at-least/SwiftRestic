@@ -31,6 +31,17 @@ struct FileTreeTests {
         #expect(tree.toggleExpanded(path: "/src/a.txt") == nil)
     }
 
+    @Test("expand opens a folder and leaves an open one open, asking for children only when unlisted")
+    func expandLeavesOpenFolderOpen() throws {
+        var tree = FileTree(roots: [dir("/src")])
+        #expect(tree.expand(path: "/src") == "/src")
+        #expect(tree.expand(path: "/src") == "/src", "an open folder still unlisted is asked for again")
+        tree.replaceChildren(of: "/src", nodes: [file("/src/a.txt")])
+        #expect(tree.expand(path: "/src") == nil)
+        #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt"])
+        #expect(tree.expand(path: "/src/a.txt") == nil)
+    }
+
     @Test("children land at one level deeper, in order, under their parent")
     func childrenInsertUnderParent() throws {
         var tree = FileTree(roots: [dir("/src"), dir("/data")])

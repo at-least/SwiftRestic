@@ -7,7 +7,6 @@ struct ActivityView: View {
     /// Taken by a click in the table (`focusOnClick`), so ↑ and ↓ walk the
     /// runs rather than the sidebar out of Activity.
     @FocusState private var tableIsFocused: Bool
-    @State private var loggedRun: RunRecord?
     // Newest first by default: the "what happened" surface is scanned by
     // recency, and the stored history's order is neither.
     @State private var sortOrder: [KeyPathComparator<RunRecord>] = [
@@ -33,13 +32,13 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No activity yet",
                     systemImage: "list.bullet.rectangle",
-                    description: Text("Backups, verifications, cleanups and restores show here when they finish.")
+                    description: Text("Backups, restores, verifications and freeing space show here when they finish.")
                 )
             } else if runs.isEmpty {
                 ContentUnavailableView(
                     "No problems recorded",
                     systemImage: "checkmark.circle",
-                    description: Text("Nothing in Activity failed or completed with warnings.")
+                    description: Text("Nothing in Activity failed or had problems.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {
@@ -52,13 +51,13 @@ struct ActivityView: View {
                         // from the accessibility tree.
                         if run.outcome.symbolName != nil {
                             StatusGlyph(outcome: run.outcome)
-                                .help(run.outcome.displayName)
-                                .accessibilityLabel(run.outcome.displayName)
+                                .help(run.outcomeName)
+                                .accessibilityLabel(run.outcomeName)
                         } else {
-                            Text(run.outcome.displayName)
+                            Text(run.outcomeName)
                                 .foregroundStyle(.clear)
                                 .lineLimit(1)
-                                .accessibilityLabel(run.outcome.displayName)
+                                .accessibilityLabel(run.outcomeName)
                         }
                     }
                     .width(24)
@@ -157,10 +156,7 @@ struct ActivityView: View {
                 // plan page's Last backup value lands on exactly such a run.
                 if let selected = runs.first(where: { $0.id == selection }) {
                     Divider()
-                    RunDetailPanel(
-                        run: selected,
-                        onShowLog: { loggedRun = $0 }
-                    )
+                    RunDetailPanel(run: selected)
                 }
             }
         }
@@ -179,10 +175,6 @@ struct ActivityView: View {
                 .pickerStyle(.segmented)
                 .fixedSize()
             }
-        }
-        .sheet(item: $loggedRun) { run in
-            RunLogSheet(run: run)
-                .environment(model)
         }
         .task(id: router.activityShowsProblemsOnly) {
             // Switching to Problems selects the newest problem, so the

@@ -1,11 +1,10 @@
 import Foundation
-import Network
 import Testing
 
 /// Drives `AppModel` against the stub restic binary, so the model-level glue
 /// the integration suite cannot reach — restore bookkeeping, refresh error
-/// paths, the run-history cap, the console, a lock in the way, deletion, notification
-/// wiring — is exercised on every machine, not only where restic is installed.
+/// paths, the run-history cap, the console, a lock in the way, deletion — is
+/// exercised on every machine, not only where restic is installed.
 @MainActor
 @Suite("AppModel with stub restic", .serialized)
 struct AppModelStubTests {
@@ -22,7 +21,6 @@ struct AppModelStubTests {
     private func makeHarness(
         mode: String,
         password: String? = "test-password",
-        channels: [NotificationChannel] = [],
         // Never the real NetFS: a saved share's reconnect is refused.
         shareMounter: ShareMounter = ShareMounter { _, _ in .failed(EAUTH) },
         volumeProbe: VolumeProbe = .fileSystem
@@ -61,7 +59,6 @@ struct AppModelStubTests {
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
         configuration.plans = [plan]
-        configuration.settings.notificationChannels = channels
 
         let store = ConfigStore(directory: root.appendingPathComponent("config"))
         try await store.save(configuration)
@@ -144,7 +141,7 @@ struct AppModelStubTests {
         let model = harness.model
         let quick = harness.plan
         let held = try addHeldPlan(to: harness)
-        #expect(quick.retention.isSafeToRun && held.retention.isSafeToRun, "both plans apply retention after their backup")
+        #expect(!quick.retention.forgetArguments.isEmpty && !held.retention.forgetArguments.isEmpty, "both plans apply retention after their backup")
 
         model.runBackups(planIDs: model.configuration.plans.map(\.id))
         // The first runs; the second waits, and its sidebar row says so.
@@ -309,7 +306,7 @@ struct AppModelStubTests {
         let last = Date.now.addingTimeInterval(-10 * 86400)
         model.configuration.plans[index].schedule.frequency = .daily
         model.configuration.plans[index].lastSuccessAt = last
-        model.configuration.settings.schedulePause = SchedulePause(until: nil)
+        model.configuration.settings.schedulePause = SchedulePause(until: .now.addingTimeInterval(86_400))
 
         await model.runDuePlans()
 
@@ -725,25 +722,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("the notification event carries the full warning count, not the five-item sample")
-    func notificationEventCountsAllWarnings() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        var record = RunRecord(kind: .backup, planName: "Docs", repositoryID: harness.repository.id)
-        record.outcome = .completedWithErrors
-        record.itemErrorCount = 500
-        record.itemErrors = (1...5).map { "unreadable file \($0)" }
-
-        let event = AppModel.notificationEvent(for: record, repositoryName: "Stub Repo")
-        #expect(event.stage == .warned)
-        #expect(event.warningCount == 500)
-        #expect(event.warnings.count == 5, "the sample stays for the excerpt")
-        #expect(event.summary.contains("500 warnings"), "summary was: \(event.summary)")
-
-        await harness.model.shutdown()
-    }
-
     @Test("quitting while a remembered refresh waits spawns no work past shutdown")
     func quitWithPendingRefreshSpawnsNoWork() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -868,6 +846,36 @@ struct AppModelStubTests {
         )
         #expect(harness.model.repositoryStats[harness.repository.id] == statsAfterBootstrap)
         #expect(harness.model.snapshotListingOutcome(for: harness.repository.id) == .loaded)
+
+        await harness.model.shutdown()
+    }
+
+    @Test("a listing-only read returns with the rows in while the size is still being read")
+    func listingReturnsBeforeStats() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let id = harness.repository.id
+        let loadedBefore = try #require(harness.model.snapshotsLoadedAt(for: id))
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "hang-stats"
+
+        // Raced against a deadline: a read that waits for the size never
+        // returns while it hangs, and the deadline's cancel ends it.
+        let model = harness.model
+        let returned = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await model.refreshListing(repositoryID: id); return true }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(10))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+
+        #expect(returned, "the listing-only read waited for the size")
+        let loadedAfter = try #require(harness.model.snapshotsLoadedAt(for: id))
+        #expect(loadedAfter > loadedBefore)
+        #expect(harness.model.snapshotListingOutcome(for: id) == .loaded)
 
         await harness.model.shutdown()
     }
@@ -1292,16 +1300,9 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a run macOS blocked is stamped with the access state and names the fix in its diagnosis and webhook")
+    @Test("a run macOS blocked is stamped with the access state and names the fix in its diagnosis")
     func tccBlockedRunNamesTheFix() async throws {
-        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
-        defer { server.stop() }
-        await server.start()
-
-        var capture = NotificationChannel()
-        capture.url = "http://127.0.0.1:\(server.port)/hook"
-
-        let harness = try await makeHarness(mode: "tccblocked", channels: [capture])
+        let harness = try await makeHarness(mode: "tccblocked")
         defer { try? FileManager.default.removeItem(at: harness.root) }
         // Injected: the real probe answers for whatever launched the tests.
         harness.model.fullDiskAccessProbe = { .notGranted }
@@ -1318,19 +1319,9 @@ struct AppModelStubTests {
         #expect(record.fullDiskAccessAtRun == .notGranted)
 
         // The fix is named where the run is read — the problem card's and
-        // the drawer's diagnosis — and in the webhook below.
+        // the drawer's diagnosis.
         let headline = try #require(ItemErrorDiagnosis.headline(for: record))
         #expect(headline.contains("SwiftRestic needs Full Disk Access"), "headline was \(headline)")
-
-        var bodies: [String] = []
-        let bodyDeadline = Date.now.addingTimeInterval(5)
-        while bodies.isEmpty, Date.now < bodyDeadline {
-            bodies = server.captured
-            if bodies.isEmpty { try await Task.sleep(for: .milliseconds(50)) }
-        }
-        let body = try #require(bodies.first, "no webhook payload ever arrived")
-        let object = try #require(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
-        #expect((object["hint"] as? String)?.contains("Full Disk Access") == true, "payload was \(body)")
 
         await harness.model.shutdown()
     }
@@ -1437,7 +1428,7 @@ struct AppModelStubTests {
         let prune = try #require(model.configuration.runs.first)
         #expect(prune.kind == .prune)
         #expect(prune.outcome == .failed)
-        #expect(prune.failureMessage == "“Stub Repo” is in use by another Mac or app. SwiftRestic tries again at the next cleanup.")
+        #expect(prune.failureMessage == "“Stub Repo” is in use by another Mac or app. SwiftRestic tries again at the next scheduled time.")
 
         await model.shutdown()
     }
@@ -1582,7 +1573,7 @@ struct AppModelStubTests {
         #expect(model.configuration.runs.first?.outcome == .skipped)
         // Found by its title: the launch's listing posts its own banners.
         // The repository is called by its drive now that it is on one.
-        let banner = try #require(model.banners.first { $0.title == "Verification of “\(volume)” skipped" })
+        let banner = try #require(model.banners.first { $0.title == "Verification of “\(volume)” was skipped" })
         #expect(banner.message == "“\(volume)” is not connected.")
         #expect(!banner.isError)
         #expect(model.repository(id: id)?.maintenance.lastCheckAt == nil)
@@ -1609,7 +1600,7 @@ struct AppModelStubTests {
         #expect(record.refusedShares == [volume])
         #expect(record.failureMessage
             == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password.")
-        #expect(model.fix(for: record) == .editRepositoryShare(harness.repository.id))
+        #expect(model.fix(for: record) == .enterSharePassword(.repository(harness.repository.id)))
         #expect(record.problemStretch == 1)
         #expect(model.currentProblem(for: planID) != nil)
 
@@ -1629,7 +1620,7 @@ struct AppModelStubTests {
         await model.waitForRun(planID: planID)
         let folderRecord = try #require(model.configuration.runs.first)
         #expect(folderRecord.refusedShares == [volume])
-        #expect(model.fix(for: folderRecord) == .editPlanShare(planID))
+        #expect(model.fix(for: folderRecord) == .enterSharePassword(.plan(planID)))
 
         await model.shutdown()
     }
@@ -1956,36 +1947,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a stopped backup's fail ping reaches Healthchecks, though the run's own task is cancelled")
-    func stoppedBackupPingsFail() async throws {
-        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
-        defer { server.stop() }
-        await server.start()
-        // A self-hosted Healthchecks address: /ping/<uuid>.
-        var monitor = NotificationChannel()
-        monitor.url = "http://127.0.0.1:\(server.port)/ping/6f1c2a3b-0000-4000-8000-000000000001"
-        #expect(monitor.wants(.cancelled, notifyOnSuccess: false))
-
-        let harness = try await makeHarness(mode: "hang-backup", channels: [monitor])
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let planID = harness.plan.id
-        harness.model.runBackup(planID: planID)
-        await StubRestic.requireHang(matching: harness.stub.sleepMarker, root: harness.root)
-        harness.model.cancelBackup(planID: planID)
-        await harness.model.waitForRun(planID: planID)
-
-        let deadline = Date.now.addingTimeInterval(5)
-        while !server.capturedRequestLines.contains(where: { $0.contains("/ping/6f1c2a3b-0000-4000-8000-000000000001/fail") }), Date.now < deadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(server.capturedRequestLines.contains { $0.contains("/ping/6f1c2a3b-0000-4000-8000-000000000001/fail") },
-                "requests were \(server.capturedRequestLines)")
-        #expect(!harness.model.banners.contains { $0.title.hasPrefix("Couldn’t send") },
-                "banners were \(harness.model.banners.map(\.message))")
-
-        await harness.model.shutdown()
-    }
-
     @Test("deleting a repository cancels the backup running against it")
     func deletingRepositoryCancelsRunningBackup() async throws {
         let harness = try await makeHarness(mode: "hang-backup")
@@ -2234,6 +2195,7 @@ struct AppModelStubTests {
         failNewestBackup()
         try await model.saveNetworkShare(share, password: "pw")
         #expect(model.isRunning(planID: planID), "a backup into a location on the share did not run again")
+        #expect(model.savedShare(forRepository: harness.repository.id)?.volumeName == volume, "the location’s share fix found no saved share")
         await model.waitForRun(planID: planID)
 
         model.configuration.repositories[0].localPath = harness.root.appendingPathComponent("Stub Repo").path
@@ -2241,7 +2203,45 @@ struct AppModelStubTests {
         failNewestBackup()
         try await model.saveNetworkShare(share, password: "pw2")
         #expect(model.isRunning(planID: planID), "a backup of a folder on the share did not run again")
+        #expect(model.savedShare(forPlan: planID)?.volumeName == volume, "the plan folder’s share fix found no saved share")
         await model.waitForRun(planID: planID)
+
+        await model.shutdown()
+    }
+
+    @Test("Full Disk Access granted backs up again each scheduled plan whose newest backup ran without it and missed files, and no other")
+    func grantedFullDiskAccessRerunsBackups() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let planID = harness.plan.id
+        let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == planID })
+        model.configuration.plans[planIndex].schedule.frequency = .daily
+        model.configuration.plans[planIndex].lastRunAt = .now
+        var newest = RunRecord(kind: .backup, planID: planID, planName: "Stub Plan", repositoryID: harness.repository.id)
+        newest.fullDiskAccessAtRun = .granted
+        newest.itemErrorCount = 2
+        model.configuration.runs = [newest]
+        model.fullDiskAccessProbe = { .granted }
+
+        model.fullDiskAccess = .notGranted
+        await model.refreshFullDiskAccess()
+        #expect(!model.isRunning(planID: planID), "a backup that ran with Full Disk Access ran again")
+
+        model.configuration.runs[0].fullDiskAccessAtRun = .notGranted
+        model.configuration.runs[0].itemErrorCount = 0
+        model.fullDiskAccess = .notGranted
+        await model.refreshFullDiskAccess()
+        #expect(!model.isRunning(planID: planID), "a backup without Full Disk Access that missed no files ran again")
+
+        // The grant already seen, as when a probe during launch took the
+        // change before the configuration loaded: the backup is still owed.
+        model.configuration.runs[0].itemErrorCount = 2
+        #expect(model.fullDiskAccess == .granted)
+        await model.refreshFullDiskAccess()
+        #expect(model.isRunning(planID: planID), "the backup that ran without Full Disk Access did not run again")
+        await model.waitForRun(planID: planID)
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.fullDiskAccessAtRun == .granted)
 
         await model.shutdown()
     }
@@ -2267,56 +2267,6 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.kind == .restore)
         #expect(record.failureMessage == "The password doesn’t open “Stub Repo”.")
-
-        await harness.model.shutdown()
-    }
-
-    @Test("the webhook gets restic's warnings")
-    func broadcastWiring() async throws {
-        // One-shot loopback HTTP server: whatever actually leaves the app
-        // lands here, so the guarantee can be asserted against the wire.
-        let server = try #require(HTTPCaptureServer(), "could not start the capture listener")
-        defer { server.stop() }
-        await server.start()
-        let port = server.port
-
-        var good = NotificationChannel()
-        good.url = "http://127.0.0.1:\(port)/hook"
-        // A second channel nothing is listening on: its failure must surface
-        // without disturbing the delivered payload.
-        var dead = NotificationChannel()
-        dead.url = "http://127.0.0.1:1/hook"
-
-        let harness = try await makeHarness(mode: "warn", channels: [good, dead])
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        harness.model.runBackup(planID: harness.plan.id)
-        await harness.model.waitForRun(planID: harness.plan.id)
-
-        var bodies: [String] = []
-        let bodyDeadline = Date.now.addingTimeInterval(5)
-        while bodies.isEmpty, Date.now < bodyDeadline {
-            bodies = server.captured
-            if bodies.isEmpty { try await Task.sleep(for: .milliseconds(50)) }
-        }
-        let body = try #require(bodies.first, "no webhook payload ever arrived")
-
-        let object = try #require(
-            JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
-            "payload was not the webhook's JSON object: \(body)"
-        )
-        #expect(object["stage"] as? String == "warned")
-        #expect(object["plan"] as? String == "Stub Plan")
-        let warnings = object["warnings"] as? [String] ?? []
-        #expect(
-            warnings.contains { $0.contains("/etc/secret-target") },
-            "restic's own warning did not reach the channel: \(warnings)"
-        )
-        // The unreachable channel must be reported, not dropped on the floor.
-        #expect(
-            harness.model.banners.contains { $0.title.contains("Couldn’t send") } == true,
-            "banners were: \(harness.model.banners.map(\.title))"
-        )
 
         await harness.model.shutdown()
     }
@@ -2639,7 +2589,6 @@ struct AppModelStubTests {
         await harness.model.waitForRun(planID: harness.plan.id)
 
         let record = try #require(harness.model.configuration.runs.first)
-        #expect(record.hasLog)
         #expect(record.exitCode == 3)
         #expect(record.resticVersion == "restic 0.19.1-stub compiled with sh on darwin")
 
@@ -2652,7 +2601,7 @@ struct AppModelStubTests {
         #expect(log.components(separatedBy: "exit 3").count - 1 == 2, "log was \(log)")
         #expect(log.contains("$    restic forget --json"))
         #expect(log.contains("note Retention skipped: "))
-        #expect(log.contains("Completed with warnings"))
+        #expect(log.contains("Some files skipped"))
         // The password and the repository's environment travel beside the
         // command line, never in it.
         #expect(!log.contains("test-password"))
@@ -2661,8 +2610,8 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a log that cannot be written leaves the run recorded, with hasLog false")
-    func unwritableLogLeavesHasLogFalse() async throws {
+    @Test("a log that cannot be written leaves the run recorded")
+    func unwritableLogLeavesTheRunRecorded() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
@@ -2677,8 +2626,6 @@ struct AppModelStubTests {
         let record = try #require(harness.model.configuration.runs.first)
         #expect(record.kind == .backup)
         #expect(record.outcome == .succeeded)
-        // Show Log reads this: a true here would offer a log that is not there.
-        #expect(record.hasLog == false)
         var isDirectory: ObjCBool = false
         #expect(FileManager.default.fileExists(atPath: logs.path, isDirectory: &isDirectory) && !isDirectory.boolValue)
 
@@ -2727,7 +2674,6 @@ struct AppModelStubTests {
         #expect(record.filesSkipped == 0)
         #expect(record.bytesProcessed == 8)
         #expect(record.exitCode == 0)
-        #expect(record.hasLog)
         let log = try logText(for: record, in: harness)
         // restic restores the file into a hidden folder beside its landing.
         #expect(
@@ -2755,7 +2701,6 @@ struct AppModelStubTests {
         }
         let kept = harness.model.configuration.runs
         #expect(kept.count == 20)
-        #expect(kept.allSatisfy { $0.hasLog })
         // Shutdown drains the background lane the removals run on.
         await harness.model.shutdown()
 
@@ -2779,8 +2724,7 @@ struct AppModelStubTests {
         let fixture = try sweepFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        var run = RunRecord(kind: .backup, planName: "Kept")
-        run.hasLog = true
+        let run = RunRecord(kind: .backup, planName: "Kept")
         var configuration = AppConfiguration()
         configuration.runs = [run]
         try await ConfigStore(directory: fixture.config).save(configuration)
@@ -2839,8 +2783,7 @@ struct AppModelStubTests {
         let fixture = try sweepFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        var run = RunRecord(kind: .backup, planName: "Kept")
-        run.hasLog = true
+        let run = RunRecord(kind: .backup, planName: "Kept")
         var configuration = AppConfiguration()
         configuration.runs = [run]
         try await ConfigStore(directory: fixture.config).save(configuration)
@@ -2875,107 +2818,4 @@ private func traceLineCount(in root: URL) -> Int {
         encoding: .utf8
     )) ?? ""
     return trace.components(separatedBy: "\n").filter { $0.hasPrefix("start ") }.count
-}
-
-/// Captures HTTP request bodies on the loopback interface.
-///
-/// Built for one small POST per test: it answers `200` with an empty body and
-/// closes the connection, collecting whatever arrived.
-private final class HTTPCaptureServer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var bodies: [String] = []
-    private var requestLines: [String] = []
-    private let listener: NWListener
-    private let queue = DispatchQueue(label: "SwiftResticTests.http-capture")
-
-    /// 0 until the listener is ready — poll it instead of reading early.
-    var port: UInt16 { listener.port?.rawValue ?? 0 }
-
-    var captured: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return bodies
-    }
-
-    var capturedRequestLines: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return requestLines
-    }
-
-    init?() {
-        let parameters = NWParameters.tcp
-        // Pin the loopback IPv4 address so 127.0.0.1 is always the thing
-        // listening, whatever the host's interface configuration.
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)
-        guard let listener = try? NWListener(using: parameters) else { return nil }
-        self.listener = listener
-    }
-
-    func start() async {
-        listener.newConnectionHandler = { [weak self] connection in
-            guard let self else { return }
-            // A connection receives nothing until it is started on a queue.
-            connection.start(queue: self.queue)
-            self.receive(on: connection, buffer: Data())
-        }
-        listener.start(queue: queue)
-        // The port only exists once the listener is ready; poll for it, so a
-        // listener that never opens is reported here instead of surfacing
-        // later as a missing payload.
-        let readyDeadline = Date.now.addingTimeInterval(5)
-        while port == 0, Date.now < readyDeadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        if port == 0 {
-            Issue.record("the capture listener never became ready")
-        }
-    }
-
-    func stop() {
-        listener.cancel()
-    }
-
-    private func receive(on connection: NWConnection, buffer: Data) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) {
-            [weak self] data, _, isComplete, error in
-            var accumulated = buffer
-            if let data { accumulated.append(data) }
-
-            if let (bodyStart, contentLength) = Self.requestBounds(accumulated),
-               accumulated.count >= bodyStart + contentLength {
-                let body = String(data: accumulated.suffix(contentLength), encoding: .utf8) ?? ""
-                let requestLine = String(decoding: accumulated.prefix { $0 != UInt8(ascii: "\r") }, as: UTF8.self)
-                self?.lock.lock()
-                self?.bodies.append(body)
-                self?.requestLines.append(requestLine)
-                self?.lock.unlock()
-                let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-                    connection.cancel()
-                })
-                return
-            }
-
-            if error == nil, !isComplete {
-                self?.receive(on: connection, buffer: accumulated)
-            } else {
-                connection.cancel()
-            }
-        }
-    }
-
-    private static func requestBounds(_ data: Data) -> (bodyStart: Int, contentLength: Int)? {
-        guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
-        let headers = String(data: data[..<headerEnd.lowerBound], encoding: .utf8) ?? ""
-        let length = headers
-            .split(separator: "\r\n")
-            .first { $0.lowercased().hasPrefix("content-length:") }
-            .flatMap { line -> Int? in
-                guard let value = line.split(separator: ":").last else { return nil }
-                return Int(value.trimmingCharacters(in: .whitespaces))
-            } ?? 0
-        return (headerEnd.upperBound - data.startIndex, length)
-    }
-
 }

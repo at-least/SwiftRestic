@@ -224,7 +224,6 @@ struct ResticIntegrationTests {
 
         var plan = fixture.plan
         plan.retention = RetentionPolicy(
-            isEnabled: true,
             keepLast: 1,
             keepHourly: 0,
             keepDaily: 0,
@@ -262,7 +261,7 @@ struct ResticIntegrationTests {
         }
         var plan = fixture.plan
         plan.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepLast: 1, keepHourly: 0, keepDaily: 0,
             keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
 
@@ -335,7 +334,7 @@ struct ResticIntegrationTests {
         // keep-last 1 applied to each plan in turn: the two survivors must be
         // exactly the newest snapshot of each group, not just some two snapshots.
         let keepOne = RetentionPolicy(
-            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepLast: 1, keepHourly: 0, keepDaily: 0,
             keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
         var trimming = fixture.plan
@@ -347,81 +346,6 @@ struct ResticIntegrationTests {
 
         let survivors = try await fixture.service.snapshots(fixture.context).map(\.id).sorted()
         #expect(survivors == [newest[fixture.plan], newest[planB]].compactMap { $0 }.sorted())
-    }
-
-    @Test("an empty retention policy is refused before restic ever sees it")
-    func emptyRetentionIsNotRun() async throws {
-        let fixture = try makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = try await fixture.service.initializeRepository(fixture.context)
-        _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
-
-        var plan = fixture.plan
-        plan.retention = RetentionPolicy(
-            isEnabled: true,
-            keepLast: 0, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
-        )
-        #expect(try await fixture.service.forget(fixture.context, plan: plan) == 0)
-        #expect(try await fixture.service.snapshots(fixture.context).count == 1)
-    }
-
-    @Test("the retention preview is a dry run that works while a backup holds the lock")
-    func retentionPreviewIsDryAndLockFree() async throws {
-        let fixture = try makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = try await fixture.service.initializeRepository(fixture.context)
-
-        var planIDs: [String] = []
-        for index in 0 ..< 3 {
-            try "change \(index)".write(
-                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
-                atomically: true,
-                encoding: .utf8
-            )
-            let outcome = try await fixture.service.backup(fixture.context, plan: fixture.plan)
-            planIDs.append(try #require(outcome.summary?.snapshotID))
-        }
-        var otherPlan = fixture.plan
-        otherPlan.id = UUID()
-        let otherOutcome = try await fixture.service.backup(fixture.context, plan: otherPlan)
-        let other = try #require(otherOutcome.summary?.snapshotID)
-
-        var plan = fixture.plan
-        plan.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
-        )
-
-        // A backup of its own holds a lock while the preview runs — the
-        // situation a user opening the sheet mid-backup is in.
-        let holder = try await Self.holdLock(on: fixture)
-        // A failed expectation must not leave restic holding the lock.
-        defer { holder.stop() }
-
-        let preview = try await fixture.service.forgetPreview(fixture.context, plan: plan)
-        #expect(Set(preview.removed.map(\.id)) == Set(planIDs.prefix(2)))
-        #expect(preview.kept.map(\.id) == [planIDs[2]])
-        #expect(!(preview.kept + preview.removed).contains { $0.id == other })
-
-        // The control: the real forget needs the exclusive lock, so the lock
-        // the preview read past is real.
-        do {
-            try await fixture.service.forget(fixture.context, plan: plan)
-            Issue.record("forget ran while a backup held the repository")
-        } catch let error as ResticError {
-            guard case let .commandFailed(code, _) = error, code == 11 else {
-                Issue.record("expected commandFailed(11), got \(error)")
-                return
-            }
-        }
-
-        // Let the holder finish: at the end of its input restic writes its
-        // untagged snapshot and releases the lock on its own.
-        try holder.feed.fileHandleForWriting.close()
-        await Self.waitForExit(holder.process, within: 120)
-        #expect(!holder.process.isRunning, "the holder did not finish after its input ended")
-        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 3)
     }
 
     @MainActor
@@ -493,44 +417,6 @@ struct ResticIntegrationTests {
 
         let after = try await rawSnapshots()
         #expect(after == before)
-    }
-
-    @MainActor
-    @Test("a dry run answers with the plan it is given, unsaved, and removes nothing")
-    func adoptDraftPreviewAnswersForTheDraft() async throws {
-        let fixture = try makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = try await fixture.service.initializeRepository(fixture.context)
-
-        let plan = fixture.plan
-        for index in 0 ..< 2 {
-            try "change \(index)".write(
-                to: fixture.sourceDirectory.appendingPathComponent("a.txt"),
-                atomically: true,
-                encoding: .utf8
-            )
-            _ = try await fixture.service.backup(fixture.context, plan: plan)
-            try await Task.sleep(for: .milliseconds(1100))
-        }
-
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = fixture.root.appendingPathComponent("repo").path
-        let model = try await adoptableModel(fixture: fixture, repository: repository)
-
-        var draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: plan.id))
-        // The policy is set in the draft alone: the plan is not saved, so the
-        // draft itself travels to restic.
-        #expect(draft.retention == BackupPlan().retention)
-        draft.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
-            keepWeekly: 0, keepMonthly: 0, keepYearly: 0
-        )
-        let preview = try await model.previewRetention(plan: draft)
-        #expect(preview.kept.count == 1)
-        #expect(preview.removed.count == 1)
-        #expect(preview.outcomeLine == "At the next backup, 2 backups become 1.")
-        #expect(try await fixture.service.snapshots(fixture.context, planID: plan.id).count == 2)
     }
 
     /// A restic backup holding the fixture repository's lock. It reads its
@@ -1042,6 +928,35 @@ struct ResticIntegrationTests {
         #expect((summary?.filesRestored ?? 0) > 0)
     }
 
+    @Test("Restore puts a file back where it was after its folders were deleted, making them again")
+    func restoreRecreatesDeletedFolders() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let (snapshotID, children) = try await backedUpChildren(fixture)
+        let sub = try #require(children.first { $0.name == "sub" })
+        let file = try #require(try await fixture.service.listDirectory(
+            fixture.context, snapshotID: snapshotID, path: sub.path
+        ).first { $0.name == "b.txt" })
+        // The backed-up folder and the folder in it, gone.
+        try FileManager.default.removeItem(at: fixture.sourceDirectory)
+
+        let original = RestoreDestinationRules.originalLocation(
+            for: .item(name: file.name, path: file.path, isDirectory: false),
+            directoryExists: RestoreDestinationRules.directoryExists,
+            isWritable: RestoreDestinationRules.isWritable
+        )
+        guard case let .available(directories, landings) = original else {
+            Issue.record("expected the original location, got \(original)")
+            return
+        }
+        #expect(landings.map(\.path) == [file.path])
+        try await fixture.service.restore(
+            fixture.context, snapshotID: snapshotID, node: file,
+            destinationDirectory: directories[0], overwrite: .keepExisting
+        )
+        #expect(try String(contentsOfFile: file.path, encoding: .utf8) == "nested")
+    }
+
     @Test("a restore of several items refuses a landing restic would damage, before restic runs")
     func restoreItemsGuardsLandings() async throws {
         let fixture = try makeFixture()
@@ -1269,7 +1184,7 @@ struct ResticIntegrationTests {
         #expect(paths.contains(document.path), "the user folder on the volume must stay")
     }
 
-    @Test("the developer rules and markers skip what the tools rebuild, over a stand-in home")
+    @Test("the developer rules and markers skip what the tools rebuild, over a stand-in home, and keep simulators and virtual machines")
     func developerExcludesSkipRebuildables() async throws {
         var fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -1280,10 +1195,6 @@ struct ResticIntegrationTests {
         // tilde paths and the anchored patterns expand against.
         let home = fixture.sourceDirectory.appendingPathComponent("home")
         fixture.service.home = home.path
-        // Every group's rules and markers alone: no other rule may be what
-        // skips a folder here.
-        fixture.plan.skipsDeveloperFiles = true
-        fixture.plan.skipsMachines = true
 
         // `inplace` is a project made a virtualenv in place
         // (`python -m venv .`): its pyvenv.cfg sits beside the user's code.
@@ -1356,13 +1267,13 @@ struct ResticIntegrationTests {
         let paths = Set(listed.content.keys)
 
         for skipped in [venvConfig, venvModule, namedVenvModule, rustBinary, pycache, nodeModule, terraformState, gradleCache,
-                        cargoRegistry, m2Repository, limaDisk, avdImage, deviceSupport, simulator, deviceFile,
+                        cargoRegistry, m2Repository, deviceSupport, deviceFile,
                         bundledGem, installedGem, intermediate, nugetPackage, cabalBuild, juliaPackage, clionBuild,
                         renvLibrary, metals, zigOut, opamSwitch, uvCache, elixirLS] {
             #expect(!paths.contains(skipped.path), "the rules must skip \(skipped.path); snapshot held \(paths.count) paths")
         }
         for kept in [cargoMarker, userTarget, inPlaceCode, terraformLock, gradleProperties,
-                     cargoBin, m2Settings, limaConfig, adbKey, archive,
+                     cargoBin, m2Settings, limaConfig, adbKey, archive, limaDisk, avdImage, simulator,
                      vendoredCode, gemCredentials, assetsMarker, userObj, juliaDev, cppSource, renvLock] {
             #expect(paths.contains(kept.path), "the marker and the user's own files must stay: \(kept.path)")
         }
@@ -1407,7 +1318,7 @@ struct ResticMaintenanceTests {
 
         var trimmed = plan
         trimmed.retention = RetentionPolicy(
-            isEnabled: true, keepLast: 1, keepHourly: 0, keepDaily: 0,
+            keepLast: 1, keepHourly: 0, keepDaily: 0,
             keepWeekly: 0, keepMonthly: 0, keepYearly: 0
         )
         #expect(try await service.forget(context, plan: trimmed) == 2)

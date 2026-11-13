@@ -12,15 +12,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
             default: rawValue.capitalized
             }
         }
-
-        /// The webhook payload's `operation`, which receivers match on: apart
-        /// from `displayName`, so a rename on screen never changes it.
-        var payloadOperation: String {
-            switch self {
-            case .forget: "Retention"
-            default: rawValue.capitalized
-            }
-        }
     }
 
     enum Outcome: String, Codable, Sendable {
@@ -34,7 +25,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         /// the overview, a stretch, a retry.
         var isProblem: Bool { self == .failed || self == .completedWithErrors }
 
-        var displayName: String {
+        /// Read through `RunRecord.outcomeName`, which words a warning by
+        /// what the run met.
+        fileprivate var displayName: String {
             switch self {
             case .succeeded: "Succeeded"
             case .completedWithErrors: "Completed with warnings"
@@ -71,8 +64,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var filesUnmodified: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
-    /// restic's words about the user's files, and the only warnings sent to
-    /// external channels. Capped at `storedItemErrorLimit` so a pathological
+    /// restic's words about the user's files. Capped at `storedItemErrorLimit` so a pathological
     /// run cannot bloat the history; `itemErrorCount` keeps the total.
     ///
     /// The order is relied on (`unreadableItems` slices it): the unreadable
@@ -104,9 +96,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var detailText: String?
     /// restic's `version` line when the run was stored.
     var resticVersion: String?
-    /// Whether `Logs/<id>.log` was written, so Show Log needs no file check
-    /// on the render path.
-    var hasLog: Bool = false
 
     // Restores only. A restore's `snapshotID` is the backup it read, never
     // a snapshot a run wrote: the snapshot→run join filters on
@@ -137,10 +126,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     /// What the backup uploaded before the disk filled stays until a prune
     /// (`repositoryFullMessage`).
     var repositoryFull: Bool?
-
-    /// `ResticError.snapshotsNotRemoved`'s count: an append-only server or a
-    /// locked bucket, fixed in the plan's editor.
-    var retentionRefused: Int?
 
     // A standing skip (`continuingSkip(of:)`), or a standing failure for the
     // same folders gone or shares refused (`continuingStandingFailure(of:)`):
@@ -209,7 +194,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         resticDetail = c.optional(.resticDetail)
         detailText = c.optional(.detailText)
         resticVersion = c.optional(.resticVersion)
-        hasLog = c.value(.hasLog, default: false)
         snapshotTime = c.optional(.snapshotTime)
         sourcePath = c.optional(.sourcePath)
         sourcePaths = c.optional(.sourcePaths)
@@ -219,7 +203,6 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         missingSources = c.optional(.missingSources)
         refusedShares = c.optional(.refusedShares)
         repositoryFull = c.optional(.repositoryFull)
-        retentionRefused = c.optional(.retentionRefused)
         skipCount = c.optional(.skipCount)
         skippedSince = c.optional(.skippedSince)
         continuedSnapshotIDs = c.optional(.continuedSnapshotIDs)
@@ -228,6 +211,19 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     }
 
     var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
+
+    /// The outcome in this kind's words. A backup's warnings are files it
+    /// could not read, else old backups it could not remove; a
+    /// verification's are damage.
+    var outcomeName: String {
+        guard outcome == .completedWithErrors else { return outcome.displayName }
+        if kind == .check { return "Problems found" }
+        let skippedFiles = itemErrorCount > 0 || exitCode == ResticError.backupPartialSuccessCode
+        let retentionSkipped = trailingItemErrors.contains { $0.hasPrefix(Self.retentionSkippedPrefix) }
+        return !skippedFiles && retentionSkipped ? "Old backups not removed" : Self.someFilesSkipped
+    }
+
+    static let someFilesSkipped = "Some files skipped"
 }
 
 extension RunRecord {
@@ -365,14 +361,14 @@ extension RunRecord {
         guard resticMessage.contains("write \(root)/") else { return nil }
         let disk = VolumePresence.volumeName(of: root).map { "“\($0)”" } ?? "This Mac’s disk"
         return "\(disk) is full — the backup needed more room than it has free. "
-            + "What it uploaded before it stopped stays in the location until a cleanup frees it."
+            + "What it uploaded before it stopped stays in the location until space is freed."
     }
 
     /// The plan's folder is not on this Mac and no drive it could wait for
-    /// is away. Choose New Location… is `AppModel.movePlan`.
+    /// is away. Locate Folder… is `AppModel.movePlan`.
     static func folderGoneMessage(path: String) -> String {
         "“\((path as NSString).lastPathComponent)” is not on this Mac — it was moved, renamed or deleted. "
-            + "Put it back, or use Choose New Location… to back it up where it is now."
+            + "Put it back, or click Locate Folder… to back it up where it is now."
     }
 
     /// `previous`: the plan's newest backup before this one. The same

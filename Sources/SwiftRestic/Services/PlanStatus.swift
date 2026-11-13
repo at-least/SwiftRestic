@@ -26,8 +26,8 @@ struct PlanCaption: Equatable, Sendable {
     var text: String
     /// Its glyph leads `text`.
     var outcome: RunRecord.Outcome?
-    /// For a column too narrow for `text` ("Warnings — 2 days ago"), tried
-    /// before the middle cut that reads "Completed with…ings".
+    /// For a column too narrow for `text` ("Files skipped — 2 days ago"),
+    /// tried before the middle cut.
     var shortText: String? = nil
 }
 
@@ -60,7 +60,7 @@ enum PlanStatus {
     private static let unnamedUnreadFact = "Some files couldn’t be read"
     /// Also the Overview's count line and the Backups tab's empty state:
     /// one wording on every surface.
-    static let noneFromThisPlanFact = "None from this plan yet. This location holds others"
+    static let noneFromThisPlanFact = "No backups of this folder yet."
     /// The usual run names one or two; a home folder macOS blocked in bulk
     /// is a diagnosis, not a list. The drawer holds the rest.
     private static let listedItemLimit = 5
@@ -123,7 +123,7 @@ enum PlanStatus {
             finishedAt: run.finishedAt,
             // A plan's problem is always a backup record (its forget and
             // rewrite runs never are), so the noun is fixed.
-            headline: "Backup \(run.outcome.displayName.lowercased())",
+            headline: run.outcome == .completedWithErrors ? run.outcomeName : "Backup \(run.outcomeName.lowercased())",
             message: message,
             facts: facts,
             items: Array(listedItems),
@@ -232,11 +232,12 @@ enum PlanStatus {
         }
         if let problem {
             let when = relative(problem.finishedAt)
+            let name = problem.outcomeName
             return PlanCaption(
-                text: "\(problem.outcome.displayName) — \(when)",
+                text: "\(name) — \(when)",
                 outcome: problem.outcome,
-                // The one outcome whose words outgrow the column.
-                shortText: problem.outcome == .completedWithErrors ? "Warnings — \(when)" : nil
+                // The one name whose words outgrow the column.
+                shortText: name == RunRecord.someFilesSkipped ? "Files skipped — \(when)" : nil
             )
         }
         let lastBackupAt = lastBackupAt(plan: plan, latestSnapshotTime: latestSnapshot?.time)

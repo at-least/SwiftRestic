@@ -25,16 +25,6 @@ enum ExcludeCategory: Sendable {
     case zig
     case ocaml
     case otherTools
-    case simulators
-    case machines
-
-    /// What the *Developer files* switch covers.
-    static let rebuildableGroups: [ExcludeCategory] = [
-        .python, .javascript, .apple, .rust, .go, .jvm, .dart, .ruby, .php, .dotnet,
-        .elixir, .haskell, .scala, .julia, .r, .cpp, .zig, .ocaml, .otherTools,
-    ]
-    /// What the *Simulators, containers and virtual machines* switch covers.
-    static let machineGroups: [ExcludeCategory] = [.simulators, .machines]
 }
 
 struct ExcludeRule: Hashable, Sendable {
@@ -104,13 +94,14 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("/Library/Logs", .startupDisk, "System-wide logs", "written afresh"),
     ]
 
-    /// What developer tools rebuild, one group per language or tool. For
-    /// the rebuildable groups the defaults' bar holds — nothing there may be
-    /// the only copy of anything; the machine groups do not meet it, so their
-    /// switch is off for new plans. Where a
+    /// What developer tools rebuild, one group per language or tool, passed
+    /// by every plan like the defaults and held to their bar: nothing here
+    /// may be the only copy of anything. Simulators, containers and virtual
+    /// machines are not here: their disks are recreated empty, so what is
+    /// inside may be the only copy (user decision: always backed up). Where a
     /// tool folder also holds the user's own words, the disposable
     /// subfolder is named, never the folder: `~/.gradle`'s
-    /// gradle.properties, `~/.lima`'s lima.yaml, `~/.android`'s keys,
+    /// gradle.properties, `~/.android`'s keys,
     /// `~/.cocoapods`' private spec repos, `~/.gem`'s credentials,
     /// `~/.stack`'s config.yaml, `~/.julia/dev`'s packages under
     /// development and `~/.cache`'s working folders stay by staying out of
@@ -273,28 +264,6 @@ struct ExcludeRule: Hashable, Sendable {
         ExcludeRule("~/.asdf/installs", .otherTools, "Tool versions (asdf)", "asdf installs them again"),
         ExcludeRule("~/.local/share/mise/installs", .otherTools, "Tool versions (mise)", "mise installs them again"),
         ExcludeRule("~/.sdkman/candidates", .otherTools, "SDK versions (SDKMAN!)", "sdk installs them again"),
-        // Simulators and SwiftUI previews: the devices are recreated on
-        // demand, but whatever was installed inside them is not backed up
-        // — the switch's trade, said where it is turned on.
-        ExcludeRule("~/Library/Developer/CoreSimulator/Devices", .simulators, "Simulator devices", "recreated empty — what was inside is not kept"),
-        ExcludeRule("~/Library/Developer/CoreSimulator/Caches", .simulators, "Simulator caches", "Simulator fills them again"),
-        ExcludeRule("~/Library/Developer/Xcode/UserData/Previews", .simulators, "SwiftUI preview devices", "Xcode recreates them"),
-        ExcludeRule("~/.android/avd", .simulators, "Android emulators", "recreated empty — what was inside is not kept"),
-        // Container and virtual-machine disk images — what lives inside
-        // the machine is not backed up (OrbStack's own FAQ recommends the
-        // exclusion), while the machine's configuration beside the disks
-        // stays. Only the disk files are named, never ~/.lima or
-        // ~/.colima wholesale.
-        ExcludeRule("~/Library/Containers/com.docker.docker/Data/vms", .machines, "Docker Desktop’s disk", "what was inside is not kept"),
-        ExcludeRule("~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data", .machines, "OrbStack’s disk", "what was inside is not kept"),
-        ExcludeRule("~/.lima/*/disk", .machines, "Lima machines’ disks", "what was inside is not kept"),
-        ExcludeRule("~/.lima/*/diffdisk", .machines, "Lima machines’ disks", "what was inside is not kept"),
-        ExcludeRule("~/.lima/*/basedisk", .machines, "Lima machines’ base images", "Lima downloads them again"),
-        ExcludeRule("~/.colima/_lima/*/disk", .machines, "Colima machines’ disks", "what was inside is not kept"),
-        ExcludeRule("~/.colima/_lima/*/diffdisk", .machines, "Colima machines’ disks", "what was inside is not kept"),
-        ExcludeRule("~/.colima/_lima/*/basedisk", .machines, "Colima machines’ base images", "Colima downloads them again"),
-        ExcludeRule("~/.local/share/containers/podman/machine", .machines, "Podman machines", "what was inside is not kept"),
-        ExcludeRule("~/.vagrant.d/boxes", .machines, "Vagrant boxes", "vagrant downloads them again"),
     ]
 
     /// A folder holding one of these files has its contents left out
@@ -304,8 +273,7 @@ struct ExcludeRule: Hashable, Sendable {
     /// obj stays, a folder holding the file the build writes into it does
     /// not. Cargo writes its marker into the target folder (not into
     /// ~/.cargo); NuGet's restore writes project.assets.json into a
-    /// project's obj folder. Each applies to every path while the developer
-    /// switch is on. The Cargo marker takes the user's files with it only where
+    /// project's obj folder. Each applies to every path. The Cargo marker takes the user's files with it only where
     /// `CARGO_TARGET_DIR` or `build.target-dir` points the build into a
     /// folder that holds them: restic then keeps the marker alone, exit 0
     /// (0.19.1, probed).

@@ -199,25 +199,6 @@ struct NetworkShareTests {
         #expect(try await secrets.loadSharePassword(nas.id) == nil)
     }
 
-    @Test("the retention preview reconnects the repository's share first, and says why when it stays away")
-    func previewReconnects() async throws {
-        let (model, mounts, volume) = try await makeModel(answer: .failed(EAUTH))
-        var repository = Repository()
-        repository.kind = .local
-        repository.localPath = "/Volumes/\(volume)/restic"
-        model.configuration.repositories = [repository]
-        var plan = BackupPlan()
-        plan.repositoryID = repository.id
-        plan.path = "/tmp/share-plan-source"
-        await #expect {
-            _ = try await model.previewRetention(plan: plan)
-        } throws: { error in
-            error.localizedDescription
-                == "“\(volume)” is not connected. Reconnecting “\(volume)” failed: the share did not accept the user name and password."
-        }
-        #expect(await mounts.calls.map(\.url) == ["smb://me@nas.local/\(volume)"])
-    }
-
     @Test("an editor's share row: as mounted now, else as saved, matched by volume")
     func editorShareRow() async throws {
         let (model, _, volume) = try await makeModel(answer: .failed(EAUTH))

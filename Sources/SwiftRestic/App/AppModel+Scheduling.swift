@@ -155,11 +155,24 @@ extension AppModel {
         runBackups(planIDs: planIDs, askedByUser: false)
     }
 
+    /// While Full Disk Access is granted (`refreshFullDiskAccess`), once the
+    /// configuration is loaded: `Scheduler.rerunAfterFullDiskAccess`. Not
+    /// under a hold.
+    func rerunBackupsMissingFullDiskAccess() {
+        guard !isShuttingDown, isLoaded, !isBootstrapping, isResticAvailable else { return }
+        let planIDs = Scheduler.rerunAfterFullDiskAccess(
+            plans: configuration.plans.filter { scheduleHold(repositoryID: $0.repositoryID) == nil },
+            newestBackup: newestBackupRuns,
+            running: runningPlanIDs
+        )
+        runBackups(planIDs: planIDs, askedByUser: false)
+    }
+
     /// Only for a backup that found the location full: otherwise every
-    /// scheduled cleanup would retry every failure on its location.
-    func rerunBackupsAfterCleanup(in repositoryID: UUID) {
-        let cleanup = configuration.runs.first { $0.kind == .prune && $0.repositoryID == repositoryID }
-        guard cleanup?.outcome == .succeeded else { return }
+    /// scheduled Free Up Space would retry every failure on its location.
+    func rerunBackupsAfterFreeingSpace(in repositoryID: UUID) {
+        let freeing = configuration.runs.first { $0.kind == .prune && $0.repositoryID == repositoryID }
+        guard freeing?.outcome == .succeeded else { return }
         let newest = newestBackupRuns
         let wasFull = plans(in: repositoryID).contains {
             newest[$0.id]?.outcome == .failed && newest[$0.id]?.repositoryFull == true

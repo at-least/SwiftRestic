@@ -29,7 +29,6 @@ struct ServerAwayTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = root.path
-        plan.retention.isEnabled = false
         // Daily and never run: due at the scheduler's first tick.
         plan.schedule.frequency = .daily
 
@@ -144,7 +143,6 @@ struct ServerAwayTests {
             var plan = BackupPlan()
             plan.repositoryID = repository.id
             plan.path = folder.path
-            plan.retention.isEnabled = false
             // Daily and never run: due at the scheduler's first tick.
             plan.schedule.frequency = .daily
             return (repository, plan)

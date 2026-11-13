@@ -1,15 +1,16 @@
 import XCTest
 
-/// A plan's search (⌘F on its Backups tab) lists what its backups hold, each
-/// word matching the start of a word in a name.
-final class FilesSearchUITests: XCTestCase {
+/// ⌘F on a plan's Backups tab opens Search All Backups, the app's one
+/// search, which lists what the backups hold, each word matching the start
+/// of a word in a name.
+final class SearchAllBackupsUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
     @MainActor
     func testSearchMatchesTheStartOfAName() throws {
-        let folders = try UITestFolders.make("FilesSearch")
+        let folders = try UITestFolders.make("SearchAllBackups")
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
 
@@ -19,13 +20,13 @@ final class FilesSearchUITests: XCTestCase {
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.typeText("hello")
-        let hit = app.outlines[AccessibilityID.FilesSearch.results].staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "hello.txt")).firstMatch
+        let hit = app.tables[AccessibilityID.FindFiles.results].staticTexts["hello.txt"].firstMatch
         XCTAssertTrue(hit.waitForExistence(timeout: 30))
 
         field.typeKey("a", modifierFlags: [.command])
         field.typeText("ello")
         XCTAssertTrue(app.staticTexts["No matches"].waitForExistence(timeout: 30))
-        XCTAssertFalse(app.outlines[AccessibilityID.FilesSearch.results].exists)
+        XCTAssertFalse(app.tables[AccessibilityID.FindFiles.results].exists)
         attachScreenshot()
     }
 }

@@ -4,8 +4,8 @@ import Foundation
 /// restic's default `--group-by host,paths`, and the app's one answer to
 /// "the same backup, over time". Under Other backups it groups the
 /// snapshots no plan tag marks (tagged ones group by plan,
-/// `OtherBackupsGroup`); the Change column and Show Changes Only compare
-/// with the previous snapshot in it.
+/// `OtherBackupsGroup`); the Change column compares with the previous
+/// snapshot in it.
 ///
 /// Retention is narrower: `forget` runs per plan (`--tag <plan>`), so a
 /// lineage two plans share is thinned as two groups, and untagged snapshots

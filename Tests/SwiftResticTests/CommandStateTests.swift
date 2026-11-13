@@ -54,7 +54,7 @@ struct CommandStateTests {
         model.setActivityPhase(.backingUp, for: documents.id)
         #expect(model.planProgress[documents.id]?.fraction == 0.97)
 
-        for phase in [PlanActivity.Phase.applyingRetention, .notifying] {
+        for phase in [PlanActivity.Phase.applyingRetention] {
             model.planProgress[documents.id] = midway
             model.setActivityPhase(phase, for: documents.id)
             #expect(model.planProgress[documents.id] == nil, "phase \(phase)")
@@ -74,7 +74,7 @@ struct CommandStateTests {
 
         model.maintenance[repository.id] = MaintenanceActivity(task: .prune)
         #expect(!model.planCommands(for: .plan(documents.id)).canBackUp)
-        #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a cleanup — backups wait until it finishes.")
+        #expect(model.backupLockReason(for: documents) == "“Home NAS” is freeing space — backups wait until it finishes.")
         model.maintenance[repository.id] = MaintenanceActivity(task: .check)
         #expect(model.backupLockReason(for: documents) == "“Home NAS” is running a verification — backups wait until it finishes.")
         model.maintenance = [:]
@@ -218,7 +218,7 @@ struct CommandStateTests {
 
         model.runBackups(planIDs: [documents.id])
         #expect(model.isQueued(documents.id))
-        model.pauseBackups(for: .untilResumed)
+        model.pauseBackups(for: .untilTomorrow)
         model.unwindPlanRun(photos.id)
 
         #expect(model.isRunning(planID: documents.id), "the backup the user asked for was dropped by the pause")
@@ -258,8 +258,13 @@ struct CommandStateTests {
 
         model.maintenance[repository.id] = MaintenanceActivity(task: .check, askedByUser: true)
         await model.deliver(record: record, repository: repository, transcript: RunTranscript().contents)
-        #expect(model.banners.map(\.title) == ["\(RunRecord.Kind.check.displayName) of “NAS” skipped"])
+        #expect(model.banners.map(\.title) == ["Verification of “NAS” was skipped"])
         #expect(model.banners.first?.message == "“NAS” isn’t connected.")
+
+        record.kind = .prune
+        model.maintenance[repository.id] = MaintenanceActivity(task: .prune, askedByUser: true)
+        await model.deliver(record: record, repository: repository, transcript: RunTranscript().contents)
+        #expect(model.banners.first?.title == "Freeing space on “NAS” was skipped")
     }
 
     @Test("Back Up Now on a plan without a repository posts the banner and starts nothing")
@@ -454,39 +459,14 @@ struct CommandStateTests {
         #expect(!model.repositoryCommands(for: nil).canFind)
     }
 
-    @Test("quitting names the verification or cleanup that is running, not maintenance")
+    @Test("quitting names the verification or freeing of space that is running, not maintenance")
     func quitNamesRunningMaintenance() {
         let model = makeModel()
         model.maintenance[UUID()] = MaintenanceActivity(task: .check)
         #expect(model.quitInterruptions == ["A verification is running."])
         model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
         model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
-        #expect(model.quitInterruptions == ["2 cleanups are running.", "A verification is running."])
-    }
-
-    @Test("⌘F searches a plan's Backups tab, and Search All Backups everywhere else — a group's page too")
-    func filesSearchRootsFollowThePage() throws {
-        let model = makeModel()
-        let repository = makeRepository()
-        let plan = makePlan(on: repository)
-        let homeless = makePlan("Homeless", on: nil)
-        model.configuration.repositories = [repository]
-        model.configuration.plans = [plan, homeless]
-        let deleted = UUID()
-        let tagged = try IndexTestData.snapshot(
-            IndexTestData.hexID(1), micros: 1_000_000, tags: [ResticService.planTag(deleted)], paths: ["/Data"])
-        let untagged = try IndexTestData.snapshot(IndexTestData.hexID(2), micros: 2_000_000, paths: ["/Music"])
-        model.snapshots[repository.id] = [untagged, tagged]
-
-        #expect(model.filesSearchRoots(for: .plan(plan.id))
-            == FileNode.roots(repositoryID: repository.id, chainKey: ResticService.planTag(plan.id)))
-        for selection: SidebarItem? in [
-            .plan(homeless.id), .orphanPlan(repositoryID: repository.id, planID: deleted),
-            .lineage(repositoryID: repository.id, key: untagged.lineageKey),
-            .repository(repository.id), .activity, nil,
-        ] {
-            #expect(model.filesSearchRoots(for: selection) == nil, "selection \(String(describing: selection))")
-        }
+        #expect(model.quitInterruptions == ["Space is being freed on 2 locations.", "A verification is running."])
     }
 
     @Test("a backup's page is its plan's, or its group's under Other backups, and none once the listing drops it")
@@ -550,7 +530,7 @@ struct CommandStateTests {
         let idle = model.planCommands(for: nil)
         #expect(idle.canPauseBackups && !idle.backupsPaused)
 
-        model.pauseBackups(for: .untilResumed)
+        model.pauseBackups(for: .untilTomorrow)
         let paused = model.planCommands(for: nil)
         #expect(paused.backupsPaused)
         #expect(!paused.canPauseBackups)

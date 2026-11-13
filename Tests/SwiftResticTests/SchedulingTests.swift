@@ -249,10 +249,6 @@ struct PauseSchedulingTests {
             Scheduler.hold(pause: SchedulePause(until: inAnHour), isOnMeteredNetwork: true, repositoryUsesNetwork: true, now: now)
                 == .paused(until: inAnHour)
         )
-        #expect(
-            Scheduler.hold(pause: SchedulePause(until: nil), isOnMeteredNetwork: false, repositoryUsesNetwork: false, now: now)
-                == .paused(until: nil)
-        )
         #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: true, repositoryUsesNetwork: true, now: now) == .onMeteredNetwork)
         #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: true, repositoryUsesNetwork: false, now: now) == nil)
         #expect(Scheduler.hold(pause: nil, isOnMeteredNetwork: false, repositoryUsesNetwork: true, now: now) == nil)
@@ -266,7 +262,6 @@ struct PauseSchedulingTests {
         )
 
         #expect(ScheduleHold.paused(until: inAnHour).resumesAt == inAnHour)
-        #expect(ScheduleHold.paused(until: nil).resumesAt == nil)
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
 
@@ -298,8 +293,7 @@ struct PauseSchedulingTests {
     func pauseLengthEnds() throws {
         let now = utcDate("2026-09-25 12:00:00")
         #expect(PauseLength.oneHour.end(from: now) == now.addingTimeInterval(3600))
-        #expect(PauseLength.untilResumed.end(from: now) == nil)
-        #expect(PauseLength.allCases.map(\.menuTitle) == ["For 1 Hour", "Until Tomorrow", "Until I Resume"])
+        #expect(PauseLength.allCases.map(\.menuTitle) == ["For 1 Hour", "Until Tomorrow"])
 
         // The expected strings carry numeric offsets: the `xxx` format
         // prints the zone as "-07:00", never "PDT", whatever the locale.
@@ -307,7 +301,7 @@ struct PauseSchedulingTests {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = try #require(TimeZone(identifier: zone))
             let start = try #require(calendar.date(from: components))
-            let end = try #require(PauseLength.untilTomorrow.end(from: start, calendar: calendar))
+            let end = PauseLength.untilTomorrow.end(from: start, calendar: calendar)
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.timeZone = calendar.timeZone
@@ -405,24 +399,19 @@ struct MaintenanceSchedulingTests {
         #expect(due.map(\.task) == [.check])
     }
 
-    private func plan(on repository: Repository, retention: RetentionPolicy = RetentionPolicy()) -> BackupPlan {
+    private func plan(on repository: Repository) -> BackupPlan {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = "/x"
-        plan.retention = retention
         return plan
     }
 
-    @Test("a cleanup comes due only where a plan removes old backups, and is chosen over a check")
+    @Test("a cleanup comes due wherever a plan backs up, and is chosen over a check")
     func pruneNeedsRetention() {
         let repository = repository { _ in }
         let now = utcDate("2026-10-10 00:00:00")
         #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: repository)], now: now).map(\.task) == [.prune])
-        // Retention off, or on another repository's plan: nothing to free, so
-        // an append-only server is never asked for a prune it refuses.
-        var keepsAll = RetentionPolicy()
-        keepsAll.isEnabled = false
-        #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: repository, retention: keepsAll)], now: now).map(\.task) == [.check])
+        // Only another repository's plan: nothing to free.
         #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: self.repository { _ in })], now: now).map(\.task) == [.check])
     }
 
@@ -543,7 +532,7 @@ struct MaintenanceSchedulingTests {
         withVerdict.detailText = "2 errors — restic repair can recover some damage. A cleanup is suggested."
         #expect(last([withVerdict]) == "\(ago) · 2 errors — restic repair can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
-        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · completed with warnings")
+        #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · problems found")
         #expect(last([check(.cancelled, at: "2026-09-09 12:00:00")]) == "\(ago) · stopped")
         // The newest of the repository's own checks, never a prune's or
         // another repository's.
@@ -591,21 +580,6 @@ struct MaintenanceSchedulingTests {
 
 @Suite("Retention policy")
 struct RetentionPolicyTests {
-    @Test("a policy with every rule at zero refuses to run")
-    func emptyPolicyIsUnsafe() {
-        // restic reads `forget` with no --keep-* flag as "delete every snapshot".
-        // Nothing in the app may ever hand it that command line.
-        var policy = RetentionPolicy()
-        policy.keepLast = 0
-        policy.keepHourly = 0
-        policy.keepDaily = 0
-        policy.keepWeekly = 0
-        policy.keepMonthly = 0
-        policy.keepYearly = 0
-        #expect(policy.forgetArguments.isEmpty)
-        #expect(policy.isSafeToRun == false)
-    }
-
     @Test("rules become --keep-* flags, skipping the zeros")
     func flags() {
         var policy = RetentionPolicy()
@@ -620,7 +594,6 @@ struct RetentionPolicyTests {
             "--keep-daily", "7",
             "--keep-monthly", "12",
         ])
-        #expect(policy.isSafeToRun)
     }
 }
 
@@ -658,6 +631,70 @@ struct RepositoryTests {
         // A folder in the bucket is typed after it, in the same field.
         s3.s3Bucket = "/my-bucket/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
+    }
+
+    @Test("one Bucket field: my-bucket on AWS, host/bucket elsewhere, read back as typed")
+    func s3BucketField() {
+        func parsed(_ field: String) -> Repository {
+            var repository = Repository()
+            repository.kind = .s3
+            repository.s3BucketField = field
+            return repository
+        }
+        func parts(_ field: String) -> [String] {
+            let repository = parsed(field)
+            return [repository.s3Endpoint, repository.s3Bucket]
+        }
+        #expect(parts("my-bucket") == ["s3.amazonaws.com", "my-bucket"])
+        // A folder in an AWS bucket: no dot before the slash.
+        #expect(parts("my-bucket/mac") == ["s3.amazonaws.com", "my-bucket/mac"])
+        #expect(parts("s3.us-west-004.backblazeb2.com/my-bucket") == ["s3.us-west-004.backblazeb2.com", "my-bucket"])
+        #expect(parts("s3.us-west-004.backblazeb2.com/my-bucket/mac") == ["s3.us-west-004.backblazeb2.com", "my-bucket/mac"])
+        // A port or a scheme marks a host with no dot, and a scheme's own
+        // slashes stay in the endpoint.
+        #expect(parts("minio:9000/my-bucket") == ["minio:9000", "my-bucket"])
+        #expect(parts("http://minio.lan:9000/my-bucket") == ["http://minio.lan:9000", "my-bucket"])
+        #expect(parsed("http://minio.lan:9000/my-bucket").resticRepositoryString == "s3:http://minio.lan:9000/my-bucket")
+        // Mid-typing: the host before its slash is still a bucket.
+        #expect(parts("s3.us-west-004.backblazeb2.com") == ["s3.amazonaws.com", "s3.us-west-004.backblazeb2.com"])
+        #expect(parts("") == ["s3.amazonaws.com", ""])
+
+        for field in ["my-bucket", "my-bucket/mac", "s3.us-west-004.backblazeb2.com/my-bucket/mac", "http://minio.lan:9000/my-bucket"] {
+            #expect(parsed(field).s3BucketField == field)
+        }
+        // Stored fields read as the one field: AWS, by name or empty, is
+        // the bucket alone.
+        var stored = Repository()
+        stored.kind = .s3
+        stored.s3Endpoint = "s3.eu-central-1.amazonaws.com"
+        stored.s3Bucket = "photos"
+        #expect(stored.s3BucketField == "s3.eu-central-1.amazonaws.com/photos")
+        stored.s3Endpoint = ""
+        #expect(stored.s3BucketField == "photos")
+        stored.s3Endpoint = "s3.amazonaws.com"
+        #expect(stored.s3BucketField == "photos")
+    }
+
+    @Test("a replacement keeps the kind, server, bucket and key ID, under a new identity")
+    func replacement() {
+        var missing = Repository()
+        missing.kind = .s3
+        missing.s3Endpoint = "s3.us-west-004.backblazeb2.com"
+        missing.s3Bucket = "photos/mac"
+        missing.s3AccessKeyID = "AKIA"
+        missing.resticID = "abc"
+        let replacement = missing.replacement()
+        #expect(replacement.id != missing.id)
+        #expect(replacement.kind == .s3)
+        #expect(replacement.resticRepositoryString == missing.resticRepositoryString)
+        #expect(replacement.s3AccessKeyID == "AKIA")
+        #expect(replacement.resticID == nil)
+
+        var sftp = Repository()
+        sftp.kind = .sftp
+        sftp.sftpHost = "backup@nas.local:2222"
+        sftp.sftpPath = "/volume1/restic"
+        #expect(sftp.replacement().resticRepositoryString == sftp.resticRepositoryString)
     }
 
     @Test("an SFTP port other than 22 moves to restic's URL form, the only one that carries a port")

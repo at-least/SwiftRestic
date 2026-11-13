@@ -57,11 +57,11 @@ struct ResticErrorTests {
             exitCode: 130,
             message: ""
         ).errorDescription ?? ""
-        #expect(bare == "It was interrupted. Show Log has the details.")
+        #expect(bare == "It was interrupted.")
         #expect(ResticError.commandFailed(exitCode: 1, message: "").errorDescription
-            == "It stopped with an error. Show Log has the details.")
+            == "It stopped with an error.")
         #expect(ResticError.commandFailed(exitCode: 2, message: "").errorDescription
-            == "It stopped unexpectedly. Show Log has the details.")
+            == "It stopped unexpectedly.")
 
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "disk on fire")
@@ -69,7 +69,7 @@ struct ResticErrorTests {
         )
         #expect(
             ResticError.commandFailed(exitCode: 99, message: "")
-                .errorDescription == "It stopped unexpectedly. Show Log has the details."
+                .errorDescription == "It stopped unexpectedly."
         )
     }
 
@@ -124,7 +124,7 @@ struct ResticErrorTests {
         #expect(result([]).failureMessage == fatal)
 
         let unknownText = ResticError.commandFailed(exitCode: 1, message: unknown.failureMessage).errorDescription ?? ""
-        #expect(unknownText == "SSH refused this server’s key. Show Log has what SSH said.")
+        #expect(unknownText == "SSH refused this server’s key.")
         let changedText = ResticError.commandFailed(exitCode: 1, message: changed.failureMessage).errorDescription ?? ""
         #expect(changedText.hasPrefix("This server’s SSH key has changed since this Mac last connected"))
         #expect(changedText.contains("~/.ssh/known_hosts"))
@@ -150,17 +150,17 @@ struct ResticErrorTests {
         #expect(result(located).failureMessage == located)
     }
 
-    @Test("a forget the repository refused says so, and how many went")
+    @Test("a forget the storage refused says so, how many stay, and that only the storage can allow it")
     func refusedSnapshotsWords() {
         #expect(ResticError.snapshotsNotRemoved(removed: 0, refused: 1, reason: "403 Forbidden").errorDescription
-            == "The location refused to delete 1 backup (403 Forbidden) — it may be append-only or locked. "
-            + "Turn off removing old backups, or allow deletions on this storage.")
+            == "This storage doesn’t allow deleting (403 Forbidden), so 1 old backup stays. Allow deletions on the storage.")
+        #expect(ResticError.snapshotsNotRemoved(removed: 0, refused: 4, reason: "").errorDescription
+            == "This storage doesn’t allow deleting, so 4 old backups stay. Allow deletions on the storage.")
         #expect(ResticError.snapshotsNotRemoved(removed: 2, refused: 1, reason: "operation not permitted").errorDescription
-            == "The location refused to delete 1 of the 3 old backups (operation not permitted); the other 2 were removed. "
-            + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage.")
+            == "This storage doesn’t allow deleting (operation not permitted), so 1 of the 3 old backups stays; "
+            + "the other 2 were removed. Allow deletions on the storage.")
         #expect(ResticError.snapshotsNotRemoved(removed: 1, refused: 2, reason: "").errorDescription
-            == "The location refused to delete 2 of the 3 old backups; the other one was removed. "
-            + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage.")
+            == "This storage doesn’t allow deleting, so 2 of the 3 old backups stay; the other one was removed. Allow deletions on the storage.")
     }
 
     @Test("a missing password names the location it is missing for")
@@ -171,9 +171,9 @@ struct ResticErrorTests {
     @Test("a launch failure, an unreadable answer and an unrestored item say what to do next, without naming restic")
     func appFailuresInTheReadersWords() {
         #expect(ResticError.processLaunchFailed("The file “restic” doesn’t exist").errorDescription
-            == "The backup engine couldn’t start: The file “restic” doesn’t exist. Install SwiftRestic again if this keeps happening.")
+            == "SwiftRestic couldn’t start the backup: The file “restic” doesn’t exist. If this keeps happening, install SwiftRestic again.")
         #expect(ResticError.malformedOutput(detail: "1 change line did not decode").errorDescription
-            == "It finished, but its result couldn’t be read (1 change line did not decode). Show Log has the details.")
+            == "It finished, but its result couldn’t be read (1 change line did not decode).")
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt"]).errorDescription
             == "/Restored/a.txt wasn’t restored: nothing by that name is in the backup. A name written on another kind of computer can do this.")
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt", "/Restored/b.txt"]).errorDescription

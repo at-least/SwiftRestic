@@ -197,11 +197,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             case .status(let text):
                 menu.addItem(disabledItem(text))
             case .problem(let text, let runID):
-                // The plan page's Show in Activity route.
                 let item = NSMenuItem(title: text, action: #selector(showProblem(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = runID.uuidString
-                item.toolTip = "Show this run in Activity"
+                item.toolTip = "Show in Activity"
                 menu.addItem(item)
             }
         }
@@ -359,7 +358,14 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
 
     @objc private func showProblem(_ sender: NSMenuItem) {
         guard let runID = (sender.representedObject as? String).flatMap(UUID.init(uuidString:)) else { return }
-        router.focusRun(runID)
+        showRun(runID)
+    }
+
+    /// The tray's problem line and a notification click: Activity at the
+    /// run, and the run's known fix opened over it.
+    func showRun(_ runID: UUID) {
+        let fix = model.configuration.runs.first { $0.id == runID }.flatMap(model.fix(for:))
+        router.focusRun(runID, openingFix: fix)
         openMainWindow()
     }
 

@@ -121,34 +121,6 @@ struct RunRecordPresentationTests {
         )
     }
 
-    @Test("the log sheet's header names the run by the same rule")
-    func logSheetTitle() {
-        let home = repository(name: "Home Disk")
-        let documents = plan(name: "Documents", repositoryID: home.id)
-
-        #expect(
-            RunRecordPresentation.logSheetTitle(
-                for: RunRecord(kind: .backup, planID: documents.id, planName: "Documents", repositoryID: home.id),
-                plans: [documents],
-                repositories: [home]
-            ) == "Backup log — Documents (Home Disk)"
-        )
-        #expect(
-            RunRecordPresentation.logSheetTitle(
-                for: RunRecord(kind: .check, planName: "Home Disk", repositoryID: home.id),
-                plans: [],
-                repositories: [home]
-            ) == "Verification log — Home Disk"
-        )
-        #expect(
-            RunRecordPresentation.logSheetTitle(
-                for: RunRecord(kind: .restore, planName: "Budget.numbers", repositoryID: home.id),
-                plans: [],
-                repositories: [home]
-            ) == "Restore log — Budget.numbers (Home Disk)"
-        )
-    }
-
     @Test("the menu bar's Next line says the plan with its repository, then when")
     func nextRunLine() {
         let home = repository(name: "Home Disk")
@@ -186,7 +158,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.exitCode = 10
         }
-        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true) == .addRepository)
+        #expect(RunRecordPresentation.fix(for: missing, repositoryExists: true) == .addRepository(repository))
 
         let locked = backup {
             $0.repositoryID = repository
@@ -208,13 +180,13 @@ struct RunRecordPresentationTests {
         wrongPassword.repositoryID = nil
         #expect(RunRecordPresentation.fix(for: wrongPassword, repositoryExists: true) == nil)
         #expect(RunFix.enterPassword(repository).title == "Enter Password…")
-        #expect(RunFix.addRepository.title == "Add Backup Location…")
+        #expect(RunFix.addRepository(repository).title == "Add Backup Location…")
         // The failure message beside the button already says the cause.
         #expect(RunFix.enterPassword(repository).help == nil)
-        #expect(RunFix.addRepository.help == nil)
+        #expect(RunFix.addRepository(repository).help == nil)
     }
 
-    @Test("a backup whose folder is gone offers Choose New Location… for its plan, and nothing once the plan is gone")
+    @Test("a backup whose folder is gone offers Locate Folder… for its plan, and nothing once the plan is gone")
     func goneFolderFix() {
         let plan = UUID()
         let gone = backup {
@@ -223,17 +195,17 @@ struct RunRecordPresentationTests {
             $0.outcome = .failed
             $0.missingSources = ["/Users/me/Documents"]
         }
-        #expect(RunRecordPresentation.fix(for: gone, repositoryExists: true) == .chooseNewLocation(planID: plan))
+        #expect(RunRecordPresentation.fix(for: gone, repositoryExists: true) == .locateFolder(planID: plan))
         #expect(
             RunRecordPresentation.fix(for: gone, repositoryExists: true, planExists: false) == nil,
             "a removed plan has no folder left to move"
         )
         // The failure message tells the user to press it by this name.
-        #expect(RunFix.chooseNewLocation(planID: plan).title == "Choose New Location…")
-        #expect(RunFix.chooseNewLocation(planID: plan).help == nil)
+        #expect(RunFix.locateFolder(planID: plan).title == "Locate Folder…")
+        #expect(RunFix.locateFolder(planID: plan).help == nil)
     }
 
-    @Test("a failure for a network share that refused offers the editor holding its password: the repository's for its own share, the plan's for a folder's")
+    @Test("a failure for a network share that refused asks for the share's password: the repository's own share, or a plan folder's")
     func refusedShareFixes() {
         let repository = UUID()
         let plan = UUID()
@@ -244,57 +216,52 @@ struct RunRecordPresentationTests {
             $0.refusedShares = ["NAS"]
         }
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: "NAS")
-            == .editRepositoryShare(repository))
+            == .enterSharePassword(.repository(repository)))
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: nil)
-            == .editPlanShare(plan))
+            == .enterSharePassword(.plan(plan)))
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, planExists: false, repositoryVolume: "Backups") == nil)
         // A check or prune refused its repository's share.
         refused.kind = .check
         refused.planID = nil
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, repositoryVolume: "NAS")
-            == .editRepositoryShare(repository))
-        #expect(RunFix.editRepositoryShare(repository).title == "Edit Location…")
-        #expect(
-            RunFix.editRepositoryShare(repository).help == "The share’s saved password is in Edit Location",
-            "Edit Location…'s tooltip says the share's password is in the location editor"
-        )
-        #expect(RunFix.editPlanShare(plan).title == "Edit Plan…")
+            == .enterSharePassword(.repository(repository)))
+        #expect(RunFix.enterSharePassword(.repository(repository)).title == "Enter Share Password…")
+        #expect(RunFix.enterSharePassword(.plan(plan)).help == "SwiftRestic uses this password to reconnect the network share")
     }
 
-    @Test("a retention the repository refused offers the plan page, a warning's as a failure's")
+    @Test("a retention the storage refused offers no fix: only the storage can allow deletions")
     func refusedRetentionFix() {
-        let repository = UUID()
-        let plan = UUID()
-        // A backup whose retention the repository refused: the snapshot
-        // stands, so the run is a warning — and still has its fix.
-        var refused = backup {
-            $0.repositoryID = repository
-            $0.planID = plan
+        let refused = backup {
+            $0.repositoryID = UUID()
+            $0.planID = UUID()
             $0.outcome = .completedWithErrors
-            $0.retentionRefused = 1
+            $0.itemErrors = [RunRecord.retentionSkippedPrefix + "This storage doesn’t allow deleting, so 1 old backup stays."]
         }
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .showPlan(plan))
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true, planExists: false) == nil)
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: false) == nil)
-        // Apply Retention Now's own run, failed for it.
-        refused.kind = .forget
-        refused.outcome = .failed
-        #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == .showPlan(plan))
-        // Any other warning still offers nothing.
-        refused.retentionRefused = nil
-        refused.kind = .backup
-        refused.outcome = .completedWithErrors
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == nil)
-        #expect(RunFix.showPlan(plan).title == "Show Plan")
-        #expect(
-            RunFix.showPlan(plan).help == "Remove old backups automatically is on the plan page",
-            "Show Plan's tooltip names the switch that turns retention off"
-        )
+        #expect(refused.outcomeName == "Old backups not removed")
     }
 
-    @Test("a backup that filled its repository's disk says so in plain words and offers Clean Up Now; a write anywhere else keeps restic's")
+    @Test("a run with problems reads in its kind's words: a backup skipped files, a verification found problems")
+    func outcomeNamePerKind() {
+        var skipped = backup { $0.outcome = .completedWithErrors }
+        skipped.itemErrorCount = 1
+        #expect(skipped.outcomeName == "Some files skipped")
+        skipped.itemErrorCount = 0
+        skipped.exitCode = ResticError.backupPartialSuccessCode
+        #expect(skipped.outcomeName == "Some files skipped", "an exit 3 that named nothing still skipped files")
+        // Files skipped and old backups kept: the files lead.
+        skipped.itemErrors = [RunRecord.retentionSkippedPrefix + "the location was busy."]
+        #expect(skipped.outcomeName == "Some files skipped")
+        var damaged = RunRecord(kind: .check)
+        damaged.outcome = .completedWithErrors
+        #expect(damaged.outcomeName == "Problems found")
+        damaged.outcome = .failed
+        #expect(damaged.outcomeName == "Failed")
+    }
+
+    @Test("a backup that filled its repository's disk says so in plain words and offers Free Up Space; a write anywhere else keeps restic's")
     func repositoryFull() {
-        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the location until a cleanup frees it."
+        let words = "is full — the backup needed more room than it has free. What it uploaded before it stopped stays in the location until space is freed."
         var onDrive = Repository()
         onDrive.kind = .local
         onDrive.localPath = "/Volumes/TinyDisk/repo"
@@ -330,9 +297,9 @@ struct RunRecordPresentationTests {
             $0.exitCode = 1
             $0.repositoryFull = true
         }
-        #expect(RunRecordPresentation.fix(for: full, repositoryExists: true) == .pruneNow(repository))
+        #expect(RunRecordPresentation.fix(for: full, repositoryExists: true) == .freeUpSpace(repository))
         #expect(RunRecordPresentation.fix(for: full, repositoryExists: false) == nil)
-        #expect(RunFix.pruneNow(repository).title == "Clean Up Now")
+        #expect(RunFix.freeUpSpace(repository).title == "Free Up Space")
     }
 
     @Test("a check or prune that did not end clean offers itself again; nothing else does")
@@ -348,7 +315,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .completedWithErrors), repositoryExists: true) == .check(repository))
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .failed), repositoryExists: true) == .prune(repository))
         #expect(MaintenanceRetry.check(repository).title == "Verify Again")
-        #expect(MaintenanceRetry.prune(repository).title == "Clean Up Again")
+        #expect(MaintenanceRetry.prune(repository).title == "Free Up Space Again")
         // A clean or cancelled one, another kind, a repository gone: nothing.
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
@@ -382,8 +349,8 @@ struct RunRecordPresentationTests {
         let older = check(.completedWithErrors, "2 errors. `restic repair` can recover some damage.")
         #expect(RunRecordPresentation.detail(for: older) == "2 errors. `restic repair` can recover some damage")
         // No verdict at all: the outcome, as every kind without words.
-        #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Completed with warnings")
-        #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "completed with warnings")
+        #expect(RunRecordPresentation.detail(for: check(.completedWithErrors, nil)) == "Problems found")
+        #expect(RunRecordPresentation.verdictClause(for: check(.completedWithErrors, nil)) == "problems found")
         #expect(RunRecordPresentation.detail(for: check(.succeeded, "No errors found.")) == "No errors found")
     }
 
@@ -485,7 +452,7 @@ struct RunRecordPresentationTests {
         #expect(detail(RunRecord(kind: .check, planName: "Home NAS")) == "Succeeded")
         var failedCheck = RunRecord(kind: .check, planName: "Home NAS")
         failedCheck.outcome = .completedWithErrors
-        #expect(detail(failedCheck) == "Completed with warnings")
+        #expect(detail(failedCheck) == "Problems found")
 
         // A cleanup's is what it freed, as a retention run's is what it removed.
         var cleanup = RunRecord(kind: .prune, planName: "Home NAS")
@@ -600,7 +567,7 @@ struct RunRecordPresentationTests {
             versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2 (Build 25G83)", restic: "restic 0.20.0")
         )
         let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Backup of “Documents” — Completed with warnings")
+        #expect(lines.first == "Backup of “Documents” — Some files skipped")
         #expect(lines.contains("Location: Home NAS"))
         #expect(lines.contains("Backup: \(snapshotID)"))
         // The drawer's words for the numbers, the notification's "new data".
@@ -707,8 +674,8 @@ struct RunRecordPresentationTests {
     func oldCancelledMessageIsTheOutcome() throws {
         let stored = #"{"kind":"backup","outcome":"cancelled","failureMessage":"Cancelled"}"#
         let run = try JSONDecoder().decode(RunRecord.self, from: Data(stored.utf8))
-        #expect(run.outcome.displayName == "Stopped")
-        #expect(run.failureMessage == run.outcome.displayName)
+        #expect(run.outcomeName == "Stopped")
+        #expect(run.failureMessage == run.outcomeName)
     }
 
     @Test("a copied Activity row for a failed multi-item restore names the items, the destination, the error and the count past the sample")

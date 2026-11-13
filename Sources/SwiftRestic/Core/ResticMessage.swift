@@ -174,10 +174,6 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
         return .metadataOnly
     }
 
-    func holder(newer: Snapshot, older: Snapshot) -> Snapshot {
-        category == .removed ? older : newer
-    }
-
     var explanation: String {
         var parts: [String] = []
         if modifier.contains("+") { parts.append("added") }

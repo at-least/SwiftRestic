@@ -216,6 +216,35 @@ struct FirstBackupTests {
         await model.shutdown()
     }
 
+    @Test("backing up the same folder into backups this Mac made of it continues their plan, with real restic")
+    func firstBackupContinuesThisMacsHistory() async throws {
+        let (first, root) = try makeModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try makeSource(in: root)
+        let folder = root.appendingPathComponent("Disk/SwiftRestic Backups").path
+        let original = try await first.createFirstBackup(source: source, folder: folder, password: "pw")
+        await first.tasks.drain()
+        #expect(first.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
+        await first.shutdown()
+
+        // This Mac set up again: a new configuration, the same disk.
+        let again = AppModel(store: ConfigStore(directory: root.appendingPathComponent("config-again")), secrets: .inMemory())
+        again.resticState = .ready(try PinnedRestic.binary(), version: "")
+        again.loginItemStateReader = { .off }
+        again.loginItemApplier = { _ in }
+        let continued = try await again.createFirstBackup(source: source, folder: folder, password: "pw")
+        #expect(continued == original)
+        #expect(again.configuration.plans.map(\.id) == [original])
+
+        // Another folder into the same backups starts its own plan.
+        let other = root.appendingPathComponent("Pictures")
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        let repositoryID = try #require(again.configuration.repositories.first?.id)
+        #expect(again.createFirstPlan(source: other.path, repositoryID: repositoryID) != original)
+        await again.tasks.drain()
+        await again.shutdown()
+    }
+
     @Test("a location the editor added for the first-run sheet gets its plan on the defaults, announced")
     func firstPlanAfterTheEditor() throws {
         let (model, root) = try makeModel()
@@ -265,7 +294,7 @@ struct FirstBackupTests {
         #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) != nil)
     }
 
-    @Test("the first success is announced once, whatever the setting; another plan's is not")
+    @Test("the first success is announced once; another plan's is not")
     func firstSuccessAnnouncedOnce() async {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftResticFirstNotice-\(UUID().uuidString)")), secrets: .inMemory())
@@ -275,7 +304,6 @@ struct FirstBackupTests {
         var old = BackupPlan()
         old.path = "/old"
         model.configuration.plans = [fresh, old]
-        #expect(!model.configuration.settings.notifyOnSuccess)
 
         func success(_ plan: BackupPlan) -> RunRecord {
             var record = RunRecord(kind: .backup, planID: plan.id, planName: plan.path, repositoryID: nil)
@@ -540,8 +568,36 @@ struct LocateRepositoryTests {
         #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryIsLocal: true)
             == .locate(run.repositoryID!))
         #expect(RunRecordPresentation.fix(for: run, repositoryExists: true, repositoryIsLocal: false)
-            == .addRepository)
+            == .addRepository(run.repositoryID!))
         #expect(RunFix.locate(UUID()).title == "Locate…")
+    }
+
+    @Test("a missing server location's fix moves its plans, ids kept, to the location added for it")
+    func replacementTakesThePlans() async throws {
+        let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticReplace-\(UUID().uuidString)")), secrets: .inMemory())
+        model.resticState = .damaged
+        var missing = Repository()
+        missing.kind = .s3
+        missing.s3Bucket = "photos"
+        missing.s3AccessKeyID = "AKIA"
+        var other = Repository()
+        other.localPath = "/Volumes/Disk/Backups"
+        model.configuration.repositories = [missing, other]
+        let moving = namedPlan("Photos", repositoryID: missing.id)
+        let staying = namedPlan("Docs", repositoryID: other.id)
+        model.configuration.plans = [moving, staying]
+
+        let replacement = missing.replacement()
+        await model.upsert(repository: replacement, password: "pw", providerSecret: "secret")
+        model.movePlans(from: missing.id, to: replacement.id)
+
+        #expect(model.configuration.plans.map(\.id) == [moving.id, staying.id])
+        #expect(model.plan(id: moving.id)?.repositoryID == replacement.id)
+        #expect(model.plan(id: staying.id)?.repositoryID == other.id)
+        // The missing location stays, with nothing backing up to it.
+        #expect(model.repository(id: missing.id) != nil)
+        #expect(model.plans(in: missing.id).isEmpty)
     }
 
     @Test("a disk not connected asks for the disk by its name")

@@ -187,7 +187,7 @@ extension AppModel: BackupRunEngine.Sink {
         }
     }
 
-    func deliver(record: RunRecord, plan: BackupPlan, transcript: RunTranscript.Contents) async {
+    func deliver(record: RunRecord, transcript: RunTranscript.Contents) async {
         var record = record
         // Probed as the run ends and recorded: the drawer's wording reads
         // this stored answer, not `fullDiskAccess`, which an older probe
@@ -197,7 +197,6 @@ extension AppModel: BackupRunEngine.Sink {
         append(record: record)
         announceInApp(record: record)
         notify(about: record)
-        await broadcast(record: record, plan: plan)
     }
 
     /// Only a skipped Back Up Now gets a banner: it ends in milliseconds and

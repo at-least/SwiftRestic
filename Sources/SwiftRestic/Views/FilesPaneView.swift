@@ -1,19 +1,17 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The pane under a Backups tab's tree for the item picked in the tree or
-/// in a plan's search: its header (`FilesPaneHeader`), then a file's
-/// versions (`FileVersionsView`), a folder's restore (`FolderPaneActions`),
-/// or, for an item on this Mac no backup holds, that it is not backed up.
+/// The pane under a Backups tab's tree for the file picked in the tree: its
+/// header (`FilesPaneHeader`), then its versions (`FileVersionsView`) or,
+/// for a file on this Mac no backup holds, that it is not backed up.
 struct FilesPaneView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(DiskWatch.self) private var diskWatch
     let node: FileNode
+    let chosenVersion: ChosenVersionRestore
 
-    /// The backups of the chain holding the item, newest first.
-    @State private var versions: [IndexVersion] = []
-    /// A file's contents through those backups, newest first.
+    /// The file's contents through the chain's backups, newest first.
     @State private var contentVersions: [ContentVersion] = []
     /// The version the file is shown at, by its newest backup; nil for the
     /// newest.
@@ -32,7 +30,7 @@ struct FilesPaneView: View {
             VStack(alignment: .leading, spacing: 8) {
                 FilesPaneHeader(
                     node: node,
-                    newestHolder: versions.first,
+                    newestHolder: contentVersions.first?.snapshots.first,
                     chainNewest: chainNewest,
                     notRead: notRead,
                     isOnDisk: isOnDisk,
@@ -42,7 +40,7 @@ struct FilesPaneView: View {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
-                        Text(FilesSearchAnswer.indexStillReading)
+                        Text(IndexWords.stillReading)
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -89,10 +87,10 @@ struct FilesPaneView: View {
         chainNewest.flatMap { model.unreadItems(inBackup: $0.id).reason(for: node.path) }
     }
 
-    /// An item on this Mac no backup of the plan holds, by the index once it
-    /// has read every backup — the tree's `notBackedUp`.
+    /// A file on this Mac no backup of the plan holds, by the index once it
+    /// has read every backup.
     private var isNotBackedUp: Bool {
-        isOnDisk == true && indexComplete && (node.isDirectory ? versions.isEmpty : contentVersions.isEmpty)
+        isOnDisk == true && indexComplete && contentVersions.isEmpty
     }
 
     @ViewBuilder
@@ -108,13 +106,11 @@ struct FilesPaneView: View {
             ContentUnavailableView(
                 "Not backed up",
                 systemImage: "clock.arrow.circlepath",
-                description: Text(verbatim: FileEntry.notBackedUpReason(notRead: notRead) + ".")
+                description: Text(verbatim: FileStandingWords.notBackedUpReason(notRead: notRead) + ".")
             )
-        } else if node.isDirectory {
-            FolderPaneActions(node: node, newest: versions.first)
         } else {
             FileVersionsView(
-                node: node, versions: contentVersions, chosenID: choice,
+                node: node, versions: contentVersions, chosenID: choice, chosenVersion: chosenVersion,
                 diskPath: DiskFile.localPath(
                     of: node.path, newestBackup: chainNewest, localHostname: model.localHostname
                 ),
@@ -136,16 +132,10 @@ struct FilesPaneView: View {
     private func load() async {
         do {
             indexComplete = try await model.indexIsComplete(repositoryID: node.repositoryID)
-            // A file's backups are its versions' together, so one read
-            // answers both; a folder has no content versions.
-            let contents = node.isDirectory ? [] : try await model.indexedContentVersions(
+            let contents = try await model.indexedContentVersions(
                 ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
             )
-            let loaded = node.isDirectory ? try await model.indexedHolders(
-                ofPath: node.path, inChain: node.chainKey, repositoryID: node.repositoryID
-            ) : contents.flatMap(\.snapshots)
             guard !Task.isCancelled else { return }
-            versions = loaded
             contentVersions = contents
             loadError = nil
             // Where the pane opens, settled on the first read: the version
@@ -158,68 +148,9 @@ struct FilesPaneView: View {
             }
         } catch {
             guard !Task.isCancelled else { return }
-            versions = []
             contentVersions = []
             loadError = error.localizedDescription
         }
-    }
-}
-
-/// A folder's way back, by the newest backup holding it — this Mac's copy gone
-/// or not: the whole folder's restore. When that backup was is the header's
-/// line; any other moment, or a part of it, is the tree's once the search
-/// ends on it.
-private struct FolderPaneActions: View {
-    @Environment(AppModel.self) private var model
-    let node: FileNode
-    let newest: IndexVersion?
-
-    @State private var destinationRequest: RestoreDestinationRequest?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if newest == nil {
-                // Saying why is the pane's banner's job, while the index reads.
-                NoBackupHoldsItYet()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Spacer()
-            }
-            Divider()
-            HStack {
-                Spacer()
-                Button("Restore To…") { restoreFolder(choosingDestination: true) }
-                    .accessibilityIdentifier(AccessibilityID.FilesPane.restoreTo)
-                    .disabled(newest == nil || model.isRestoring)
-                    .help("Restore this whole folder as of the newest backup to a folder you choose")
-                Button("Restore") { restoreFolder() }
-                    .accessibilityIdentifier(AccessibilityID.FilesPane.restore)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(newest == nil || model.isRestoring)
-                    .help("Put this whole folder back as of the newest backup")
-            }
-            .padding(12)
-        }
-        .restoreCommand(RestoreCommand(
-            isEnabled: newest != nil && !model.isRestoring,
-            run: { restoreFolder() }
-        ))
-        .restoreFlow($destinationRequest)
-    }
-
-    /// By its path, its kind in that backup read before it restores: the
-    /// backup may hold the path as a file (`RestoreSource.node`).
-    private func restoreFolder(choosingDestination: Bool = false) {
-        guard let newest else { return }
-        destinationRequest = RestoreDestinationRequest.picked(
-            [RestoreSource(
-                name: node.name, path: node.path, isDirectory: true,
-                snapshotID: newest.id, backupTime: newest.time, node: nil
-            )],
-            repositoryID: node.repositoryID,
-            model: model,
-            choosingDestination: choosingDestination
-        )
     }
 }
 
@@ -234,11 +165,11 @@ private struct FilesPaneLoadKey: Equatable {
     let diskGeneration: UInt64
 }
 
-/// The pane's identity block: the kind's icon, the name, its path and, for a
-/// folder or an item the chain's newest backup no longer holds, when it was
-/// last backed up: the one fact of its standing the rows below do not
-/// already say — and, for a file, its copy on this Mac beside its versions.
-/// How many backups and versions hold it are the rows themselves.
+/// The pane's subtitle: the file's path and, for a file the chain's newest
+/// backup no longer holds, when it was last backed up — the one fact of its
+/// standing the rows below do not already say — and its copy on this Mac
+/// beside its versions. Its icon and name are the tree's selected row
+/// above. How many backups and versions hold it are the rows themselves.
 private struct FilesPaneHeader: View {
     let node: FileNode
     let newestHolder: IndexVersion?
@@ -253,15 +184,10 @@ private struct FilesPaneHeader: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            FileKindIcon(type: .backedUp(name: node.name, isDirectory: node.isDirectory), size: 32)
-                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(node.name)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                // The item's own path, not its parent's: a plan's root would
-                // read as a bare "~". A link only while this Mac holds it.
+                // The file's own path, not its parent's: the name says which
+                // file of the folder it is. A link only while this Mac holds
+                // it.
                 let location = (node.path as NSString).abbreviatingWithTildeInPath
                 if isOnDisk == true {
                     Button(location) {
@@ -300,16 +226,9 @@ private struct FilesPaneHeader: View {
     }
 
     /// Nil for a file the chain's newest backup holds: its rows and disk
-    /// line say it already. A folder gone from this Mac uses a deleted row's
-    /// tooltip words.
+    /// line say it already.
     private var standing: String? {
-        guard let newestHolder else { return nil }
-        if node.isDirectory, isOnDisk == false {
-            return FileEntry.deleted(lastBackedUp: newestHolder.time)
-        }
-        if let chainNewest, newestHolder.id != chainNewest.id {
-            return FileEntry.standing(notRead: notRead, lastBackedUp: newestHolder.time)
-        }
-        return node.isDirectory ? "Last backed up \(Format.timestamp(newestHolder.time))" : nil
+        guard let newestHolder, let chainNewest, newestHolder.id != chainNewest.id else { return nil }
+        return FileStandingWords.standing(notRead: notRead, lastBackedUp: newestHolder.time)
     }
 }

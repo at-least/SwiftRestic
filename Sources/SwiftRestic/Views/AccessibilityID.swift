@@ -35,25 +35,17 @@ enum AccessibilityID {
         static let add = "pathList.add"
     }
 
-    enum FilesPane {
-        static let restore = "filesPane.restore"
-        static let restoreTo = "filesPane.restoreTo"
-    }
-
     enum RestorePane {
         static let tree = "restorePane.tree"
         static let restore = "restorePane.restore"
-        static let restoreTo = "restorePane.restoreTo"
-    }
-
-    enum FilesSearch {
-        static let results = "filesSearch.results"
     }
 
     enum FileVersions {
         static let list = "fileVersions.list"
-        static let restore = "fileVersions.restore"
-        static let restoreTo = "fileVersions.restoreTo"
+    }
+
+    enum FindFiles {
+        static let results = "findFiles.results"
     }
 
     enum RepositoryEditor {
@@ -67,7 +59,7 @@ enum AccessibilityID {
     enum PasswordPrompt {
         static let password = "passwordPrompt.password"
         static let failure = "passwordPrompt.failure"
-        static let open = "passwordPrompt.open"
+        static let save = "passwordPrompt.save"
     }
 
     enum Repository {

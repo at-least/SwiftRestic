@@ -2,7 +2,7 @@ import XCTest
 
 /// A file's versions under its backup's tree on the Backups tab: the one
 /// before the latest change restored, its old bytes back — into a folder
-/// chosen in the folder panel, and in place.
+/// chosen in the folder panel, and in place by the tab's one Restore.
 final class FileVersionsUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -31,9 +31,9 @@ final class FileVersionsUITests: XCTestCase {
         let older = versions.element(boundBy: 1)
         older.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(older.waitForSelected())
-        let restoreButton = app.buttons[AccessibilityID.FileVersions.restore]
+        let restoreButton = app.buttons[AccessibilityID.RestorePane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
-        UITest.restoreToButton(AccessibilityID.FileVersions.restoreTo, in: app).click()
+        UITest.chooseRestoreTo(in: app)
 
         // This Mac's backup: the folder panel at once, no sheet.
         UITest.choose(restored, in: app)
@@ -44,8 +44,9 @@ final class FileVersionsUITests: XCTestCase {
         attachScreenshot()
     }
 
-    /// Restore puts the older version back over the file, with no sheet:
-    /// the file is in the way, so the Replace question comes first.
+    /// The tab's Restore puts the version chosen under the tree back over
+    /// the file, with no sheet: the file is in the way, so the Replace
+    /// question comes first.
     @MainActor
     func testRestoreAnEarlierVersionInPlace() throws {
         let folders = try UITestFolders.make("FileVersionsInPlace")
@@ -65,7 +66,7 @@ final class FileVersionsUITests: XCTestCase {
         let older = versions.element(boundBy: 1)
         older.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(older.waitForSelected())
-        let restoreButton = app.buttons[AccessibilityID.FileVersions.restore]
+        let restoreButton = app.buttons[AccessibilityID.RestorePane.restore]
         XCTAssertTrue(restoreButton.waitForEnabled())
         restoreButton.click()
 

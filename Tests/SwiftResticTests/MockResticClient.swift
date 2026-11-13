@@ -344,12 +344,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return try locked { forgetScript }.get()
     }
 
-    /// Not transcribed: the preview is a read the sheet asks for, not a run.
-    func forgetPreview(_ context: RepositoryContext, plan: BackupPlan) async throws -> RetentionPreview {
-        record("forgetPreview")
-        return RetentionPreview(kept: [], removed: [])
-    }
-
     func restore(
         _ context: RepositoryContext,
         snapshotID: String,

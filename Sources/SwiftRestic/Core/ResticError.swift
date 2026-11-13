@@ -65,7 +65,7 @@ enum ResticError: Error, LocalizedError, Equatable {
             if let base { return base }
             if let advice = Self.sshHostKeyAdvice(message) { return advice }
             let known = Self.exitCodeWords(code)
-            if message.isEmpty { return "\(known ?? "It stopped unexpectedly"). Show Log has the details." }
+            if message.isEmpty { return "\(known ?? "It stopped unexpectedly")." }
             let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
             // Exit 1 is every restic fatal error: the reason alone, as a
             // sentence.
@@ -76,11 +76,11 @@ enum ResticError: Error, LocalizedError, Equatable {
         case .repositoryRemoved:
             return "This backup location is no longer set up in SwiftRestic."
         case let .itemNotListed(name):
-            return "“\(name)” is no longer listed in the chosen backup — refresh and try again."
+            return "“\(name)” isn’t in this backup any more. Select the backup again, then restore."
         case let .passwordMissing(name):
             return "No password is stored for “\(name)”."
         case let .processLaunchFailed(reason):
-            return "The backup engine couldn’t start: \(reason). Install SwiftRestic again if this keeps happening."
+            return "SwiftRestic couldn’t start the backup: \(reason). If this keeps happening, install SwiftRestic again."
         case let .timedOut(seconds, cause):
             return cause.isEmpty
                 ? "Timed out after \(Format.duration(seconds)) and was stopped."
@@ -88,18 +88,18 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .idleStalled(seconds):
             return "Nothing moved for \(Format.duration(seconds)), so it was stopped. Check the location’s connection and try again."
         case let .malformedOutput(detail):
-            return "It finished, but its result couldn’t be read (\(detail)). Show Log has the details."
+            return "It finished, but its result couldn’t be read (\(detail))."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file couldn’t be written at \(path): \(reason). Nothing at the destination was changed."
         case let .snapshotsNotRemoved(removed, refused, reason):
             let cause = reason.isEmpty ? "" : " (\(reason))"
-            let advice = "Turn off removing old backups, or allow deletions on this storage."
+            let refusal = "This storage doesn’t allow deleting\(cause), so"
+            let advice = "Allow deletions on the storage."
             guard removed > 0 else {
-                return "The location refused to delete \(Format.plural(refused, "backup"))\(cause) — it may be append-only or locked. \(advice)"
+                return "\(refusal) \(Format.plural(refused, "old backup")) \(refused == 1 ? "stays" : "stay"). \(advice)"
             }
             let others = removed == 1 ? "the other one was removed" : "the other \(removed) were removed"
-            return "The location refused to delete \(refused) of the \(removed + refused) old backups\(cause); \(others). "
-                + "It may be append-only or locked. Turn off removing old backups, or allow deletions on this storage."
+            return "\(refusal) \(refused) of the \(removed + refused) old backups \(refused == 1 ? "stays" : "stay"); \(others). \(advice)"
         case let .folderInTheWay(path):
             return "A folder is already at \(path), where a restored file would go, so nothing was restored. Move it aside, or restore somewhere else."
         case let .fileInTheWay(path):
@@ -130,7 +130,7 @@ enum ResticError: Error, LocalizedError, Equatable {
                 + "the server was reinstalled, or another computer is answering. If you expect the change, "
                 + "remove the server’s line from ~/.ssh/known_hosts, then try again."
         }
-        return "SSH refused this server’s key. Show Log has what SSH said."
+        return "SSH refused this server’s key."
     }
 
     /// A run record's words: a refused password names the location, and a

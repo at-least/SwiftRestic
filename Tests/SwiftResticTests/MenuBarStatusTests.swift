@@ -419,12 +419,12 @@ struct MenuBarStatusTests {
         )
         #expect(
             MenuBarStatus.problemLine(runs: [warned], hasNoRepositories: false, relative: Self.ago)
-                == "Photos completed with warnings 2 hours ago"
+                == "Photos: some files skipped 2 hours ago"
         )
         // Two problems: the one that finished later leads, whatever the
         // storage order.
-        #expect(MenuBarStatus.problemLine(runs: [failed, warned], hasNoRepositories: false)?.hasPrefix("Photos ") == true)
-        #expect(MenuBarStatus.problemLine(runs: [warned, failed], hasNoRepositories: false)?.hasPrefix("Photos ") == true)
+        #expect(MenuBarStatus.problemLine(runs: [failed, warned], hasNoRepositories: false)?.hasPrefix("Photos:") == true)
+        #expect(MenuBarStatus.problemLine(runs: [warned, failed], hasNoRepositories: false)?.hasPrefix("Photos:") == true)
     }
 
     @Test("a failed retention run is named by what it did, then the plan")
@@ -620,7 +620,7 @@ struct MenuBarStatusTests {
         )
         #expect(
             MenuBarStatus.problemLine(runs: [failedRun(kind: .prune, name: "NAS")], hasNoRepositories: false, relative: Self.ago)
-                == "Cleanup on NAS failed 2 hours ago"
+                == "Freeing space on NAS failed 2 hours ago"
         )
         #expect(
             MenuBarStatus.problemLine(runs: [failedRun(kind: .restore, name: "Report.pdf")], hasNoRepositories: false, relative: Self.ago)
@@ -702,7 +702,7 @@ struct MenuBarStatusTests {
         // While held, a "Next:" headline would lie: the scheduler will not
         // fire it.
         #expect(MenuBarStatus.headline(activity: [:], hold: .onMeteredNetwork, plans: [], repositories: [], nextRun: (nightly, future)) == nil)
-        #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: nil), plans: [], repositories: [], nextRun: (nightly, future)) == nil)
+        #expect(MenuBarStatus.headline(activity: [:], hold: .paused(until: future), plans: [], repositories: [], nextRun: (nightly, future)) == nil)
         #expect(
             MenuBarStatus.headline(activity: [:], hold: nil, plans: [], repositories: [], nextRun: (nightly, future))
                 == MenuBarStatus.headline(activity: [:], plans: [], repositories: [], nextRun: (nightly, future))
@@ -722,7 +722,6 @@ struct MenuBarStatusTests {
             flat(ScheduleHold.paused(until: try at(10, 0)).summary(now: now, calendar: calendar))
                 == "Backups paused until tomorrow"
         )
-        #expect(ScheduleHold.paused(until: nil).summary(now: now, calendar: calendar) == "Backups paused until you resume")
         #expect(ScheduleHold.onMeteredNetwork.summary(now: now, calendar: calendar) == "Backups paused on a metered network")
         #expect(ScheduleHold.onMeteredNetwork.resumesAt == nil)
     }
@@ -950,13 +949,14 @@ struct MenuBarStatusTests {
 
     @Test("the icon dims for a hold only while nothing runs, and says why")
     func heldIconDimsAndSpeaks() {
+        let pause = ScheduleHold.paused(until: .now.addingTimeInterval(3600))
         #expect(MenuBarStatus.appearsHeld(state: .idle, hold: .onMeteredNetwork))
-        #expect(MenuBarStatus.appearsHeld(state: .problem, hold: .paused(until: nil)))
+        #expect(MenuBarStatus.appearsHeld(state: .problem, hold: pause))
         #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .onMeteredNetwork))
-        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: .paused(until: nil)))
+        #expect(!MenuBarStatus.appearsHeld(state: .running, hold: pause))
         #expect(!MenuBarStatus.appearsHeld(state: .idle, hold: nil))
 
-        let paused = MenuBarStatus.accessibilityDescription(for: .idle, hold: .paused(until: nil))
+        let paused = MenuBarStatus.accessibilityDescription(for: .idle, hold: pause)
         #expect(paused.contains("paused"), "was \(paused)")
         #expect(paused.hasPrefix("SwiftRestic"))
         let problemHeld = MenuBarStatus.accessibilityDescription(for: .problem, hold: .onMeteredNetwork)
@@ -973,5 +973,34 @@ struct MenuBarStatusTests {
             == "SwiftRestic, SwiftRestic is damaged. Install it again.")
         #expect(MenuBarStatus.accessibilityDescription(for: .idle, hold: nil, isResticDamaged: false)
             == "SwiftRestic")
+    }
+}
+
+/// The tray's problem line and a notification click (`TrayStatusItem.showRun`).
+@MainActor
+@Suite("Problem routes")
+struct ProblemRouteTests {
+    @Test("a run with a fix that opens a sheet lands Activity on the run with that sheet asked for; any other run lands on Activity alone")
+    func runFixOpensOverActivity() {
+        let runID = UUID()
+        let repositoryID = UUID()
+        let planID = UUID()
+        let cases: [(RunFix?, AppRouter.Intent?)] = [
+            (.enterPassword(repositoryID), .enterPassword(repositoryID)),
+            (.enterSharePassword(.repository(repositoryID)), .enterSharePassword(.repository(repositoryID))),
+            (.enterSharePassword(.plan(planID)), .enterSharePassword(.plan(planID))),
+            (.addRepository(repositoryID), .addRepository(replacing: repositoryID)),
+            (.freeUpSpace(repositoryID), nil),
+            (.locate(repositoryID), nil),
+            (.locateFolder(planID: planID), nil),
+            (nil, nil),
+        ]
+        for (fix, intent) in cases {
+            let router = AppRouter()
+            router.focusRun(runID, openingFix: fix)
+            #expect(router.selection == .activity, "\(String(describing: fix))")
+            #expect(router.activityFocusRunID == runID, "\(String(describing: fix))")
+            #expect(router.pendingIntent == intent, "\(String(describing: fix))")
+        }
     }
 }

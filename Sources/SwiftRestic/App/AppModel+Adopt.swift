@@ -14,38 +14,50 @@ struct AdoptBriefing: Equatable {
 
 extension AppModel {
     func adoptDraft(repositoryID: UUID, planID: UUID) async -> BackupPlan? {
+        guard var draft = continuingDraft(repositoryID: repositoryID, planID: planID) else { return nil }
+        // Daily — a new plan's default — only when the prefilled folder is
+        // here to back up. Otherwise it is likely another Mac's, and a plan
+        // that cannot run here must not start on a schedule. Off the main
+        // actor, as every presence read: a stalled share holds it.
+        let path = draft.path
+        let isHere = await Task.detached { Self.sourceExists(path) }.value
+        draft.schedule.frequency = isHere ? .daily : .manual
+        return draft
+    }
+
+    /// The plan an orphan group's backups continue under: the group's UUID,
+    /// so its tag, and its newest backup's folder, excludes and tags, on a
+    /// new plan's schedule.
+    func continuingDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
+        shelves(for: repositoryID).orphanPlanGroup(planID).flatMap { continuingDraft(repositoryID: repositoryID, group: $0) }
+    }
+
+    /// `group`, one of the location's shelves' groups, already in hand.
+    func continuingDraft(repositoryID: UUID, group: OtherBackupsGroup) -> BackupPlan? {
         let shelves = self.shelves(for: repositoryID)
-        guard repository(id: repositoryID) != nil,
+        guard case let .plan(planID, snapshots) = group,
+              repository(id: repositoryID) != nil,
               plan(id: planID) == nil,
-              let group = shelves.orphanPlanGroup(planID),
               let path = shelves.adoptablePath(of: group, localHost: localHostname),
-              let prefill = BackupShelves.prefillSnapshot(among: group.snapshots, localHost: localHostname)
+              let prefill = BackupShelves.prefillSnapshot(among: snapshots, localHost: localHostname)
         else { return nil }
         var draft = BackupPlan()
         draft.id = planID
         draft.repositoryID = repositoryID
         draft.path = path
         // restic records each exclude as it was passed, tilde expanded: a
-        // rule the app offers goes back to the app's own spelling, so the
-        // switches below read it as theirs.
+        // rule the app applies goes back to the app's own spelling, so it is
+        // recognised below.
         let spelled = Dictionary(
-            (BackupPlan.defaultExcludes + BackupPlan.developerExcludes).filter { $0.hasPrefix("~") }
+            BackupPlan.appliedExcludes.filter { $0.hasPrefix("~") }
                 .map { (ResticService.expandTilde($0), $0) },
             uniquingKeysWith: { first, _ in first }
         )
         let recorded = BackupPlan.withoutDuplicates(prefill.excludes.map { spelled[$0] ?? $0 })
-        // A run records the switches' rules among the excludes (not the
-        // markers): the switches read back from them, and what they do not
-        // pass is the user's own list.
-        draft.readSwitches(fromRecorded: recorded)
-        draft.excludePatterns = draft.withoutSwitchRules(recorded)
+        // A run records the applied rules among the excludes (not the
+        // markers): what they do not pass is the user's own list.
+        draft.excludePatterns = BackupPlan.withoutAppliedRules(recorded)
         draft.tags = prefill.userTags
-        // Daily — a new plan's default — only when the prefilled folder is
-        // here to back up. Otherwise it is likely another Mac's, and a plan
-        // that cannot run here must not start on a schedule. Off the main
-        // actor, as every presence read: a stalled share holds it.
-        let isHere = await Task.detached { Self.sourceExists(path) }.value
-        draft.schedule.frequency = isHere ? .daily : .manual
         return draft
     }
 

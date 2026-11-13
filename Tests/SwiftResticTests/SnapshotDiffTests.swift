@@ -27,16 +27,6 @@ struct SnapshotDiffTests {
         #expect(photos.previousComparable(in: all) == nil)
     }
 
-    @Test("a change row's copy is in the newer backup, a removed one's in the older")
-    func changeHolder() throws {
-        let older = try snapshot("a1", time: "2026-09-01T02:00:00Z", paths: ["/src"])
-        let newer = try snapshot("a2", time: "2026-09-02T02:00:00Z", paths: ["/src"])
-        for modifier in ["+", "M", "T", "U", "MU", "?"] {
-            #expect(ResticDiffChange(path: "/src/a.txt", modifier: modifier).holder(newer: newer, older: older) == newer)
-        }
-        #expect(ResticDiffChange(path: "/src/gone/", modifier: "-").holder(newer: newer, older: older) == older)
-    }
-
     @Test("a change row's glyph: the category's sign, a modified one's strongest fact")
     func changeGlyph() {
         // U+2212 minus for a removal, not a hyphen.
@@ -119,61 +109,5 @@ struct DiffCandidateGroupingTests {
     @Test("empty input groups to nothing")
     func emptyInput() throws {
         #expect(DiffCandidateGrouping.months(in: [Snapshot](), time: \.time).isEmpty)
-    }
-}
-
-@Suite("Show Changes Only")
-struct BackupChangesTests {
-    private func changes(_ entries: [(String, String)]) -> [PathKey: ResticDiffChange] {
-        Dictionary(uniqueKeysWithValues: entries.map {
-            (PathKey(ResticPath.normalized($0.0)), ResticDiffChange(path: $0.0, modifier: $0.1))
-        })
-    }
-
-    @Test("lists every change by path, deletions and folders too, each with its normalized path")
-    func rows() {
-        let list = BackupChanges(changes: changes([
-            ("/d/z.txt", "+"), ("/d/a.txt", "-"), ("/d/sub/", "+"), ("/d/m.txt", "M"),
-        ]))
-        #expect(list.rows.map(\.path) == ["/d/a.txt", "/d/m.txt", "/d/sub", "/d/z.txt"])
-        #expect(list.rows.first?.change.category == .removed)
-        #expect(list.rows[2].change.isDirectory)
-        #expect(list.total == 4)
-        #expect(list.summary(dataAdded: nil) == "2 added, 1 deleted, 1 modified")
-    }
-
-    @Test("says the data the backup added, and nothing for a run that stored none")
-    func summaryWithData() {
-        let list = BackupChanges(changes: changes([("/a", "+")]))
-        #expect(list.summary(dataAdded: 2_000_000) == "1 added · \(Format.bytes(2_000_000)) of new data")
-        #expect(list.summary(dataAdded: 0) == "1 added")
-        #expect(BackupChanges(changes: [:]).summary(dataAdded: nil) == "No changes")
-    }
-
-    @Test("two names differing only in Unicode normalization are two rows")
-    func spellings() {
-        let list = BackupChanges(changes: changes([("/d/caf\u{e9}", "+"), ("/d/cafe\u{301}", "+")]))
-        #expect(Set(list.rows.map(\.id)).count == 2)
-    }
-
-    /// Built off the main actor when the diff lands (`RestorePaneLoad.run`); its
-    /// cost is what "why did this backup grow" waits on past the walk itself.
-    @Test("a diff past the limit keeps the counts whole, says it stopped, and builds in seconds")
-    func large() {
-        let count = 200_000
-        var entries: [PathKey: ResticDiffChange] = [:]
-        entries.reserveCapacity(count)
-        for index in 0 ..< count {
-            let path = "/data/folder\(index % 500)/file\(index)"
-            entries[PathKey(path)] = ResticDiffChange(path: path, modifier: index % 2 == 0 ? "+" : "M")
-        }
-        let started = ContinuousClock.now
-        let list = BackupChanges(changes: entries)
-        let elapsed = ContinuousClock.now - started
-        print("SHOW-CHANGES build: \(count) changes in \(elapsed)")
-        #expect(list.total == count)
-        #expect(list.rows.count == BackupChanges.rowLimit)
-        #expect(list.summary(dataAdded: nil).hasSuffix("Showing the first \(Format.count(BackupChanges.rowLimit))"))
-        #expect(elapsed < .seconds(10))
     }
 }

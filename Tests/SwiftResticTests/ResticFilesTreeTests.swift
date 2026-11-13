@@ -183,8 +183,8 @@ struct ResticFilesTreeTests {
 
     /// The index searches' cap, over the index the app builds: a full page
     /// of hits is the whole answer, one hit past the cap says it was cut —
-    /// the model's probe of asking one hit past the limit, for a plan's
-    /// search and Search All Backups. The ceiling itself is pinned
+    /// the model's probe of asking one hit past the limit, for Search All
+    /// Backups. The ceiling itself is pinned
     /// store-side (`SnapshotIndexScaleTests.search`).
     @MainActor
     @Test("an index search's full page is not called cut short; one hit past the cap is")
@@ -238,12 +238,6 @@ struct ResticFilesTreeTests {
                 await eventually(within: 60) { (try? await model.indexIsComplete(repositoryID: repository.id)) == true },
                 "the index never read \(plan.path)'s backup"
             )
-            let found = try await model.searchIndex(
-                pattern: "note", inChain: ResticService.planTag(plan.id), repositoryID: repository.id
-            )
-            #expect(found.hits.count == AppModel.indexSearchLimit, "\(plan.path) returned \(found.hits.count) hits")
-            #expect(found.isTruncated == (plan.id == over.id), "\(plan.path) read as truncated \(found.isTruncated)")
-
             // The repository-wide searches hold every plan backed up so far:
             // Full's page alone, then Full's notes and Over's together.
             let summaries = try await model.searchIndexWithSummaries(pattern: "note", repositoryID: repository.id)

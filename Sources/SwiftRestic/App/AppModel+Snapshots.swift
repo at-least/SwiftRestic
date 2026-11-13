@@ -50,7 +50,30 @@ extension AppModel {
         repositoriesAwaitingLaunchListing.remove(repositoryID)
     }
 
+    /// Returns once the listing is in (or the read ended without one):
+    /// restic's ID and the size, which can take minutes on a large remote,
+    /// go on in the background. For a caller that needs only the rows.
+    func refreshListing(repositoryID: UUID) async {
+        await withCheckedContinuation { (listed: CheckedContinuation<Void, Never>) in
+            tasks.addBackground(Task {
+                await self.readSnapshots(repositoryID: repositoryID, whenListed: { listed.resume() })
+            })
+        }
+    }
+
     func refreshSnapshots(repositoryID: UUID) async {
+        await readSnapshots(repositoryID: repositoryID, whenListed: nil)
+    }
+
+    /// `whenListed` is called exactly once: after the listing lands, or as
+    /// the read ends without one.
+    private func readSnapshots(repositoryID: UUID, whenListed: (() -> Void)?) async {
+        var whenListed = whenListed
+        func listed() {
+            whenListed?()
+            whenListed = nil
+        }
+        defer { listed() }
         guard let repository = repository(id: repositoryID) else { return }
         guard !loadingSnapshots.contains(repositoryID) else {
             // Not dropped: the running listing predates what this one needs
@@ -117,6 +140,7 @@ extension AppModel {
             maintenanceAwaitingServer.remove(repositoryID)
             repositoriesMissingPassword.remove(repositoryID)
             indexReconcile(repositoryID: repositoryID, listing: listing, generation: generation)
+            listed()
             if repository.resticID == nil {
                 await recordResticID(of: repositoryID, service: service, context: context)
             }
@@ -166,7 +190,7 @@ extension AppModel {
             guard configuration.repository(id: repositoryID) != nil else { return }
             snapshotListingOutcomes[repositoryID] = .failed(
                 Self.missingRepositoryReason(kind: repository.kind),
-                fix: repository.kind == .local ? .locate(repositoryID) : .addRepository
+                fix: repository.kind == .local ? .locate(repositoryID) : .addRepository(repositoryID)
             )
         } catch let ResticError.commandFailed(code, message) where code == ResticError.wrongPasswordCode {
             guard configuration.repository(id: repositoryID) != nil else { return }

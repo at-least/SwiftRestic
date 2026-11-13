@@ -42,9 +42,9 @@ struct AppRouterTests {
         let b = UUID()
         let plan = UUID()
 
-        router.request(.cleanUp(a))
-        router.request(.cleanUp(b))
-        #expect(router.takePendingIntent() == .cleanUp(b))
+        router.request(.freeUpSpace(a))
+        router.request(.freeUpSpace(b))
+        #expect(router.takePendingIntent() == .freeUpSpace(b))
 
         for intent: AppRouter.Intent in [
             .stopPlan(plan),
@@ -94,21 +94,12 @@ struct AppRouterTests {
         #expect(router.backupSelection[page] == "s2")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s1") == nil)
 
-        // A route opens its backup afresh: a query left on the page's
-        // Backups tab, searched in another backup, would stand over the
-        // record and the folder the route asked for. Another page's stays.
-        let otherID = UUID()
-        let other = SidebarItem.plan(otherID)
-        let pageRoots = FileNode.roots(repositoryID: repository, chainKey: ResticService.planTag(pageID))
-        let otherRoots = FileNode.roots(repositoryID: repository, chainKey: ResticService.planTag(otherID))
-        router.filesSearchText[pageRoots] = "taxes"
-        router.filesSearchText[otherRoots] = "kept"
+        // Another page's open backup stays.
+        let other = SidebarItem.plan(UUID())
         router.backupSelection[other] = "kept"
         router.showBackup("s3", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         #expect(router.backupSelection[page] == "s3")
-        #expect(router.filesSearchText[pageRoots] == nil, "the page's search still lists its hits over the backup the route opened")
         #expect(router.backupSelection[other] == "kept")
-        #expect(router.filesSearchText[otherRoots] == "kept")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s3") == "/D/Taxes")
     }
 
@@ -167,47 +158,21 @@ struct AppRouterTests {
         }
     }
 
-    @Test("⇧⌘F on a page turns it to its Backups tab and asks that page's toolbar field, and no other, for the focus")
-    func searchFilesFocusesThePagesField() {
-        let router = AppRouter()
-        let page = SidebarItem.plan(UUID())
-        router.selection = page
-        router.searchFiles(on: page)
-        #expect(router.tab(of: page) == .backups)
-        #expect(router.selection == page)
-        #expect(router.searchFocus == page)
-    }
-
-    @Test("the Backups tab searches for the typed text without its edge spaces; spaces alone show the tree")
-    func searchQueryIsTrimmed() {
-        let router = AppRouter()
-        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
-        #expect(router.filesSearchQuery(for: roots) == "")
-        router.filesSearchText[roots] = "  invoice "
-        #expect(router.filesSearchQuery(for: roots) == "invoice")
-        router.filesSearchText[roots] = "   "
-        #expect(router.filesSearchQuery(for: roots) == "", "spaces alone ran a search instead of showing the tree")
-    }
-
-    @Test("Search All Backups opens as a page, its field focused, and a query handed over is kept, with the plan it came from to go back to")
+    @Test("Search All Backups opens as a page from every page, its field focused, and a query handed over is kept")
     func openFindIsAPage() {
         let router = AppRouter()
+        router.selection = .plan(UUID())
+        router.setTab(.backups, of: .plan(UUID()))
         router.findQuery = "older"
         router.openFind()
         #expect(router.selection == .findFiles)
-        #expect(router.searchFocus == .findFiles)
+        #expect(router.focusesFindField)
         #expect(router.findQuery == "older")
-        #expect(router.findOrigin == nil)
 
-        let plan = SidebarItem.plan(UUID())
-        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
-        router.openFind(query: "invoice", from: AppRouter.FindOrigin(page: plan, roots: roots))
+        router.focusesFindField = false
+        router.openFind(query: "invoice")
         #expect(router.findQuery == "invoice")
-        router.returnToPlanSearch()
-        #expect(router.selection == plan)
-        #expect(router.tab(of: plan) == .backups)
-        #expect(router.searchFocus == plan)
-        #expect(router.filesSearchText[roots] == "invoice")
+        #expect(router.focusesFindField)
     }
 
 

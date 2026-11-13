@@ -323,9 +323,6 @@ struct SnapshotListingCaveat: View {
 /// A clear Text survives as its own static text in both.
 struct SnapshotCompletenessMark: View {
     let run: RunRecord?
-    /// A list of backups draws the triangle in `.secondary`: orange on every
-    /// incomplete row reads as alarm down the whole list.
-    var isMuted = false
 
     private static let outcome = RunRecord.Outcome.completedWithErrors
     private static let symbolName = outcome.symbolName!
@@ -335,7 +332,7 @@ struct SnapshotCompletenessMark: View {
         case .incomplete?:
             let label = Format.snapshotCompleteness(run) ?? ""
             Image(systemName: Self.symbolName)
-                .foregroundStyle(isMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(StatusPalette.status(Self.outcome)))
+                .foregroundStyle(StatusPalette.status(Self.outcome))
                 .help(label)
                 .accessibilityLabel(label)
         case .complete?:
@@ -415,7 +412,7 @@ struct PathListEditor: View {
     @State private var isDropTargeted = false
 
     /// About six one-line rows: the list scrolls past them rather than
-    /// pushing the switches off the sheet.
+    /// growing the sheet.
     private static let listHeight: CGFloat = 132
 
     var body: some View {
@@ -509,14 +506,6 @@ private struct ListBarButton: View {
         .buttonStyle(.borderless)
         .help(title)
         .accessibilityLabel(title)
-    }
-}
-
-extension View {
-    /// On/off settings: mini switches in a grouped form, the HIG's "consider
-    /// using a mini switch to control the setting in a single row".
-    func editorSwitches() -> some View {
-        toggleStyle(.switch).controlSize(.mini)
     }
 }
 
@@ -694,32 +683,6 @@ struct UnreadableItemLine: View {
             Button("Exclude from “\(model.label(of: plan))”") { model.exclude(paths: [path], fromPlan: plan.id) }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
         }
-    }
-}
-
-/// Where a search looks: this plan, or everything. Finder's search scope, in
-/// the two places a search shows its results. Picking the other one hands the
-/// query over.
-struct SearchScopePicker: View {
-    enum Scope: Hashable {
-        case thisPlan
-        case allBackups
-    }
-
-    let scope: Scope
-    let onChange: () -> Void
-
-    var body: some View {
-        Picker("Search", selection: Binding(
-            get: { scope },
-            set: { if $0 != scope { onChange() } }
-        )) {
-            Text("This Plan").tag(Scope.thisPlan)
-            Text("All Backups").tag(Scope.allBackups)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
     }
 }
 

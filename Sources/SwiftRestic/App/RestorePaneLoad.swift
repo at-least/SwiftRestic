@@ -8,8 +8,6 @@ enum RestorePaneLoad {
         var changes: [PathKey: ResticDiffChange]
         var changesInside: [PathKey: ChangesInside]
         var comparison: ChangeComparison
-        /// The whole diff, removals too.
-        var list: BackupChanges
     }
 
     /// `show` first gets the blank column of a comparison under way (or of
@@ -25,15 +23,14 @@ enum RestorePaneLoad {
         show(Marks(
             changes: [:],
             changesInside: [:],
-            comparison: baseline.map { .comparing(baseline: $0) } ?? .firstBackup,
-            list: BackupChanges(changes: [:])
+            comparison: baseline.map { .comparing(baseline: $0) } ?? .firstBackup
         ))
         async let marks = comparing(baseline, compare)
         await listTree()
         guard let baseline, let marks = await marks else { return }
         guard !Task.isCancelled else { return }
-        // Off the main actor: a diff of 200,000 changes took 2.7 s to tally
-        // and sort in a Debug build, and the pane must not freeze for it.
+        // Off the main actor: a diff can hold 200,000 changes, and the pane
+        // must not freeze while they are tallied.
         let built = await Task.detached(priority: .userInitiated) { compared(marks, baseline: baseline) }.value
         guard !Task.isCancelled else { return }
         show(built)
@@ -64,8 +61,7 @@ enum RestorePaneLoad {
             changes: held,
             changesInside: ChangeComparison.changesInside(held),
             comparison: marks.failure.map { .failed(baseline: baseline, reason: $0) }
-                ?? .compared(baseline: baseline, changeCount: held.count),
-            list: BackupChanges(changes: marks.changes)
+                ?? .compared(baseline: baseline, changeCount: held.count)
         )
     }
 }

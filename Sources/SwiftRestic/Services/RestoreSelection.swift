@@ -1,8 +1,8 @@
 import Foundation
 
-/// One picked item of a restore — a row of the Restore pane, Search All Backups or
-/// Show Changes Only: where it is in which backup, and restic's node for it
-/// when the row carries one.
+/// One picked item of a restore — a row of the Restore pane, a file's
+/// versions or Search All Backups: where it is in which backup, and restic's
+/// node for it when the row carries one.
 struct RestoreSource: RestoreBatchItem, Sendable, Equatable {
     let name: String
     /// Its path in the backup, as restic's node spells it: no trailing slash.

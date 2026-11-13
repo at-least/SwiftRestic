@@ -4,7 +4,7 @@ import SwiftUI
 /// page's Last backup value lands on exactly such a run.
 ///
 /// A fixed height, scrolling inside, buttons pinned under the scroll view so
-/// Show Log stays in reach. A constant per run, never a measurement:
+/// the fix stays in reach. A constant per run, never a measurement:
 /// Activity's non-scrolling host answers the split view's zero-width minimum
 /// query with it, whatever the text wraps to.
 struct RunDetailPanel: View {
@@ -15,7 +15,6 @@ struct RunDetailPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let run: RunRecord
-    var onShowLog: (RunRecord) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,7 +46,7 @@ struct RunDetailPanel: View {
     // No outcome glyph: the selected row above already wears it. How long
     // it took lives here, not in a table column of its own.
     private var header: some View {
-        Text("\(run.outcome.displayName) · finished \(Format.timestamp(run.finishedAt)) · \(Format.duration(run.duration))")
+        Text("\(run.outcomeName) · finished \(Format.timestamp(run.finishedAt)) · \(Format.duration(run.duration))")
             .font(.headline)
     }
 
@@ -106,19 +105,11 @@ struct RunDetailPanel: View {
             repositoryRow
         default:
             repositoryRow
-            // A check's verdict, what a retention run removed, or what a
-            // cleanup freed: the copied details' Result line.
+            // A check's verdict, what a retention run removed, or the space a
+            // prune freed: the copied details' Result line.
             if run.kind == .check || run.kind == .forget || run.kind == .prune, let result = run.detailText {
                 DetailRow("Result") {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(result).textSelection(.enabled)
-                        // The verdict advises restic's repair commands: the console
-                        // is where it runs with the password supplied.
-                        if let id = RunRecordPresentation.repairRoute(for: run, repositoryExists: repositoryName != nil) {
-                            ConsoleRouteButton(repositoryID: id)
-                                .controlSize(.small)
-                        }
-                    }
+                    Text(result).textSelection(.enabled)
                 }
             }
         }
@@ -148,7 +139,7 @@ struct RunDetailPanel: View {
     }
 
     private var hasMessages: Bool {
-        (run.failureMessage != nil && run.failureMessage != run.outcome.displayName)
+        (run.failureMessage != nil && run.failureMessage != run.outcomeName)
             || !run.itemErrors.isEmpty
     }
 
@@ -159,7 +150,7 @@ struct RunDetailPanel: View {
         let (unreadable, unlisted) = run.unreadableItemListing()
         if hasMessages {
             VStack(alignment: .leading, spacing: 6) {
-                if let failure = run.failureMessage, failure != run.outcome.displayName {
+                if let failure = run.failureMessage, failure != run.outcomeName {
                     Text(failure)
                         .textSelection(.enabled)
                 }
@@ -189,10 +180,15 @@ struct RunDetailPanel: View {
         }
     }
 
+    /// The fix, where there is one, is the one prominent button.
     private var buttons: some View {
         HStack(spacing: 10) {
             if let fix = model.fix(for: run) {
                 RunFixButton(fix: fix)
+                    .buttonStyle(.borderedProminent)
+            } else if let id = RunRecordPresentation.repairRoute(for: run, repositoryExists: repositoryName != nil) {
+                RepairButton(repositoryID: id)
+                    .buttonStyle(.borderedProminent)
             }
             // A check's verdict stands a week with nothing on its page to
             // act on it; its re-run sits here, beside the fix. Greyed while
@@ -201,7 +197,7 @@ struct RunDetailPanel: View {
                 Button(retry.title) {
                     switch retry {
                     case let .check(id): router.request(.verifyBackups(id))
-                    case let .prune(id): router.request(.cleanUp(id))
+                    case let .prune(id): router.request(.freeUpSpace(id))
                     }
                 }
                 .disabled(!model.repositoryCommands(for: .repository(retry.repositoryID)).canMaintain)
@@ -220,17 +216,13 @@ struct RunDetailPanel: View {
                 }
             }
             Spacer(minLength: 0)
-            Button("Show Log") { onShowLog(run) }
-                .disabled(!run.hasLog)
-                .modifier(TileHelp(help: run.hasLog ? nil : "No log was saved for this run"))
         }
         .controlSize(.small)
     }
 }
 
-/// A failure's one known fix: an editor sheet or the command itself, asked
-/// as the menus ask (`AppRouter.request`); Locate's and Choose New
-/// Location's panels open here.
+/// A failure's one known fix: its intent, asked as the menus ask
+/// (`RunFix.intent`); Locate's and Locate Folder's panels open here.
 struct RunFixButton: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppModel.self) private var model
@@ -238,19 +230,12 @@ struct RunFixButton: View {
 
     var body: some View {
         Button(fix.title) {
-            switch fix {
-            case let .editRepositoryShare(id):
-                router.request(.editRepository(id))
-            case let .chooseNewLocation(planID): chooseNewLocation(planID)
-            case let .enterPassword(id): router.request(.enterPassword(id))
-            case .addRepository: router.request(.newRepository)
-            case let .locate(id): locate(id)
-            case let .editPlanShare(id): router.request(.editPlan(id))
-            case let .showPlan(id):
-                // The switch is on the plan page's Overview.
-                router.setTab(.overview, of: .plan(id))
-                router.selection = .plan(id)
-            case let .pruneNow(id): router.request(.cleanUp(id))
+            if let intent = fix.intent {
+                router.request(intent)
+            } else if case let .locate(id) = fix {
+                locate(id)
+            } else if case let .locateFolder(planID) = fix {
+                locateFolder(planID)
             }
         }
         .modifier(TileHelp(help: fix.help))
@@ -269,7 +254,7 @@ struct RunFixButton: View {
         }
     }
 
-    private func chooseNewLocation(_ planID: UUID) {
+    private func locateFolder(_ planID: UUID) {
         guard let plan = model.plan(id: planID),
               let url = FilePicker.chooseDirectory(message: "Choose where “\(model.label(of: plan))” is now")
         else { return }
@@ -284,18 +269,17 @@ struct RunFixButton: View {
 /// Opens the restic console on a repository whose check found damage. It
 /// types nothing: repair stays a command the user writes, and the console
 /// asks before running it.
-struct ConsoleRouteButton: View {
+struct RepairButton: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     let repositoryID: UUID
 
     var body: some View {
-        Button("restic Console") {
+        Button("Repair…") {
             model.pointConsole(at: repositoryID)
             openWindow(id: SwiftResticApp.consoleWindowID)
         }
         .disabled(!model.isResticAvailable)
-        .help("In the console, type repair index, then repair snapshots. SwiftRestic enters the password.")
     }
 }
 

@@ -48,44 +48,17 @@ struct Schedule: Codable, Sendable, Hashable {
     }
 }
 
-/// Recommended or Keep everything: the only two choices (user decision).
-struct RetentionPolicy: Codable, Sendable, Hashable {
-    /// Off is Keep everything.
-    var isEnabled: Bool = true
-    /// Recommended's rules. Never stored: stored rules read as Recommended.
-    /// Variables so tests can keep fewer, which makes restic remove a
-    /// backup made seconds before.
+/// Every plan removes old backups with these rules after each backup (user
+/// decision: no switch, no Keep everything). Never stored. Variables so
+/// tests can keep fewer, which makes restic remove a backup made seconds
+/// before.
+struct RetentionPolicy: Sendable, Hashable {
     var keepLast: Int = 0
     var keepHourly: Int = 24
     var keepDaily: Int = 7
     var keepWeekly: Int = 4
     var keepMonthly: Int = 12
     var keepYearly: Int = 3
-
-    private enum CodingKeys: String, CodingKey { case isEnabled }
-
-    init(
-        isEnabled: Bool = true,
-        keepLast: Int = 0,
-        keepHourly: Int = 24,
-        keepDaily: Int = 7,
-        keepWeekly: Int = 4,
-        keepMonthly: Int = 12,
-        keepYearly: Int = 3
-    ) {
-        self.isEnabled = isEnabled
-        self.keepLast = keepLast
-        self.keepHourly = keepHourly
-        self.keepDaily = keepDaily
-        self.keepWeekly = keepWeekly
-        self.keepMonthly = keepMonthly
-        self.keepYearly = keepYearly
-    }
-
-    init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        isEnabled = c.value(.isEnabled, default: true)
-    }
 
     var forgetArguments: [String] {
         var args: [String] = []
@@ -100,10 +73,6 @@ struct RetentionPolicy: Codable, Sendable, Hashable {
         add("--keep-yearly", keepYearly)
         return args
     }
-
-    /// restic refuses `forget` with no `--keep-*` rule (it would delete every
-    /// snapshot).
-    var isSafeToRun: Bool { isEnabled && !forgetArguments.isEmpty }
 }
 
 struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
@@ -120,8 +89,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     var resolvedPath: String { ResticService.expandTilde(path) }
 
-    /// The editor's *Also skip* list. The switches' and the fixed rules are
-    /// not stored here; a run adds them (`excludesToPass`).
+    /// The editor's Excluded Items list. The always-applied rules are not
+    /// stored here; a run adds them (`excludesToPass`).
     var excludePatterns: [String] = []
     var tags: [String] = []
     var schedule = Schedule()
@@ -131,21 +100,13 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// The last backup the quiet-plan alert (`StaleAlert`) named this plan
     /// for: one notification per stretch, re-armed by a newer success.
     var staleAlertedFor: Date?
-    /// Created here and not yet backed up: its first success is announced
-    /// whatever `notifyOnSuccess` says. Off for an adopted plan.
+    /// Created here and not yet backed up: its first success is the one
+    /// success announced. Off for an adopted plan.
     var announcesFirstBackup = false
-    /// What developer tools download or build again
-    /// (`ExcludeCategory.rebuildableGroups`). On for new plans.
-    var skipsDeveloperFiles: Bool = true
-    /// Simulators, containers and virtual machines
-    /// (`ExcludeCategory.machineGroups`): their disks are recreated empty, so
-    /// what is inside may be the only copy. Off for new plans (user decision).
-    var skipsMachines: Bool = false
 
     private enum CodingKeys: String, CodingKey {
-        case id, repositoryID, path, excludePatterns, tags, schedule, retention
-        case lastRunAt, lastSuccessAt, staleAlertedFor
-        case skipsDeveloperFiles, skipsMachines, announcesFirstBackup
+        case id, repositoryID, path, excludePatterns, tags, schedule
+        case lastRunAt, lastSuccessAt, staleAlertedFor, announcesFirstBackup
     }
 
     init() {}
@@ -157,64 +118,31 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         path = c.value(.path, default: "")
         tags = c.value(.tags, default: [])
         schedule = c.value(.schedule, default: Schedule())
-        retention = c.value(.retention, default: RetentionPolicy())
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
         staleAlertedFor = c.optional(.staleAlertedFor)
         announcesFirstBackup = c.value(.announcesFirstBackup, default: false)
-        // A plan saved without either key asked for neither, so its backups
-        // do not change under a switch it never turned on.
-        skipsDeveloperFiles = c.value(.skipsDeveloperFiles, default: false)
-        skipsMachines = c.value(.skipsMachines, default: false)
         // A duplicate means a hand-edited config and would give the list's
-        // rows colliding identities. A switch's rule is passed by the switch.
-        excludePatterns = withoutSwitchRules(Self.withoutDuplicates(c.value(.excludePatterns, default: [])))
+        // rows colliding identities. An always-applied rule is passed anyway.
+        excludePatterns = Self.withoutAppliedRules(Self.withoutDuplicates(c.value(.excludePatterns, default: [])))
     }
 
-    static let defaultExcludes = ExcludeRule.defaults.map(\.pattern)
-
-    private static func patterns(of rules: [ExcludeRule], in groups: [ExcludeCategory]) -> [String] {
-        rules.filter { groups.contains($0.category) }.map(\.pattern)
-    }
-
-    static let developerExcludes = patterns(of: ExcludeRule.developer, in: ExcludeCategory.rebuildableGroups)
-    static let machineExcludes = patterns(of: ExcludeRule.developer, in: ExcludeCategory.machineGroups)
+    /// Every plan passes them, whatever its path: a rule naming nothing
+    /// under it matches nothing. Not stored on the plan, so a rule added
+    /// here reaches every plan.
+    static let appliedExcludes = (ExcludeRule.defaults + ExcludeRule.developer).map(\.pattern)
 
     /// `--exclude-if-present` file names: restic leaves out the contents of a
     /// folder holding one and keeps the marker itself.
-    var developerMarkers: [String] {
-        skipsDeveloperFiles ? ExcludeRule.developerMarkers.map(\.pattern) : []
-    }
-
-    /// Whatever the path: a rule naming nothing under it matches nothing. A
-    /// plan stores the switches, not their rules, so a rule added to a
-    /// switch reaches every plan with it on.
-    private var switchExcludes: [String] {
-        Self.defaultExcludes
-            + (skipsDeveloperFiles ? Self.developerExcludes : [])
-            + (skipsMachines ? Self.machineExcludes : [])
-    }
+    static let excludeMarkers = ExcludeRule.developerMarkers.map(\.pattern)
 
     var excludesToPass: [String] {
-        Self.withoutDuplicates(switchExcludes + excludePatterns)
+        Self.withoutDuplicates(Self.appliedExcludes + excludePatterns)
     }
 
-    func withoutSwitchRules(_ patterns: [String]) -> [String] {
-        let passed = Set(switchExcludes)
+    static func withoutAppliedRules(_ patterns: [String]) -> [String] {
+        let passed = Set(appliedExcludes)
         return patterns.filter { !passed.contains($0) }
-    }
-
-    /// The switches a backup's recorded excludes imply. A group counts when
-    /// most of its rules are there: a later build may add a rule an older list
-    /// never held, and a few of them are rows the user typed.
-    mutating func readSwitches(fromRecorded patterns: [String]) {
-        let present = Set(patterns)
-        func holds(_ group: ExcludeCategory) -> Bool {
-            let rules = Self.patterns(of: ExcludeRule.developer, in: [group])
-            return rules.filter(present.contains).count * 2 > rules.count
-        }
-        skipsDeveloperFiles = ExcludeCategory.rebuildableGroups.contains(where: holds)
-        skipsMachines = ExcludeCategory.machineGroups.contains(where: holds)
     }
 
     static func withoutDuplicates(_ values: [String]) -> [String] {
@@ -263,8 +191,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     }
 
     /// The fields the editor does not edit come from the stored plan: the
-    /// run stamps, the quiet-plan alert's mark, and the schedule and
-    /// retention the plan page saves while the editor is open. A new field
+    /// run stamps, the quiet-plan alert's mark, and the schedule the plan
+    /// page saves while the editor is open. A new field
     /// written outside the editor joins this list, or the next save reverts
     /// it to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
@@ -274,7 +202,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         merged.staleAlertedFor = staleAlertedFor
         merged.announcesFirstBackup = announcesFirstBackup
         merged.schedule = schedule
-        merged.retention = retention
         return merged
     }
 }

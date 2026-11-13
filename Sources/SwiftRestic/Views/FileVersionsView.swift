@@ -6,7 +6,8 @@ import SwiftUI
 /// its chain's history, newest first — the backups that held it unchanged
 /// (`ContentVersion`, from the index) — with when it was modified and how
 /// big it was, from one `restic find` of its path in each version's newest
-/// backup. Pick one to restore it, Space to look at it; drag one to Finder.
+/// backup. Pick one to restore it with the tab's Restore, Space to look at
+/// it; drag one to Finder.
 struct FileVersionsView: View {
     @Environment(AppModel.self) private var model
     @Environment(DiskWatch.self) private var diskWatch
@@ -15,6 +16,9 @@ struct FileVersionsView: View {
     let versions: [ContentVersion]
     /// The chosen version, by its newest backup's ID.
     @Binding var chosenID: String?
+    /// Where this pane offers the chosen version's restore to the tab's one
+    /// Restore.
+    let chosenVersion: ChosenVersionRestore
     /// Where the file is on this Mac, when the chain backs up this Mac's
     /// folders by their own paths (`DiskFile.localPath`); nil says nothing
     /// of the disk.
@@ -36,6 +40,9 @@ struct FileVersionsView: View {
     @State private var disk: DiskFile?
     @State private var previewer = PreviewSession()
     @FocusState private var listIsFocused: Bool
+    /// This pane's mark on its offer, so a pane going away withdraws only
+    /// its own: the file's next pane can appear before it disappears.
+    @State private var offerOwner = UUID()
 
     private var chosen: ContentVersion? {
         versions.chosen(chosenID)
@@ -45,12 +52,21 @@ struct FileVersionsView: View {
         VStack(spacing: 0) {
             list
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            footer
+            statusLine
         }
         .restoreCommand(restore)
         .onChange(of: diskLineText, initial: true) { _, line in diskLine = line }
-        .onDisappear { diskLine = nil }
+        // Again when the versions change: the offer's restore reads them
+        // as they were when it was made.
+        .onChange(of: versions.map(\.id), initial: true) {
+            chosenVersion.offer = versions.isEmpty ? nil : ChosenVersionRestore.Offer(
+                owner: offerOwner, path: node.path, run: { restoreChosen(choosingDestination: $0) }
+            )
+        }
+        .onDisappear {
+            diskLine = nil
+            if chosenVersion.offer?.owner == offerOwner { chosenVersion.offer = nil }
+        }
         // One find per file shown, again when the versions change under a
         // newer listing or a re-read of the index.
         .task(id: versions.map(\.id)) { await readDetails() }
@@ -132,13 +148,13 @@ struct FileVersionsView: View {
                         .disabled(previewBlock(for: version) != nil || previewer.isCopying)
                 }
             } primaryAction: { _ in
-                restoreChosen()
+                restoreChosen(choosingDestination: false)
             }
             .onKeyPress(.return, phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
                       chosen != nil, !model.isRestoring
                 else { return .ignored }
-                restoreChosen()
+                restoreChosen(choosingDestination: false)
                 return .handled
             }
             .onKeyPress(.space, phases: .down) { press in
@@ -150,11 +166,14 @@ struct FileVersionsView: View {
         }
     }
 
-    /// The pane's foot: the reads' errors at the left, and at the right the
-    /// chosen version's ways out. Preview is Space and the row's menu, as
-    /// Quick Look is in Finder.
-    private var footer: some View {
-        VStack(spacing: 10) {
+    /// The reads' errors and a preview's copying, under the versions, only
+    /// while there is one. The chosen version's Restore is the tab's bottom
+    /// bar's; Preview is Space and the row's menu, as Quick Look is in
+    /// Finder.
+    @ViewBuilder
+    private var statusLine: some View {
+        if detailsError != nil || previewer.failure != nil || previewer.isCopying {
+            Divider()
             HStack {
                 if let detailsError {
                     WarningLine(text: "Sizes and dates couldn’t be read")
@@ -172,26 +191,19 @@ struct FileVersionsView: View {
                         .controlSize(.small)
                         .help("Copying the chosen version for the preview")
                 }
-                Button("Restore To…") { chosen.map { restoreVersion($0, choosingDestination: true) } }
-                    .accessibilityIdentifier(AccessibilityID.FileVersions.restoreTo)
-                    .disabled(chosen == nil || model.isRestoring)
-                    .help("Restore the chosen version to a folder you choose")
-                Button("Restore") { restoreChosen() }
-                    .accessibilityIdentifier(AccessibilityID.FileVersions.restore)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(chosen == nil || model.isRestoring)
-                    .help("Put the chosen version back where the file was (Return)")
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
-        .padding(12)
     }
 
-    /// What the pane restores, for File ▸ Restore: the chosen version —
-    /// the bottom bar's button's restore. Return is the list's own.
+    /// What the pane restores, for File ▸ Restore and Restore To…: the
+    /// chosen version — the tab's bottom bar's restore. Return is the
+    /// list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
             isEnabled: chosen != nil && !model.isRestoring,
-            run: restoreChosen
+            run: { restoreChosen(choosingDestination: $0) }
         )
     }
 
@@ -223,8 +235,8 @@ struct FileVersionsView: View {
         return model.dragRestoreProvider(repositoryID: node.repositoryID, snapshotID: backup.id, node: file)
     }
 
-    private func restoreChosen() {
-        chosen.map { restoreVersion($0) }
+    private func restoreChosen(choosingDestination: Bool) {
+        chosen.map { restoreVersion($0, choosingDestination: choosingDestination) }
     }
 
     /// A version, back where the file was or, choosing, through the
@@ -286,6 +298,21 @@ struct FileVersionsView: View {
         }
         isReadingDetails = false
     }
+}
+
+/// The versions pane's restore of its chosen version, which the Backups
+/// tab's one Restore, Return in the tree and File ▸ Restore run while the
+/// tree has the pane's file selected. Not observed: read when a restore
+/// starts.
+@MainActor
+final class ChosenVersionRestore {
+    struct Offer {
+        let owner: UUID
+        let path: String
+        let run: (_ choosingDestination: Bool) -> Void
+    }
+
+    var offer: Offer?
 }
 
 /// One version: when the file was modified then — what picks Tuesday's

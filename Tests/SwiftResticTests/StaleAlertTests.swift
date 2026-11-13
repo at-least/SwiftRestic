@@ -61,8 +61,7 @@ struct StaleAlertTests {
 
     @Test("a config from before the switches went still loads, and a saved Off has no effect")
     func oldSettingsAreIgnored() throws {
-        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"staleAlertDays": 0, "notifyOnFailure": false, "notifyOnSuccess": true}"#.utf8))
-        #expect(settings.notifyOnSuccess)
+        _ = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"staleAlertDays": 0, "notifyOnFailure": false, "notifyOnSuccess": true, "notificationChannels": [{"url": "https://hooks.slack.com/a"}]}"#.utf8))
         #expect(due([plan(lastSuccessDaysAgo: 20)]).count == 1)
     }
 

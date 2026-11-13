@@ -38,22 +38,12 @@ struct ResticConsoleView: View {
     private var controls: some View {
         @Bindable var console = model.console
         return VStack(alignment: .leading, spacing: 10) {
-            // One label column, one value column: the popup and the field
-            // start at the same x, as the editors' grids do.
+            // It opens only from one location's damage (`RepairButton`),
+            // so the location is a title, not a choice.
+            Text(model.repository(id: console.repositoryID).map { model.label(of: $0) } ?? "No location")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 10) {
-                GridRow {
-                    Text("Location")
-                        .gridColumnAlignment(.trailing)
-                    Picker("Location", selection: $console.repositoryID) {
-                        Text("Choose").tag(UUID?.none)
-                        ForEach(model.configuration.repositories) { repository in
-                            Text(model.label(of: repository)).tag(UUID?.some(repository.id))
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    .accessibilityLabel("Location")
-                }
                 GridRow {
                     Text("restic")
                         .font(.system(.body, design: .monospaced))
@@ -98,7 +88,7 @@ struct ResticConsoleView: View {
             }
 
             ExpandableCaption(
-                summary: "The location and its credentials are supplied for you.",
+                summary: "To repair damage, run repair index, then repair snapshots. The location’s password is supplied for you.",
                 detail: "Output is restic’s own — nothing here is parsed by the app."
             )
         }

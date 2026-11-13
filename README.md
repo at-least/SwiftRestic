@@ -10,8 +10,8 @@ SwiftRestic is a native macOS backup app in the spirit of Arq, with
 on a schedule to local disks, SFTP servers and S3-compatible storage such as
 Backblaze B2; browses and restores any backup; keeps
 a searchable index of every file in every backup; removes old backups, frees
-their space and verifies each backup location; and reports through macOS
-notifications, webhooks, Slack, Discord and Healthchecks.io.
+their space and verifies each backup location; and reports problems through
+macOS notifications.
 
 ## Requirements
 
@@ -20,8 +20,8 @@ notifications, webhooks, Slack, Discord and Healthchecks.io.
   copy, whatever else is on the Mac. It updates with app updates; its
   license (BSD 2-Clause) is in the About window.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
-  withholds `~/Documents`, `~/Desktop` and the like and backups end
-  incomplete. The app asks for it when you set up your first backup.
+  withholds `~/Documents`, `~/Desktop` and the like and backups skip
+  those files. The app asks for it when you set up your first backup.
 
 ## Build, run and test
 
@@ -65,11 +65,16 @@ and for the restic inside it.
   since a login item registered from a build folder goes stale. It stops
   when no plan has one. To turn it off, use System Settings ▸ General ▸
   Login Items.
-- One switch, *Notify when a backup succeeds*, sends successes to macOS
-  notifications and every webhook. A plan's first backup and the first
-  failure in a row are announced either way. A webhook's service
-  (Slack, Discord, Healthchecks.io, or plain JSON) is read from its address.
-  Healthchecks hears every run.
+- Notifications stay quiet while backups succeed. A plan's first backup, the
+  first failure in a row, and a scheduled plan that has not backed up for
+  days are announced.
+- After each backup, a plan removes its old backups: it keeps one an hour for
+  a day, one a day for a week, one a week for a month, one a month for a year
+  and one a year for three years.
+- Every plan leaves out caches, system files, the Trash, online-only files and
+  what developer tools download or build again. Simulators, containers and
+  virtual machines are backed up.
+- *Pause Backups* holds every scheduled backup for an hour or until tomorrow.
 - The app is not sandboxed. restic has to read any folder and reach the
   network, and a sandboxed app confines its children.
 - *Back Up a Folder…* starts the plan's first backup as soon as it is

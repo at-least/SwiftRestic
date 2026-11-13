@@ -18,6 +18,9 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
     /// Set when the line is the standing problem's ("Failed — 3 hours
     /// ago"); nil when the listing or a run in flight says it.
     let problemOutcome: RunRecord.Outcome?
+    /// Listed, with no backup of its own yet and nothing gone wrong: the
+    /// next scheduled run is the remedy, so no surface warns of it.
+    let isAwaitingFirstBackup: Bool
     var id: UUID { planID }
 
     /// Scanning order is severity, not sidebar order: unreadable first,
@@ -27,6 +30,7 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
         // Ahead of the listing's verdict: a first backup in flight has no
         // snapshot yet, and is news being made, not an alarm.
         if isRunning { return 3 }
+        if isAwaitingFirstBackup { return 2 }
         if isKnown, !isUpToDate { return 1 }
         if !isKnown { return 2 }
         return 4
@@ -41,7 +45,8 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
         didFail: Bool,
         lastBackupAt: Date? = nil,
         isRunning: Bool = false,
-        problemOutcome: RunRecord.Outcome? = nil
+        problemOutcome: RunRecord.Outcome? = nil,
+        isAwaitingFirstBackup: Bool = false
     ) {
         planID = plan.id
         planName = plan.label(among: plans)
@@ -53,6 +58,7 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
         self.lastBackupAt = lastBackupAt
         self.isRunning = isRunning
         self.problemOutcome = problemOutcome
+        self.isAwaitingFirstBackup = isAwaitingFirstBackup
     }
 }
 
@@ -60,6 +66,9 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
 struct UpToDateLine: Equatable, Sendable {
     let planID: UUID
     let text: String
+    /// The line is the plan's standing problem, so it carries that
+    /// problem's fix.
+    var isProblem = false
 }
 
 /// The repository page's Status line.
@@ -73,11 +82,14 @@ struct UpToDateSummary: Equatable, Sendable {
     /// One per plan whose last backup failed ("Code: Failed — 3 hours
     /// ago"), beside the red octagon the plan's own row wears.
     var failureLines: [UpToDateLine] = []
-    /// One per other plan that needs the user ("Photos: No backups yet"),
-    /// beside the warning triangle. Includes up-to-date plans that are "Not
-    /// scheduled" (`PlanStatus.willNotRunCaption`), so "all up to date"
-    /// cannot hide a plan that has stopped.
+    /// One per other plan that needs the user ("Photos: Last backup 9 days
+    /// ago"), beside the warning triangle. Includes up-to-date plans that
+    /// are "Not scheduled" (`PlanStatus.willNotRunCaption`), so "all up to
+    /// date" cannot hide a plan that has stopped.
     var attentionLines: [UpToDateLine] = []
+    /// One per plan that has simply not backed up yet ("Photos: No backups
+    /// yet"), with no glyph: the sidebar shows none for it either.
+    var awaitingLines: [UpToDateLine] = []
 }
 
 /// Derives the protection rows and the recent problems from the
@@ -190,7 +202,7 @@ enum OverviewMetrics {
                     return UpToDateRow(
                         plan: plan,
                         among: plans,
-                        stateText: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
+                        stateText: "\(problem.outcomeName) — \(relative(problem.finishedAt))",
                         isKnown: listed.isKnown,
                         // A failed run wrote no snapshot, so the newest one
                         // is older than the trouble; restic exit 3 wrote one.
@@ -250,7 +262,8 @@ enum OverviewMetrics {
             }
             return UpToDateRow(
                 plan: plan, among: plans, stateText: line, isKnown: true,
-                isUpToDate: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment
+                isUpToDate: latest != nil && !isOverdue, didFail: false, lastBackupAt: moment,
+                isAwaitingFirstBackup: latest == nil
             )
         case let .notConnected(volume):
             return failedRow(Format.withoutFinalPeriod(SnapshotListingOutcome.connectText(volume: volume)))
@@ -316,10 +329,15 @@ enum OverviewMetrics {
         if case .paused = hold { showsResume = true }
         var failures: [UpToDateLine] = []
         var attention: [UpToDateLine] = []
+        var awaiting: [UpToDateLine] = []
         for row in rows where row.isKnown && !row.isUpToDate && !row.isRunning {
-            let line = UpToDateLine(planID: row.planID, text: "\(row.planName): \(row.stateText)")
+            let line = UpToDateLine(
+                planID: row.planID, text: "\(row.planName): \(row.stateText)", isProblem: row.problemOutcome != nil
+            )
             if row.problemOutcome == .failed {
                 if !failures.contains(line) { failures.append(line) }
+            } else if row.isAwaitingFirstBackup {
+                if !awaiting.contains(line) { awaiting.append(line) }
             } else if !attention.contains(line) {
                 attention.append(line)
             }
@@ -334,7 +352,8 @@ enum OverviewMetrics {
             text: segments.joined(separator: " · "),
             showsResume: showsResume,
             failureLines: failures,
-            attentionLines: attention
+            attentionLines: attention,
+            awaitingLines: awaiting
         )
     }
 
@@ -356,7 +375,7 @@ enum OverviewMetrics {
 
     /// The rest go on the sidebar's "Other backups" shelf, whatever made
     /// them (another Mac, a deleted plan, the console, restic elsewhere), so
-    /// the line names the place, not a cause. A repository with no plans
+    /// the line names no cause. A repository with no plans
     /// has nothing to split. `noun` leads with the word ("12 backups") where
     /// no row label above says it.
     static func snapshotsLine(
@@ -365,8 +384,8 @@ enum OverviewMetrics {
         var line = noun ? Format.plural(total, "backup") : Format.count(total)
         if repositoryHasPlans, otherBackups > 0 {
             line += otherBackups == total
-                ? " · all in Other backups"
-                : " · \(Format.count(otherBackups)) in Other backups"
+                ? ", none from plans here"
+                : ", \(Format.count(otherBackups)) from elsewhere"
         }
         // The oldest backup's day, which nothing else on the page says. One
         // backup reaches no further than itself.

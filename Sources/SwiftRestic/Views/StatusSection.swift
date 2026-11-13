@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The location page's first answer: how many of its plans are up to date, then
-/// one row per plan that is not, which opens that plan.
+/// one row per plan that is not, which opens that plan and carries its
+/// problem's fix.
 struct StatusSection: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
@@ -24,11 +25,12 @@ struct StatusSection: View {
                     if summary.showsResume {
                         Spacer(minLength: 8)
                         Button("Resume") { model.resumeBackups() }
-                            .help("Resume scheduled backups, verifications and cleanups")
+                            .help("Resume scheduled backups, verifications and freeing space")
                     }
                 }
                 planRows(summary.failureLines, symbol: RunRecord.Outcome.failed.symbolName!, tint: StatusPalette.status(.failed))
                 planRows(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
+                planRows(summary.awaitingLines, symbol: nil, tint: Color.clear)
             } else {
                 SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID), repositoryID: repositoryID)
             }
@@ -97,24 +99,40 @@ struct StatusSection: View {
             : "Show the backups other Macs or removed plans made here")
     }
 
-    private func planRows(_ lines: [UpToDateLine], symbol: String, tint: some ShapeStyle) -> some View {
+    /// A line without a symbol keeps the glyph's room, so its text lines up
+    /// with the lines above.
+    private func planRows(_ lines: [UpToDateLine], symbol: String?, tint: some ShapeStyle) -> some View {
         ForEach(lines, id: \.text) { line in
-            Button {
-                router.selection = .plan(line.planID)
-            } label: {
-                HStack {
-                    Label {
-                        Text(line.text)
-                    } icon: {
-                        Image(systemName: symbol).foregroundStyle(tint)
+            HStack {
+                Button {
+                    router.selection = .plan(line.planID)
+                } label: {
+                    HStack {
+                        Label {
+                            Text(line.text)
+                        } icon: {
+                            Image(systemName: symbol ?? "exclamationmark.triangle.fill")
+                                .foregroundStyle(tint)
+                                .opacity(symbol == nil ? 0 : 1)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Show this plan")
+                if line.isProblem, let problem = model.currentProblem(for: line.planID), let fix = model.fix(for: problem) {
+                    RunFixButton(fix: fix)
+                        .controlSize(.small)
+                }
+                Button {
+                    router.selection = .plan(line.planID)
+                } label: {
                     RowChevron()
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .help("Show this plan")
         }
     }
 }

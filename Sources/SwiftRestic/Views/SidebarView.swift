@@ -8,8 +8,7 @@ import SwiftUI
 /// Every row is a top-level List row, and a repository's children are
 /// leading indentation (`Indent`), not a fold. Only places carry a tag — a
 /// repository, a plan, a group under Other backups — so selection stays
-/// unique; the Other backups caption is text, and "Back Up a Folder" is an
-/// action.
+/// unique; the Other backups caption is text.
 ///
 /// Its own view, and each row kind its own function, so it type-checks: the
 /// root's modifier chain sits at the compiler's type-check budget. The
@@ -86,8 +85,7 @@ struct SidebarView: View {
 
     /// Arq's bare + in the corner; actions only, every page is a row. A
     /// damaged restic is not repeated here: the banner above every pane
-    /// (RootDetailView) says it. The bar background stays: a long list
-    /// scrolls under it.
+    /// (RootDetailView) says it.
     private var sidebarFooter: some View {
         HStack(spacing: 8) {
             Menu {
@@ -111,7 +109,6 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
     }
 
     @ViewBuilder
@@ -200,38 +197,10 @@ struct SidebarView: View {
                 // selection change.
                 planRow(plan, latestSnapshot: shelves.byPlan[plan.id]?.first)
             }
-        case .addPlan:
-            addPlanRow(repository)
         case .otherBackups:
             otherBackupsCaption(repository, shelves: shelves)
             otherBackups(repository, shelves: shelves)
         }
-    }
-
-    /// The way to a repository's first plan, where its plans would be. An
-    /// action, not a place: no tag, its title tinted, no icon — buttons wear
-    /// none (the user's call). The hidden symbol holds the icon column, so
-    /// its title starts where plan names do.
-    private func addPlanRow(_ repository: Repository) -> some View {
-        Button { onNewPlan(repository.id) } label: {
-            HStack(spacing: 4) {
-                Label {
-                    Text("Back Up a Folder…")
-                        .foregroundStyle(Theme.tint)
-                } icon: {
-                    Image(systemName: "plus.circle")
-                        .hidden()
-                        .accessibilityHidden(true)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.leading, Indent.child)
-        .help("Back up a folder to “\(model.label(of: repository))”")
-        // Every repository without a plan has one: the name tells them apart.
-        .accessibilityLabel("Back Up a Folder to “\(model.label(of: repository))”")
     }
 
     /// A plan wears a folder, a file's plan too.
@@ -407,7 +376,7 @@ private struct PlanSidebarRow: View {
                     .accessibilityHidden(true)
             }
             // The whole line when it fits, its shorter spelling when
-            // one exists ("Warnings — 2 days ago"), and only then the
+            // one exists ("Files skipped — 2 days ago"), and only then the
             // middle cut: a tail cut would take "ago" — when it happened.
             // The tooltip and VoiceOver keep the whole line.
             Group {

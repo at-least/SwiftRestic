@@ -47,10 +47,10 @@ struct OtherGroupPageTests {
         let page = try #require(home.otherGroupPage(.plan(music.id), repositories: [offsite], localHost: "mac"))
         #expect(!page.isAdoptable)
         #expect(page.title == "Music")
-        #expect(page.explanation == "From a plan that now backs up somewhere else, so they can’t be continued here.")
+        #expect(page.explanation == "From a plan that now backs up to another location. You can restore from them.")
         let single = BackupShelves(listing: [m2], plans: [], allPlans: [music])
         #expect(single.otherGroupPage(.plan(music.id), repositories: [offsite], localHost: "mac")?.explanation
-            == "From a plan that now backs up somewhere else, so it can’t be continued here.")
+            == "From a plan that now backs up to another location. You can restore from it.")
     }
 
     @Test("a history of several folders isn't offered as continuable, and says why")
@@ -61,7 +61,7 @@ struct OtherGroupPageTests {
         let page = try #require(BackupShelves(listing: [several], plans: [], allPlans: [])
             .otherGroupPage(.plan(deleted), repositories: [], localHost: "mac"))
         #expect(!page.isAdoptable)
-        #expect(page.explanation.contains("It holds several folders"))
+        #expect(page.explanation == "From a backup of several folders. You can restore from it.")
     }
 
     @Test("a repository's page offers Continue Backups for what this Mac can continue, and nothing otherwise")
@@ -104,7 +104,7 @@ struct OtherGroupPageTests {
         #expect(orphaned.orphanPlanGroup(UUID()) == nil)
     }
 
-    @Test("an untagged lineage's page says it can't be adopted")
+    @Test("an untagged lineage's page says it was made by another app and can be restored from")
     func lineagePage() throws {
         let l2 = try snapshot("l2", time: "2026-10-02T02:00:00Z", paths: ["/Data/Music"], host: "studio", tags: ["manual"])
         let l1 = try snapshot("l1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"], host: "studio")
@@ -115,11 +115,11 @@ struct OtherGroupPageTests {
 
         #expect(page.title == "Music")
         #expect(!page.isAdoptable)
-        #expect(page.explanation == "Made outside SwiftRestic, so they can’t be continued.")
+        #expect(page.explanation == "Made by another app. You can restore from them.")
 
         let single = BackupShelves(listing: [l1], plans: [], allPlans: [])
         #expect(single.otherGroupPage(.lineage(key), repositories: [], localHost: "mac")?.explanation
-            == "Made outside SwiftRestic, so it can’t be continued.")
+            == "Made by another app. You can restore from it.")
         let empty = BackupShelves(listing: [], plans: [], allPlans: [])
         #expect(empty.lineageGroup(key) == nil)
         #expect(empty.otherGroupPage(.lineage(key), repositories: [], localHost: "mac") == nil)

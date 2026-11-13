@@ -45,6 +45,18 @@ extension AppModel {
         if fixesBackups { rerunFailedBackups(in: repository.id) }
     }
 
+    /// A missing server or cloud location's fix: its plans back up to where
+    /// the backups are now. Each keeps its id, so its tag and its history
+    /// in the new location stay its own; the missing location stays until
+    /// the user removes it.
+    func movePlans(from oldRepositoryID: UUID, to newRepositoryID: UUID) {
+        precondition(repository(id: newRepositoryID) != nil, "plans move to a saved location")
+        for index in configuration.plans.indices where configuration.plans[index].repositoryID == oldRepositoryID {
+            configuration.plans[index].repositoryID = newRepositoryID
+        }
+        rerunFailedBackups(in: newRepositoryID)
+    }
+
     /// The removal dialog's sentence. Each cancellation `deleteRepository`
     /// performs needs its own clause here; the two are kept in step by hand.
     func removalConsequences(for repositoryID: UUID) -> String {
@@ -85,7 +97,7 @@ extension AppModel {
                 : " Backups of \(Format.list(names)) are running and will be stopped."
         }
         if let runningMaintenance {
-            consequences += " \(runningMaintenance.runningClause) and will be stopped."
+            consequences += " \(runningMaintenance.runningClause(count: 1)) and will be stopped."
         }
         if isConsoleRunning {
             consequences += " A console command is running and will be stopped."

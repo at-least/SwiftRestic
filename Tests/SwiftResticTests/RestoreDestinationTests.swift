@@ -72,6 +72,39 @@ struct RestoreDestinationTests {
         #expect(combiningLandings.map(\.lastPathComponent) == ["\u{0301}leading.txt"])
     }
 
+    @Test("a folder gone since the backup is made again under the nearest folder still here, as Time Machine does")
+    func originalLocationRecreatesMissingFolders() {
+        let report = RestoreSubject.item(name: "report.txt", path: "/Users/x/Documents/Old/2025/report.txt", isDirectory: false)
+        // Old and Old/2025 are gone; Documents is here and writable: back in
+        // place, the restore making the two folders.
+        #expect(original(report) == .available(
+            directories: [URL(fileURLWithPath: "/Users/x/Documents/Old/2025", isDirectory: true)],
+            landings: [URL(fileURLWithPath: "/Users/x/Documents/Old/2025/report.txt")]
+        ))
+        // The nearest folder still here decides: not writable, the sheet,
+        // naming the folder it can't write to.
+        #expect(original(report, existing: ["/Users/x/Documents", "/Users/x"], writable: ["/Users/x"])
+            == .unavailable(reason: "SwiftRestic can’t write to “/Users/x/Documents”."))
+        // However far up it is. On a real Mac /Users is not writable, so
+        // another account's or another Mac's home goes to the sheet.
+        #expect(original(report, existing: ["/Users"], writable: ["/Users"]) == .available(
+            directories: [URL(fileURLWithPath: "/Users/x/Documents/Old/2025", isDirectory: true)],
+            landings: [URL(fileURLWithPath: "/Users/x/Documents/Old/2025/report.txt")]
+        ), "a writable folder decides, however far up")
+        #expect(original(report, existing: ["/Users"], writable: [])
+            == .unavailable(reason: "SwiftRestic can’t write to “/Users”."))
+        // A volume not mounted is never made a folder, nor is a folder made
+        // straight under the root.
+        let onVolume = RestoreSubject.item(name: "a.txt", path: "/Volumes/Archive/Projects/a.txt", isDirectory: false)
+        #expect(original(onVolume, existing: ["/Volumes", "/"], writable: ["/Volumes", "/"])
+            == .unavailable(reason: "“/Volumes/Archive/Projects” isn’t on this Mac."))
+        let underRoot = RestoreSubject.item(name: "a.txt", path: "/Gone/a.txt", isDirectory: false)
+        #expect(original(underRoot, existing: ["/"], writable: ["/"])
+            == .unavailable(reason: "“/Gone” isn’t on this Mac."))
+        let atRoot = RestoreSubject.item(name: "a.txt", path: "/a.txt", isDirectory: false)
+        #expect(original(atRoot, existing: [], writable: []) == .unavailable(reason: "“/” isn’t on this Mac."))
+    }
+
     @Test("several items go back each into its own folder, or not at all")
     func originalLocationOfSeveral() {
         let items = RestoreSubject.items([

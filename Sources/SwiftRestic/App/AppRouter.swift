@@ -14,6 +14,9 @@ final class AppRouter {
     enum Intent: Equatable {
         case newPlan
         case newRepository
+        /// A missing server or cloud location's fix: the editor prefilled
+        /// from it, its plans moving to what is added.
+        case addRepository(replacing: UUID)
         case showFind
         case runSelectedPlan
         // The Backup and Location menus' targeted asks carry their target
@@ -26,6 +29,11 @@ final class AppRouter {
         case editPlan(UUID)
         case editRepository(UUID)
         case enterPassword(UUID)
+        /// A refused network share's password alone
+        /// (`SharePasswordPromptSheet`); with no share saved for it — one
+        /// removed in Settings since the run — the editor of what it holds,
+        /// where the share is set up again.
+        case enterSharePassword(RunFix.ShareOwner)
         case confirm(CommandConfirmation)
         /// Verify Backups, from every surface that offers it: at once, with
         /// no question — a check only reads, and a backup asked for
@@ -33,10 +41,10 @@ final class AppRouter {
         /// place a check shows its progress and Cancel; a check that passes
         /// posts no banner.
         case verifyBackups(UUID)
-        /// Clean Up Again and a full location's Clean Up Now, from Activity's
-        /// drawer and a failed run's fix, the only ways to it: at once, as
-        /// Verify Backups — the failed run already asked for it.
-        case cleanUp(UUID)
+        /// Free Up Space, from Activity's drawer and a full location's
+        /// failed run, the only ways to it: at once, as Verify Backups — the
+        /// failed run already asked for it.
+        case freeUpSpace(UUID)
     }
 
     var selection: SidebarItem?
@@ -57,8 +65,8 @@ final class AppRouter {
     var activityShowsProblemsOnly = false
 
     /// An item a backup's tree should open its folders to and select when
-    /// it next loads this exact record — a search hit, Search All Backups'
-    /// row, an unread item's earlier copy.
+    /// it next loads this exact record — Search All Backups' row, an
+    /// unread item's earlier copy.
     private struct RestoreFocus: Equatable {
         var repositoryID: UUID
         var snapshotID: String
@@ -81,27 +89,14 @@ final class AppRouter {
     /// opens on the newest backup after a launch.
     var backupSelection: [SidebarItem: String] = [:]
 
-    /// The item whose versions each chain's Backups tab shows under its
-    /// tree, by the chain's roots (`FileNode.roots`): a file picked in the
-    /// tree or a search hit. Transient.
+    /// The file whose versions each chain's Backups tab shows under its
+    /// tree, by the chain's roots (`FileNode.roots`). Transient.
     var filesSelection: [FileNode: FileNode] = [:]
 
-    /// What each chain's Backups tab is searching for, by the chain's
-    /// roots, as typed in the toolbar's search field; empty or absent shows
-    /// the backup's tree. Transient, as the selection is: a search left on a
-    /// page is there when the page is shown again.
-    var filesSearchText: [FileNode: String] = [:]
-
-    /// The search `roots`' Backups tab runs: the typed text, trimmed; empty
-    /// shows the tree.
-    func filesSearchQuery(for roots: FileNode) -> String {
-        (filesSearchText[roots] ?? "").trimmingCharacters(in: .whitespaces)
-    }
-
-    /// The page whose toolbar search field takes the keyboard focus next —
-    /// ⌘F, and Search All Backups on arrival. The page spends it once its
-    /// field has the focus.
-    var searchFocus: SidebarItem?
+    /// Whether Search All Backups' toolbar field takes the keyboard focus
+    /// next — ⌘F, and a search typed on another page. The page spends it
+    /// once its field has the focus.
+    var focusesFindField = false
 
     func showMaintenance(of repositoryID: UUID) {
         if selection != .repository(repositoryID) {
@@ -109,37 +104,15 @@ final class AppRouter {
         }
     }
 
-    func searchFiles(on page: SidebarItem) {
-        setTab(.backups, of: page)
-        searchFocus = page
-    }
-
-    /// Search All Backups' query as typed in its toolbar field — and in a
-    /// repository's page's, which hands it over on Return. Transient, kept
+    /// Search All Backups' query as typed in its toolbar field — and in
+    /// another page's, which hands it over as it is typed. Transient, kept
     /// while the app runs: coming back to the page finds it.
     var findQuery = ""
 
-    /// The plan a search came from, for the page's way back to it.
-    struct FindOrigin: Equatable {
-        var page: SidebarItem
-        var roots: FileNode
-    }
-
-    private(set) var findOrigin: FindOrigin?
-
-    func openFind(query: String? = nil, from origin: FindOrigin? = nil) {
+    func openFind(query: String? = nil) {
         if let query { findQuery = query }
-        findOrigin = origin
-        searchFocus = .findFiles
+        focusesFindField = true
         selection = .findFiles
-    }
-
-    /// Search All Backups' This Plan: the plan's Backups tab, the query kept.
-    func returnToPlanSearch() {
-        guard let origin = findOrigin else { return }
-        filesSearchText[origin.roots] = findQuery
-        searchFiles(on: origin.page)
-        selection = origin.page
     }
 
     /// The backup each file's pane opens at — the version left at, or the
@@ -196,14 +169,10 @@ final class AppRouter {
     }
 
     /// A plain route clears an older focus request rather than inheriting
-    /// it. A plan's search left on the tab would list its hits over the
-    /// tree the route lands on, so it ends.
+    /// it.
     func showBackup(_ snapshotID: String, on page: SidebarItem, repositoryID: UUID, focusPath: String? = nil) {
         restoreFocus = focusPath.map {
             RestoreFocus(repositoryID: repositoryID, snapshotID: snapshotID, path: $0)
-        }
-        if case let .plan(planID) = page {
-            filesSearchText[FileNode.roots(repositoryID: repositoryID, chainKey: ResticService.planTag(planID))] = nil
         }
         backupSelection[page] = snapshotID
         // A group's page is its backups, with no tab to turn; the choice
@@ -288,4 +257,31 @@ enum CommandConfirmation: Hashable, Identifiable {
     case deleteRepository(UUID)
 
     var id: Self { self }
+}
+
+extension RunFix {
+    /// The ask a fix makes of the window (`AppRouter.request`); nil for
+    /// Locate… and Locate Folder…, whose file panels open where they are
+    /// clicked (`RunFixButton`).
+    var intent: AppRouter.Intent? {
+        switch self {
+        case let .enterPassword(id): .enterPassword(id)
+        case let .enterSharePassword(owner): .enterSharePassword(owner)
+        case let .addRepository(id): .addRepository(replacing: id)
+        case let .freeUpSpace(id): .freeUpSpace(id)
+        case .locate, .locateFolder: nil
+        }
+    }
+}
+
+extension AppRouter {
+    /// The tray's problem line and a notification click. Only a fix that
+    /// opens a sheet the user confirms opens by itself: Free Up Space would
+    /// start a prune at a click.
+    func focusRun(_ runID: RunRecord.ID, openingFix fix: RunFix?) {
+        focusRun(runID)
+        guard let intent = fix?.intent else { return }
+        if case .freeUpSpace = intent { return }
+        request(intent)
+    }
 }

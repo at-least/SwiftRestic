@@ -177,7 +177,7 @@ struct TolerantDecodingTests {
     func defaultExcludesArePinned() {
         // The whole list, so a pattern typoed here fails this test instead
         // of only a real backup.
-        #expect(BackupPlan.defaultExcludes == [
+        #expect(ExcludeRule.defaults.map(\.pattern) == [
             ".DS_Store",
             "~/Library/Caches",
             "~/Library/Containers/*/Data/Library/Caches",
@@ -207,62 +207,26 @@ struct TolerantDecodingTests {
         var plan = BackupPlan()
         plan.path = "~/dotfiles"
         #expect(plan.excludePatterns.isEmpty)
-        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes)
+        #expect(BackupPlan.appliedExcludes == (ExcludeRule.defaults + ExcludeRule.developer).map(\.pattern))
+        #expect(plan.excludesToPass == BackupPlan.appliedExcludes)
     }
 
-    @Test("the developer switch is on and the machines' off for new plans, both off for ones saved without a key, and both round-trip")
-    func developerSwitchDefaults() throws {
-        #expect(BackupPlan().skipsDeveloperFiles && !BackupPlan().skipsMachines)
-        let bare = try decode(BackupPlan.self, #"{"name":"Docs"}"#)
-        #expect(!bare.skipsDeveloperFiles && !bare.skipsMachines)
+    @Test("a plan saved with the removed exclude switches still loads, and no switch key is written")
+    func removedSwitchesDecode() throws {
+        let old = try decode(BackupPlan.self, #"{"path":"/a","skipsDeveloperFiles":false,"skipsMachines":true}"#)
+        #expect(old.excludesToPass == BackupPlan.appliedExcludes)
         // No dates in a fresh plan, so no strategy to match the encoder's.
-        for (developer, machines) in [(true, false), (false, true), (true, true), (false, false)] {
-            var plan = BackupPlan()
-            plan.skipsDeveloperFiles = developer
-            plan.skipsMachines = machines
-            let data = try JSONEncoder().encode(plan)
-            let read = try JSONDecoder().decode(BackupPlan.self, from: data)
-            #expect(read.skipsDeveloperFiles == developer && read.skipsMachines == machines)
-            let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-            #expect(object["skipDeveloperGroups"] == nil)
-            #expect(object["excludeDeveloperFiles"] == nil)
-        }
+        let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+        #expect(object["skipsDeveloperFiles"] == nil && object["skipsMachines"] == nil)
     }
 
-    @Test("switches and every plan's fixed rules make the run, beside the plan's own patterns, each once")
-    func switchesMakeTheRun() {
+    @Test("every plan's applied rules make the run, beside the plan's own patterns, each once")
+    func appliedRulesMakeTheRun() {
         var plan = BackupPlan()
-        plan.skipsDeveloperFiles = false
         plan.excludePatterns = ["*.iso", "**/.venv"]
-        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + ["*.iso", "**/.venv"])
-        #expect(plan.developerMarkers.isEmpty)
-
-        plan.skipsDeveloperFiles = true
-        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + ["*.iso"])
-        #expect(plan.withoutSwitchRules(plan.excludePatterns) == ["*.iso"])
-        #expect(plan.developerMarkers == [".rustc_info.json", "project.assets.json"])
-
-        plan.skipsMachines = true
-        #expect(plan.excludesToPass == BackupPlan.defaultExcludes + BackupPlan.developerExcludes + BackupPlan.machineExcludes + ["*.iso"])
-    }
-
-    @Test("the switches read back from recorded rules: a group by most of its rules")
-    func switchesReadFromRecordedRules() throws {
-        func rules(_ group: ExcludeCategory) -> [String] {
-            ExcludeRule.developer.filter { $0.category == group }.map(\.pattern)
-        }
-        var plan = BackupPlan()
-        // JavaScript but two of its rules, which a user may have typed.
-        plan.readSwitches(fromRecorded: ["*.iso", "**/node_modules", "**/.next"])
-        #expect(!plan.skipsDeveloperFiles && !plan.skipsMachines)
-        plan.readSwitches(fromRecorded: rules(.python))
-        #expect(plan.skipsDeveloperFiles && !plan.skipsMachines)
-        plan.readSwitches(fromRecorded: rules(.machines))
-        #expect(!plan.skipsDeveloperFiles && plan.skipsMachines)
-        // Exactly half is not most: those may be rows the user typed.
-        let even = try #require(ExcludeCategory.rebuildableGroups.first { rules($0).count.isMultiple(of: 2) })
-        plan.readSwitches(fromRecorded: Array(rules(even).prefix(rules(even).count / 2)))
-        #expect(!plan.skipsDeveloperFiles, "half of the \(even) rules turned the developer switch on")
+        #expect(plan.excludesToPass == BackupPlan.appliedExcludes + ["*.iso"])
+        #expect(BackupPlan.withoutAppliedRules(plan.excludePatterns) == ["*.iso"])
+        #expect(BackupPlan.excludeMarkers == [".rustc_info.json", "project.assets.json"])
     }
 
     @Test("a run leaves out the rules that name its source or a folder above it, and only those")
@@ -326,20 +290,11 @@ struct TolerantDecodingTests {
             (.ocaml, ["**/_opam"], ["~/.opam/download-cache"]),
             (.otherTools, ["**/.terraform", "**/.direnv"],
              ["~/.cache/pre-commit", "~/.asdf/installs", "~/.local/share/mise/installs", "~/.sdkman/candidates"]),
-            (.simulators, [],
-             ["~/Library/Developer/CoreSimulator/Devices", "~/Library/Developer/CoreSimulator/Caches",
-              "~/Library/Developer/Xcode/UserData/Previews", "~/.android/avd"]),
-            (.machines, [],
-             ["~/Library/Containers/com.docker.docker/Data/vms", "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data",
-              "~/.lima/*/disk", "~/.lima/*/diffdisk", "~/.lima/*/basedisk",
-              "~/.colima/_lima/*/disk", "~/.colima/_lima/*/diffdisk", "~/.colima/_lima/*/basedisk",
-              "~/.local/share/containers/podman/machine", "~/.vagrant.d/boxes"]),
         ]
-        #expect(groups.map(\.0) == ExcludeCategory.rebuildableGroups + ExcludeCategory.machineGroups)
         for (group, folders, home) in groups {
             #expect(ExcludeRule.developer.filter { $0.category == group }.map(\.pattern) == folders + home, "\(group)")
         }
-        #expect(BackupPlan.developerExcludes + BackupPlan.machineExcludes == groups.flatMap { $0.folders + $0.home })
+        #expect(ExcludeRule.developer.map(\.pattern) == groups.flatMap { $0.folders + $0.home })
         // Rust's target and .NET's obj go by their markers.
         #expect(ExcludeRule.developerMarkers.map(\.pattern) == [".rustc_info.json", "project.assets.json"])
     }
@@ -351,21 +306,19 @@ struct TolerantDecodingTests {
         for rule in rules {
             #expect(!rule.what.isEmpty && !rule.why.isEmpty, "\(rule.pattern)")
         }
-        let developerGroups = ExcludeCategory.rebuildableGroups + ExcludeCategory.machineGroups
-        #expect(ExcludeRule.defaults.allSatisfy { !developerGroups.contains($0.category) })
-        #expect((ExcludeRule.developer + ExcludeRule.developerMarkers)
-            .allSatisfy { developerGroups.contains($0.category) })
+        let developerCategories = Set((ExcludeRule.developer + ExcludeRule.developerMarkers).map(\.category))
+        #expect(ExcludeRule.defaults.allSatisfy { !developerCategories.contains($0.category) })
     }
 
     @Test("a plan's list sheds the rules the app now passes itself, keeping the user's own patterns")
-    func listsBecomeSwitchesAtLoad() async throws {
+    func listsShedAppliedRulesAtLoad() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let home = NSHomeDirectory()
-        let defaults = String(decoding: try JSONEncoder().encode(BackupPlan.defaultExcludes), as: UTF8.self)
-        let python = String(decoding: try JSONEncoder().encode(["*.iso"] + BackupPlan.developerExcludes), as: UTF8.self)
+        let defaults = String(decoding: try JSONEncoder().encode(ExcludeRule.defaults.map(\.pattern)), as: UTF8.self)
+        let python = String(decoding: try JSONEncoder().encode(["*.iso"] + ExcludeRule.developer.map(\.pattern)), as: UTF8.self)
         let json = """
         {
           "repositories": [{"id": "0753DDAB-181D-4E00-9340-8FDF7FD52504", "kind": "local", "localPath": "/tmp/repo"}],
@@ -397,20 +350,19 @@ struct TolerantDecodingTests {
         #expect(loaded.decodeNotes.isEmpty)
         let plans = loaded.configuration.plans
         #expect(plans.map(\.excludePatterns) == [
-            // The defaults leave the list for their switches, whatever the
-            // path; the user's own stay, in their order — **/node_modules,
-            // an earlier default, among them, its group unticked.
-            ["**/node_modules", "~/elsewhere/cache", "*.log"],
+            // The applied rules leave the list, whatever the path — the
+            // developer rule **/node_modules among them; the user's own
+            // stay, in their order.
+            ["~/elsewhere/cache", "*.log"],
             [],
             [],
             [],
             [],
-            // A switch's rules leave the list too.
+            // The developer rules leave the list too.
             ["*.iso"],
             // Passed by every plan, so a typed copy leaves the list.
             [],
         ])
-        #expect(plans[5].skipsDeveloperFiles)
 
         try await store.save(loaded.configuration)
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
@@ -490,7 +442,6 @@ struct TolerantDecodingTests {
             #"{"bytesProcessed":250000,"dataAdded":900,"filesChanged":1,"filesNew":0,"filesUnmodified":16,"finishedAt":"2026-09-25T18:00:10Z","hookMessages":[],"id":"44444444-4444-4444-8444-000000000005","itemErrorCount":0,"itemErrors":[],"kind":"backup","outcome":"succeeded","planID":"22222222-2222-4222-8222-222222222222","planName":"Documents","repositoryID":"11111111-1111-4111-8111-111111111111","snapshotID":"abf728998814d029436dc76f64e5204a4d2336134e43b921a53e52e53144137f","startedAt":"2026-09-25T18:00:00Z"}"#
         )
         #expect(legacy.filesChanged == 1)
-        #expect(legacy.hasLog == false)
         #expect(legacy.exitCode == nil)
         #expect(legacy.resticVersion == nil)
         #expect(legacy.snapshotTime == nil)
@@ -501,7 +452,6 @@ struct TolerantDecodingTests {
 
         var restore = RunRecord(kind: .restore, planName: "Budget.numbers")
         restore.snapshotID = "abf72899"
-        restore.hasLog = true
         restore.exitCode = 0
         restore.resticVersion = "restic 0.19.1 compiled with go1.26.5 on darwin/arm64"
         restore.snapshotTime = Date(timeIntervalSince1970: 1_790_359_200)
@@ -512,7 +462,6 @@ struct TolerantDecodingTests {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let roundTripped = try decode(RunRecord.self, String(decoding: try encoder.encode(restore), as: UTF8.self))
-        #expect(roundTripped.hasLog)
         #expect(roundTripped.exitCode == 0)
         #expect(roundTripped.resticVersion == restore.resticVersion)
         #expect(roundTripped.snapshotTime == restore.snapshotTime)
@@ -553,7 +502,6 @@ struct TolerantDecodingTests {
         #expect(on.schedule.interval == 3600)
         #expect(on.runsOnSchedule)
 
-        // Top-level keys only: `retention` keeps an `isEnabled` of its own.
         let written = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(on)) as? [String: Any])
         #expect(written["isEnabled"] == nil && written["pausedUntil"] == nil)
         let schedule = try #require(written["schedule"] as? [String: Any])
@@ -562,17 +510,20 @@ struct TolerantDecodingTests {
 
     @Test("settings an older build saved are ignored")
     func oldSettingsDecode() throws {
-        let settings = try decode(AppSettings.self, #"{"pauseOnBattery":true,"pauseOnMeteredNetwork":true,"showMenuBarExtra":false,"maxRunHistory":20,"notifyOnSuccess":true}"#)
-        #expect(settings.notifyOnSuccess)
+        let settings = try decode(
+            AppSettings.self,
+            #"{"pauseOnBattery":true,"pauseOnMeteredNetwork":true,"showMenuBarExtra":false,"maxRunHistory":20,"notifyOnSuccess":true,"notificationChannels":[{"url":"https://hooks.slack.com/a"}]}"#
+        )
         let written = try String(decoding: JSONEncoder().encode(settings), as: UTF8.self)
         #expect(!written.contains("pauseOn") && !written.contains("showMenuBarExtra") && !written.contains("maxRunHistory"))
+        #expect(!written.contains("notifyOnSuccess") && !written.contains("notificationChannels"))
     }
 
-    @Test("pause fields round-trip; missing reads as not paused; an unreadable pause date reads as not paused, never as forever")
+    @Test("pause fields round-trip; missing reads as not paused; a pause without a readable end reads as not paused, never as forever")
     func pauseFieldsDecodeFailSafe() async throws {
         #expect(try decode(AppSettings.self, "{}").schedulePause == nil)
-        // An empty pause is the stored form of Until I Resume: no end.
-        #expect(try decode(AppSettings.self, #"{"schedulePause":{}}"#).schedulePause == SchedulePause(until: nil))
+        // An older build's Until I Resume, stored with no end: dropped.
+        #expect(try decode(AppSettings.self, #"{"schedulePause":{}}"#).schedulePause == nil)
 
         // A present date that does not read must not become "no end" — that
         // would stop every scheduled backup without a word. It reads as not
@@ -596,10 +547,6 @@ struct TolerantDecodingTests {
         let loaded = try await store.load()
         #expect(loaded.decodeNotes.isEmpty)
         #expect(loaded.configuration.settings.schedulePause == SchedulePause(until: until))
-
-        configuration.settings.schedulePause = SchedulePause(until: nil)
-        try await store.save(configuration)
-        #expect(try await store.load().configuration.settings.schedulePause == SchedulePause(until: nil))
     }
 
     @Test("a run record stored with restic's trailing newline reads without it")
@@ -662,23 +609,18 @@ struct TolerantDecodingTests {
         #expect(notes.notes.count == 4)
     }
 
-    @Test("stored keep rules read as Recommended; switched off they read as Keep everything; only the switch is written")
-    func storedKeepRulesReadAsRecommended() throws {
-        let plan = try JSONDecoder().decode(
-            BackupPlan.self,
-            from: Data(#"{"retention":{"isEnabled":true,"keepLast":1,"keepDaily":30,"keepYearly":500}}"#.utf8)
-        )
-        #expect(plan.retention == RetentionPolicy())
-        // Keep rules saved with no switch were in force, so they read as on.
-        let unswitched = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"retention":{"keepDaily":30}}"#.utf8))
-        #expect(unswitched.retention == RetentionPolicy())
-        let kept = try JSONDecoder().decode(
-            BackupPlan.self,
-            from: Data(#"{"retention":{"isEnabled":false,"keepDaily":365}}"#.utf8)
-        )
-        #expect(kept.retention == RetentionPolicy(isEnabled: false))
-        let written = try JSONSerialization.jsonObject(with: JSONEncoder().encode(RetentionPolicy()))
-        #expect((written as? [String: Bool]) == ["isEnabled": true])
+    @Test("every stored retention reads as Recommended, Keep everything included, and none is written")
+    func storedRetentionReadsAsRecommended() throws {
+        for stored in [
+            #"{"retention":{"isEnabled":true,"keepLast":1,"keepDaily":30,"keepYearly":500}}"#,
+            #"{"retention":{"keepDaily":30}}"#,
+            #"{"retention":{"isEnabled":false,"keepDaily":365}}"#,
+        ] {
+            let plan = try JSONDecoder().decode(BackupPlan.self, from: Data(stored.utf8))
+            #expect(plan.retention == RetentionPolicy(), "\(stored)")
+        }
+        let written = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(BackupPlan())) as? [String: Any])
+        #expect(written["retention"] == nil)
     }
 
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")

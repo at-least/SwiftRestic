@@ -353,25 +353,12 @@ actor IndexCoordinator {
         try await Task.detached(priority: .utility) { try body() }.value
     }
 
-    nonisolated func versions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [IndexVersion] {
-        try await read(repositoryID) { try await $0.versions(ofPath: path, inChain: chainKey) }
-    }
-
     nonisolated func contentVersions(ofPath path: String, inChain chainKey: String, repositoryID: UUID) async throws -> [ContentVersion] {
         try await read(repositoryID) { try await $0.contentVersions(ofPath: path, inChain: chainKey) }
     }
 
     nonisolated func searchWithSummaries(matching query: String, repositoryID: UUID, limit: Int) async throws -> SearchWithSummaries {
         try await read(repositoryID) { try await $0.searchWithSummaries(matching: query, limit: limit) }
-    }
-
-    nonisolated func search(
-        matching query: String,
-        inChain chainKey: String,
-        repositoryID: UUID,
-        limit: Int
-    ) async throws -> [IndexChild] {
-        try await read(repositoryID) { try await $0.search(matching: query, inChain: chainKey, limit: limit) }
     }
 
     nonisolated func kinds(of paths: [String], inSnapshot snapshotID: String, repositoryID: UUID) async throws -> [PathKey: Bool] {

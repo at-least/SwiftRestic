@@ -6,6 +6,10 @@ extension AppModel {
         var plan = plan
         plan.announcesFirstBackup = true
         upsert(plan: plan)
+        backUpIfScheduled(plan)
+    }
+
+    private func backUpIfScheduled(_ plan: BackupPlan) {
         if plan.isScheduled, isResticAvailable {
             runBackup(planID: plan.id)
         }
@@ -18,19 +22,45 @@ extension AppModel {
         repository.localPath = folder
         let service = try service()
         let context = RepositoryContext(repository: repository, password: password, providerSecret: nil)
-        if try await !service.repositoryExists(context, timeout: EditorRequirements.probeTimeout) {
+        let existed = try await service.repositoryExists(context, timeout: EditorRequirements.probeTimeout)
+        if !existed {
             _ = try await service.initializeRepository(context)
         }
         await upsert(repository: repository, password: password, providerSecret: nil)
         await flushSave()
-        scheduleSnapshotRefresh(repositoryID: repository.id)
+        if existed {
+            // Read before the plan is made: it may continue a history here.
+            await refreshListing(repositoryID: repository.id)
+        } else {
+            scheduleSnapshotRefresh(repositoryID: repository.id)
+        }
         return createFirstPlan(source: source, repositoryID: repository.id)
     }
 
+    /// Continues the folder's own history in the location when it has one
+    /// (`continuedGroup`), as Continue Backups would; otherwise a new plan.
     func createFirstPlan(source: String, repositoryID: UUID) -> UUID {
-        let plan = BackupPlan(firstBackupOf: source, into: repositoryID)
-        createPlan(plan)
-        return plan.id
+        guard let group = continuedGroup(source: source, repositoryID: repositoryID),
+              let draft = continuingDraft(repositoryID: repositoryID, group: group)
+        else {
+            let plan = BackupPlan(firstBackupOf: source, into: repositoryID)
+            createPlan(plan)
+            return plan.id
+        }
+        adopt(draft: draft)
+        backUpIfScheduled(draft)
+        return draft.id
+    }
+
+    /// A former plan's backups in the location, every one made on this Mac
+    /// of exactly `source`. Nothing looser: retention runs per plan tag, so
+    /// a tag two Macs back up under would have each remove the other's
+    /// backups.
+    private func continuedGroup(source: String, repositoryID: UUID) -> OtherBackupsGroup? {
+        shelves(for: repositoryID).adoptableGroups(localHost: localHostname).first { group in
+            guard case let .plan(_, snapshots) = group else { return false }
+            return snapshots.allSatisfy { $0.hostname == localHostname && $0.paths == [source] }
+        }
     }
 
     /// nil leaves it to the sheet.

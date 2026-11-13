@@ -1,11 +1,9 @@
 import Foundation
 
 struct AppSettings: Codable, Sendable, Hashable {
-    var notifyOnSuccess: Bool = false
     /// The tray's Pause Backups, while it holds: every scheduled backup,
     /// check and prune waits. `nil` when nothing is paused.
     var schedulePause: SchedulePause?
-    var notificationChannels: [NotificationChannel] = []
     var networkShares: [NetworkShare] = []
 
     init() {}
@@ -16,11 +14,9 @@ struct AppSettings: Codable, Sendable, Hashable {
         // let drift apart.
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        notifyOnSuccess = c.value(.notifyOnSuccess, default: notifyOnSuccess)
         // A pause whose date does not read throws inside, so this reads as
         // not paused and says so — never as a pause without end.
         schedulePause = c.optional(.schedulePause)
-        notificationChannels = c.value(.notificationChannels, default: [NotificationChannel]())
         networkShares = c.value(.networkShares, default: networkShares)
     }
 }
@@ -81,6 +77,7 @@ actor ConfigStore {
     }
 
     static func defaultDirectory() -> URL {
+        #if DEBUG
         // A seam for running the app against a throwaway configuration without
         // touching the real one.
         if let override = ProcessInfo.processInfo.environment["SWIFTRESTIC_CONFIG_DIR"],
@@ -88,6 +85,7 @@ actor ConfigStore {
         {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
+        #endif
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("com.newlix.SwiftRestic", isDirectory: true)
     }
