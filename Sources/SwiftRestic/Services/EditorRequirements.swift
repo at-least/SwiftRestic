@@ -36,10 +36,12 @@ enum EditorRequirements {
         ResticPath.normalized((path.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath)
     }
 
-    /// Bounds Save's check: against a REST server that refuses connections
-    /// restic 0.19.1 retried for over ten minutes, with the sheet's buttons
-    /// grey all the while.
+    /// Bounds Save's check: restic's retries keep it at an SFTP server or S3
+    /// endpoint it cannot reach (a refusing server held restic 0.19.1 for
+    /// over ten minutes), with the sheet's buttons grey all the while.
     static let probeTimeout: TimeInterval = 60
+
+    static let probeTimedOut = "No answer from the location in \(Int(probeTimeout)) seconds. Check that it is reachable."
 
     /// The repository inside what it backs up: every backup would carry
     /// restic's own files.
@@ -154,10 +156,6 @@ enum EditorRequirements {
             }
         case .s3:
             if draft.s3Bucket.isEmpty || draft.s3AccessKeyID.isEmpty { return "Enter the bucket and access key ID to save it." }
-        case .rest:
-            if draft.restURL.isEmpty { return "Enter the server URL to save it." }
-        case .rclone:
-            if draft.rcloneRemote.isEmpty { return "Choose an rclone remote to save it." }
         }
         // Without a name of their own, two entries for one place would be
         // two identical rows — and two schedulers' checks and prunes on one

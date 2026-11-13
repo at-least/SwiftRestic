@@ -10,8 +10,8 @@ struct FirstBackupSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let onCreated: (UUID) -> Void
-    /// A server or cloud storage: the repository editor's kinds, carrying
-    /// what the sheet already holds.
+    /// An SFTP server or S3-compatible storage: the repository editor on
+    /// that kind, carrying what the sheet already holds.
     let onServerOrCloud: (FirstBackupHandoff) -> Void
 
     @State private var source: String
@@ -29,7 +29,7 @@ struct FirstBackupSheet: View {
         case none
         case destination(FirstBackupDestination)
         case otherFolder
-        case serverOrCloud
+        case server(Repository.Kind)
     }
 
     /// `source` is the folder the open panel already answered: the sheet
@@ -147,7 +147,7 @@ struct FirstBackupSheet: View {
 
     /// Every place the backups can go, in one pop-up: the locations set up
     /// here, the disks, a folder chosen in a panel, and the repository
-    /// editor's servers and cloud storage.
+    /// editor's server kinds.
     private var destinationPicker: some View {
         let newDisks = self.newDisks
         return Picker("Back up to", selection: choice) {
@@ -164,7 +164,8 @@ struct FirstBackupSheet: View {
             }
             Divider()
             Text("Other Folder…").tag(Choice.otherFolder)
-            Text("Server or Cloud Storage…").tag(Choice.serverOrCloud)
+            Text("SFTP Server…").tag(Choice.server(.sftp))
+            Text("S3-Compatible Storage…").tag(Choice.server(.s3))
         }
         .accessibilityIdentifier(AccessibilityID.FirstBackup.destination)
     }
@@ -215,10 +216,12 @@ struct FirstBackupSheet: View {
                         }
                     }
                 }
-            case .serverOrCloud:
+            case let .server(kind):
                 // No wait for the menu, unlike the panel: the editor opens
                 // in this sheet's onDismiss, after its closing animation.
-                onServerOrCloud(FirstBackupHandoff(source: source, password: password, confirmPassword: confirmPassword))
+                onServerOrCloud(FirstBackupHandoff(
+                    kind: kind, source: source, password: password, confirmPassword: confirmPassword
+                ))
                 dismiss()
             }
         }
@@ -268,6 +271,8 @@ struct FirstBackupSheet: View {
 /// to a server or cloud storage: the plan follows the editor's Add on
 /// today's defaults (`AppModel.createFirstPlan`).
 struct FirstBackupHandoff {
+    /// The editor opens on it, with no Type pop-up.
+    let kind: Repository.Kind
     let source: String
     let password: String
     let confirmPassword: String

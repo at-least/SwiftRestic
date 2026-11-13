@@ -390,7 +390,7 @@ struct OverviewMetricsTests {
             standingProblem: { _ in nil }
         )
         #expect(
-            rows.first?.stateText.hasPrefix("Can’t read backups — This password doesn’t open “NAS”") == true,
+            rows.first?.stateText.hasPrefix("Can’t read backups — The password doesn’t open “NAS”") == true,
             "the Status row names the location whose password was refused"
         )
         #expect(rows.first?.didFail == true, "a refused password is a failed read")

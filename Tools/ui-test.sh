@@ -14,7 +14,6 @@ OUT=.build/ui-test
 
 xcodegen generate --quiet
 Tools/fetch-restic.sh >/dev/null
-Tools/fetch-rclone.sh >/dev/null
 xcodebuild_scheme=SwiftResticUITests
 # shellcheck source=Tools/xcodebuild-common.sh
 source Tools/xcodebuild-common.sh

@@ -23,7 +23,7 @@ struct ResticBinary: Sendable {
 }
 
 extension Bundle {
-    /// Where `Tools/embed-helpers.sh` puts the pinned restic and rclone.
+    /// Where `Tools/embed-helpers.sh` puts the pinned restic.
     var helpersURL: URL { bundleURL.appendingPathComponent("Contents/Helpers") }
 }
 

@@ -20,9 +20,10 @@ struct ServerAwayTests {
         let traceFile = root.appendingPathComponent("stub-trace.log")
 
         var repository = Repository()
-        repository.kind = .rest
+        repository.kind = .sftp
         // Never dialled: the probe below answers for it.
-        repository.restURL = "http://127.0.0.1:9/app"
+        repository.sftpHost = "127.0.0.1:9"
+        repository.sftpPath = "/app"
         repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default", "SWIFTRESTIC_TRACE": traceFile.path]
 
         var plan = BackupPlan()
@@ -43,7 +44,8 @@ struct ServerAwayTests {
             store: store,
             secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
             serverProbe: ServerProbe { _, _ in await answer.current },
-            resticExecutable: stub.url
+            resticExecutable: stub.url,
+            repositoryEnvironment: [repository.id: repository.extraEnvironment]
         )
         await model.bootstrap()
 
@@ -96,9 +98,10 @@ struct ServerAwayTests {
         let stub = try StubRestic.install(in: root)
 
         var repository = Repository()
-        repository.kind = .rest
+        repository.kind = .sftp
         // Never dialled: the probe below answers for it.
-        repository.restURL = "http://127.0.0.1:9/app"
+        repository.sftpHost = "127.0.0.1:9"
+        repository.sftpPath = "/app"
         repository.extraEnvironment = ["SWIFTRESTIC_STUB": "default"]
         var configuration = AppConfiguration()
         configuration.repositories = [repository]
@@ -109,7 +112,8 @@ struct ServerAwayTests {
             store: store,
             secrets: .inMemory([repository.id: (password: "test-password", providerSecret: nil)]),
             serverProbe: ServerProbe { _, _ in .reachable },
-            resticExecutable: stub.url
+            resticExecutable: stub.url,
+            repositoryEnvironment: [repository.id: repository.extraEnvironment]
         )
         await model.bootstrap()
         #expect(await eventually(within: 10) { model.snapshotListingOutcomes[repository.id] == .loaded })
@@ -157,7 +161,7 @@ struct ServerAwayTests {
         let model = AppModel(store: store, secrets: .inMemory([
             hung.id: (password: "test-password", providerSecret: nil),
             fine.id: (password: "test-password", providerSecret: nil),
-        ]), resticExecutable: stub.url)
+        ]), resticExecutable: stub.url, repositoryEnvironment: [hung.id: hung.extraEnvironment, fine.id: fine.extraEnvironment])
         model.launchListingGrace = .milliseconds(500)
         let boot = Task { await model.bootstrap() }
 

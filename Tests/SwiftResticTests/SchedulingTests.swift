@@ -438,9 +438,7 @@ struct MaintenanceSchedulingTests {
         for kind in [Repository.Kind.local, .sftp] {
             #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == .slice(1, of: 12), "\(kind)")
         }
-        for kind in [Repository.Kind.rest, .s3, .rclone] {
-            #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == nil, "\(kind)")
-        }
+        #expect(MaintenancePolicy().scheduledDataSubset(for: .s3) == nil)
         var policy = MaintenancePolicy()
         policy.nextCheckDataSlice = 3
         #expect(policy.scheduledDataSubset(for: .local) == .slice(3, of: 12))
@@ -660,11 +658,6 @@ struct RepositoryTests {
         // A folder in the bucket is typed after it, in the same field.
         s3.s3Bucket = "/my-bucket/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
-
-        var rest = Repository()
-        rest.kind = .rest
-        rest.restURL = "https://host:8000/"
-        #expect(rest.resticRepositoryString == "rest:https://host:8000/")
     }
 
     @Test("an SFTP port other than 22 moves to restic's URL form, the only one that carries a port")
@@ -734,52 +727,6 @@ struct RepositoryTests {
         sftp.sftpHost = "backup@nas.local:2222"
         sftp.sftpPath = "/volume1/SwiftRestic Backups"
         #expect(sftp.displayLocation == "backup@nas.local:/volume1/SwiftRestic Backups")
-
-        var rclone = Repository()
-        rclone.kind = .rclone
-        rclone.rcloneRemote = "gdrive:"
-        rclone.rclonePath = "backups"
-        #expect(rclone.displayLocation == "gdrive:backups")
-
-        var rest = Repository()
-        rest.kind = .rest
-        rest.restURL = "rest:https://host:8000/"
-        #expect(rest.displayLocation == "https://host:8000/")
-    }
-
-    @Test("a REST server's login rides in restic's environment from the Keychain, never in the stored URL")
-    func restCredentials() throws {
-        var rest = Repository()
-        rest.kind = .rest
-        rest.restURL = "https://host:8000/"
-        rest.restUser = "alice"
-        // The password is the provider secret: the editor shows its field.
-        #expect(rest.secretFieldLabel == "Server password")
-        let env = rest.credentialEnvironment(secret: "s3cret")
-        #expect(env["RESTIC_REST_USERNAME"] == "alice")
-        #expect(env["RESTIC_REST_PASSWORD"] == "s3cret")
-        #expect(rest.resticRepositoryString == "rest:https://host:8000/")
-
-        let split = try #require(Repository.splittingRESTCredentials("https://alice:p%40ss@host:8000/repo/"))
-        #expect(split.url == "https://host:8000/repo/")
-        #expect(split.user == "alice")
-        #expect(split.password == "p@ss")
-        let prefixed = try #require(Repository.splittingRESTCredentials("rest:http://bob@10.0.0.2:8000/"))
-        #expect(prefixed.url == "rest:http://10.0.0.2:8000/")
-        #expect(prefixed.user == "bob")
-        #expect(prefixed.password == nil)
-        // Nothing to take, or no server yet while the user is typing.
-        #expect(Repository.splittingRESTCredentials("https://host:8000/") == nil)
-        #expect(Repository.splittingRESTCredentials("https://alice:pa@") == nil)
-
-        // A repository saved with its login in the URL keeps working as it
-        // did: the URL passes through, and restic prefers its credentials.
-        let old = try JSONDecoder().decode(
-            Repository.self,
-            from: Data(#"{"kind":"rest","name":"Server","restURL":"https://alice:s3cret@host:8000/"}"#.utf8)
-        )
-        #expect(old.restUser == "")
-        #expect(old.resticRepositoryString == "rest:https://alice:s3cret@host:8000/")
     }
 
     @Test("plan tags are stable and unique per plan")
@@ -818,51 +765,10 @@ struct RepositoryTests {
 
 @Suite("Additional backends")
 struct AdditionalBackendTests {
-    @Test("rclone builds the repository string restic expects")
-    func repositoryStrings() {
-        var rclone = Repository()
-        rclone.kind = .rclone
-        rclone.rcloneRemote = "mydrive"
-        rclone.rclonePath = "backups/mac/"
-        #expect(rclone.resticRepositoryString == "rclone:mydrive:backups/mac")
-        // A remote typed with rclone's own trailing colon must not double up.
-        rclone.rcloneRemote = "mydrive:"
-        #expect(rclone.resticRepositoryString == "rclone:mydrive:backups/mac")
-        // The leading slash is rclone's absolute path: on sftp and local
-        // remotes "/srv/x" and "srv/x" (from the login's home, or the
-        // current folder) are different places.
-        rclone.rclonePath = "/srv/backups/"
-        #expect(rclone.resticRepositoryString == "rclone:mydrive:/srv/backups")
-    }
-
-    @Test("rclone needs no credentials of its own, only its helper")
-    func credentialEnvironment() {
-        var rclone = Repository()
-        rclone.kind = .rclone
-        #expect(rclone.credentialEnvironment(secret: nil).isEmpty)
-        #expect(rclone.requiresRcloneBinary)
-    }
-
-    @Test("a config written before these backends existed still loads")
-    func decodesLegacyRepository() throws {
-        // Only the keys an older build wrote. The synthesized decoder would throw
-        // on every field added since, losing the user's whole configuration.
-        let json = #"{"id":"0753DDAB-181D-4E00-9340-8FDF7FD52504","name":"Old","kind":"local","createdAt":"2026-09-05T00:00:00Z","localPath":"/tmp/repo"}"#
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let repository = try decoder.decode(Repository.self, from: Data(json.utf8))
-        // The name an older build stored is no longer read: a repository
-        // is called by where it is.
-        #expect(repository.label(among: [repository]) == "repo")
-        #expect(repository.localPath == "/tmp/repo")
-        #expect(repository.s3Endpoint == "s3.amazonaws.com")
-        #expect(repository.rcloneRemote.isEmpty)
-    }
-
     @Test("a location of a kind no longer offered still loads, as a folder not yet chosen")
     func decodesRemovedKind() throws {
-        for kind in ["b2", "azure", "gcs"] {
-            let json = #"{"kind":"\#(kind)","b2Bucket":"photos","azureContainer":"photos","gcsBucket":"photos"}"#
+        for kind in ["b2", "azure", "gcs", "rest", "rclone"] {
+            let json = #"{"kind":"\#(kind)","b2Bucket":"photos","azureContainer":"photos","gcsBucket":"photos","restURL":"https://host:8000/","rcloneRemote":"gdrive"}"#
             let repository = try JSONDecoder().decode(Repository.self, from: Data(json.utf8))
             #expect(repository.kind == .local, "\(kind)")
             #expect(!repository.isConfigurationComplete, "\(kind)")
@@ -880,8 +786,6 @@ struct RepositoryCompletenessTests {
             .local: [{ $0.localPath = "/Volumes/Backup" }],
             .sftp: [{ $0.sftpHost = "nas.local" }, { $0.sftpPath = "/volume1/restic" }],
             .s3: [{ $0.s3Bucket = "bucket" }, { $0.s3AccessKeyID = "AKIA" }],
-            .rest: [{ $0.restURL = "https://host:8000" }],
-            .rclone: [{ $0.rcloneRemote = "mydrive" }],
         ]
     }
 

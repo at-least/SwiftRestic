@@ -45,16 +45,14 @@ struct ServerProbe: Sendable {
     /// direct connection proves nothing.
     private static let proxyVariables = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
 
-    /// Where an HTTP-reached repository's server is — REST, S3 — or nil when there is nothing to ask first: a local folder, an
-    /// SFTP host (`sshTarget`), an rclone remote (its server lives in
-    /// rclone's config), a proxy in the environment restic runs with.
+    /// Where an HTTP-reached repository's server is — S3 — or nil when
+    /// there is nothing to ask first: a local folder, an SFTP host
+    /// (`sshTarget`), a proxy in the environment restic runs with.
     static func httpTarget(of repository: Repository, environment: [String: String]) -> Target? {
         guard !proxyVariables.contains(where: { !(environment[$0] ?? "").isEmpty }) else { return nil }
         switch repository.kind {
-        case .local, .sftp, .rclone:
+        case .local, .sftp:
             return nil
-        case .rest:
-            return urlTarget(repository.restServerURL)
         case .s3:
             let endpoint = repository.s3Endpoint.isEmpty ? "s3.amazonaws.com" : repository.s3Endpoint
             return urlTarget(endpoint.contains("://") ? endpoint : "https://\(endpoint)")

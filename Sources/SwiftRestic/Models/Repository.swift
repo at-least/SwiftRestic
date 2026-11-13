@@ -5,7 +5,7 @@ import Foundation
 /// the login Keychain and fetched at spawn time; see `KeychainStore`.
 struct Repository: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable, CaseIterable, Identifiable {
-        case local, sftp, s3, rest, rclone
+        case local, sftp, s3
         var id: String { rawValue }
 
         var displayName: String {
@@ -13,8 +13,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .local: "Local folder or disk"
             case .sftp: "SFTP"
             case .s3: "S3-compatible"
-            case .rest: "REST server"
-            case .rclone: "rclone remote"
             }
         }
 
@@ -23,8 +21,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             case .local: "externaldrive"
             case .sftp: "terminal"
             case .s3: "cloud"
-            case .rest: "network"
-            case .rclone: "shippingbox"
             }
         }
     }
@@ -46,16 +42,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     var s3Bucket: String = ""
     var s3AccessKeyID: String = ""
 
-    var restURL: String = ""
-    /// The REST server's user. Its password is the provider secret, in the
-    /// Keychain like every other backend's, so neither has to ride in the
-    /// URL this file stores.
-    var restUser: String = ""
-
-    var rcloneRemote: String = ""
-    var rclonePath: String = ""
-
     /// Extra `KEY=value` pairs handed to the restic child process verbatim.
+    /// Not in `config.json` (`CodingKeys`): only tests set it, to steer the
+    /// stub restic (`AppModel.init`'s `repositoryEnvironment`).
     var extraEnvironment: [String: String] = [:]
 
     var maintenance = MaintenancePolicy()
@@ -65,7 +54,12 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// folder is this repository and not another. Nil until then.
     var resticID: String?
 
-    /// Written by hand so a configuration saved by an older build still loads;
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, createdAt, localPath, sftpHost, sftpPath
+        case s3Endpoint, s3Bucket, s3AccessKeyID, maintenance, resticID
+    }
+
+    /// Written by hand so a field that does not read falls back with a note;
     /// see `KeyedDecodingContainer.value(_:default:)`.
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -78,11 +72,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         s3Endpoint = c.value(.s3Endpoint, default: "s3.amazonaws.com")
         s3Bucket = c.value(.s3Bucket, default: "")
         s3AccessKeyID = c.value(.s3AccessKeyID, default: "")
-        restURL = c.value(.restURL, default: "")
-        restUser = c.value(.restUser, default: "")
-        rcloneRemote = c.value(.rcloneRemote, default: "")
-        rclonePath = c.value(.rclonePath, default: "")
-        extraEnvironment = c.value(.extraEnvironment, default: [:])
         maintenance = c.value(.maintenance, default: MaintenancePolicy())
         resticID = c.optional(.resticID)
     }
@@ -115,11 +104,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
             return "s3:\(endpoint)/\(Self.trimSlashes(s3Bucket))"
-        case .rest:
-            return restURL.hasPrefix("rest:") ? restURL : "rest:\(restURL)"
-        case .rclone:
-            // not trimSlashes: a leading slash is rclone's absolute path.
-            return "rclone:\(rcloneRemoteName):\(rclonePath.replacing(/\/+$/, with: ""))"
         }
     }
 
@@ -165,14 +149,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         return port
     }
 
-    var restServerURL: String {
-        restURL.hasPrefix("rest:") ? String(restURL.dropFirst("rest:".count)) : restURL
-    }
-
-    private var rcloneRemoteName: String {
-        rcloneRemote.hasSuffix(":") ? String(rcloneRemote.dropLast()) : rcloneRemote
-    }
-
     var driveVolumeName: String? {
         kind == .local ? VolumePresence.volumeName(of: resolvedLocalPath) : nil
     }
@@ -196,8 +172,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .local: return !localPath.isEmpty
         case .sftp: return !sftpHostName.isEmpty && !sftpPath.isEmpty
         case .s3: return !s3Bucket.isEmpty && !s3AccessKeyID.isEmpty
-        case .rest: return !restURL.isEmpty
-        case .rclone: return !rcloneRemote.isEmpty
         }
     }
 
@@ -207,8 +181,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
     /// and drive-full words use). When another of
     /// `repositories` would read the same, each reads as its location
     /// (`displayLocation`).
-    /// Older builds stored a name; a configuration's key is
-    /// ignored.
     func label(among repositories: [Repository]) -> String {
         let short = shortLabel
         guard !short.isEmpty else { return "Untitled Location" }
@@ -218,9 +190,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     /// The location in the reader's words, not restic's repository string:
     /// the repository page's Location, and a twin's label, which every
-    /// notification, hook and webhook says. A REST server's URL leaves out
-    /// the login a URL saved before the login had fields of its own still
-    /// carries.
+    /// notification and webhook says.
     var displayLocation: String {
         switch kind {
         case .local:
@@ -230,10 +200,6 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .s3:
             let endpoint = s3Endpoint.isEmpty ? "s3.amazonaws.com" : s3Endpoint
             return "\(Self.trimSlashes(s3Bucket)) on \(endpoint)"
-        case .rest:
-            return Self.splittingRESTCredentials(restServerURL)?.url ?? restServerURL
-        case .rclone:
-            return "\(rcloneRemoteName):\(rclonePath)"
         }
     }
 
@@ -244,10 +210,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             guard !path.isEmpty else { return "" }
             return VolumePresence.volumeName(of: path) ?? (path as NSString).lastPathComponent
         case .sftp: return sftpHostName
-        case .rest:
-            return URL(string: restServerURL)?.host ?? restServerURL
         case .s3: return String(Self.trimSlashes(s3Bucket).prefix { $0 != "/" })
-        case .rclone: return rcloneRemoteName
         }
     }
 
@@ -267,8 +230,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
     var secretFieldLabel: String? {
         switch kind {
-        case .local, .rclone, .sftp: nil
-        case .rest: "Server password"
+        case .local, .sftp: nil
         case .s3: "Secret access key"
         }
     }
@@ -279,36 +241,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .s3:
             env["AWS_ACCESS_KEY_ID"] = s3AccessKeyID
             if let secret { env["AWS_SECRET_ACCESS_KEY"] = secret }
-        case .rest:
-            // restic 0.19.1 reads these only when the URL carries no
-            // credentials of its own, so a repository saved with them in its
-            // URL works as it did; unset and empty send the same blank login.
-            env["RESTIC_REST_USERNAME"] = restUser
-            if let secret { env["RESTIC_REST_PASSWORD"] = secret }
-        case .local, .sftp, .rclone:
+        case .local, .sftp:
             break
         }
         return env
     }
-
-    /// A REST server URL with its credentials taken out, for the editor to
-    /// keep in User and the Keychain instead — nil when it carries none, or
-    /// no server yet (the user is still typing).
-    static func splittingRESTCredentials(_ url: String) -> (url: String, user: String, password: String?)? {
-        let prefix = url.hasPrefix("rest:") ? "rest:" : ""
-        guard var components = URLComponents(string: String(url.dropFirst(prefix.count))),
-              components.user != nil || components.password != nil,
-              components.host?.isEmpty == false
-        else { return nil }
-        let user = components.user ?? ""
-        let password = components.password
-        components.user = nil
-        components.password = nil
-        guard let bare = components.string else { return nil }
-        return (prefix + bare, user, password)
-    }
-
-    /// restic shells out to `rclone` for this backend, so the helper has to be
-    /// findable in the child's PATH.
-    var requiresRcloneBinary: Bool { kind == .rclone }
 }

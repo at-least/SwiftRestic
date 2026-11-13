@@ -307,7 +307,10 @@ extension AppModel {
             record.bytesProcessed = summary?.bytesRestored ?? 0
             outcome = .succeeded(summary)
         } catch {
-            record.setOutcome(from: error, cancellationMessage: cancellationMessage)
+            record.setOutcome(
+                from: error, cancellationMessage: cancellationMessage,
+                location: repository(id: repositoryID).map { (label(of: $0), $0.kind) }
+            )
             noteAuthFailure(error, repositoryID: repositoryID)
             let partial = restoredBefore.map {
                 "\(Format.count($0.count)) of \(Format.plural($0.total, "item")) were restored before it stopped."

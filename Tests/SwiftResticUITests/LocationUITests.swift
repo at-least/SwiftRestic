@@ -1,7 +1,7 @@
 import XCTest
 
 /// The Location menu on the plan's backup location: Verify Backups and
-/// Remove from SwiftRestic….
+/// Remove Location….
 final class LocationUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -41,7 +41,7 @@ final class LocationUITests: XCTestCase {
 
         let location = app.menuBars.menuBarItems["Location"]
         location.click()
-        location.menuItems["Remove from SwiftRestic…"].click()
+        location.menuItems["Remove Location…"].click()
         let remove = app.buttons["Remove"]
         XCTAssertTrue(remove.waitForExistence(timeout: 10))
         remove.click()

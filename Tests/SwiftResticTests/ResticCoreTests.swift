@@ -31,13 +31,17 @@ struct ResticErrorTests {
             exitCode: 12,
             message: "Fatal: wrong password"
         ).errorDescription ?? ""
-        #expect(wrongPassword == "The password doesn’t open this backup location. Check it in Edit Backup Location.")
+        #expect(wrongPassword == "The password doesn’t open this backup location.")
         #expect(ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password").resticDetail == "Fatal: wrong password")
         #expect(ResticError.commandFailed(exitCode: 12, message: "").resticDetail == nil)
-        #expect(
-            ResticError.commandFailed(exitCode: 12, message: "")
-                .errorDescription?.contains("Check it in Edit Backup Location") == true
-        )
+        // A run knows its location: the refused password names it, and a
+        // disk's missing backups ask after the disk.
+        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 12, message: ""), location: ("NAS", .sftp))
+            == "The password doesn’t open “NAS”.")
+        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 10, message: ""), location: ("Backup", .local))
+            == "Backups not found. Is the disk connected? If it moved, locate it.")
+        #expect(ResticError.words(for: ResticError.commandFailed(exitCode: 10, message: ""), location: ("NAS", .sftp))
+            == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
 
         // A missing repository and a lock carry their fix the same way: the
         // banner and the notification repeat this message.
@@ -124,62 +128,6 @@ struct ResticErrorTests {
         #expect(!changedText.contains("restic") && !changedText.contains("Terminal"))
     }
 
-    @Test("an rclone repository's failure leads with what rclone said, or says plainly what restic couldn’t get from it")
-    func rcloneWords() {
-        // restic 0.19.1 with rclone 1.75.2: rclone's own
-        // verdict reaches stderr as "rclone: <date> <time> CRITICAL: …", and
-        // the exit_error JSON carries only "error talking HTTP to rclone".
-        let fatal = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: exit status 1"
-        func result(_ rcloneLines: [String]) -> ResticRunResult {
-            let json = #"{"message_type":"exit_error","code":1,"message":"\#(fatal)"}"#
-            return ResticRunResult(
-                exitCode: 1,
-                messages: [.exitError(ResticExitError(code: 1, message: fatal))],
-                stdout: "",
-                stderr: (rcloneLines.map { "rclone: \($0)" } + [json]).joined(separator: "\n") + "\n"
-            )
-        }
-        let refused = result([
-            "2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed. Set known_hosts_file (to \"none\" to silence this notice)",
-            "2026/10/16 02:54:34 CRITICAL: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: ssh: unexpected message type 51 (expected 60)",
-        ])
-        // Its errors only, without the date and the level; a NOTICE is no verdict.
-        #expect(refused.failureMessage == fatal
-            + "\nrclone: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: ssh: unexpected message type 51 (expected 60)")
-        #expect(result(["2026/10/16 02:55:12 ERROR : sftp: can't stat: permission denied"]).failureMessage
-            == fatal + "\nrclone: sftp: can't stat: permission denied")
-        #expect(result(["2026/10/16 02:54:34 NOTICE: sftp: No host key validation is being performed."]).failureMessage == fatal)
-        // Only rclone's own lines are its verdict, whatever level words
-        // another program's line carries.
-        #expect(ResticRunResult.rcloneComplaint("subprocess ssh: 2026/10/16 02:55:12 ERROR : x") == nil)
-
-        // rclone said nothing: restic's reason stands. The unanswered-remote
-        // sentence needs restic's own deadline in the line.
-        #expect(ResticError.commandFailed(exitCode: 1, message: fatal).errorDescription
-            == "Unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: exit status 1")
-
-        // rclone's verdict, the first sentence, which captions show.
-        #expect(ResticError.commandFailed(exitCode: 1, message: refused.failureMessage).errorDescription
-            == "rclone: Failed to create file system for \"sftp:backups/restic\": NewFs: couldn't connect SSH: ssh: handshake failed: "
-            + "ssh: unexpected message type 51 (expected 60).")
-        let typo = result(["2026/10/16 02:55:12 CRITICAL: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\")"])
-        let typoText = ResticError.commandFailed(exitCode: 1, message: typo.failureMessage).errorDescription ?? ""
-        #expect(typoText
-            == "rclone: Failed to create file system for \"sftpx:backups/restic\": didn't find section in config file (\"sftpx\").")
-
-        // A remote that never answered: restic gave up waiting on rclone
-        // after a minute, before rclone said anything.
-        let waited = "Fatal: unable to open repository at rclone:sftp:backups/restic: error talking HTTP to rclone: "
-            + "Get \"http://localhost/file-6043080322775398060\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
-        #expect(ResticError.commandFailed(exitCode: 1, message: waited).errorDescription
-            == "rclone did not answer within a minute — its remote may be unreachable.")
-
-        let missing = "Fatal: unable to open repository at rclone:sftp:backups/restic: exec: \"rclone\": executable file not found in $PATH"
-        #expect(ResticError.commandFailed(exitCode: 1, message: missing).errorDescription == ResticError.rcloneMissing)
-        // rclone rides inside the app, so a missing one is a damaged install.
-        #expect(ResticError.rcloneMissing == "SwiftRestic is damaged. Install it again.")
-    }
-
     @Test("restic's Go stack trace never reaches a message; a second line of restic's own stays")
     func goStackTraceIsCut() {
         // restic 0.19.1's forget on an append-only server, as its exit_error
@@ -247,13 +195,9 @@ struct ResticErrorTests {
 
 @Suite("restic binary location")
 struct ResticBinaryTests {
-    @Test("restic's PATH leads with the app's helpers, then reaches a Homebrew or MacPorts ssh")
+    @Test("restic's PATH reaches a Homebrew or MacPorts ssh")
     func helperFoldersAreOnResticsPath() throws {
-        // The bundled helpers lead, so restic spawns the pinned rclone — a
-        // brew rclone on the inherited PATH must not stand in.
-        let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").path
         let path = try #require(ResticRunner.baseEnvironment()["PATH"]).split(separator: ":").map(String.init)
-        #expect(path.first == helpers, "\(path.first ?? "none") leads instead of \(helpers)")
         // An sftp location needs ssh, which a GUI app's near-empty PATH
         // would not find where Homebrew or MacPorts put it.
         for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
@@ -261,12 +205,11 @@ struct ResticBinaryTests {
         }
     }
 
-    @Test("the app runs restic and rclone from where the build phase puts them")
+    @Test("the app runs restic from where the build phase puts it")
     func bundledHelpersMatchTheBuildPhase() {
-        // build.sh checks that the built app carries the pinned pair there.
+        // build.sh checks that the built app carries the pinned restic there.
         let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
         #expect(ResticBinary.bundled.url == helpers.appendingPathComponent("restic"))
-        #expect(RcloneBinary.bundled.url == helpers.appendingPathComponent("rclone"))
     }
 
     @Test("a folder is not an executable file, though its mode has the execute bit")

@@ -97,8 +97,8 @@ final class AppModel {
     /// The newest generation the index has taken, per repository — set as
     /// its reconcile returns, whatever it decided. Until it is the
     /// generation `snapshots` was read under, the index answers for an
-    /// older listing (`indexIsComplete`). Observed by the Files views, which
-    /// read again the moment it moves, rather than at their next recheck.
+    /// older listing (`indexIsComplete`). Observed by the Backups tab, which
+    /// reads again the moment it moves, rather than at their next recheck.
     var indexTakenGeneration: [UUID: UInt64] = [:]
     /// Repositories with no password in the Keychain yet. Upkeep is not scheduled
     /// for these: there is nothing to run, and stamping a "last checked" time for
@@ -219,7 +219,7 @@ final class AppModel {
     /// password save may answer the old password, and must not cache it.
     @ObservationIgnored var contextGenerations: [UUID: Int] = [:]
     /// What `fileHistory` has read of a file in a backup — its node, with
-    /// the size and modification time a Files pane's version row shows —
+    /// the size and modification time the Backups tab's version row shows —
     /// for the session; the index keeps it across launches. A backup ID is
     /// restic's hash of the snapshot, so an answer never goes stale while
     /// its backup lives, and a forgotten backup is never asked about again.
@@ -286,6 +286,10 @@ final class AppModel {
     /// backups leave out (`OtherBackupsGroup.labels`). Tests name their own.
     let localHostname: String
 
+    /// Each loaded repository's `extraEnvironment`, by its id: how tests
+    /// steer the stub restic, since config.json does not carry it.
+    let repositoryEnvironment: [UUID: [String: String]]
+
     init(
         store: ConfigStore = ConfigStore(),
         secrets: SecretStore = .standard,
@@ -294,9 +298,11 @@ final class AppModel {
         volumeProbe: VolumeProbe = .fileSystem,
         defaults: UserDefaults = .standard,
         localHostname: String = ResticService.localHostname,
-        resticExecutable: URL = ResticBinary.bundled.url
+        resticExecutable: URL = ResticBinary.bundled.url,
+        repositoryEnvironment: [UUID: [String: String]] = [:]
     ) {
         self.resticExecutable = resticExecutable
+        self.repositoryEnvironment = repositoryEnvironment
         self.store = store
         self.secrets = secrets
         self.shareMounter = shareMounter

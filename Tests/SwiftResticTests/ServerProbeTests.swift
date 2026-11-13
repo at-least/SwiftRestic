@@ -13,28 +13,24 @@ struct ServerProbeTests {
         return repository
     }
 
-    @Test("an HTTP-reached repository's server is read from its location; a local folder, rclone and a proxy are not probed")
+    @Test("an HTTP-reached repository's server is read from its location; a local folder, SFTP and a proxy are not probed")
     func httpTargets() {
         func target(_ repository: Repository, _ environment: [String: String] = [:]) -> Target? {
             ServerProbe.httpTarget(of: repository, environment: environment)
         }
-        #expect(target(repository(.rest) { $0.restURL = "http://nas.local:8000/backups" }) == Target(host: "nas.local", port: 8000))
-        #expect(target(repository(.rest) { $0.restURL = "rest:https://backup.example.com/me/" }) == Target(host: "backup.example.com", port: 443))
-        #expect(target(repository(.rest) { $0.restURL = "http://10.0.0.5/" }) == Target(host: "10.0.0.5", port: 80))
         #expect(target(repository(.s3)) == Target(host: "s3.amazonaws.com", port: 443))
         #expect(target(repository(.s3) { $0.s3Endpoint = "https://minio.lan:9000" }) == Target(host: "minio.lan", port: 9000))
         #expect(target(repository(.s3) { $0.s3Endpoint = "http://minio.lan" }) == Target(host: "minio.lan", port: 80))
         #expect(target(repository(.s3) { $0.s3Endpoint = "s3.us-west-002.backblazeb2.com" }) == Target(host: "s3.us-west-002.backblazeb2.com", port: 443))
         // Nothing to ask first: the folder is the volume's to answer for, ssh
-        // resolves an SFTP host itself, rclone's server is in rclone's config.
+        // resolves an SFTP host itself.
         #expect(target(repository(.local) { $0.localPath = "/Volumes/Archive" }) == nil)
         #expect(target(repository(.sftp) { $0.sftpHost = "nas" }) == nil)
-        #expect(target(repository(.rclone) { $0.rcloneRemote = "nas:" }) == nil)
         // restic goes through a proxy, so a direct connection proves nothing.
-        let rest = repository(.rest) { $0.restURL = "http://nas.local:8000/backups" }
-        #expect(target(rest, ["HTTPS_PROXY": "http://proxy:3128"]) == nil)
-        #expect(target(rest, ["http_proxy": "http://proxy:3128"]) == nil)
-        #expect(target(rest, ["HTTPS_PROXY": ""]) == Target(host: "nas.local", port: 8000))
+        let minio = repository(.s3) { $0.s3Endpoint = "http://nas.local:8000" }
+        #expect(target(minio, ["HTTPS_PROXY": "http://proxy:3128"]) == nil)
+        #expect(target(minio, ["http_proxy": "http://proxy:3128"]) == nil)
+        #expect(target(minio, ["HTTPS_PROXY": ""]) == Target(host: "nas.local", port: 8000))
     }
 
     @Test("an SFTP host is probed where ssh would dial it — an alias's HostName and Port — and not through a jump host or a command")

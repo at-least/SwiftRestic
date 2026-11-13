@@ -100,12 +100,6 @@ struct EditorRequirementTests {
         draft.kind = .s3
         #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [])
             == "Enter the bucket and access key ID to save it.")
-        draft.kind = .rest
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [])
-            == "Enter the server URL to save it.")
-        draft.kind = .rclone
-        #expect(EditorRequirements.repository(draft, password: "", confirmPassword: "", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [])
-            == "Choose an rclone remote to save it.")
     }
 
     @Test("a location already added cannot be added again — the two would be one repository under two rows; twins an older configuration holds still save their edits")
@@ -128,15 +122,6 @@ struct EditorRequirementTests {
         #expect(EditorRequirements.repository(
             draft, password: "pw", confirmPassword: "pw", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [home]
         ) == "“restic” is already at this location.")
-        var server = Repository()
-        server.kind = .rest
-        server.restURL = "rest:http://nas.local:8000/"
-        var again = Repository()
-        again.kind = .rest
-        again.restURL = "rest:http://nas.local:8000"
-        #expect(EditorRequirements.repository(
-            again, password: "pw", confirmPassword: "pw", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [server]
-        ) == "“nas.local” is already at this location.")
         draft.localPath = "/Volumes/T7/restic-imac"
         #expect(EditorRequirements.repository(
             draft, password: "pw", confirmPassword: "pw", isNew: true, holdsBackups: false, hasStoredPassword: nil, among: [saved]
@@ -229,12 +214,13 @@ struct EditorRequirementTests {
         #expect(reaches { $0.kind = .local })
         #expect(reaches { $0.extraEnvironment = ["RESTIC_COMPRESSION": "max"] })
         #expect(reaches({ _ in }, password: "pv"))
-        #expect(reaches({ $0.kind = .rest; $0.restURL = "https://host:8000/" }, secret: "s3cret"))
-        var rest = initial
-        rest.kind = .rest
-        rest.restURL = "https://host:8000/"
-        initial = rest
-        #expect(reaches { $0.restUser = "alice" })
+        #expect(reaches({ $0.kind = .s3; $0.s3Bucket = "bucket"; $0.s3AccessKeyID = "AKIA" }, secret: "s3cret"))
+        var bucket = initial
+        bucket.kind = .s3
+        bucket.s3Bucket = "bucket"
+        bucket.s3AccessKeyID = "AKIA"
+        initial = bucket
+        #expect(reaches { $0.s3AccessKeyID = "AKIB" })
         #expect(reaches({ _ in }, secret: "s3cret"))
     }
 
