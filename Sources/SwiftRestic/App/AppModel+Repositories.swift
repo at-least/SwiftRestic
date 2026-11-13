@@ -3,44 +3,38 @@ import Foundation
 extension AppModel {
     func repository(id: UUID?) -> Repository? { configuration.repository(id: id) }
 
-    /// The saved password is known not to open the repository: its last
-    /// listing was refused it (restic exit 12). A run refused it reads the
-    /// listing again, which says it too. The editor then opens on the
-    /// password field, not "Saved in Keychain".
+    /// The last snapshot listing refused the saved password (exit 12); a run
+    /// refused it re-reads the listing, so this covers runs too. The editor
+    /// then opens on the password field, not "Saved in Keychain".
     func passwordRefused(repositoryID: UUID) -> Bool {
         if case .passwordRefused? = snapshotListingOutcomes[repositoryID] { return true }
         return false
     }
 
     /// A non-empty `password` replaces the stored one; nil keeps it. A new
-    /// password for a location already saved is a failed backup's fix: once
-    /// the Keychain holds it, the location's failed backups run again.
+    /// password for a saved location reruns its failed backups once the
+    /// Keychain holds it.
     func upsert(repository: Repository, password: String?, providerSecret: String?) async {
         let isSaved = self.repository(id: repository.id) != nil
         var fixesBackups = false
         do {
             try await secrets.save(repository.id, password, providerSecret)
-            // Cleared only on a successful save: a Keychain failure must not
-            // have the model schedule upkeep for a repository whose password
-            // never actually landed.
+            // Only after a successful save: a Keychain failure must not
+            // schedule work for a password that never landed.
             if password?.isEmpty == false {
                 repositoriesMissingPassword.remove(repository.id)
                 fixesBackups = isSaved
             }
         } catch {
-            // Name the repository: a Keychain failure for one repository
-            // must not read as a problem with another's.
             post(Banner(
                 title: "Couldn’t save the password for “\(label(of: repository))”",
                 message: error.localizedDescription,
                 level: .error
             ))
         }
-        // The cache key compares the Repository value, which by design carries
-        // no secrets — a password-only or provider-secret-only edit leaves it
-        // unchanged, so the entry dies here rather than serving stale
-        // credentials until an exit-12 happens to clear it (a wrong provider
-        // secret never would).
+        // The context cache compares the Repository value, which carries no
+        // secrets: a secrets-only edit leaves it equal, so only this drop
+        // stops stale credentials being served.
         forgetContext(repository.id)
 
         if let index = configuration.repositories.firstIndex(where: { $0.id == repository.id }) {
@@ -51,12 +45,8 @@ extension AppModel {
         if fixesBackups { rerunFailedBackups(in: repository.id) }
     }
 
-    /// What removing this repository does to work in flight — the removal
-    /// dialogs word themselves from here so the rule and its phrasing stay
-    /// testable at the model level, the same pattern as `quitInterruptions`.
-    /// Every kind of cancellation `deleteRepository` will perform gets its own
-    /// clause, so the dialog's word of what will be interrupted can never
-    /// trail what removal actually does.
+    /// The removal dialog's sentence. Each cancellation `deleteRepository`
+    /// performs needs its own clause here; the two are kept in step by hand.
     func removalConsequences(for repositoryID: UUID) -> String {
         let plans = plans(in: repositoryID)
         return Self.removalConsequences(
@@ -68,12 +58,8 @@ extension AppModel {
         )
     }
 
-    /// Pure so the dialog's wording can be tested without a live model — the
-    /// console's running state is `private(set)`, and the sentence, not the
-    /// bookkeeping, is what needs testing.
-    /// The plans are named: a plan follows its repository out, so this is
-    /// the last moment their names can be read — `deleteRepository`
-    /// removes each one.
+    /// Static so tests can word it without a live model (the console's
+    /// running state is `private(set)`).
     nonisolated static func removalConsequences(
         removedPlanNames: [String],
         isRestoring: Bool,
@@ -107,21 +93,11 @@ extension AppModel {
         return consequences
     }
 
-    /// Removes a repository from the app, and its plans with it: a plan
-    /// belongs to its repository, and one pointing nowhere could never run
-    /// again. The data in the repository is untouched, and so is the run
-    /// history.
-    ///
-    /// Work in flight against it is cancelled first, and the tasks' unwind
-    /// writes the run records itself — a cancelled run beats one that finishes
-    /// silently against a repository the app no longer lists. Nothing else is
-    /// cleaned up here: the completion blocks nil their own dictionary entries,
-    /// and double bookkeeping would double the records. Cancellation is
-    /// cooperative, so a backup already past restic (in retention or the
-    /// closing refresh) still settles as a success — its snapshot is real.
-    ///
-    /// The removal dialog discloses the work in flight through
-    /// `removalConsequences`.
+    /// Removes a repository and its plans; its data and run history stay.
+    /// The cancelled tasks' unwind writes their own run records and clears
+    /// their own entries, so doing either here would double them.
+    /// Cancellation is cooperative: a backup already past restic still
+    /// settles as a success, since its snapshot is real.
     func deleteRepository(id: UUID) {
         for plan in configuration.plans where plan.repositoryID == id {
             tasks.cancel(.plan(plan.id))
@@ -129,22 +105,19 @@ extension AppModel {
         tasks.cancel(.maintenance(id))
         if restoreRepositoryID == id { tasks.cancel(.restore) }
         if console.runningRepositoryID == id { console.cancelRunningCommand() }
-        // Cancel-then-forget, before the repository list shrinks: the
-        // cancelled child can take seconds to unwind, and `maintenanceLines`
-        // derives its rows from the repository list this removal is about to
-        // shrink — without this order the menu would show neither a headline
-        // nor a line until the unwind lands.
+        // Before the repository list shrinks: the cancelled child can take
+        // seconds to unwind, and `maintenanceLines` reads that list, so the
+        // other order leaves the menu blank until the unwind lands.
         clearRuntimeState(repositoryID: id)
         configuration.repositories.removeAll { $0.id == id }
-        // Plan deletion's own bookkeeping, so the two ways a plan goes cannot
-        // drift apart; its cancel repeats the one above, which is harmless.
+        // deletePlan's own bookkeeping, so the two ways a plan goes cannot
+        // drift apart; its cancel repeats the one above harmlessly.
         for plan in plans(in: id) {
             deletePlan(id: plan.id)
         }
-        // Both sends quitting should drain: an untracked index drop could
-        // recreate the file it was deleting, and an untracked keychain
-        // removal that lost the race leaves orphaned secrets no UI path
-        // can ever reach again.
+        // Tracked so quitting drains them: an interrupted index drop can
+        // recreate its file, and an interrupted Keychain removal leaves
+        // secrets no UI can reach.
         tasks.addBackground(Task { [indexCoordinator] in
             await indexCoordinator.dropRepository(repositoryID: id)
         })
@@ -162,11 +135,9 @@ extension AppModel {
         })
     }
 
-    /// The per-repository runtime state, dropped in one place — so a new
-    /// dictionary keyed by repository id joins this list instead of hoping
-    /// its removal path remembers. UUIDs are never reused, so an entry
-    /// missed here is never cleared again. (`loadingSnapshots` is not here:
-    /// it is cleared by the in-flight refresh's own `defer`.)
+    /// Every per-repository runtime entry; a new dictionary keyed by
+    /// repository id joins this list, or its entry leaks forever.
+    /// `loadingSnapshots` is left to the in-flight refresh's own `defer`.
     private func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil
         retireRunToken(for: .maintenance(id))
@@ -189,14 +160,10 @@ extension AppModel {
     func storedSecrets(for repositoryID: UUID) async throws -> (password: String?, providerSecret: String?) {
         try await secrets.load(repositoryID)
     }
-    /// Builds everything a restic command needs, or explains what is missing.
-    /// The password rules live once, in the main-actor-free
-    /// `AppModel.readContext` — this delegates to it, and caches
-    /// the answer beside the repository value it was built from, which
-    /// holds everything but the secrets; secret
-    /// edits are covered by `upsert`'s explicit invalidation, and a stale
-    /// credential by `noteAuthFailure`. Failures are never cached; only a
-    /// fully resolved context is.
+    /// Caches `readContext`'s answer beside the repository value it was built
+    /// from. That value holds no secrets, so secret edits invalidate through
+    /// `upsert` and stale credentials through `noteAuthFailure`. Failures
+    /// are never cached.
     func context(for repository: Repository) async throws -> RepositoryContext {
         if let cached = resolvedContexts[repository.id], cached.repository == repository {
             return cached.context
@@ -216,13 +183,9 @@ extension AppModel {
         contextGenerations[repositoryID, default: 0] += 1
     }
 
-    /// Change Password: the repository's key moves to `newPassword` with
-    /// the stored password the app opened it with, then the Keychain
-    /// follows. A refusal — a stored password the repository does not take
-    /// (exit 12), a lock held elsewhere (11) — throws with nothing stored.
-    /// Once restic has changed the key the old password is gone, so a
-    /// Keychain that cannot store the new one says so in its error rather
-    /// than leaving the two silently apart.
+    /// restic changes the key first, then the Keychain follows. Once restic
+    /// has changed it the old password is gone, so a Keychain failure must
+    /// surface as `PasswordNotStored`.
     func changeRepositoryPassword(repositoryID: UUID, to newPassword: String) async throws {
         precondition(EditorRequirements.newPassword(newPassword, confirm: newPassword) == nil, "an unchecked new password")
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
@@ -243,47 +206,34 @@ extension AppModel {
         }
     }
 
-    /// Callers keep their own missing-repository guard, because each
-    /// surface phrases that answer its own way.
+    /// Callers keep their own missing-repository guard: each surface words
+    /// it its own way.
     func resticContext(
         for repository: Repository
     ) async throws -> (service: any ResticClient, context: RepositoryContext) {
-        // A read of a repository on a saved network share that is away —
-        // the Backups tab, a restore, the console — reconnects it
-        // first, as a run does; still away, it throws in the run's words.
         try await reconnectShare(before: repository)
         let service = try service()
         let context = try await context(for: repository)
         return (service, context)
     }
 
-    /// Drops a repository's cached context so the next call re-reads the
-    /// Keychain. Exit 12 (wrong password / no matching key) is the failure a
-    /// stale repository credential produces; exit 1 is what a stale provider
-    /// secret surfaces as (restic's fatal-error catch-all — a rejected
-    /// S3 key exits 1, not 12). Without the drop, a credential fixed outside
-    /// the app would leave every call failing until a restart. The cost is
-    /// one extra Keychain read after any fatal error, which no run frequency
-    /// makes expensive.
+    /// A stale provider secret exits with restic's fatal catch-all, not 12
+    /// (a rejected S3 key exits 1), so every fatal error costs one extra
+    /// Keychain read.
     func noteAuthFailure(_ error: Error, repositoryID: UUID) {
-        guard case let ResticError.commandFailed(code, _) = error, code == ResticError.wrongPasswordCode || code == 1 else { return }
+        guard case let ResticError.commandFailed(code, _) = error,
+              code == ResticError.wrongPasswordCode || code == Self.resticFatalErrorCode else { return }
         forgetContext(repositoryID)
     }
 
-    /// The engine seam: everything above `ResticClient` is written against
-    /// the protocol, and this is the one place the concrete binary-backed
-    /// implementation is chosen.
+    private static let resticFatalErrorCode: Int32 = 1
+
     func service() throws -> any ResticClient {
         guard case let .ready(binary, _) = resticState else { throw ResticError.damagedInstall }
         return ResticService(runner: runner, binary: binary.url)
     }
 
-    /// The location editor's check and the password prompt's: restic opens
-    /// the repository with `context`'s credentials before anything is kept.
-    /// With nothing there, `creatingIfMissing` creates one, else it is
-    /// refused in `EditorRequirements.noRepositoryHere`'s words; a timeout
-    /// in `EditorRequirements.probeTimedOut`'s. Returns whether it created
-    /// one.
+    /// Run before anything is kept. Returns whether it created a repository.
     func openRepository(_ context: RepositoryContext, creatingIfMissing: Bool) async throws -> Bool {
         let service = try service()
         do {
@@ -296,10 +246,8 @@ extension AppModel {
         return true
     }
 
-    /// The password prompt's Open (`PasswordPromptSheet`): restic opens the
-    /// repository with `password` (`openRepository`) before the Keychain
-    /// keeps it, so a refused one never replaces the stored one. Throws in
-    /// the prompt's words.
+    /// Opens the repository before the Keychain keeps `password`, so a
+    /// refused one never replaces the stored one.
     func enterPassword(_ password: String, forRepository repositoryID: UUID) async throws {
         guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let context = RepositoryContext(

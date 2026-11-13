@@ -1,20 +1,17 @@
 import SwiftUI
 
-/// Activity's drawer: what the selected run did and where to go from it —
-/// the snapshot it wrote or read (Show in Backups), its
-/// numbers, restic's exit code, the messages it left, and the log. Shown
-/// for every selected run, clean ones included: the plan page's Last backup
-/// value lands on exactly such a run, and an empty pane under the selection
-/// reads as "nothing to see".
+/// Activity's drawer for the selected run, clean ones included: the plan
+/// page's Last backup value lands on exactly such a run.
 ///
-/// A fixed height, scrolling inside, buttons pinned under the scroll view
-/// so Show Log stays in reach whatever the messages list: 220 pt for a run
-/// with nothing to say, 320 for one with messages, so a failure's diagnosis
-/// does not push the facts under the fold. A constant per selected run,
-/// never a measurement, also answers Activity's non-scrolling host: its
-/// reply to the split view's zero-width minimum query is that number,
-/// whatever the text wraps to.
+/// A fixed height, scrolling inside, buttons pinned under the scroll view so
+/// Show Log stays in reach. A constant per run, never a measurement:
+/// Activity's non-scrolling host answers the split view's zero-width minimum
+/// query with it, whatever the text wraps to.
 struct RunDetailPanel: View {
+    private static let quietHeight: CGFloat = 220
+    /// Taller, so a failure's diagnosis does not push the facts under the fold.
+    private static let messagesHeight: CGFloat = 320
+
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     let run: RunRecord
@@ -44,7 +41,7 @@ struct RunDetailPanel: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(height: hasMessages ? 320 : 220)
+        .frame(height: hasMessages ? Self.messagesHeight : Self.quietHeight)
     }
 
     // No outcome glyph: the selected row above already wears it. How long
@@ -156,9 +153,7 @@ struct RunDetailPanel: View {
     }
 
     /// What the run left in words: the failure, what to do about the
-    /// unreadable items, restic's item lines. The unreadable items come under
-    /// restic's count and end with how many were not stored, the way the
-    /// copied details and the Restore strip say it.
+    /// unreadable items, restic's item lines.
     @ViewBuilder
     private var messages: some View {
         let (unreadable, unlisted) = run.unreadableItemListing()
@@ -215,10 +210,8 @@ struct RunDetailPanel: View {
                 // A retry only where there is something to retry: a clean
                 // record's next step is not a pointless re-run.
                 if run.kind == .backup, run.outcome != .succeeded, plan.isConfigurationComplete {
-                    // The Backup menu's predicate, as the plan page's and the
-                    // sidebar's buttons read it — without it the button is
-                    // clickable while running or restic-less and quietly
-                    // does nothing.
+                    // The Backup menu's predicate: without it the button is
+                    // clickable while running and quietly does nothing.
                     Button("Back Up Now") { model.runBackup(planID: planID) }
                         .disabled(!model.planCommands(for: .plan(planID)).canBackUp)
                         .modifier(TileHelp(help: model.isRunning(planID: planID)
@@ -307,10 +300,9 @@ struct ConsoleRouteButton: View {
 }
 
 /// The drawer's Backup row, in its own view so the listing lookup behind
-/// it reruns only when the run or the repository's listing changes — not on
-/// every write the drawer's other rows observe. Show in Backups opens the
-/// backup on its page's Backups tab; restic's short ID stays in Copy
-/// Details, the backup's time names it for a restore.
+/// it reruns only when the run or the repository's listing changes, not on
+/// every write the drawer's other rows observe. restic's snapshot ID stays in
+/// the copied details (Edit ▸ Copy); the backup's time names it on screen.
 private struct RunSnapshotRow: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router

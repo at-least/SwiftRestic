@@ -9,17 +9,10 @@ extension AppModel {
         ))
     }
 
-    /// Shows a transient message. Successes and news dismiss themselves
-    /// after a few seconds — success that outlives its moment reads as
-    /// stale — while errors and warnings stay until the user dismisses
-    /// them. Banners carrying a Show in Finder action stay too: a restore finishing
-    /// behind an open sheet would otherwise expire its button before anyone
-    /// could click it. The cap keeps a pathological stream from stacking
-    /// banners without end.
-    ///
-    /// An identical error or warning already on screen is not posted
-    /// again: they do not expire on their own, and a repeatable action
-    /// would stack copies until they evict unrelated successes.
+    /// Banners with a Show in Finder action stay: a restore finishing behind
+    /// an open sheet would expire its button before anyone could click it.
+    /// An identical staying banner is not posted again, or a repeated action
+    /// stacks copies.
     func post(_ banner: Banner) {
         if banner.staysUntilDismissed,
            banners.contains(where: { $0.staysUntilDismissed && $0.title == banner.title && $0.message == banner.message })
@@ -28,16 +21,14 @@ extension AppModel {
         }
         banners.insert(banner, at: 0)
         if banners.count > Self.bannerLimit {
-            // Evict the oldest passing banner first: an unread error is
-            // exactly what the queue exists to protect. The just-posted
-            // banner (index 0) is exempt; only a queue of errors and
-            // warnings gives up its oldest.
+            // The oldest passing banner goes first, never the just-posted
+            // one at index 0; errors go only when nothing else can.
             let oldestPassing = banners.lastIndex(where: { !$0.staysUntilDismissed }).flatMap { $0 > 0 ? $0 : nil }
             banners.remove(at: oldestPassing ?? banners.count - 1)
         }
         guard !banner.staysUntilDismissed, banner.revealPaths.isEmpty else { return }
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
+            try? await Task.sleep(for: Self.passingBannerLifetime)
             guard let self else { return }
             self.banners.removeAll { $0.id == banner.id }
         }
@@ -48,4 +39,5 @@ extension AppModel {
     }
 
     private static let bannerLimit = 4
+    private static let passingBannerLifetime: Duration = .seconds(8)
 }

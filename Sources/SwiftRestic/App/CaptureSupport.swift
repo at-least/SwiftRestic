@@ -1,25 +1,15 @@
 import AppKit
 import ScreenCaptureKit
 
-/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`): ScreenCaptureKit
-/// with a `cacheDisplay` fallback, the all-panes sweep, and the display
-/// wake. Kept out of the app-entry file: test scaffolding that ships in
-/// debug builds, so the entry file stays app logic. Needs a logged-in,
-/// unlocked GUI session: on macOS 26 a locked screen hid the window from
-/// this capture entirely (2026-09-14); on macOS 27.0.1 `screencapture -l`
-/// still photographed a window by its ID while locked and a region capture
-/// (`-R`) failed, this capture not tried (2026-10-09).
+/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`), kept out of the
+/// app-entry file. Needs a logged-in, unlocked GUI session: on macOS 26 a
+/// locked screen hid the window from this capture entirely; on macOS 27.0.1
+/// `screencapture -l` still photographed a window by its ID while locked and
+/// a region capture (`-R`) failed, this capture not tried.
 
 #if DEBUG
 extension AppDelegate {
-    /// Debug-only: write PNG(s) of the main window, then quit.
-    ///
-    /// The preferred backend is ScreenCaptureKit, which renders Tahoe's glass
-    /// materials correctly but needs a one-time Screen Recording grant;
-    /// `cacheDisplay` is the permission-free fallback and draws those
-    /// materials black on macOS 26. Which backend produced a given shot is
-    /// logged, so a black capture is never silent. The fallback keeps the
-    /// sweep usable from a terminal session or CI.
+    /// Writes PNG(s) of the main window, then quits. Backends: `bestEffortPNG`.
     func scheduleDebugCapture() {
         let environment = ProcessInfo.processInfo.environment
         guard let path = environment["SWIFTRESTIC_CAPTURE"], !path.isEmpty else { return }
@@ -177,18 +167,17 @@ extension AppDelegate {
         let windowID = CGWindowID(window.windowNumber)
         let scale = window.backingScaleFactor
 
-        // A lock-guarded box carries the SC result out: the SC task may
-        // ignore cancellation once a system prompt is up, so the leash
-        // abandons it rather than waiting, and cacheDisplay photographs
-        // the pane while the orphan settles.
+        // The SC task may ignore cancellation once a system prompt is up,
+        // so the leash abandons it rather than waiting.
         let box = CaptureResultBox()
         let scCapture = Task.detached(priority: .userInitiated) {
             let data = try? await Self.screenCaptureKitPNG(windowID: windowID, scale: scale)
             box.store(data)
         }
+        let screenCaptureKitLeashSeconds = 6.0
         var settled = false
         var waited = 0.0
-        while waited < 6 {
+        while waited < screenCaptureKitLeashSeconds {
             try? await Task.sleep(for: .seconds(0.5))
             waited += 0.5
             guard let data = box.load() else { continue }
@@ -233,9 +222,8 @@ extension AppDelegate {
         }
     }
 
-    /// Sendable confinement for the ScreenCaptureKit snapshot: older SDKs
-    /// (macOS 15, what CI compiles against) do not annotate
-    /// `SCShareableContent` as Sendable, so the async class method's result
+    /// Sendable confinement for the ScreenCaptureKit snapshot: the macOS 15
+    /// SDK does not annotate `SCShareableContent` as Sendable, so the async class method's result
     /// cannot cross back into the caller's isolation unboxed. The content
     /// is an immutable snapshot of the window list, so boxing it right where
     /// it is fetched — before the only send — is honest.

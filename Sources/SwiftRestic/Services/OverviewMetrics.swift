@@ -1,8 +1,7 @@
 import Foundation
 
-/// One plan's protection state — the rows behind a repository's sidebar
-/// warning and its page's Status line. Data only, so the counts and the
-/// words are pinned by tests.
+/// One plan's protection state: the rows behind a repository's sidebar
+/// warning and its page's Status line.
 struct UpToDateRow: Identifiable, Sendable, Equatable {
     let planID: UUID
     let planName: String
@@ -11,16 +10,13 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
     let isKnown: Bool
     let isUpToDate: Bool
     let didFail: Bool
-    /// A run of the plan is in flight, and the line says its phase.
+    /// The line says the run's phase.
     let isRunning: Bool
-    /// The moment the plan's "Last backup" counts from, from
-    /// `PlanStatus.lastBackupAt` — the one derivation every surface reads.
-    /// Nil in every state that spells no moment; the Status line reads
-    /// the newest of these across a repository's plans.
+    /// From `PlanStatus.lastBackupAt`. Nil in every state that spells no
+    /// moment; the Status line reads the newest across a repository's plans.
     let lastBackupAt: Date?
-    /// The standing problem's outcome when the line is that problem's
-    /// ("Failed — 3 hours ago"); nil when the listing or a run in flight
-    /// says it.
+    /// Set when the line is the standing problem's ("Failed — 3 hours
+    /// ago"); nil when the listing or a run in flight says it.
     let problemOutcome: RunRecord.Outcome?
     var id: UUID { planID }
 
@@ -36,8 +32,6 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
         return 4
     }
 
-    /// Derives straight from the plan, so each listing outcome states
-    /// only the part that differs.
     init(
         plan: BackupPlan,
         among plans: [BackupPlan],
@@ -62,68 +56,57 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
     }
 }
 
-/// A line under the Status summary, naming one plan; clicking it opens
-/// that plan.
+/// Names one plan; clicking it opens that plan.
 struct UpToDateLine: Equatable, Sendable {
     let planID: UUID
     let text: String
 }
 
-/// The repository page's Status line: its text, and whether it ends
-/// with the hold's Resume. Data only — `OverviewMetrics.upToDateSummary`
-/// derives it, so the counts and the words are pinned beside the rows they
-/// come from.
+/// The repository page's Status line.
 struct UpToDateSummary: Equatable, Sendable {
-    /// "2 of 2 plans up to date · Last backup 1 hour ago", with the hold's own
-    /// words joined on while one is on.
+    /// "2 of 2 plans up to date · Last backup 1 hour ago", with the hold's
+    /// own words joined on while one is on.
     var text: String
     /// The hold is the user's own Pause Backups, so the line ends with a
     /// Resume.
     var showsResume: Bool
-    /// One line per plan whose last backup failed, in these
-    /// words ("Code: Failed — 3 hours ago"), beside the failed run's red
-    /// octagon that the plan's own row wears. Empty when none failed.
+    /// One per plan whose last backup failed ("Code: Failed — 3 hours
+    /// ago"), beside the red octagon the plan's own row wears.
     var failureLines: [UpToDateLine] = []
-    /// One line per other plan that needs the user — no backup yet, no
-    /// repository, or up to date but "Not scheduled"
-    /// (`PlanStatus.willNotRunCaption`), so "all up to date" cannot hide a
-    /// plan that has stopped — in these words ("Photos: No backups yet"),
-    /// beside the warning triangle. Empty when every plan is up to date and
-    /// will run.
+    /// One per other plan that needs the user ("Photos: No backups yet"),
+    /// beside the warning triangle. Includes up-to-date plans that are "Not
+    /// scheduled" (`PlanStatus.willNotRunCaption`), so "all up to date"
+    /// cannot hide a plan that has stopped.
     var attentionLines: [UpToDateLine] = []
 }
 
 /// Derives the protection rows and the recent problems from the
 /// configuration and run history.
-///
-/// Pure and separate from the view so it can be tested.
 enum OverviewMetrics {
-    /// The window a "recent problem" counts over: the sidebar's Activity
-    /// badge and the menu bar's problem line read the same week, so a problem
-    /// cannot age out of one before the other. A week, not "until the next success": a backup fixes no
-    /// failed check, prune, retention run or restore.
+    /// Not "until the next success": a backup fixes no failed check, prune,
+    /// retention run or restore.
+    private static let problemWindowLength: TimeInterval = 7 * 86_400
+
+    /// The sidebar's Activity badge and the menu bar's problem line read the
+    /// same window, so a problem cannot age out of one before the other.
     static func problemWindowStart(from now: Date) -> Date {
-        now.addingTimeInterval(-7 * 86_400)
+        now.addingTimeInterval(-problemWindowLength)
     }
 
-    /// Failures and completed-with-errors runs that finished inside the
-    /// window — the one definition of "recent problem". The sidebar's badge
-    /// counts its unseen part, healed or not; the menu bar's problem line leads with its newest entry `isHealed`
-    /// has not cleared. Recency counts from when a run finished: a backup
-    /// that ran all night and failed at dawn is this morning's news, not
-    /// eight days old.
+    /// The one definition of "recent problem". The sidebar's badge counts
+    /// its unseen part, healed or not; the menu bar's problem line leads
+    /// with its newest entry `isHealed` has not cleared. Recency counts from
+    /// when a run finished: a backup that ran all night and failed at dawn is
+    /// this morning's news.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {
         runs.filter {
             $0.finishedAt >= since && $0.outcome.isProblem
         }
     }
 
-    /// Whether a backup problem no longer stands: a successful backup of the
-    /// same plan finished after it — the next run fixed it. Backups only: a
-    /// failed check, prune, forget or restore is not fixed by a backup going
-    /// through. A retention run older builds recorded under the plan's ID
-    /// heals nothing. The sidebar's standing problem and
-    /// the menu bar's face both go by this.
+    /// Backups only: a failed check, prune, forget or restore is not fixed
+    /// by a backup going through. The sidebar's standing problem and the
+    /// menu bar's face both go by this.
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
         guard problem.kind == .backup, let planID = problem.planID else { return false }
         return runs.contains {
@@ -134,12 +117,10 @@ enum OverviewMetrics {
     }
 
     /// The records a standing problem still reads, which the history cap
-    /// keeps past its count: each plan's newest failed or completed-with-
-    /// errors backup no later success healed — the sidebar caption and the
-    /// dot read it however old it is — and every other run's problem inside
-    /// the week, which a backup never heals (the repository's Recent
-    /// problems, the Activity badge, the menu bar). Bounded: one record per
-    /// plan, and a week of the rest.
+    /// keeps past its count: each plan's newest unhealed problem backup,
+    /// however old (the sidebar caption and dot read it), and every other
+    /// problem run inside the week, which a backup never heals. Bounded: one
+    /// record per plan, and a week of the rest.
     static func standingProblemIDs(in runs: [RunRecord], now: Date) -> Set<UUID> {
         var newestBackupProblem: [UUID: RunRecord] = [:]
         var standing: Set<UUID> = []
@@ -159,18 +140,15 @@ enum OverviewMetrics {
         return standing
     }
 
-    /// The rows whose plan is not up to date and should be: an unreadable
-    /// listing, a plan known to have no backup, one past the quiet window, or
-    /// one whose last backup failed. A repository's sidebar row and the menu
-    /// bar's face wear a warning for these.
+    /// A repository's sidebar row and the menu bar's face wear a warning for
+    /// these.
     static func needingAttention(_ rows: [UpToDateRow]) -> [UpToDateRow] {
         rows.filter { $0.severityRank <= 1 }
     }
 
-    /// The protection rows, one per plan. The lookups arrive as closures so
-    /// the derivation stays pure while the view keeps its observation on the
-    /// model behind them. `relative` spells a past moment; the view passes
-    /// the window's minute clock, as the sidebar's captions do.
+    /// The lookups are closures so the derivation stays pure while the view
+    /// keeps its observation on the model behind them. The view passes the
+    /// window's minute clock as `relative`, as the sidebar's captions do.
     static func protectionRows(
         plans: [BackupPlan],
         latestSnapshot: (_ repositoryID: UUID, _ planID: UUID) -> Snapshot?,
@@ -196,11 +174,9 @@ enum OverviewMetrics {
                     relative: relative
                 )
                 // The sidebar caption's top ranks, in its words
-                // (PlanStatus.sidebarCaption): a run in flight says its
-                // phase, then a standing problem; an unreadable listing
-                // still outranks the problem. The pause stays out of the
-                // rows — the caption says it. Up to date is the listing's,
-                // except that a standing failure takes it away below.
+                // (`PlanStatus.sidebarCaption`); an unreadable listing still
+                // outranks the problem. The pause stays out of the rows: the
+                // caption says it.
                 if let activity = activity(plan.id) {
                     return UpToDateRow(
                         plan: plan,
@@ -217,8 +193,7 @@ enum OverviewMetrics {
                         stateText: "\(problem.outcome.displayName) — \(relative(problem.finishedAt))",
                         isKnown: listed.isKnown,
                         // A failed run wrote no snapshot, so the newest one
-                        // is older than the trouble; a run that completed
-                        // with errors (restic exit 3) wrote one.
+                        // is older than the trouble; restic exit 3 wrote one.
                         isUpToDate: listed.isUpToDate && problem.outcome != .failed,
                         didFail: false, lastBackupAt: listed.lastBackupAt,
                         problemOutcome: problem.outcome
@@ -258,11 +233,9 @@ enum OverviewMetrics {
             var moment: Date?
             var isOverdue = false
             if let latest, let stamped = PlanStatus.lastBackupAt(plan: plan, latestSnapshotTime: latest.time) {
-                // The sidebar's words and formatter, and the one moment
-                // every surface's "Last backup" counts from
-                // (`PlanStatus.lastBackupAt`). Date.RelativeFormatStyle
-                // rounds 1 h 43 min up to "2 hours ago", where
-                // Format.relative says "1 hour ago".
+                // `relative`, not Date.RelativeFormatStyle, which rounds
+                // 1 h 43 min up to "2 hours ago" where the sidebar says "1
+                // hour ago".
                 moment = stamped
                 isOverdue = StaleAlert.isOverdue(plan, lastBackupAt: stamped, now: now)
                 line = isOverdue
@@ -271,10 +244,8 @@ enum OverviewMetrics {
             } else if !repositoryHasSnapshots(repositoryID) {
                 line = "No backups yet"
             } else {
-                // The repository has snapshots but none from this plan —
-                // the same distinction the plan page's Snapshots row draws;
-                // a bare "No snapshots yet" would be false about a
-                // repository adopted with snapshots already in it.
+                // Snapshots, none from this plan: a bare "No backups yet"
+                // would be false about a repository adopted with snapshots.
                 line = PlanStatus.noneFromThisPlanFact
             }
             return UpToDateRow(
@@ -298,24 +269,17 @@ enum OverviewMetrics {
         }
     }
 
-    /// An unreadable snapshot listing in one sentence — the rows and the caveat
-    /// say it alike.
+    /// The rows and the caveat say it alike.
     static func listingFailureText(_ message: String) -> String {
         "Can’t read backups — \(Format.withoutFinalPeriod(Format.firstSentence(message)))"
     }
 
-    /// The listing not read yet, in the sidebar's words — the caveat and the
-    /// location page's tooltip say it the same way.
+    /// The caveat and the location page's tooltip say it the same way.
     static let listingIdleText = "List of backups not loaded yet"
 
-    /// The repository page's Status line: how many of the repository's
-    /// plans are up to date, when its newest backup landed, and, while one is
-    /// on, the app-wide hold's own words. Nil unless the listing has
-    /// succeeded: no count is honest before it lands or after it fails.
-    ///
-    /// With no plans, the line names the repository's adoptable side — the
-    /// same count the sidebar's Other backups node carries — what "no plans"
-    /// means on a page whose repository may hold history.
+    /// Nil unless the listing succeeded: no count is honest before it lands
+    /// or after it fails. With no plans, the line names the repository's
+    /// adoptable side, the count the sidebar's Other backups node carries.
     static func upToDateSummary(
         rows: [UpToDateRow],
         listingLoaded: Bool,
@@ -333,15 +297,13 @@ enum OverviewMetrics {
                 segments.append(Format.plural(otherBackupsCount, "backup"))
             }
         } else {
-            // The Status line's own rule: a plan still being read is
-            // in neither number.
+            // A plan still being read is in neither number.
             let known = rows.filter(\.isKnown)
             segments = [
                 "\(known.filter(\.isUpToDate).count) of \(Format.plural(known.count, "plan")) up to date"
             ]
-            // A run in flight, in the sidebar caption's phase words: during a
-            // first backup "0 of 1 plan up to date" alone would read as an
-            // alarm while the remedy is under way.
+            // During a first backup "0 of 1 plan up to date" alone would read
+            // as an alarm while the remedy is under way.
             segments += rows.filter(\.isRunning).map { "\($0.planName) — \($0.stateText)" }
             if let newest = rows.compactMap(\.lastBackupAt).max() {
                 segments.append("Last backup \(relative(newest))")
@@ -352,7 +314,6 @@ enum OverviewMetrics {
         }
         var showsResume = false
         if case .paused = hold { showsResume = true }
-        // A failed run's lines apart, under its glyph.
         var failures: [UpToDateLine] = []
         var attention: [UpToDateLine] = []
         for row in rows where row.isKnown && !row.isUpToDate && !row.isRunning {
@@ -363,8 +324,7 @@ enum OverviewMetrics {
                 attention.append(line)
             }
         }
-        // The up-to-date plans that will not run by themselves; an
-        // out-of-date one's line above already names it.
+        // An out-of-date plan's line above already names it.
         for row in rows where row.isKnown && row.isUpToDate && !row.isRunning {
             if let caption = willNotRun(row.planID) {
                 attention.append(UpToDateLine(planID: row.planID, text: "\(row.planName): \(caption)"))
@@ -378,11 +338,9 @@ enum OverviewMetrics {
         )
     }
 
-    /// The Snapshots tile of a repository page (`subject` "here") or a plan
-    /// page ("of this plan"): `snapshotsLine` on its face, the oldest
-    /// backup's moment behind it. `snapshots` are newest first, as every
-    /// listing is (the pages read their newest from `first`), so the oldest
-    /// is the last.
+    /// `subject` is "here" (repository page) or "of this plan" (plan page).
+    /// `snapshots` are newest first, as every listing is, so the oldest is
+    /// the last.
     static func snapshotsTile(
         total: Int, otherBackups: Int, repositoryHasPlans: Bool, snapshots: [Snapshot], subject: String, noun: Bool = false
     ) -> TileFace {
@@ -396,13 +354,11 @@ enum OverviewMetrics {
         )
     }
 
-    /// The repository page's Snapshots value: the whole count, split by the
-    /// shelf the sidebar puts the rest on — "Other backups", whatever made
+    /// The rest go on the sidebar's "Other backups" shelf, whatever made
     /// them (another Mac, a deleted plan, the console, restic elsewhere), so
     /// the line names the place, not a cause. A repository with no plans
-    /// shelves everything under "Backups": there is nothing to split.
-    /// `noun` leads the line with the word ("12 backups") where no row label
-    /// above it says it; the bare count is the default.
+    /// has nothing to split. `noun` leads with the word ("12 backups") where
+    /// no row label above says it.
     static func snapshotsLine(
         total: Int, otherBackups: Int, repositoryHasPlans: Bool, since: Date? = nil, noun: Bool = false
     ) -> String {
@@ -412,9 +368,7 @@ enum OverviewMetrics {
                 ? " · all in Other backups"
                 : " · \(Format.count(otherBackups)) in Other backups"
         }
-        // How far back the history reaches — the oldest backup's day, which
-        // nothing else on the page says and which both the Backups tab's
-        // list and its picker put at the end of a long list. One
+        // The oldest backup's day, which nothing else on the page says. One
         // backup reaches no further than itself.
         if let since, total > 1 {
             line += " · since \(Format.day(since))"

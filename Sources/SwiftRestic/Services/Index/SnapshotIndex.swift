@@ -179,11 +179,9 @@ struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConv
     }
 }
 
-/// One search result: a distinct path an indexed snapshot holds, and
-/// whether it is a directory. From the index, the kind is the one in the
+/// A distinct path an indexed snapshot holds. The kind is the one in the
 /// newest indexed snapshot holding the path — a path can change kind over
-/// its history. The Restore pane replaces it with the kind in the open
-/// backup, since that is the snapshot it restores from.
+/// its history.
 ///
 /// Identity and equality are byte-exact (`PathKey`): two hits whose names
 /// differ only in Unicode normalization are two paths, two rows and two
@@ -191,9 +189,7 @@ struct PathKey: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConv
 struct SearchHit: Sendable, Equatable, Identifiable {
     let path: String
     let isDirectory: Bool
-    /// The path's bytes in hex — never a path, so it cannot collide with
-    /// the tree rows' path tags in a list that shares their selection.
-    /// Stored: SwiftUI reads it on every diff of the list.
+    /// Stored, not computed: SwiftUI reads it on every diff of the list.
     let id: String
 
     init(path: String, isDirectory: Bool) {
@@ -207,8 +203,8 @@ struct SearchHit: Sendable, Equatable, Identifiable {
     }
 }
 
-/// A search and, from the same read, which of its hits one snapshot holds —
-/// the Restore pane's question. One read, not a search and then a lookup:
+/// A search and, from the same read, which of its hits one snapshot holds.
+/// One read, not a search and then a lookup:
 /// the search knows each hit's node, but a node id means nothing outside
 /// the transaction that read it — housekeeping may delete the node and a
 /// later ingest reuse its id — and asking again by path text resolves every
@@ -224,8 +220,8 @@ struct SearchWithMembership: Sendable, Equatable {
     let inSnapshot: [PathKey: Bool]
 }
 
-/// A search and, from the same read, each hit's version summary — Find
-/// Files' rows. One read for the reason `SearchWithMembership` gives. Within
+/// A search and, from the same read, each hit's version summary — Search
+/// All Backups' rows. One read for the reason `SearchWithMembership` gives. Within
 /// it every hit has a summary: the search keeps only paths an indexed
 /// snapshot holds, and the summary counts exactly those snapshots.
 struct SearchWithSummaries: Sendable, Equatable {
@@ -354,11 +350,9 @@ enum IndexError: Error, Equatable {
 /// serializes them too — hence `@unchecked Sendable`. Reads run async on
 /// pool readers, beside the writer.
 final class SnapshotIndex: @unchecked Sendable {
-    /// 4: version 3 with the file-node cache in the creation script, where
-    /// an open had added it to every file since the cache came. 3: version 2
-    /// had no `edit` or `blind`, and a file without them knows nothing of
-    /// content changes, so it is rebuilt rather than read as if no file had
-    /// ever changed. (1 is taken too: development builds wrote it.)
+    /// Must equal the `user_version` `SnapshotIndexSchema.create` sets; bump
+    /// both on any change to the creation script, and a file with another
+    /// version is rebuilt.
     private static let schemaVersion: Int32 = 4
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
@@ -407,12 +401,11 @@ final class SnapshotIndex: @unchecked Sendable {
         return database.resultCode == .SQLITE_CORRUPT || database.resultCode == .SQLITE_NOTADB
     }
 
-    /// Opens (or creates) the file at `path`. A file with any other schema —
-    /// including an empty `user_version` over existing tables, which is what
-    /// the older index format looks like — throws `schemaMismatch` with the
-    /// pool already closed, so the owner can delete the file and open again.
-    /// The file holds every indexed path in clear, names restic keeps
-    /// encrypted in the repository: nothing more sensitive goes in it.
+    /// A file with any other schema — including an empty `user_version` over
+    /// existing tables — throws `schemaMismatch` with the pool already
+    /// closed, so the owner can delete the file and open again. The file
+    /// holds every indexed path in clear, names restic keeps encrypted in the
+    /// repository: nothing more sensitive goes in it.
     init(path: String) throws {
         let pool = try DatabasePool(path: path, configuration: Self.configuration())
         do {
@@ -585,13 +578,11 @@ final class SnapshotIndex: @unchecked Sendable {
     /// The next backfill step, read-only on a pool reader.
     ///
     /// Per chain with pending snapshots: a chain with no window offers a full
-    /// read of its newest pending snapshot (class 0); otherwise the lowest
-    /// pending seq above `hi` (class 1, forward), else the highest below `lo`
-    /// (class 2, reverse) — as a delta from the window end when that
-    /// snapshot is alive, and as a full compare when it died. The best offer
-    /// wins by class, then newest time, then greatest id bytes: every
-    /// chain's first build before anything else, then new backups, then
-    /// history newest to oldest.
+    /// read of its newest pending snapshot; otherwise the lowest pending seq
+    /// above `hi`, else the highest below `lo` — as a delta from the window
+    /// end when that snapshot is alive, and as a full compare when it died.
+    /// The best offer wins by `PlanRank`, then newest time, then greatest id
+    /// bytes.
     ///
     /// `skipping` holds the snapshots the caller gave up on for this pass. A
     /// skipped forward candidate removes the chain's forward step — the
@@ -623,17 +614,16 @@ final class SnapshotIndex: @unchecked Sendable {
                     while let row = try pending.next() {
                         let hash: String = row["hash"]
                         guard !skipping.contains(hash) else { continue }
-                        offer(0, row["time"], hash, PlannedStep(step: .full(snapshotID: hash)))
+                        offer(PlanRank.firstBuild, row["time"], hash, PlannedStep(step: .full(snapshotID: hash)))
                         break
                     }
                     continue
                 }
-                // Forward first: the lowest pending seq above hi (class 1),
-                // else the highest below lo (class 2). Only an offer ends the
-                // search: a skipped forward candidate removes the chain's
-                // forward step — the window cannot jump over it — but lets its
-                // reverse one through.
-                for (rank, candidate, end) in [(1, SQL.lowestPendingAbove, hi), (2, SQL.highestPendingBelow, lo)] {
+                // Only an offer ends the search: a skipped forward candidate
+                // still lets the reverse one through.
+                for (rank, candidate, end) in [
+                    (PlanRank.forward, SQL.lowestPendingAbove, hi), (PlanRank.reverse, SQL.highestPendingBelow, lo),
+                ] {
                     guard let row = try Row.fetchOne(db.cachedStatement(sql: candidate), arguments: [chainID, end])
                     else { continue }
                     let hash: String = row["hash"]
@@ -645,6 +635,14 @@ final class SnapshotIndex: @unchecked Sendable {
             }
             return best?.planned ?? PlannedStep(step: .done)
         }
+    }
+
+    /// The planner's offer classes, lowest wins: every chain's first build
+    /// before anything else, then new backups, then history newest to oldest.
+    private enum PlanRank {
+        static let firstBuild = 0
+        static let forward = 1
+        static let reverse = 2
     }
 
     /// A step past one end of a window: a delta from the end's snapshot
@@ -818,9 +816,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// Which of `paths` the snapshot holds, each with its kind in *that*
     /// snapshot (true for a directory). `[:]` when the snapshot is not listed
     /// or not indexed: nothing about it is known. Keyed by the bytes asked
-    /// for (`PathKey`), as the summaries are. What the Restore pane's
-    /// incomplete strip asks of the backup before, and what a restore by
-    /// path asks of the backup it restores from.
+    /// for (`PathKey`), as the summaries are.
     func kinds(of paths: [String], inSnapshot snapshotID: String) async throws -> [PathKey: Bool] {
         try await pool.read { db in
             guard let target = try Target.fetch(db, snapshotID), target.state == State.indexed else { return [:] }
@@ -951,10 +947,8 @@ final class SnapshotIndex: @unchecked Sendable {
     /// Basename search within one chain — the Backups tab's: `searchPaths`'s
     /// walk and order, keeping only the paths an indexed snapshot of the
     /// chain holds, so the limit counts the chain's hits alone and a chain
-    /// whose names sort late still gets its own. Each hit is what the tree
-    /// lists for it (`IndexChild`): its kind and newest backup are the
-    /// chain's, and `isInNewest` says whether the chain's newest indexed
-    /// snapshot holds it. An unknown chain answers `[]`.
+    /// whose names sort late still gets its own. Each hit's kind and newest
+    /// backup are the chain's. An unknown chain answers `[]`.
     func search(matching query: String, inChain chainKey: String, limit: Int) async throws -> [IndexChild] {
         let match = Self.ftsQuery(from: query)
         guard !match.isEmpty, limit > 0 else { return [] }
