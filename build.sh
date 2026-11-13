@@ -97,15 +97,25 @@ end_to_end_suites=(
 
 # One xcodebuild run: the full log to a temporary file, the interesting
 # lines to the terminal; the status is xcodebuild's own, not grep's.
-log="$(mktemp)"
-trap 'rm -f "$log"' EXIT
+# Tests run in parallel: the generated scheme says parallelizable NO, which
+# ran every suite one after another; three parallel runs of each phase
+# passed with no failure (2026-11-14). Parallel output interleaves and cuts
+# lines, so the counts come from the result bundle, not the log.
+work="$(mktemp -d)"
+log="$work/log"
+trap 'rm -rf "$work"' EXIT
 run_xcodebuild() {
     local action="$1"
     shift
     local result=0
-    xcodebuild "${xcodebuild_arguments[@]}" "$action" "$@" 2>&1 \
+    local bundle="$work/$action.xcresult"
+    local test_arguments=()
+    if [ "$action" != build ]; then
+        test_arguments=(-parallel-testing-enabled YES -resultBundlePath "$bundle")
+    fi
+    xcodebuild "${xcodebuild_arguments[@]}" "$action" "${test_arguments[@]}" "$@" 2>&1 \
       | tee "$log" \
-      | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed|passed" \
+      | grep --line-buffered -E "error:|warning:|BUILD|TEST|Testing failed|failed" \
       || result=${PIPESTATUS[0]}
     if [ "$action" != build ]; then
         # The filtered stream above does not show a restarted runner.
@@ -114,11 +124,18 @@ run_xcodebuild() {
             result=1
         fi
         # xcodebuild exits 0 when a filter or a stale project file selects
-        # zero tests; the swift-testing summary line is then absent. Checked
-        # only after success, so a compile failure is not an empty run.
-        if [ "$result" -eq 0 ] && ! grep -qE "Test run with [1-9][0-9]* tests" "$log"; then
-            echo "error: test run reported success without executing any tests" >&2
-            result=1
+        # zero tests. Checked only after success, so a compile failure is
+        # not reported as an empty run.
+        if [ "$result" -eq 0 ]; then
+            local counts
+            counts="$(xcrun xcresulttool get test-results summary --path "$bundle" \
+                | python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["totalTestCount"], d["passedTests"], d["failedTests"], d["skippedTests"])')"
+            read -r total passed failed skipped <<<"$counts"
+            echo "Test run: $total tests, $passed passed, $failed failed, $skipped skipped"
+            if [ "$total" -eq 0 ]; then
+                echo "error: test run reported success without executing any tests" >&2
+                result=1
+            fi
         fi
     fi
     return "$result"
