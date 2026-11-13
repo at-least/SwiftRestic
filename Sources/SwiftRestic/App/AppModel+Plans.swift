@@ -115,6 +115,28 @@ extension AppModel {
         configuration.plans.removeAll { $0.id == id }
     }
 
+    /// Choose New Location… for a plan whose folder moved: a plan's path is
+    /// fixed (`BackupPlan.path`), so the folder where it is now gets a new
+    /// plan with this one's settings in the same location, and this one is
+    /// removed in the same step — its backups stay in the location, under
+    /// Other backups. Returns the new plan's ID.
+    func movePlan(id: UUID, toPath path: String) throws -> UUID {
+        guard let old = plan(id: id) else { throw MessageError(message: "This plan was removed.") }
+        var moved = old
+        moved.id = UUID()
+        moved.path = path
+        moved.lastRunAt = nil
+        moved.lastSuccessAt = nil
+        moved.staleAlertedFor = nil
+        let others = configuration.plans.filter { $0.id != id }
+        if let reason = EditorRequirements.plan(moved, isNew: true, among: others) {
+            throw MessageError(message: reason)
+        }
+        deletePlan(id: id)
+        createPlan(moved)
+        return moved.id
+    }
+
     func isRunning(planID: UUID) -> Bool { activity[planID] != nil }
 
     var runningPlanIDs: Set<UUID> { Set(activity.keys) }

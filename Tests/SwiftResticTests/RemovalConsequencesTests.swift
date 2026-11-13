@@ -15,7 +15,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos"],
                 isRestoring: false,
                 runningBackupNames: [],
-                isMaintaining: false,
+                runningMaintenance: nil,
                 isConsoleRunning: false
             ) == "Its plans “Documents” and “Photos” are removed too. The backups in it are kept."
         )
@@ -24,7 +24,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents"],
                 isRestoring: false,
                 runningBackupNames: [],
-                isMaintaining: false,
+                runningMaintenance: nil,
                 isConsoleRunning: false
             ) == "Its plan “Documents” is removed too. The backups in it are kept."
         )
@@ -35,7 +35,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos", "Music"],
                 isRestoring: false,
                 runningBackupNames: [],
-                isMaintaining: false,
+                runningMaintenance: nil,
                 isConsoleRunning: false
             ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
         )
@@ -44,7 +44,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: [],
                 isRestoring: false,
                 runningBackupNames: [],
-                isMaintaining: false,
+                runningMaintenance: nil,
                 isConsoleRunning: false
             ) == "The backups in it are kept."
         )
@@ -56,12 +56,12 @@ struct RemovalConsequencesTests {
             removedPlanNames: ["Nightly"],
             isRestoring: true,
             runningBackupNames: ["Nightly", "Untitled Plan"],
-            isMaintaining: true,
+            runningMaintenance: .prune,
             isConsoleRunning: true
         )
         #expect(sentence.contains("A restore from this location is running and will be stopped."))
         #expect(sentence.contains("Backups of “Nightly” and “Untitled Plan” are running and will be stopped."))
-        #expect(sentence.contains("Maintenance is running and will be stopped."))
+        #expect(sentence.contains("A cleanup is running and will be stopped."))
         #expect(sentence.contains("A console command is running and will be stopped."))
     }
 }

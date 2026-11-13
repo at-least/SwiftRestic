@@ -59,6 +59,20 @@ enum Scheduler {
         return due
     }
 
+    /// The plans a fix that worked runs again: each the scheduler would
+    /// start by itself whose newest backup failed — the mount's catch-up
+    /// rule, for a failure instead of a skip. Which repository's plans the
+    /// fix was for is the caller's to say.
+    static func rerunAfterFix(
+        plans: [BackupPlan],
+        newestBackupOutcome: [UUID: RunRecord.Outcome],
+        running: Set<UUID>
+    ) -> [UUID] {
+        plans
+            .filter { $0.runsOnSchedule && !running.contains($0.id) && newestBackupOutcome[$0.id] == .failed }
+            .map(\.id)
+    }
+
     /// What holds a run at `now`: a live pause, whatever the repository; else
     /// a metered network, for a repository that would use it. A pause whose
     /// end has passed holds nothing, even before the tick clears it.

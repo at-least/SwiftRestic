@@ -72,5 +72,6 @@ extension AppModel {
         forgetContext(id)
         await flushSave()
         scheduleSnapshotRefresh(repositoryID: id)
+        rerunFailedBackups(in: id)
     }
 }

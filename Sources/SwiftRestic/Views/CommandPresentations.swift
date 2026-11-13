@@ -7,7 +7,6 @@ import SwiftUI
 /// own because RootView's chain sits at the compiler's type-check limit.
 struct CommandPresentations: ViewModifier {
     @Environment(AppModel.self) private var model
-    @Environment(AppRouter.self) private var router
     @Binding var pendingConfirmation: CommandConfirmation?
 
     func body(content: Content) -> some View {
@@ -40,13 +39,6 @@ struct CommandPresentations: ViewModifier {
             Button("Remove Plan") { model.deletePlan(id: id) }
         case let .deleteRepository(id):
             Button("Remove") { model.deleteRepository(id: id) }
-        case let .prune(id):
-            Button("Clean Up") {
-                model.runMaintenance(repositoryID: id, task: .prune)
-                // The location's page is the only place a prune shows its
-                // progress and Cancel.
-                router.showMaintenance(of: id)
-            }
         }
     }
 }

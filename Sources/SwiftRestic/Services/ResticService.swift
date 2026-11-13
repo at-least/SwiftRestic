@@ -272,10 +272,10 @@ struct ResticService: ResticClient {
     /// Reclaims the space that `forget` freed.
     ///
     /// `prune` is one of the commands `--json` does not cover (restic
-    /// 0.19.1): it prints human-readable progress, so its output is captured
-    /// as text and kept on the run record rather than parsed. `onRawLine`
-    /// receives each line as it arrives, so a UI can show the prune is
-    /// still moving.
+    /// 0.19.1): it prints human-readable progress, returned as text, which
+    /// the run's log keeps; `pruneFreedBytes(in:)` reads the amount out of
+    /// it. `onRawLine` receives each line as it arrives, so a UI can show
+    /// the prune is still moving.
     func prune(
         _ context: RepositoryContext,
         onRawLine: (@Sendable (String) -> Void)? = nil
@@ -289,8 +289,22 @@ struct ResticService: ResticClient {
             ),
             onRawLine: onRawLine
         )
-        let combined = (result.stdout + result.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
-        return ResticRunner.tail(of: combined, limit: 4000)
+        return (result.stdout + result.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// What a prune deleted, from its "total prune:  12 blobs / 2.864 MiB"
+    /// line (restic 0.19.1, binary units); nil when no such line is there.
+    static func pruneFreedBytes(in output: String) -> Int64? {
+        let units: [String: Double] = ["B": 1, "KiB": 0x1p10, "MiB": 0x1p20, "GiB": 0x1p30, "TiB": 0x1p40]
+        for line in output.split(whereSeparator: \.isNewline) where line.hasPrefix("total prune:") {
+            guard let amount = line.split(separator: "/").last?.split(separator: " "),
+                  amount.count == 2,
+                  let value = Double(amount[0]),
+                  let unit = units[String(amount[1])]
+            else { return nil }
+            return Int64((value * unit).rounded())
+        }
+        return nil
     }
 
     /// Any exit code is returned rather than thrown: the console shows whatever
@@ -434,7 +448,7 @@ struct ResticService: ResticClient {
     /// the rest still answer (restic 0.19.1).
     ///
     /// `--no-lock`, as `listDirectory`, `walkDiff`, `snapshots` and `stats`:
-    /// what a click in a Files tab or on a backup and a refresh run. Locked, each would pay restic's 200 ms lock wait, fail
+    /// what a click in the Backups tab or on a backup and a refresh run. Locked, each would pay restic's 200 ms lock wait, fail
     /// at once with exit 11 while retention's `forget` or a `prune` held
     /// the exclusive lock, and lock a starting `forget` out the same way.
     func find(

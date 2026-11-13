@@ -19,7 +19,7 @@ final class ActivityUITests: XCTestCase {
         let one = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 1"), object: rows)
         XCTAssertEqual(XCTWaiter().wait(for: [one], timeout: 10), .completed)
         let row = rows.element(boundBy: 0)
-        for value in ["source", "Backup", "1 new, 0 changed"] {
+        for value in ["source", "Backup", "1 new · 0 changed"] {
             XCTAssertTrue(row.staticTexts.matching(NSPredicate(format: "value == %@", value)).firstMatch.exists, value)
         }
         attachScreenshot()

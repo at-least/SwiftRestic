@@ -167,7 +167,7 @@ struct RepositoryDetailView: View {
             }
         } header: {
             HStack {
-                Text("Maintenance")
+                Text("Verification and Cleanup")
                 Spacer()
                 Button("Verify Backups") { router.request(.verifyBackups(repositoryID)) }
                     .disabled(!model.repositoryCommands(for: .repository(repositoryID)).canMaintain)

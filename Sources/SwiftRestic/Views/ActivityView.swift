@@ -65,7 +65,7 @@ struct ActivityView: View {
 
                     // Five columns after the glyph, one line per row: how
                     // long a run took and what it added are in the drawer
-                    // below and in Copy Details. A SwiftUI table gives every
+                    // below and in the copied details. A SwiftUI table gives every
                     // capped column its minimum and sends the spare width to
                     // the one uncapped column, Detail — the one whose text
                     // runs long — so each minimum is what its column shows
@@ -145,6 +145,9 @@ struct ActivityView: View {
                 .alternatingRowBackgrounds(.disabled)
                 .accessibilityIdentifier(AccessibilityID.Activity.table)
                 .focusOnClick($tableIsFocused)
+                // Edit ▸ Copy (⌘C): the selected run as text for a forum
+                // post or an issue, worded only when copied.
+                .onCopyCommand { copiedDetails(of: runs).map { NSItemProvider(object: $0 as NSString) } }
                 .contextMenu(forSelectionType: RunRecord.ID.self) { ids in
                     if ids.count == 1, let id = ids.first,
                        let run = runs.first(where: { $0.id == id }),
@@ -210,5 +213,14 @@ struct ActivityView: View {
                 selection = id
             }
         }
+    }
+
+    private func copiedDetails(of runs: [RunRecord]) -> [String] {
+        guard let run = runs.first(where: { $0.id == selection }) else { return [] }
+        return [RunRecordPresentation.detailsText(
+            for: run,
+            repositoryName: model.repository(id: run.repositoryID).map { model.label(of: $0) },
+            versionsNow: .current(resticVersion: model.resticVersion)
+        )]
     }
 }
