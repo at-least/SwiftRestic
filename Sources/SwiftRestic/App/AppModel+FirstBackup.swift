@@ -38,6 +38,20 @@ extension AppModel {
         createPlan(plan)
         return plan.id
     }
+
+    /// Back Up a Folder…'s panel answer, when it is the last one: a location
+    /// set up here that takes `source` and a folder with no Full Disk Access
+    /// notice. The plan is made and started; nil leaves it to the sheet.
+    func backUpWithoutSheet(source: String, destination: FirstBackupDestination?) -> UUID? {
+        guard case let .location(repositoryID) = destination,
+              FirstBackupDestination.requirement(
+                  source: source, destination: destination, password: "", confirmPassword: "",
+                  holdsBackups: false, plans: configuration.plans, repositories: configuration.repositories
+              ) == nil,
+              fullDiskAccessNotice(for: source) == nil
+        else { return nil }
+        return createFirstPlan(source: source, repositoryID: repositoryID)
+    }
 }
 
 private extension BackupPlan {

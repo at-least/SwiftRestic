@@ -40,6 +40,30 @@ final class FirstBackupUITests: XCTestCase {
         attachScreenshot()
     }
 
+    /// With a location set up, the folder panel also asks where: on that
+    /// location, with nothing left to ask, it backs up with no sheet and
+    /// lands on the new plan.
+    @MainActor
+    func testFolderPanelBacksUpToALocation() throws {
+        let folders = try UITestFolders.make("PanelLocation")
+        let app = UITest.launch(folders)
+        UITest.backUpFirstFolder(folders, in: app)
+        let second = folders.root.appendingPathComponent("second")
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+
+        let file = app.menuBars.menuBarItems["File"]
+        file.click()
+        file.menuItems["Back Up a Folder…"].click()
+        let panel = app.dialogs["open-panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 10))
+        XCTAssertTrue(panel.popUpButtons[AccessibilityID.BackUpAFolderPanel.destination].waitForValue("SwiftRestic Backups"))
+        UITest.choose(second, in: app)
+
+        XCTAssertFalse(app.buttons[AccessibilityID.FirstBackup.backUp].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.outlines["Sidebar"].staticTexts["second"].waitForExistence(timeout: 10))
+        attachScreenshot()
+    }
+
     /// Back Up a Folder… asks for the folder before the sheet: a cancelled
     /// panel leaves Welcome as it was.
     @MainActor

@@ -75,20 +75,6 @@ struct NotificationChannel: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
-/// A channel as a configuration holds it. Nil for one switched off in an older
-/// build: it must not start sending.
-struct StoredChannel: Decodable {
-    var channel: NotificationChannel?
-
-    private enum LegacyKeys: String, CodingKey { case isEnabled }
-
-    init(from decoder: any Decoder) throws {
-        if try decoder.container(keyedBy: LegacyKeys.self).value(.isEnabled, default: true) {
-            channel = try NotificationChannel(from: decoder)
-        }
-    }
-}
-
 struct NotificationEvent: Sendable, Equatable {
     enum Stage: String, Sendable, Equatable {
         case started, succeeded, warned, failed
@@ -131,7 +117,7 @@ struct NotificationEvent: Sendable, Equatable {
         let subject = planName.isEmpty
             ? repositoryName
             : RunRecordPresentation.planWithRepository(planName, repositoryName: repositoryName)
-        let operation = kind.channelSummaryName
+        let operation = kind.displayName
         switch stage {
         case .started:
             return "\(operation) started: \(subject)"
@@ -143,14 +129,14 @@ struct NotificationEvent: Sendable, Equatable {
             // A retention line is appended to `itemErrors` after
             // `itemErrorCount` is set, so it can sit in the sample without
             // being in any count — not a warning, and never counted one.
-            let counted = warningCount ?? warnings.filter { !$0.hasPrefix(RunRecord.retentionSkippedPrefix) }.count
+            let counted = warningCount ?? warnings.filter { !$0.hasPrefix(RunRecord.retentionSkippedOnScreenPrefix) }.count
             return "\(operation) \(counted > 0 ? "completed with \(Format.plural(counted, "warning"))" : "completed with warnings"): \(subject)"
                 + (warnings.first.map { " — \($0)" } ?? "")
                 + (hint.map { "\n" + $0 } ?? "")
         case .failed:
             return "\(operation) failed: \(subject) — \(errorMessage ?? "no details")"
         case .cancelled:
-            return "\(operation) cancelled: \(subject)"
+            return "\(operation) stopped: \(subject)"
         case .skipped:
             return "\(operation) skipped: \(subject)" + (errorMessage.map { " — \($0)" } ?? "")
         }

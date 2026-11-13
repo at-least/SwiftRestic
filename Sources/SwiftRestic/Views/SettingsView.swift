@@ -113,6 +113,13 @@ private struct NotificationsTab: View {
     @State private var testOutcomes: [NotificationChannel.ID: AppModel.TestNotificationOutcome] = [:]
     @State private var testing: Set<NotificationChannel.ID> = []
     @State private var removing: NotificationChannel?
+    @State private var newChannel: NotificationChannel?
+
+    private func addNewChannel() {
+        guard let channel = newChannel, channel.hasUsableURL else { return }
+        model.configuration.settings.notificationChannels.append(channel)
+        newChannel = nil
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -129,11 +136,31 @@ private struct NotificationsTab: View {
                     channelRows($channel)
                 }
             }
-            Section {
-                Button("Add Notification Address") { model.configuration.settings.notificationChannels.append(NotificationChannel()) }
-                Text("Paste a Slack, Discord or Healthchecks address, or any webhook.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            // Saved only once its address can send: a blank one would sit in
+            // the configuration doing nothing.
+            if let newChannel = Binding($newChannel) {
+                Section {
+                    TextField("Address", text: newChannel.url, prompt: Text("https://…"))
+                        .onSubmit(addNewChannel)
+                    if !newChannel.wrappedValue.url.isEmpty, !newChannel.wrappedValue.hasUsableURL {
+                        WarningLine(text: "This address can’t be used until it starts with http:// or https://.")
+                            .font(.callout)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { self.newChannel = nil }
+                        Button("Add Address", action: addNewChannel)
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(!newChannel.wrappedValue.hasUsableURL)
+                    }
+                }
+            } else {
+                Section {
+                    Button("Add Notification Address") { newChannel = NotificationChannel() }
+                    Text("Paste a Slack, Discord or Healthchecks address, or any webhook.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
