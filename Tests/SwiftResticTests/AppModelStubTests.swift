@@ -946,16 +946,17 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("a missing password settles the listing as failed, without a banner")
+    @Test("a missing password settles the listing as failed, Enter Password… its fix, without a banner")
     func missingPasswordSettlesFailed() async throws {
         let harness = try await makeHarness(mode: "snaprows", password: nil)
         defer { try? FileManager.default.removeItem(at: harness.root) }
 
-        guard case let .failed(message, _) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
+        guard case let .failed(message, fix) = harness.model.snapshotListingOutcome(for: harness.repository.id) else {
             Issue.record("expected a failed listing outcome, got \(harness.model.snapshotListingOutcome(for: harness.repository.id))")
             return
         }
         #expect(message.contains("password"))
+        #expect(fix == .enterPassword(harness.repository.id), "a listing with no password saved does not offer Enter Password…")
         #expect(harness.model.banners.isEmpty, "a missing password is a normal state, not an error banner")
         #expect(harness.model.snapshotsLoadedAt(for: harness.repository.id) == nil)
 
@@ -2138,14 +2139,45 @@ struct AppModelStubTests {
         }
         #expect(try await harness.model.storedSecrets(for: id).password == "test-password", "a refused password replaced the stored one")
 
+        // A place with no backups is refused, never made into a new location.
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "missing"
+        await #expect {
+            try await harness.model.enterPassword("any", forRepository: id)
+        } throws: { error in
+            error.localizedDescription == EditorRequirements.noRepositoryHere
+        }
+        #expect(try await harness.model.storedSecrets(for: id).password == "test-password", "a password for an empty place replaced the stored one")
+
         harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "default"
         try await harness.model.enterPassword("the-right-one", forRepository: id)
         #expect(try await harness.model.storedSecrets(for: id).password == "the-right-one")
+        await harness.model.tasks.drain()
+        #expect(harness.model.snapshotListingOutcome(for: id) == .loaded, "the location's backups were not read again with the password that opens it")
 
         await harness.model.shutdown()
     }
 
-    @Test("Enter Password… with a password that opens the location runs its failed scheduled backup again")
+    @Test("the location editor's check opens a location without creating one, and refuses an empty place unless asked to create")
+    func openRepositoryCreatesOnlyWhenAsked() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        func context() throws -> RepositoryContext {
+            RepositoryContext(repository: try #require(harness.model.repository(id: harness.repository.id)), password: "pw", providerSecret: nil)
+        }
+
+        #expect(try await harness.model.openRepository(context(), creatingIfMissing: true) == false, "a location restic opens was reported as created")
+
+        harness.model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "missing"
+        await #expect {
+            _ = try await harness.model.openRepository(context(), creatingIfMissing: false)
+        } throws: { error in
+            error.localizedDescription == EditorRequirements.noRepositoryHere
+        }
+
+        await harness.model.shutdown()
+    }
+
+    @Test("Enter Password… with a password that opens the location runs its failed scheduled backup again; an edit that keeps the password does not")
     func enterPasswordRerunsFailedBackups() async throws {
         let harness = try await makeHarness(mode: "wrongpassword")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2158,6 +2190,10 @@ struct AppModelStubTests {
 
         // Scheduled, and stamped by the run just now: only the fix can start it.
         model.configuration.plans[0].schedule.frequency = .daily
+        // An edit that keeps the password fixes nothing.
+        await model.upsert(repository: try #require(model.repository(id: harness.repository.id)), password: nil, providerSecret: nil)
+        #expect(!model.isRunning(planID: planID), "an edit that kept the password ran the failed backup again")
+
         model.configuration.repositories[0].extraEnvironment["SWIFTRESTIC_STUB"] = "default"
         try await model.enterPassword("the-right-one", forRepository: harness.repository.id)
         #expect(model.isRunning(planID: planID), "the failed backup did not run again")
@@ -2165,6 +2201,79 @@ struct AppModelStubTests {
         #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
 
         await model.shutdown()
+    }
+
+    @Test("the app made active reads again a listing read five minutes ago")
+    func activationRereadsAStaleListing() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let readAt = try #require(model.snapshotsLoadedAt[id])
+
+        model.refreshStaleListings(now: readAt.addingTimeInterval(AppModel.listingStaleAfter))
+        await model.tasks.drain()
+        #expect(model.snapshotsLoadedAt[id] != readAt, "a listing read five minutes ago was not read again")
+
+        await model.shutdown()
+    }
+
+    @Test("a share's password saved runs again each failed scheduled backup that needed the share: into a location on it, or of a folder on it")
+    func savedSharePasswordRerunsItsBackups() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let planID = harness.plan.id
+        let volume = "SwiftResticAbsentShare-\(UUID().uuidString)"
+        let share = MountedShare(volumeName: volume, url: "smb://me@nas.local/\(volume)")
+        let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == planID })
+        model.configuration.plans[planIndex].schedule.frequency = .daily
+        model.configuration.plans[planIndex].lastRunAt = .now
+        func failNewestBackup() {
+            var failed = RunRecord(kind: .backup, planID: planID, planName: "Stub Plan", repositoryID: harness.repository.id)
+            failed.outcome = .failed
+            model.configuration.runs = [failed]
+        }
+
+        model.configuration.repositories[0].localPath = "/Volumes/\(volume)/restic"
+        failNewestBackup()
+        try await model.saveNetworkShare(share, password: "pw")
+        #expect(model.isRunning(planID: planID), "a backup into a location on the share did not run again")
+        await model.waitForRun(planID: planID)
+
+        model.configuration.repositories[0].localPath = harness.root.appendingPathComponent("Stub Repo").path
+        model.configuration.plans[planIndex].path = "/Volumes/\(volume)/Projects"
+        failNewestBackup()
+        try await model.saveNetworkShare(share, password: "pw2")
+        #expect(model.isRunning(planID: planID), "a backup of a folder on the share did not run again")
+        await model.waitForRun(planID: planID)
+
+        await model.shutdown()
+    }
+
+    @Test("a restore the password doesn't open fails naming the location")
+    func refusedRestoreNamesTheLocation() async throws {
+        let harness = try await makeHarness(mode: "wrongpassword")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let node = try ResticMessageDecoder.jsonDecoder.decode(
+            SnapshotNode.self,
+            from: Data(#"{"name":"a.txt","type":"file","path":"/src/a.txt","size":12}"#.utf8)
+        )
+
+        harness.model.restore(
+            repositoryID: harness.repository.id,
+            snapshotID: "latest",
+            node: node,
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
+        )
+        await waitUntilRestoreFinishes(in: harness.model)
+
+        let record = try #require(harness.model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.failureMessage == "The password doesn’t open “Stub Repo”.")
+
+        await harness.model.shutdown()
     }
 
     @Test("the webhook gets restic's warnings")

@@ -602,6 +602,8 @@ struct AppModelTests {
         let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
         model.configuration.plans[index].excludePatterns = ["*.tmp"]
         model.configuration.plans[index].retention.keepDaily = 9
+        model.configuration.plans[index].lastRunAt = .now
+        model.configuration.plans[index].lastSuccessAt = .now
         let movedFolder = harness.root.appendingPathComponent("moved")
         try FileManager.default.createDirectory(at: movedFolder, withIntermediateDirectories: true)
 
@@ -614,6 +616,7 @@ struct AppModelTests {
         #expect(moved.excludePatterns == ["*.tmp"])
         #expect(moved.retention.keepDaily == 9)
         #expect(moved.lastRunAt == nil)
+        #expect(moved.lastSuccessAt == nil, "the moved folder's plan claims a backup it never made")
         #expect(model.configuration.plans.map(\.id) == [newID])
 
         // A folder the location already has a plan for is refused, and
@@ -628,7 +631,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a cleanup that succeeds on a location a backup found full runs that backup again; other cleanups rerun nothing")
+    @Test("a cleanup that succeeds on a location whose backup found it full runs that backup again, unless backups are paused; any other cleanup reruns nothing")
     func cleanupRerunsTheFullLocationsBackup() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -638,28 +641,40 @@ struct AppModelTests {
         model.configuration.plans[index].schedule.frequency = .daily
         model.configuration.plans[index].lastRunAt = .now
         let plan = model.configuration.plans[index]
-        func record(_ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome, full: Bool = false) -> RunRecord {
-            var record = RunRecord(kind: kind, planID: kind == .backup ? plan.id : nil, planName: "source", repositoryID: harness.repository.id)
+        func record(_ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome, full: Bool = false, repositoryID: UUID? = nil) -> RunRecord {
+            var record = RunRecord(kind: kind, planID: kind == .backup ? plan.id : nil, planName: "source", repositoryID: repositoryID ?? harness.repository.id)
             record.outcome = outcome
             if full { record.repositoryFull = true }
             return record
         }
+        func expectNoRerun(_ runs: [RunRecord], _ why: Comment) {
+            model.configuration.runs = runs
+            model.rerunBackupsAfterCleanup(in: harness.repository.id)
+            #expect(!model.isRunning(planID: plan.id), why)
+        }
 
-        // Newest first: a failure that was not a full location.
-        model.configuration.runs = [record(.prune, .succeeded), record(.backup, .failed)]
-        model.rerunBackupsAfterCleanup(in: harness.repository.id)
-        #expect(!model.isRunning(planID: plan.id))
+        // Newest first.
+        expectNoRerun([record(.prune, .succeeded), record(.backup, .failed)], "a failure that was not a full location ran again")
+        expectNoRerun([record(.prune, .failed), record(.backup, .failed, full: true)], "a cleanup that failed ran the backup again")
+        expectNoRerun(
+            [record(.prune, .succeeded, repositoryID: UUID()), record(.prune, .failed), record(.backup, .failed, full: true)],
+            "another location's cleanup ran this location's backup again"
+        )
+        expectNoRerun(
+            [record(.prune, .succeeded), record(.backup, .succeeded), record(.backup, .failed, full: true)],
+            "a backup that succeeded since the full location ran again"
+        )
+        model.pauseBackups(for: .untilResumed)
+        expectNoRerun([record(.prune, .succeeded), record(.backup, .failed, full: true)], "a paused backup ran again")
+        model.resumeBackups()
 
-        // A cleanup that failed frees nothing.
-        model.configuration.runs = [record(.prune, .failed), record(.backup, .failed, full: true)]
-        model.rerunBackupsAfterCleanup(in: harness.repository.id)
-        #expect(!model.isRunning(planID: plan.id))
-
-        model.configuration.runs = [record(.prune, .succeeded), record(.backup, .failed, full: true)]
-        model.rerunBackupsAfterCleanup(in: harness.repository.id)
-        #expect(model.isRunning(planID: plan.id))
+        // A cleanup run on the location the backup found full.
+        model.configuration.runs = [record(.backup, .failed, full: true)]
+        model.runMaintenance(repositoryID: harness.repository.id, task: .prune)
+        await model.waitForMaintenance(repositoryID: harness.repository.id)
+        #expect(model.configuration.runs.first?.kind == .prune)
         await model.waitForRun(planID: plan.id)
-        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded)
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded, "the backup that found the location full did not run again after its cleanup")
 
         await model.shutdown()
     }

@@ -436,12 +436,24 @@ struct LocateRepositoryTests {
         #expect(try JSONDecoder().decode(Repository.self, from: Data(#"{"resticID":"abc"}"#.utf8)).resticID == "abc")
     }
 
-    @Test("a moved folder fails with Locate as its fix, and Locate brings every backup back")
+    @Test("a moved folder fails with Locate as its fix, and Locate brings every backup back and runs its failed backup again")
     func locateFindsTheMovedRepository() async throws {
         let (model, root, repository) = try await makeModel()
         defer { try? FileManager.default.removeItem(at: root) }
         await model.refreshSnapshots(repositoryID: repository.id)
         let new = try move(repository, in: root)
+        // A scheduled plan, stamped just now, whose backup failed on the move.
+        let source = root.appendingPathComponent("Documents")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        var plan = BackupPlan()
+        plan.repositoryID = repository.id
+        plan.path = source.path
+        plan.schedule.frequency = .daily
+        plan.lastRunAt = .now
+        model.configuration.plans = [plan]
+        var failed = RunRecord(kind: .backup, planID: plan.id, planName: "Documents", repositoryID: repository.id)
+        failed.outcome = .failed
+        model.configuration.runs = [failed]
 
         await model.refreshSnapshots(repositoryID: repository.id)
         guard case let .failed(_, fix) = model.snapshotListingOutcome(for: repository.id) else {
@@ -452,6 +464,8 @@ struct LocateRepositoryTests {
 
         try await model.locateRepository(id: repository.id, atPath: new)
         #expect(model.repository(id: repository.id)?.localPath == new)
+        await model.waitForRun(planID: plan.id)
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded, "the backup that failed on the move did not run again")
         await model.tasks.drain()
         await model.refreshSnapshots(repositoryID: repository.id)
         #expect(model.snapshotListingOutcome(for: repository.id) == .loaded)

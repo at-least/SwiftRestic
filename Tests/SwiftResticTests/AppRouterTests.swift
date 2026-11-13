@@ -71,7 +71,8 @@ struct AppRouterTests {
     func showBackupOpensTheTabAndFocusesOnce() {
         let router = AppRouter()
         let repository = UUID()
-        let page = SidebarItem.plan(UUID())
+        let pageID = UUID()
+        let page = SidebarItem.plan(pageID)
 
         router.showBackup("s1", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         #expect(router.selection == page)
@@ -96,11 +97,18 @@ struct AppRouterTests {
         // A route opens its backup afresh: a query left on the page's
         // Backups tab, searched in another backup, would stand over the
         // record and the folder the route asked for. Another page's stays.
-        let other = SidebarItem.plan(UUID())
+        let otherID = UUID()
+        let other = SidebarItem.plan(otherID)
+        let pageRoots = FileNode.roots(repositoryID: repository, chainKey: ResticService.planTag(pageID))
+        let otherRoots = FileNode.roots(repositoryID: repository, chainKey: ResticService.planTag(otherID))
+        router.filesSearchText[pageRoots] = "taxes"
+        router.filesSearchText[otherRoots] = "kept"
         router.backupSelection[other] = "kept"
         router.showBackup("s3", on: page, repositoryID: repository, focusPath: "/D/Taxes")
         #expect(router.backupSelection[page] == "s3")
+        #expect(router.filesSearchText[pageRoots] == nil, "the page's search still lists its hits over the backup the route opened")
         #expect(router.backupSelection[other] == "kept")
+        #expect(router.filesSearchText[otherRoots] == "kept")
         #expect(router.takeRestoreFocus(repositoryID: repository, snapshotID: "s3") == "/D/Taxes")
     }
 
@@ -168,6 +176,17 @@ struct AppRouterTests {
         #expect(router.tab(of: page) == .backups)
         #expect(router.selection == page)
         #expect(router.searchFocus == page)
+    }
+
+    @Test("the Backups tab searches for the typed text without its edge spaces; spaces alone show the tree")
+    func searchQueryIsTrimmed() {
+        let router = AppRouter()
+        let roots = FileNode.roots(repositoryID: UUID(), chainKey: "swiftrestic-plan-aaaa")
+        #expect(router.filesSearchQuery(for: roots) == "")
+        router.filesSearchText[roots] = "  invoice "
+        #expect(router.filesSearchQuery(for: roots) == "invoice")
+        router.filesSearchText[roots] = "   "
+        #expect(router.filesSearchQuery(for: roots) == "", "spaces alone ran a search instead of showing the tree")
     }
 
     @Test("Search All Backups opens as a page, its field focused, and a query handed over is kept, with the plan it came from to go back to")

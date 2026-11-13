@@ -274,18 +274,21 @@ struct BackupRunEngineTests {
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
     }
 
-    @Test("a failed backup is marked failed, noted for auth when exit 12, delivered")
+    @Test("a backup the password doesn't open is marked failed, noted for auth, delivered naming the location")
     func failedRun() async throws {
         let sink = RecordingSink()
         let client = MockResticClient().onBackup(
             .failure(ResticError.commandFailed(exitCode: 12, message: "wrong password"))
         )
         let plan = makePlan()
-        await BackupRunEngine.perform(plan: plan, repository: Repository(), sink: sink.serving(client))
+        let repository = Repository()
+        await BackupRunEngine.perform(plan: plan, repository: repository, sink: sink.serving(client))
 
         #expect(sink.log.contains("mark:nothing"))
         #expect(sink.log.contains("auth-noted"))
         #expect(sink.deliveredRecords[0].outcome == .failed)
+        #expect(sink.deliveredRecords[0].failureMessage == ResticError.wrongPassword(location: sink.label(of: repository)),
+                "the failed backup does not name the location its password doesn't open")
     }
 
     @Test("a retention failure degrades to warnings, never fails the run")
@@ -980,17 +983,31 @@ struct MaintenanceRunEngineTests {
         #expect(freed("2.000 TiB") == 2_199_023_255_552, "TiB is 1024⁴ bytes")
     }
 
-    @Test("a prune whose output names no amount says nothing about it")
+    @Test("a prune whose output names no amount, or frees nothing, says nothing about it")
     func pruneWithoutAmount() async throws {
         #expect(ResticService.pruneFreedBytes(in: "removed 2 of 3 packs") == nil)
         #expect(ResticService.pruneFreedBytes(in: "total prune:          3 blobs / 1.5 parsecs") == nil)
+        for output in ["removed 2 of 3 packs", "total prune:          0 blobs / 0 B"] {
+            let sink = RecordingSink()
+            let client = MockResticClient().onPrune(.success(output)).onExit("prune", 0)
+            await MaintenanceRunEngine.perform(repository: Repository(), task: .prune, sink: sink.serving(client))
+            let record = try #require(sink.deliveredRecords.first)
+            #expect(record.outcome == .succeeded)
+            #expect(record.detailText == nil, "a cleanup's Detail says “\(record.detailText ?? "")” for restic's “\(output)”")
+            #expect(RunRecordPresentation.detail(for: record) == record.outcome.displayName)
+        }
+    }
+
+    @Test("a check the password doesn't open fails naming the location")
+    func refusedCheckNamesTheLocation() async throws {
         let sink = RecordingSink()
-        let client = MockResticClient().onPrune(.success("removed 2 of 3 packs")).onExit("prune", 0)
-        await MaintenanceRunEngine.perform(repository: Repository(), task: .prune, sink: sink.serving(client))
+        let client = MockResticClient().onCheck(.failure(ResticError.commandFailed(exitCode: 12, message: "wrong password")))
+        let repository = Repository()
+        await MaintenanceRunEngine.perform(repository: repository, task: .check, sink: sink.serving(client))
         let record = try #require(sink.deliveredRecords.first)
-        #expect(record.outcome == .succeeded)
-        #expect(record.detailText == nil)
-        #expect(RunRecordPresentation.detail(for: record) == record.outcome.displayName)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == ResticError.wrongPassword(location: sink.label(of: repository)),
+                "the failed check does not name the location its password doesn't open")
     }
 
     @Test("a failed prune is stamped and recorded failed, never unstamped")
