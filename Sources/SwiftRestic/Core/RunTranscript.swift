@@ -34,8 +34,8 @@ final class RunTranscript: @unchecked Sendable {
             case command
             case output(Stream)
             case exit(Int32)
-            /// An app-authored line: retention's result, a
-            /// stop that ended the child before it could exit.
+            /// An app-authored line: retention's result, a stop that ended
+            /// the child before it could exit.
             case note
         }
 

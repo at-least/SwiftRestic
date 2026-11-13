@@ -7,24 +7,8 @@ struct ResticBinary: Sendable {
     /// `Tools/embed-helpers.sh` puts it here. Not looked for on the Mac: a
     /// restic the tests never ran could change what a backup means.
     static var bundled: ResticBinary {
-        ResticBinary(url: Bundle.main.helpersURL.appendingPathComponent("restic"))
+        ResticBinary(url: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers").appendingPathComponent("restic"))
     }
-
-    /// An executable *file*. `FileManager.isExecutableFile` alone also accepts
-    /// directories — 0755 has the execute bit — and spawning one fails later
-    /// with an opaque launch error.
-    static func isExecutableFile(atPath path: String) -> Bool {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
-              !isDirectory.boolValue
-        else { return false }
-        return FileManager.default.isExecutableFile(atPath: path)
-    }
-}
-
-extension Bundle {
-    /// Where `Tools/embed-helpers.sh` puts the pinned restic.
-    var helpersURL: URL { bundleURL.appendingPathComponent("Contents/Helpers") }
 }
 
 enum ResticState {

@@ -6,14 +6,14 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// `message` is restic's own text when it gave one.
     case commandFailed(exitCode: Int32, message: String)
     case cancelled
-    case repositoryMissing
+    case repositoryRemoved
     case itemNotListed(name: String)
     case passwordMissing(repositoryName: String)
     case processLaunchFailed(String)
     /// The child outlived its timeout and was terminated. `cause` is what
     /// restic was retrying when it was stopped — "connection refused" —
     /// or empty (`ResticRunResult.retryCause`).
-    case timedOut(seconds: TimeInterval, cause: String = "")
+    case timedOut(seconds: TimeInterval, cause: String)
     /// The child produced no output at all for `seconds` and was terminated
     /// as hung. The distinction from `timedOut` matters to the reader: a
     /// total-runtime cap kills work that was merely slow, an idle cap only
@@ -86,7 +86,7 @@ enum ResticError: Error, LocalizedError, Equatable {
             return known.map { "\($0) — \(reason)" } ?? reason
         case .cancelled:
             return "The operation was stopped."
-        case .repositoryMissing:
+        case .repositoryRemoved:
             return "This backup location is no longer set up in SwiftRestic."
         case let .itemNotListed(name):
             return "“\(name)” is no longer listed in the chosen backup — refresh and try again."

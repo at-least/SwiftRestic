@@ -23,3 +23,17 @@ extension ResticService {
         )
     }
 }
+
+extension ResticBinary {
+    /// An executable *file*. `FileManager.isExecutableFile` alone also accepts
+    /// directories — 0755 has the execute bit — and spawning one fails later
+    /// with an opaque launch error. No production caller since the bundled
+    /// rclone left (2155f10); the test that pins it lives on here.
+    static func isExecutableFile(atPath path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue
+        else { return false }
+        return FileManager.default.isExecutableFile(atPath: path)
+    }
+}

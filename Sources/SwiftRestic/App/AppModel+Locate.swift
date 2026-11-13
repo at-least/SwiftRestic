@@ -43,7 +43,7 @@ extension AppModel {
     /// stays good; restic keys its cache by the same ID checked here.
     func locateRepository(id: UUID, atPath path: String) async throws {
         guard let repository = repository(id: id), repository.kind == .local else {
-            throw ResticError.repositoryMissing
+            throw ResticError.repositoryRemoved
         }
         var moved = repository
         moved.localPath = path

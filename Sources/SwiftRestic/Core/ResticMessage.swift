@@ -109,17 +109,16 @@ struct ResticSummary: Sendable, Equatable, Decodable {
 
 /// A non-fatal error line.
 ///
-/// `backup` and `restore` nest the text under `error.message` with `during` and
-/// `item` alongside it; `check` emits a flat `message` instead. Accept both, or
+/// `backup` and `restore` nest the text under `error.message` with `item`
+/// alongside it; `check` emits a flat `message` instead. Accept both, or
 /// every `check` error would be silently dropped as an unknown message type.
 struct ResticErrorMessage: Sendable, Equatable, Decodable {
     private struct Payload: Sendable, Equatable, Decodable { var message: String }
 
     var message: String
-    var during: String?
     var item: String?
 
-    private enum CodingKeys: String, CodingKey { case error, message, during, item }
+    private enum CodingKeys: String, CodingKey { case error, message, item }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -128,7 +127,6 @@ struct ResticErrorMessage: Sendable, Equatable, Decodable {
         } else {
             message = try c.decode(String.self, forKey: .message)
         }
-        during = try c.decodeIfPresent(String.self, forKey: .during)
         item = try c.decodeIfPresent(String.self, forKey: .item)
     }
 }

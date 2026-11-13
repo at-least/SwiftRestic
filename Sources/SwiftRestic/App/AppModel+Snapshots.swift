@@ -306,7 +306,7 @@ extension AppModel {
         snapshotID: String,
         path: String
     ) async throws -> [SnapshotNode] {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         // The browse cache first. A snapshot is content-addressed and
         // immutable, so its directory listings are facts that never go stale:
         // a hit answers without a restic process on every chevron click. The
@@ -350,7 +350,7 @@ extension AppModel {
     /// every find costs a restic process, so going back to a file asks
     /// nothing, and a version list a new backup grew asks only for that one.
     func fileHistory(repositoryID: UUID, path: String, snapshotIDs: [String]) async throws -> [String: SnapshotNode] {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let pathKey = PathKey(path)
         func key(_ snapshotID: String) -> FileHistoryKey {
             FileHistoryKey(repositoryID: repositoryID, snapshotID: snapshotID, path: pathKey)
@@ -367,7 +367,7 @@ extension AppModel {
             )
             // Removed meanwhile: its answers went with it, and nothing would
             // clear these.
-            guard self.repository(id: repositoryID) != nil else { throw ResticError.repositoryMissing }
+            guard self.repository(id: repositoryID) != nil else { throw ResticError.repositoryRemoved }
             var found: [String: SnapshotNode] = [:]
             for result in results {
                 if let match = result.matches.first(where: { PathKey($0.path) == pathKey }) {

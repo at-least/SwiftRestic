@@ -187,7 +187,7 @@ struct ResticErrorTests {
     func lockedIsExitElevenOnly() {
         #expect(ResticError.isRepositoryLocked(ResticError.commandFailed(exitCode: 11, message: "Fatal: repository is locked")))
         #expect(!ResticError.isRepositoryLocked(ResticError.commandFailed(exitCode: 1, message: "Fatal: repository is locked")))
-        #expect(!ResticError.isRepositoryLocked(ResticError.timedOut(seconds: 11)))
+        #expect(!ResticError.isRepositoryLocked(ResticError.timedOut(seconds: 11, cause: "")))
     }
 
     @Test("a stop is Swift's cancellation or restic's own; a failure is neither")

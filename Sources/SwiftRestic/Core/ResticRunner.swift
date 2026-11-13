@@ -245,8 +245,8 @@ actor ResticRunner {
 
         // The reaper: a pipe that has not reached EOF within `grandchildGrace`
         // of the child's death is being held open by an inherited copy — a
-        // backend child that outlived a SIGKILL —
-        // and no signal of ours can reach it. Abandoning the read then is what
+        // backend child that outlived a SIGKILL — and no signal of ours can
+        // reach it. Abandoning the read then is what
         // keeps every stop path (caps, cancellation, quit's terminateAll)
         // answerable; a healthy run never sees it, because EOF lands in
         // milliseconds. A second waiter on `exit` is exactly why ExitWaiter
@@ -360,7 +360,7 @@ actor ResticRunner {
 
     /// The extra PATH entries restic runs with, before the system folders —
     /// where a brew ssh lives, which an sftp location needs.
-    static let toolDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
+    private static let toolDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"]
 
     /// A predictable environment for the child. A GUI app's inherited environment
     /// is nearly empty, so we rebuild the parts restic actually reads. It has
@@ -378,8 +378,7 @@ actor ResticRunner {
             env.removeValue(forKey: key)
         }
         let extraPaths = toolDirectories + ["/bin", "/usr/sbin", "/sbin"]
-        let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
-        var merged = existing
+        var merged = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
         for path in extraPaths where !merged.contains(path) { merged.append(path) }
         env["PATH"] = merged.joined(separator: ":")
         // Keep restic's own progress printer quiet; we drive progress from JSON.
@@ -545,12 +544,12 @@ private final class StreamReader: @unchecked Sendable {
 
     static let defaultTextLimit = 64 * 1024
 
-    let handle: FileHandleBox
-    let textLimit: Int
-    let retainMessages: Bool
+    private let handle: FileHandleBox
+    private let textLimit: Int
+    private let retainMessages: Bool
     /// Fires for every chunk read, before any line splitting — liveness is
     /// cheaper to prove than progress, and a stall cap only needs liveness.
-    let onActivity: (@Sendable () -> Void)?
+    private let onActivity: (@Sendable () -> Void)?
 
     /// Wakes the reader out of its `poll` when the run is being abandoned.
     /// The write end is kept open for the reader's lifetime so the signal can
@@ -603,8 +602,8 @@ private final class StreamReader: @unchecked Sendable {
     ///   line that is not restic JSON) — the run transcript's feed.
     func readAll(
         onMessage: (@Sendable (ResticMessage) -> Void)?,
-        onRawLine: (@Sendable (String) -> Void)? = nil,
-        onLine: (@Sendable (String, ResticMessage?) -> Void)? = nil
+        onRawLine: (@Sendable (String) -> Void)?,
+        onLine: (@Sendable (String, ResticMessage?) -> Void)?
     ) async -> Outcome {
         let box = handle
         return await withCheckedContinuation { (cont: CheckedContinuation<Outcome, Never>) in

@@ -200,7 +200,7 @@ extension AppModel {
             return ChangeMarks(changes: map)
         }
         guard let repository = repository(id: repositoryID) else {
-            return ChangeMarks(changes: [:], failure: ResticError.repositoryMissing.localizedDescription)
+            return ChangeMarks(changes: [:], failure: ResticError.repositoryRemoved.localizedDescription)
         }
         let collector = ChangeMap()
         do {

@@ -293,7 +293,7 @@ extension AppModel {
         var outcome = RestoreStepOutcome.stopped
         do {
             guard let repository = repository(id: repositoryID) else {
-                throw ResticError.repositoryMissing
+                throw ResticError.repositoryRemoved
             }
             let (service, context) = try await resticContext(for: repository)
             let summary = try await RunTranscript.$current.withValue(transcript) {
@@ -522,7 +522,7 @@ extension AppModel {
     /// when the preview closes (`removePreviewCopy`); a session that ends
     /// first leaves it to the launch sweep.
     func previewCopy(repositoryID: UUID, snapshotID: String, node: SnapshotNode) async throws -> URL {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let (service, context) = try await resticContext(for: repository)
         try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         let folder = stagingDirectory

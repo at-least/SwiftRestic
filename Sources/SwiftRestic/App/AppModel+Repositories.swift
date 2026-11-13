@@ -225,7 +225,7 @@ extension AppModel {
     /// than leaving the two silently apart.
     func changeRepositoryPassword(repositoryID: UUID, to newPassword: String) async throws {
         precondition(EditorRequirements.newPassword(newPassword, confirm: newPassword) == nil, "an unchecked new password")
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let (service, context) = try await resticContext(for: repository)
         do {
             try await service.changePassword(context, newPassword: newPassword)
@@ -301,7 +301,7 @@ extension AppModel {
     /// keeps it, so a refused one never replaces the stored one. Throws in
     /// the prompt's words.
     func enterPassword(_ password: String, forRepository repositoryID: UUID) async throws {
-        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryMissing }
+        guard let repository = repository(id: repositoryID) else { throw ResticError.repositoryRemoved }
         let context = RepositoryContext(
             repository: repository,
             password: password,

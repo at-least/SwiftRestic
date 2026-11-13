@@ -7,7 +7,7 @@ extension AppModel {
     /// travels too.
     func previewRetention(plan: BackupPlan) async throws -> RetentionPreview {
         guard let repository = repository(id: plan.repositoryID)
-        else { throw ResticError.repositoryMissing }
+        else { throw ResticError.repositoryRemoved }
         do {
             let (service, context) = try await resticContext(for: repository)
             return try await service.forgetPreview(context, plan: plan)
