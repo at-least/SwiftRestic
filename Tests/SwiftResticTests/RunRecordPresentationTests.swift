@@ -238,11 +238,15 @@ struct RunRecordPresentationTests {
             $0.itemErrors = [RunRecord.retentionSkippedPrefix + "This storage doesn’t allow deleting, so 1 old backup stays."]
         }
         #expect(RunRecordPresentation.fix(for: refused, repositoryExists: true) == nil)
-        #expect(refused.outcomeName == "Old backups not removed")
     }
 
-    @Test("a run with problems reads in its kind's words: a backup skipped files, a verification found problems")
+    @Test("a run with problems reads in its kind's words: a backup skipped files or kept old backups, a verification found problems")
     func outcomeNamePerKind() {
+        let kept = backup {
+            $0.outcome = .completedWithErrors
+            $0.itemErrors = [RunRecord.retentionSkippedPrefix + "This storage doesn’t allow deleting, so 1 old backup stays."]
+        }
+        #expect(kept.outcomeName == "Old backups not removed")
         var skipped = backup { $0.outcome = .completedWithErrors }
         skipped.itemErrorCount = 1
         #expect(skipped.outcomeName == "Some files skipped")

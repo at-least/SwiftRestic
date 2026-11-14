@@ -467,6 +467,8 @@ struct CommandStateTests {
         model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
         model.maintenance[UUID()] = MaintenanceActivity(task: .prune)
         #expect(model.quitInterruptions == ["Space is being freed on 2 locations.", "A verification is running."])
+        model.maintenance[UUID()] = MaintenanceActivity(task: .check)
+        #expect(model.quitInterruptions == ["Space is being freed on 2 locations.", "2 verifications are running."])
     }
 
     @Test("a backup's page is its plan's, or its group's under Other backups, and none once the listing drops it")

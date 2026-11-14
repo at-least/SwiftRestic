@@ -207,6 +207,11 @@ struct MenuBarStatusTests {
             maintenance: [repository.id: MaintenanceActivity(task: .check)]
         )
         #expect(busy.map(\.text) == ["\(repository.label(among: [repository])) — Verifying…"])
+        let freeing = MenuBarStatus.maintenanceLines(
+            repositories: [repository],
+            maintenance: [repository.id: MaintenanceActivity(task: .prune)]
+        )
+        #expect(freeing.map(\.text) == ["\(repository.label(among: [repository])) — Freeing space…"])
     }
 
     @Test("upkeep and restores hold the idle headline back, like a backup does")

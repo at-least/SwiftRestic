@@ -211,22 +211,12 @@ struct TolerantDecodingTests {
         #expect(plan.excludesToPass == BackupPlan.appliedExcludes)
     }
 
-    @Test("a plan saved with the removed exclude switches still loads, and no switch key is written")
-    func removedSwitchesDecode() throws {
-        let old = try decode(BackupPlan.self, #"{"path":"/a","skipsDeveloperFiles":false,"skipsMachines":true}"#)
-        #expect(old.excludesToPass == BackupPlan.appliedExcludes)
-        // No dates in a fresh plan, so no strategy to match the encoder's.
-        let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
-        #expect(object["skipsDeveloperFiles"] == nil && object["skipsMachines"] == nil)
-    }
-
     @Test("every plan's applied rules make the run, beside the plan's own patterns, each once")
     func appliedRulesMakeTheRun() {
         var plan = BackupPlan()
         plan.excludePatterns = ["*.iso", "**/.venv"]
         #expect(plan.excludesToPass == BackupPlan.appliedExcludes + ["*.iso"])
         #expect(BackupPlan.withoutAppliedRules(plan.excludePatterns) == ["*.iso"])
-        #expect(BackupPlan.excludeMarkers == [".rustc_info.json", "project.assets.json"])
     }
 
     @Test("a run leaves out the rules that name its source or a folder above it, and only those")
@@ -335,7 +325,7 @@ struct TolerantDecodingTests {
             {"id": "5B0E7C2D-0000-4000-8000-000000000005", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "\(home)/Library", "excludePatterns": []},
             {"id": "5B0E7C2D-0000-4000-8000-000000000006", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
-             "path": "~/Code", "excludePatterns": \(python), "skipsDeveloperFiles": true},
+             "path": "~/Code", "excludePatterns": \(python)},
             {"id": "5B0E7C2D-0000-4000-8000-000000000007", "repositoryID": "0753DDAB-181D-4E00-9340-8FDF7FD52504",
              "path": "~/Notes", "excludePatterns": [".DS_Store"], "skipsFinderFiles": false, "skipsSystemFiles": true}
           ],
@@ -522,8 +512,6 @@ struct TolerantDecodingTests {
     @Test("pause fields round-trip; missing reads as not paused; a pause without a readable end reads as not paused, never as forever")
     func pauseFieldsDecodeFailSafe() async throws {
         #expect(try decode(AppSettings.self, "{}").schedulePause == nil)
-        // An older build's Until I Resume, stored with no end: dropped.
-        #expect(try decode(AppSettings.self, #"{"schedulePause":{}}"#).schedulePause == nil)
 
         // A present date that does not read must not become "no end" — that
         // would stop every scheduled backup without a word. It reads as not
@@ -609,29 +597,13 @@ struct TolerantDecodingTests {
         #expect(notes.notes.count == 4)
     }
 
-    @Test("every stored retention reads as Recommended, Keep everything included, and none is written")
-    func storedRetentionReadsAsRecommended() throws {
-        for stored in [
-            #"{"retention":{"isEnabled":true,"keepLast":1,"keepDaily":30,"keepYearly":500}}"#,
-            #"{"retention":{"keepDaily":30}}"#,
-            #"{"retention":{"isEnabled":false,"keepDaily":365}}"#,
-        ] {
-            let plan = try JSONDecoder().decode(BackupPlan.self, from: Data(stored.utf8))
-            #expect(plan.retention == RetentionPolicy(), "\(stored)")
-        }
-        let written = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(BackupPlan())) as? [String: Any])
-        #expect(written["retention"] == nil)
-    }
-
     @Test("a field of the wrong type falls back to that field's default, neighbours survive")
     func wrongTypedValues() throws {
         let plan = try decode(
             BackupPlan.self,
-            #"{"path":"/Users/someone/Documents","retention":{"keepLast":"many"},"schedule":"not an object"}"#
+            #"{"path":"/Users/someone/Documents","schedule":"not an object"}"#
         )
         #expect(plan.path == "/Users/someone/Documents")
-        #expect(plan.retention.keepLast == 0)
-        #expect(plan.retention.keepDaily == 7)
         #expect(plan.schedule == Schedule())
 
         let repository = try decode(

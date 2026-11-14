@@ -654,6 +654,8 @@ struct RepositoryTests {
         // slashes stay in the endpoint.
         #expect(parts("minio:9000/my-bucket") == ["minio:9000", "my-bucket"])
         #expect(parts("http://minio.lan:9000/my-bucket") == ["http://minio.lan:9000", "my-bucket"])
+        #expect(parts("http://minio/my-bucket") == ["http://minio", "my-bucket"])
+        #expect(parts("HTTPS://minio.lan/my-bucket") == ["HTTPS://minio.lan", "my-bucket"])
         #expect(parsed("http://minio.lan:9000/my-bucket").resticRepositoryString == "s3:http://minio.lan:9000/my-bucket")
         // Mid-typing: the host before its slash is still a bucket.
         #expect(parts("s3.us-west-004.backblazeb2.com") == ["s3.amazonaws.com", "s3.us-west-004.backblazeb2.com"])
@@ -673,6 +675,15 @@ struct RepositoryTests {
         #expect(stored.s3BucketField == "photos")
         stored.s3Endpoint = "s3.amazonaws.com"
         #expect(stored.s3BucketField == "photos")
+    }
+
+    @Test("a bucket alone typed over another provider's field points the location back at AWS")
+    func s3BucketFieldBackToAWS() {
+        var repository = Repository()
+        repository.kind = .s3
+        repository.s3BucketField = "s3.us-west-004.backblazeb2.com/photos"
+        repository.s3BucketField = "photos"
+        #expect(repository.resticRepositoryString == "s3:s3.amazonaws.com/photos")
     }
 
     @Test("a replacement keeps the kind, server, bucket and key ID, under a new identity")
