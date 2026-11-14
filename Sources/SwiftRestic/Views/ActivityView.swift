@@ -99,7 +99,7 @@ struct ActivityView: View {
                     // asserts neither.
                     if model.configuration.repositories.count > 1 {
                         TableColumn("Location") { run in
-                            if let name = model.repository(id: run.repositoryID).map({ model.label(of: $0) }) {
+                            if let name = model.repositoryLabel(id: run.repositoryID) {
                                 Text(name)
                                     .help(name)
                             } else {
@@ -202,7 +202,7 @@ struct ActivityView: View {
         guard let run = runs.first(where: { $0.id == selection }) else { return [] }
         return [RunRecordPresentation.detailsText(
             for: run,
-            repositoryName: model.repository(id: run.repositoryID).map { model.label(of: $0) },
+            repositoryName: model.repositoryLabel(id: run.repositoryID),
             versionsNow: .current(resticVersion: model.resticVersion)
         )]
     }

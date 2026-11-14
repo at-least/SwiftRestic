@@ -32,7 +32,7 @@ struct StatusSection: View {
                 planRows(summary.attentionLines, symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
                 planRows(summary.awaitingLines, symbol: nil, tint: Color.clear)
             } else {
-                SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: repositoryID), repositoryID: repositoryID)
+                SnapshotListingCaveat(repositoryID: repositoryID)
             }
             // Not while the location can't be read: a plan for a drive that
             // isn't here is not the next step, reaching it is.

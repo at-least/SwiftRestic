@@ -169,10 +169,7 @@ private struct RestoreProgressStrip: View {
                 progress: progress,
                 onCancel: { model.cancelRestore() }
             )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
+            .detailStrip()
         }
     }
 

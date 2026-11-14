@@ -104,8 +104,8 @@ enum RestoreDestinationRules {
     /// missing under a writable folder the restore makes it in.
     static func originalLocation(
         for subject: RestoreSubject,
-        directoryExists: (String) -> Bool,
-        isWritable: (String) -> Bool
+        directoryExists: (String) -> Bool = RestoreDestinationRules.directoryExists,
+        isWritable: (String) -> Bool = RestoreDestinationRules.isWritable
     ) -> OriginalLocation {
         switch subject {
         case let .item(name, path, _):
@@ -187,7 +187,7 @@ enum RestoreDestinationRules {
     /// the user to click through it.
     static func replaceConfirmationTargets(
         landings: [URL],
-        exists: (URL) -> Bool
+        exists: (URL) -> Bool = RestoreDestinationRules.itemExists(at:)
     ) -> [URL] {
         landings.filter(exists)
     }

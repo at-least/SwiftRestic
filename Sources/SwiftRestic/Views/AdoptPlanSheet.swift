@@ -48,7 +48,7 @@ struct AdoptPlanSheet: View {
                 row("Location") {
                     // While the group is gone the bare name still says where
                     // this draft points.
-                    Text(briefing?.repositoryLine ?? model.repository(id: draft.repositoryID).map { model.label(of: $0) } ?? "")
+                    Text(briefing?.repositoryLine ?? model.repositoryLabel(id: draft.repositoryID) ?? "")
                 }
                 row("Schedule") { Text(draft.schedule.frequency.displayName) }
             }

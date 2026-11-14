@@ -3,6 +3,8 @@ import Foundation
 extension AppModel {
     func repository(id: UUID?) -> Repository? { configuration.repository(id: id) }
 
+    func repositoryLabel(id: UUID?) -> String? { repository(id: id).map { label(of: $0) } }
+
     /// The last snapshot listing refused the saved password (exit 12); a run
     /// refused it re-reads the listing, so this covers runs too. The editor
     /// then opens on the password field, not "Saved in Keychain".

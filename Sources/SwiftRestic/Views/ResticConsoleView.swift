@@ -40,7 +40,7 @@ struct ResticConsoleView: View {
         return VStack(alignment: .leading, spacing: 10) {
             // It opens only from one location's damage (`RepairButton`),
             // so the location is a title, not a choice.
-            Text(model.repository(id: console.repositoryID).map { model.label(of: $0) } ?? "No location")
+            Text(model.repositoryLabel(id: console.repositoryID) ?? "No location")
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 10) {

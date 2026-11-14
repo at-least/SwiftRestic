@@ -305,7 +305,7 @@ extension AppModel {
             }
             // nil when the repository's removal cancelled the restore; the
             // removal dialog already said so.
-            let repositoryName = repository(id: repositoryID).map { label(of: $0) }
+            let repositoryName = repositoryLabel(id: repositoryID)
             if record.outcome == .cancelled {
                 // Not during shutdown: the quit confirmation already said it.
                 if !isShuttingDown {

@@ -45,7 +45,7 @@ struct LogTextView: NSViewRepresentable {
 /// nothing to ⌘F.
 @MainActor
 final class LogFinder {
-    weak var textView: NSTextView?
+    fileprivate weak var textView: NSTextView?
 
     func showFindBar() {
         guard let textView else { return }

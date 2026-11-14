@@ -79,14 +79,7 @@ struct PlanEditorSheet: View {
             // not born dirty.
             if initial == nil { initial = draft }
         }
-        .confirmationDialog(
-            "Discard changes?",
-            isPresented: $isConfirmingDiscard,
-            titleVisibility: .visible
-        ) {
-            Button("Discard Changes", role: .destructive) { dismiss() }
-            Button("Cancel", role: .cancel) {}
-        }
+        .discardChangesDialog(isPresented: $isConfirmingDiscard) { dismiss() }
     }
 
     private func cancel() {

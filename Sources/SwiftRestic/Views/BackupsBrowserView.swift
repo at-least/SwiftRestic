@@ -239,7 +239,7 @@ private struct BackupsStatusRow: View {
                     .foregroundStyle(.secondary)
             }
         } else if outcome != .loaded {
-            SnapshotListingCaveat(outcome: outcome, repositoryID: repositoryID)
+            SnapshotListingCaveat(repositoryID: repositoryID)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 // A plan's page says which kind of empty this is, as the

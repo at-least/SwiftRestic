@@ -67,12 +67,12 @@ struct PlanDetailView: View {
     /// No dismiss button: it lasts exactly as long as the problem.
     private struct PlanProblemRow: View {
         @Environment(AppModel.self) private var model
+        @Environment(AppRouter.self) private var router
         @Environment(\.now) private var now
         let summary: PlanProblemSummary
         let run: RunRecord
         /// How many backups in a row ended this way (`RunRecord.problemStretch`).
         let inARow: Int
-        var onShowInActivity: (() -> Void)?
 
         var body: some View {
             HStack(alignment: .top, spacing: 10) {
@@ -137,20 +137,14 @@ struct PlanDetailView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
-                if let onShowInActivity {
-                    // The visible title is the accessible name, as on the
-                    // Restore pane's incomplete-backup strip: a longer label
-                    // would hide "Show in Activity" from Voice Control.
-                    Button("Show in Activity", action: onShowInActivity)
-                        .controlSize(.small)
-                        .help("See every message from this backup in Activity")
-                }
+                // The visible title is the accessible name, as on the
+                // Restore pane's incomplete-backup strip: a longer label
+                // would hide "Show in Activity" from Voice Control.
+                Button("Show in Activity") { router.focusRun(run.id) }
+                    .controlSize(.small)
+                    .help("See every message from this backup in Activity")
             }
         }
-    }
-
-    private func showInActivity(_ run: RunRecord) -> () -> Void {
-        { router.focusRun(run.id) }
     }
 
     private func content(_ plan: BackupPlan) -> some View {
@@ -166,13 +160,12 @@ struct PlanDetailView: View {
                         run: problem,
                         // Every backup problem in the history has one: filled at
                         // load and as each run is appended.
-                        inARow: problem.problemStretch!,
-                        onShowInActivity: showInActivity(problem)
+                        inARow: problem.problemStretch!
                     )
                 }
             }
             if model.snapshotListingOutcome(for: plan.repositoryID) != .loaded {
-                Section { SnapshotListingCaveat(outcome: model.snapshotListingOutcome(for: plan.repositoryID), repositoryID: plan.repositoryID) }
+                Section { SnapshotListingCaveat(repositoryID: plan.repositoryID) }
             }
             scheduleSection(plan)
         }

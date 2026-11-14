@@ -941,9 +941,7 @@ struct ResticIntegrationTests {
         try FileManager.default.removeItem(at: fixture.sourceDirectory)
 
         let original = RestoreDestinationRules.originalLocation(
-            for: .item(name: file.name, path: file.path, isDirectory: false),
-            directoryExists: RestoreDestinationRules.directoryExists,
-            isWritable: RestoreDestinationRules.isWritable
+            for: .item(name: file.name, path: file.path, isDirectory: false)
         )
         guard case let .available(directories, landings) = original else {
             Issue.record("expected the original location, got \(original)")

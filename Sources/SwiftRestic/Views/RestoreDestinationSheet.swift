@@ -92,7 +92,7 @@ extension RestoreDestinationRequest {
     fileprivate func overwritePolicy(into directories: [URL]) async -> RestoreOverwritePolicy? {
         let landings = RestoreDestinationRules.landings(for: subject, into: directories)
         let existing = await Task.detached(priority: .userInitiated) {
-            RestoreDestinationRules.replaceConfirmationTargets(landings: landings, exists: RestoreDestinationRules.itemExists(at:))
+            RestoreDestinationRules.replaceConfirmationTargets(landings: landings)
         }.value
         guard !Task.isCancelled, let policy = overwritePolicy(existing: existing), !Task.isCancelled else { return nil }
         return policy
@@ -225,16 +225,9 @@ private struct RestoreFlow: ViewModifier {
     private func restoreInPlace(_ pending: RestoreDestinationRequest) async {
         let subject = pending.subject
         let (original, existing) = await Task.detached(priority: .userInitiated) {
-            let original = RestoreDestinationRules.originalLocation(
-                for: subject,
-                directoryExists: RestoreDestinationRules.directoryExists,
-                isWritable: RestoreDestinationRules.isWritable
-            )
+            let original = RestoreDestinationRules.originalLocation(for: subject)
             guard case let .available(_, landings) = original else { return (original, [URL]()) }
-            return (original, RestoreDestinationRules.replaceConfirmationTargets(
-                landings: landings,
-                exists: RestoreDestinationRules.itemExists(at:)
-            ))
+            return (original, RestoreDestinationRules.replaceConfirmationTargets(landings: landings))
         }.value
         guard !Task.isCancelled else { return }
         guard case let .available(directories, _) = original else {
@@ -322,7 +315,7 @@ private struct RestoreDestinationSheet: View {
                 Spacer()
                 Button("Cancel") {
                     confirmation?.cancel()
-                    close()
+                    dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Restore") { restore() }
@@ -453,11 +446,7 @@ private struct RestoreDestinationSheet: View {
     private func checkOriginalLocation() async {
         let subject = request.subject
         original = await Task.detached(priority: .userInitiated) {
-            RestoreDestinationRules.originalLocation(
-                for: subject,
-                directoryExists: RestoreDestinationRules.directoryExists,
-                isWritable: RestoreDestinationRules.isWritable
-            )
+            RestoreDestinationRules.originalLocation(for: subject)
         }.value
     }
 
@@ -482,11 +471,7 @@ private struct RestoreDestinationSheet: View {
     }
 
     private func commit(_ directories: [URL], _ policy: RestoreOverwritePolicy) {
-        close()
-        request.perform(directories, policy)
-    }
-
-    private func close() {
         dismiss()
+        request.perform(directories, policy)
     }
 }

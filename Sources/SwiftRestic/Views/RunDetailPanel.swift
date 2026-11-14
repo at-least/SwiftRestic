@@ -50,7 +50,7 @@ struct RunDetailPanel: View {
             .font(.headline)
     }
 
-    private var repositoryName: String? { model.repository(id: run.repositoryID).map { model.label(of: $0) } }
+    private var repositoryName: String? { model.repositoryLabel(id: run.repositoryID) }
 
     @ViewBuilder
     private var rows: some View {
@@ -249,7 +249,7 @@ struct RunFixButton: View {
             do {
                 try await model.locateRepository(id: id, atPath: url.path)
             } catch {
-                model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
+                postFolderFailure(error)
             }
         }
     }
@@ -261,8 +261,12 @@ struct RunFixButton: View {
         do {
             router.selection = .plan(try model.movePlan(id: planID, toPath: url.path))
         } catch {
-            model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
+            postFolderFailure(error)
         }
+    }
+
+    private func postFolderFailure(_ error: Error) {
+        model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
     }
 }
 

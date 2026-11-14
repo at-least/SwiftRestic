@@ -75,10 +75,26 @@ struct BannerView: View {
                 .accessibilityLabel("Dismiss")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
+        .detailStrip()
+    }
+}
+
+extension View {
+    /// A strip across the top of the detail column, above every pane: a
+    /// banner, the restore's progress.
+    func detailStrip() -> some View {
+        padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+    }
+
+    /// An editor sheet's Cancel with unsaved edits.
+    func discardChangesDialog(isPresented: Binding<Bool>, discard: @escaping () -> Void) -> some View {
+        confirmationDialog("Discard changes?", isPresented: isPresented, titleVisibility: .visible) {
+            Button("Discard Changes", role: .destructive, action: discard)
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }
 
@@ -260,10 +276,10 @@ struct WarningLine: View {
 /// the known fix, or Try Again.
 struct SnapshotListingCaveat: View {
     @Environment(AppModel.self) private var model
-    let outcome: SnapshotListingOutcome
     let repositoryID: UUID?
 
     var body: some View {
+        let outcome = model.snapshotListingOutcome(for: repositoryID)
         if case let .notConnected(volume) = outcome {
             // A normal state, not a failed read: its sentence alone, with
             // Locate for a disk renamed.
@@ -354,7 +370,8 @@ struct SnapshotCompletenessMark: View {
 /// scroll and `NSWorkspace` is not free.
 struct FileKindIcon: View {
     let type: UTType
-    var size: CGFloat = 16
+
+    private static let size: CGFloat = 16
 
     @MainActor private static var icons: [String: NSImage] = [:]
 
@@ -368,7 +385,7 @@ struct FileKindIcon: View {
     var body: some View {
         Image(nsImage: Self.icon(for: type))
             .resizable()
-            .frame(width: size, height: size)
+            .frame(width: Self.size, height: Self.size)
     }
 }
 

@@ -217,14 +217,7 @@ struct RepositoryEditorSheet: View {
             mountedShare = share
             holdsBackups = holds
         }
-        .confirmationDialog(
-            "Discard changes?",
-            isPresented: $isConfirmingDiscard,
-            titleVisibility: .visible
-        ) {
-            Button("Discard Changes", role: .destructive) { dismiss() }
-            Button("Cancel", role: .cancel) {}
-        }
+        .discardChangesDialog(isPresented: $isConfirmingDiscard) { dismiss() }
     }
 
     private var isDirty: Bool {

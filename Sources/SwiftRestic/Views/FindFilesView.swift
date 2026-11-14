@@ -159,7 +159,7 @@ struct FindFilesView: View {
     }
 
     private func name(of repositoryID: UUID) -> String {
-        model.repository(id: repositoryID).map { model.label(of: $0) } ?? "Location"
+        model.repositoryLabel(id: repositoryID) ?? "Location"
     }
 
     /// A repository out of reach is no longer being read: "still reading"

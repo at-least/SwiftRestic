@@ -14,14 +14,14 @@ extension AppModel {
     var lockedRepositories: [UUID: String] {
         var reasons: [UUID: String] = [:]
         for (repositoryID, work) in maintenance {
-            let name = repository(id: repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
+            let name = repositoryLabel(id: repositoryID).map { "“\($0)”" } ?? "The location"
             reasons[repositoryID] = "\(name) \(work.task.locationClause) — backups wait until it finishes."
         }
         // Not by phase: Stop turns it to `.cancelling` while the restic
         // child, still holding the lock, dies.
         for (planID, run) in activity where run.isInRetentionStep {
             guard reasons[run.repositoryID] == nil else { continue }
-            let name = repository(id: run.repositoryID).map { "“\(label(of: $0))”" } ?? "The location"
+            let name = repositoryLabel(id: run.repositoryID).map { "“\($0)”" } ?? "The location"
             let planName = plan(id: planID).map { label(of: $0) } ?? run.planName
             reasons[run.repositoryID] = "\(name) is removing old backups of “\(planName)”. Backups wait until it finishes."
         }
