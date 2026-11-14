@@ -258,25 +258,26 @@ struct RunLogTests {
         #expect(!FileManager.default.fileExists(atPath: absent.directory.path))
     }
 
-    @Test("a skipped run's reason, a failed restore's destination, the failure line and restic's detail each reach the log")
-    func skippedAndFailedRestoreLines() throws {
-        func record(_ kind: RunRecord.Kind) -> RunRecord {
-            var record = RunRecord(kind: kind, planName: "Documents")
-            record.startedAt = at(0)
-            record.finishedAt = at(2)
-            return record
-        }
-        func render(_ record: RunRecord) -> [String] {
-            RunLog.render(
-                record: record,
-                repositoryName: "Home NAS",
-                repositoryKind: "Folder or Disk",
-                versions: versions,
-                transcript: RunTranscript.Contents(),
-                timeZone: TimeZone(identifier: "UTC")!
-            ).components(separatedBy: "\n")
-        }
+    private func record(_ kind: RunRecord.Kind) -> RunRecord {
+        var record = RunRecord(kind: kind, planName: "Documents")
+        record.startedAt = at(0)
+        record.finishedAt = at(2)
+        return record
+    }
 
+    private func render(_ record: RunRecord) -> [String] {
+        RunLog.render(
+            record: record,
+            repositoryName: "Home NAS",
+            repositoryKind: "Folder or Disk",
+            versions: versions,
+            transcript: RunTranscript.Contents(),
+            timeZone: TimeZone(identifier: "UTC")!
+        ).components(separatedBy: "\n")
+    }
+
+    @Test("a skipped run's reason, a failed restore's destination and the failure line each reach the log")
+    func skippedAndFailedRestoreLines() {
         var skipped = record(.backup)
         skipped.outcome = .skipped
         skipped.detailText = "“Photos” is not connected."
@@ -295,8 +296,11 @@ struct RunLogTests {
             "A folder is already at /tmp/there, where a restored file would go, so nothing was restored."
         ))
         #expect(failedLines.contains("Destination /tmp/there"))
-        #expect(!failedLines.contains { $0.hasPrefix("restic: ") })
+        #expect(!failedLines.contains { $0.hasPrefix("restic: ") }, "a failure with no detail from restic got a restic line")
+    }
 
+    @Test("a result SwiftRestic couldn’t read is followed in the log by what restic's answer lacked")
+    func resticDetailFollowsTheFailure() throws {
         var unread = record(.backup)
         unread.setOutcome(
             from: ResticError.malformedOutput(detail: "1 change line did not decode"),
@@ -305,6 +309,9 @@ struct RunLogTests {
         )
         let unreadLines = render(unread)
         let failureLine = try #require(unreadLines.firstIndex(of: "SwiftRestic couldn’t read the result. Try again."))
-        #expect(unreadLines[failureLine + 1] == "restic: 1 change line did not decode")
+        #expect(
+            unreadLines[failureLine + 1] == "restic: 1 change line did not decode",
+            "the log lost restic's detail under the failure; it read \(unreadLines[failureLine + 1])"
+        )
     }
 }

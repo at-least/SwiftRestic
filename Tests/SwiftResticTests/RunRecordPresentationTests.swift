@@ -318,8 +318,16 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.backup, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: false) == nil)
+    }
 
-        // Only a check that found damage offers Repair.
+    @Test("only a verification that found damage, on a location still set up, offers Repair")
+    func repairRoute() {
+        let repository = UUID()
+        func run(_ kind: RunRecord.Kind, _ outcome: RunRecord.Outcome) -> RunRecord {
+            var record = RunRecord(kind: kind, repositoryID: repository)
+            record.outcome = outcome
+            return record
+        }
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .completedWithErrors), repositoryExists: true) == repository)
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .succeeded), repositoryExists: true) == nil)

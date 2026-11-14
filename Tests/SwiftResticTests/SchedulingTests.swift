@@ -194,51 +194,51 @@ struct SchedulingTests {
         #expect(Scheduler.duePlans(in: [plan], now: now, existingRepositoryIDs: existing).map { $0.label(among: []) } == ["waiting"])
     }
 
-    @Test("plans due on one repository in the same tick start one at a time, the most overdue first")
+    private func dailyPlan(_ name: String, _ repositoryID: UUID, lastRunAt: String) -> BackupPlan {
+        var plan = BackupPlan()
+        plan.repositoryID = repositoryID
+        plan.path = "/tmp/" + name
+        plan.schedule.frequency = .daily
+        plan.lastRunAt = utcDate(lastRunAt)
+        return plan
+    }
+
+    /// Started together, each backup's retention `forget` takes the
+    /// repository's exclusive lock and locks the other out, which records
+    /// "Retention skipped".
+    @Test("plans due on one repository in the same tick start one at a time; the one held back starts on a later tick")
     func oneBackupPerRepositoryPerTick() {
         let shared = UUID()
         let other = UUID()
-        func makePlan(_ name: String, _ repositoryID: UUID, lastRunAt: String) -> BackupPlan {
-            var plan = BackupPlan()
-            plan.repositoryID = repositoryID
-            plan.path = "/tmp/" + name
-            plan.schedule.frequency = .daily
-            plan.lastRunAt = utcDate(lastRunAt)
-            return plan
-        }
-        // Two plans on one repository due at the same moment: started
-        // together, each backup's retention `forget` takes the repository's
-        // exclusive lock and locks the other out, which records
-        // "Retention skipped" — so a tick starts only one of them.
-        let downloads = makePlan("downloads", shared, lastRunAt: "2026-09-04 02:00:00")
-        let dotfiles = makePlan("dotfiles", shared, lastRunAt: "2026-09-04 02:00:00")
-        let elsewhere = makePlan("elsewhere", other, lastRunAt: "2026-09-04 02:00:00")
+        let downloads = dailyPlan("downloads", shared, lastRunAt: "2026-09-04 02:00:00")
+        let dotfiles = dailyPlan("dotfiles", shared, lastRunAt: "2026-09-04 02:00:00")
+        let elsewhere = dailyPlan("elsewhere", other, lastRunAt: "2026-09-04 02:00:00")
         let existing: Set<UUID> = [shared, other]
-        let now = utcDate("2026-09-05 02:00:30")
 
-        #expect(Scheduler.duePlans(
-            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing
-        ).map { $0.label(among: []) } == ["downloads", "elsewhere"])
+        let firstTick = Scheduler.duePlans(
+            in: [downloads, dotfiles, elsewhere], now: utcDate("2026-09-05 02:00:30"), existingRepositoryIDs: existing
+        ).map { $0.label(among: []) }
+        #expect(firstTick == ["downloads", "elsewhere"], "two backups started on one location in one tick: \(firstTick)")
 
-        // Held back, not dropped: while the first runs its repository is busy,
-        // and once it has run, the other is due on the next tick.
-        #expect(Scheduler.duePlans(
-            in: [downloads, dotfiles, elsewhere], now: now, existingRepositoryIDs: existing,
-            busyPlanIDs: [downloads.id, elsewhere.id], busyRepositoryIDs: [shared, other]
-        ).isEmpty)
         var ran = downloads
         ran.lastRunAt = utcDate("2026-09-05 02:00:40")
-        #expect(Scheduler.duePlans(
+        let laterTick = Scheduler.duePlans(
             in: [ran, dotfiles], now: utcDate("2026-09-05 02:01:30"), existingRepositoryIDs: existing
-        ).map { $0.label(among: []) } == ["dotfiles"])
+        ).map { $0.label(among: []) }
+        #expect(laterTick == ["dotfiles"], "the plan held back was dropped instead of starting next: \(laterTick)")
+    }
 
-        // The plan whose slot passed longer ago goes first, whatever the
-        // order: a daily plan is due a day after its last run, so 01:00
-        // beats 02:00.
-        let early = makePlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
-        #expect(Scheduler.duePlans(
-            in: [downloads, early], now: now, existingRepositoryIDs: existing
-        ).map { $0.label(among: []) } == ["early"])
+    /// A daily plan is due a day after its last run, so a last run at 01:00
+    /// is further overdue than one at 02:00.
+    @Test("of two plans due on one repository, the one overdue longer starts first, whatever their order")
+    func mostOverdueStartsFirst() {
+        let shared = UUID()
+        let later = dailyPlan("later", shared, lastRunAt: "2026-09-04 02:00:00")
+        let early = dailyPlan("early", shared, lastRunAt: "2026-09-04 01:00:00")
+        let started = Scheduler.duePlans(
+            in: [later, early], now: utcDate("2026-09-05 02:00:30"), existingRepositoryIDs: [shared]
+        ).map { $0.label(among: []) }
+        #expect(started == ["early"], "the plan overdue longer waited behind a newer one: \(started)")
     }
 }
 

@@ -43,10 +43,13 @@ struct StaleAlertTests {
         #expect(due([adopted]).isEmpty)
     }
 
-    @Test("the window is the threshold, or one schedule interval and a day when that is longer")
-    func window() {
-        #expect(StaleAlert.window(schedule: plan(.daily, lastSuccessDaysAgo: nil).schedule) == 7 * day)
-        #expect(StaleAlert.window(schedule: plan(.weekly, lastSuccessDaysAgo: nil).schedule) == 8 * day)
+    /// A weekly plan is due again exactly seven days after its last backup:
+    /// named at seven days, it would be named before every run.
+    @Test("a weekly plan is named a day after its next backup was due, not while that backup is merely due")
+    func weeklyPlanHasADayOfGrace() {
+        let named = due([plan(.weekly, lastSuccessDaysAgo: 7.5)])
+        #expect(named.isEmpty, "a weekly plan was named \(named.map(\.days)) days after its last backup, before its day of grace ran out")
+        #expect(due([plan(.weekly, lastSuccessDaysAgo: 8.5)]).map(\.days) == [8])
     }
 
     @Test("a scheduled plan is named; manual, incomplete and running plans are not")

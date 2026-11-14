@@ -415,6 +415,19 @@ struct OverviewMetricsTests {
         )
     }
 
+    @Test("a location whose plans are all still being read does not claim to be up to date")
+    func nothingKnownIsNotUpToDate() throws {
+        let summary = try #require(OverviewMetrics.upToDateSummary(
+            rows: [protectionRow("Reading", isKnown: false, isUpToDate: false)],
+            listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
+            now: utcDate("2026-09-05 11:00:00")
+        ))
+        #expect(
+            !summary.text.contains("Up to date"),
+            "the Status line claimed “\(summary.text)” before any plan's state was known"
+        )
+    }
+
     @Test("the Status line counts known rows, names the newest last backup, and carries the hold")
     func protectionLine() {
         let rows = [
