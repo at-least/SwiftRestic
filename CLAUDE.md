@@ -7,11 +7,11 @@ The restic and rclone versions and checksums: `Tools/fetch-restic.sh`,
 `Tools/fetch-rclone.sh`.
 The index's SQLite floor: `Tools/sqlite-floor.sh`, by hand.
 
-GUI runs, screenshots and pixel checks happen in a single-use orchard VM
-from the `tester` image (`orchard ssh vm`), never on the host desktop.
+GUI runs, screenshots, pixel checks and the UI tests run on the Mac itself
+and drive its desktop, so this project is developed on air, where nobody
+else works (user 2026-11-14); orchard VMs are no longer used.
 UI tests (scheme SwiftResticUITests, identifiers in `AccessibilityID.swift`):
-`Tools/ui-test.sh` builds them here and runs them in a single-use orchard VM
-from cirruslabs' Xcode image; `./build.sh test` leaves them out.
+`Tools/ui-test.sh` builds and runs them; `./build.sh test` leaves them out.
 Debug builds photograph themselves through the
 `SWIFTRESTIC_CAPTURE*` environment (`CaptureSupport.swift`), with
 `SWIFTRESTIC_CONFIG_DIR` pointing at a throwaway configuration.
