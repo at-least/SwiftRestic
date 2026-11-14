@@ -83,7 +83,7 @@ struct ActivityView: View {
                     TableColumn("Name") { run in
                         Group {
                             switch run.kind {
-                            case .backup, .forget, .restore:
+                            case .backup, .restore:
                                 Text(run.planName.isEmpty ? "—" : run.planName)
                                     .help(run.planName)
                             case .check, .prune:

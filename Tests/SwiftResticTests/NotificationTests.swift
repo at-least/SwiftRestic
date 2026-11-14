@@ -193,12 +193,9 @@ struct RepeatedProblemNotificationTests {
         #expect(counts([warned(600), ended(540, .cancelled), warned(480)]) == [2, nil, 1])
         #expect(counts([warned(600, items: ["/b: open /b: permission denied"]), warned(540)]) == [1, 1])
         #expect(counts([failed(600), warned(540)]) == [1, 1])
-        // Another plan's runs, and the plan's own retention run, neither end
-        // it nor add to it.
-        var forget = ended(550, .succeeded)
-        forget.kind = .forget
-        #expect(counts([warned(600), ended(570, .succeeded, plan: UUID()), forget, warned(560, items: ["/z"]).withPlan(UUID()), warned(540)])
-            == [2, nil, nil, 1, 1])
+        // Another plan's runs neither end it nor add to it.
+        #expect(counts([warned(600), ended(570, .succeeded, plan: UUID()), warned(560, items: ["/z"]).withPlan(UUID()), warned(540)])
+            == [2, nil, 1, 1])
         // A failure merged into a standing one counts the runs it stands for,
         // on top of an earlier failure for the same cause it did not merge
         // into.

@@ -22,11 +22,9 @@ struct StandingProblemTests {
     private func record(
         _ outcome: RunRecord.Outcome,
         finishedAt: Date,
-        planID: UUID? = nil,
-        kind: RunRecord.Kind = .backup
+        planID: UUID? = nil
     ) -> RunRecord {
         var record = RunRecord()
-        record.kind = kind
         record.planID = planID ?? self.planID
         record.outcome = outcome
         record.finishedAt = finishedAt
@@ -72,29 +70,6 @@ struct StandingProblemTests {
     func cancelledIsQuiet() {
         let model = makeModel()
         model.configuration.runs = [record(.cancelled, finishedAt: hour1)]
-
-        #expect(model.currentProblem(for: planID) == nil)
-    }
-
-    @Test("a retention run carries the plan's ID but does not heal its backup failure")
-    func aRetentionRunDoesNotHealABackupFailure() {
-        let model = makeModel()
-        // It removed backups, it did not back anything up: the failure stands.
-        model.configuration.runs = [
-            record(.succeeded, finishedAt: hour2, kind: .forget),
-            record(.failed, finishedAt: hour1),
-        ]
-
-        #expect(model.currentProblem(for: planID)?.kind == .backup)
-        #expect(model.currentProblem(for: planID)?.outcome == .failed)
-    }
-
-    @Test("a failed retention run is not the plan's problem")
-    func aFailedRetentionRunIsNotThePlansProblem() {
-        let model = makeModel()
-        // It stays in Activity and in the 7-day count; the plan's row and
-        // status speak for its backups only.
-        model.configuration.runs = [record(.failed, finishedAt: hour1, kind: .forget)]
 
         #expect(model.currentProblem(for: planID) == nil)
     }

@@ -103,9 +103,8 @@ struct RunDetailPanel: View {
             repositoryRow
         default:
             repositoryRow
-            // A check's verdict, what a retention run removed, or the space a
-            // prune freed: the copied details' Result line.
-            if run.kind == .check || run.kind == .forget || run.kind == .prune, let result = run.detailText {
+            // A check's verdict or the space a prune freed: the copied details' Result line.
+            if run.kind == .check || run.kind == .prune, let result = run.detailText {
                 DetailRow("Result") {
                     Text(result).textSelection(.enabled)
                 }

@@ -2,11 +2,10 @@ import Foundation
 
 struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     enum Kind: String, Codable, Sendable {
-        case backup, forget, check, prune, restore
+        case backup, check, prune, restore
 
         var displayName: String {
             switch self {
-            case .forget: "Old backup removal"
             case .prune: MaintenanceTask.prune.displayName
             case .check: MaintenanceTask.check.displayName
             default: rawValue.capitalized

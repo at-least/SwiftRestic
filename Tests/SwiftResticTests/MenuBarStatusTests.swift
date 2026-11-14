@@ -432,18 +432,6 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatus.problemLine(runs: [warned, failed], hasNoRepositories: false)?.hasPrefix("Photos:") == true)
     }
 
-    @Test("a failed retention run is named by what it did, then the plan")
-    func retentionProblemLine() {
-        var removal = RunRecord(kind: .forget, planName: "Documents")
-        removal.outcome = .failed
-        removal.startedAt = .now.addingTimeInterval(-600)
-        removal.finishedAt = removal.startedAt
-        #expect(
-            MenuBarStatus.problemLine(runs: [removal], hasNoRepositories: false, relative: Self.ago)
-                == "Old backup removal on Documents failed 2 hours ago"
-        )
-    }
-
     @Test("recency counts from when the run finished, not when it started")
     func finishedAtIsTheNewsClock() {
         // An overnight backup that failed at dawn against an afternoon failure:
@@ -530,14 +518,12 @@ struct MenuBarStatusTests {
     func whatDoesNotHeal() {
         let planID = UUID()
         let failed = run(.failed, minutesAgo: 60, planID: planID)
-        // Another plan's success, a success that came before the failure, a
-        // cancelled run, and a successful forget (Apply Retention Now
-        // records it under the plan's ID) — the sidebar's rule exactly.
+        // Another plan's success, a success that came before the failure, and
+        // a cancelled run — the sidebar's rule exactly.
         let leaves: [RunRecord] = [
             run(.succeeded, minutesAgo: 10, planID: UUID()),
             run(.succeeded, minutesAgo: 90, planID: planID),
             run(.cancelled, minutesAgo: 10, planID: planID),
-            run(.succeeded, minutesAgo: 10, planID: planID, kind: .forget),
         ]
         for other in leaves {
             #expect(face([failed, other]) == .problem)
@@ -545,15 +531,15 @@ struct MenuBarStatusTests {
         }
     }
 
-    @Test("a check, prune, retention or restore problem keeps the seven-day window whatever succeeds after it")
+    @Test("a check, prune or restore problem keeps the seven-day window whatever succeeds after it")
     func otherKindsKeepTheWindow() {
         let planID = UUID()
-        for kind in [RunRecord.Kind.check, .prune, .forget, .restore] {
-            let failed = run(.failed, minutesAgo: 60, planID: kind == .forget ? planID : nil, kind: kind)
+        for kind in [RunRecord.Kind.check, .prune, .restore] {
+            let failed = run(.failed, minutesAgo: 60, kind: kind)
             let runs = [
                 failed,
                 run(.succeeded, minutesAgo: 10, planID: planID),
-                run(.succeeded, minutesAgo: 10, planID: kind == .forget ? planID : nil, kind: kind),
+                run(.succeeded, minutesAgo: 10, kind: kind),
             ]
             #expect(face(runs) == .problem)
         }

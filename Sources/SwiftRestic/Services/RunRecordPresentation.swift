@@ -92,7 +92,7 @@ enum RunRecordPresentation {
         switch run.kind {
         case .check: return .check(id)
         case .prune: return .prune(id)
-        case .backup, .forget, .restore: return nil
+        case .backup, .restore: return nil
         }
     }
 
@@ -135,7 +135,6 @@ enum RunRecordPresentation {
     /// The subject line the log and the copied details open with.
     static func subject(of run: RunRecord) -> String {
         guard !run.planName.isEmpty else { return run.kind.displayName }
-        if run.kind == .forget { return "Removing old backups of “\(run.planName)”" }
         return "\(run.kind.displayName) of “\(run.planName)”"
     }
 
@@ -168,7 +167,7 @@ enum RunRecordPresentation {
     ) -> String {
         let repositoryName = repositories.withID(run.repositoryID).map { $0.label(among: repositories) }
         switch run.kind {
-        case .backup, .forget, .restore:
+        case .backup, .restore:
             // A restore carries no planID, so its step label (the stored
             // name) is its subject.
             return planWithRepository(currentPlanName(of: run, plans: plans), repositoryName: repositoryName)
@@ -216,7 +215,7 @@ enum RunRecordPresentation {
             return "\(Format.count(run.filesNew)) new · \(Format.count(run.filesChanged)) changed"
         case .restore:
             return restoreDetail(run) ?? run.outcomeName
-        case .forget, .prune:
+        case .prune:
             // Freed space whose amount restic's output did not say has no
             // count.
             return run.detailText ?? run.outcomeName
@@ -361,7 +360,7 @@ enum RunRecordPresentation {
             if run.outcome == .succeeded, run.filesRestored + run.filesSkipped > 0 {
                 lines.append("Files: \(restoreFiles(run))")
             }
-        case .check, .forget, .prune:
+        case .check, .prune:
             if let result = run.detailText { lines.append("Result: \(result)") }
         }
         if let code = run.exitCode, let text = exitCodeText(code) {

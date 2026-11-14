@@ -56,13 +56,6 @@ struct RunRecordPresentationTests {
                 repositories: [home]
             ) == "Documents (Home Disk)"
         )
-        #expect(
-            RunRecordPresentation.displayName(
-                for: run(.forget, planID: documents.id, planName: "Documents", repositoryID: home.id),
-                plans: [documents],
-                repositories: [home]
-            ) == "Documents (Home Disk)"
-        )
         // The plan is called what it is called now, not what the record
         // stored.
         var renamed = documents
@@ -324,7 +317,6 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .succeeded), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.prune, .cancelled), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.backup, .failed), repositoryExists: true) == nil)
-        #expect(RunRecordPresentation.maintenanceRetry(for: run(.forget, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: false) == nil)
 
         // Only a check that found damage routes to the console, whose
@@ -458,7 +450,7 @@ struct RunRecordPresentationTests {
         failedCheck.outcome = .completedWithErrors
         #expect(detail(failedCheck) == "Problems found")
 
-        // A prune's is what it freed, as a retention run's is what it removed.
+        // A prune's is what it freed.
         var prune = RunRecord(kind: .prune, planName: "Home NAS")
         prune.detailText = "Freed 3 MB."
         #expect(detail(prune) == "Freed 3 MB.", "a prune's Detail names what it freed")
@@ -508,25 +500,6 @@ struct RunRecordPresentationTests {
         )?.location == "Documents/Medical")
         // A line with no stored path stays restic's own.
         #expect(words("restic: some message without an item", nil) == nil)
-    }
-
-    @Test("a retention run's Detail says what it removed, or why it did not")
-    func retentionRunDetail() {
-        var applied = RunRecord(kind: .forget, planName: "Documents")
-        applied.detailText = "Removed 2 backups. Their data stays until the next cleanup."
-        #expect(RunRecordPresentation.detail(for: applied)
-            == "Removed 2 backups. Their data stays until the next cleanup.")
-
-        var failed = RunRecord(kind: .forget, planName: "Documents")
-        failed.outcome = .failed
-        failed.failureMessage = "The repository is already locked"
-        #expect(RunRecordPresentation.detail(for: failed) == "The repository is already locked")
-
-        // A forget with no stored count (a stopped one, say) falls back to
-        // its outcome.
-        var bare = RunRecord(kind: .forget, planName: "Documents")
-        bare.outcome = .succeeded
-        #expect(RunRecordPresentation.detail(for: bare) == "Succeeded")
     }
 
     @Test("the Detail column and the plan page's facts agree word for word")
@@ -582,21 +555,6 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
         #expect(lines.contains("restic 0.19.1 compiled with go1.26.5 on darwin/arm64"))
         #expect(lines.last == "Copied from SwiftRestic 0.1.0 (1) on macOS 26.6.2 (Build 25G83)")
-    }
-
-    @Test("a copied Activity row for a retention run says what it removed")
-    func copyDetailsForARetentionRun() {
-        var record = RunRecord(kind: .forget, planName: "Documents")
-        record.outcome = .succeeded
-        record.detailText = "Removed 2 backups. Their data stays until the next cleanup."
-        let text = RunRecordPresentation.detailsText(
-            for: record,
-            repositoryName: "Home NAS",
-            versionsNow: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1")
-        )
-        let lines = text.components(separatedBy: "\n")
-        #expect(lines.first == "Removing old backups of “Documents” — Succeeded")
-        #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
     @Test("a copied Activity row for freeing space says what it freed")

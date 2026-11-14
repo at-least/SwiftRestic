@@ -95,8 +95,8 @@ struct UpToDateSummary: Equatable, Sendable {
 /// Derives the protection rows and the recent problems from the
 /// configuration and run history.
 enum OverviewMetrics {
-    /// Not "until the next success": a backup fixes no failed check, prune,
-    /// retention run or restore.
+    /// Not "until the next success": a backup fixes no failed check, prune
+    /// or restore.
     private static let problemWindowLength: TimeInterval = 7 * 86_400
 
     /// The sidebar's Activity badge and the menu bar's problem line read the
@@ -116,7 +116,7 @@ enum OverviewMetrics {
         }
     }
 
-    /// Backups only: a failed check, prune, forget or restore is not fixed
+    /// Backups only: a failed check, prune or restore is not fixed
     /// by a backup going through. The sidebar's standing problem and the
     /// menu bar's face both go by this.
     static func isHealed(_ problem: RunRecord, in runs: [RunRecord]) -> Bool {
