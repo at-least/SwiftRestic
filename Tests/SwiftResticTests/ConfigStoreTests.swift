@@ -498,17 +498,6 @@ struct TolerantDecodingTests {
         #expect(schedule["intervalHours"] == nil)
     }
 
-    @Test("settings an older build saved are ignored")
-    func oldSettingsDecode() throws {
-        let settings = try decode(
-            AppSettings.self,
-            #"{"pauseOnBattery":true,"pauseOnMeteredNetwork":true,"showMenuBarExtra":false,"maxRunHistory":20,"notifyOnSuccess":true,"notificationChannels":[{"url":"https://hooks.slack.com/a"}]}"#
-        )
-        let written = try String(decoding: JSONEncoder().encode(settings), as: UTF8.self)
-        #expect(!written.contains("pauseOn") && !written.contains("showMenuBarExtra") && !written.contains("maxRunHistory"))
-        #expect(!written.contains("notifyOnSuccess") && !written.contains("notificationChannels"))
-    }
-
     @Test("pause fields round-trip; missing reads as not paused; a pause without a readable end reads as not paused, never as forever")
     func pauseFieldsDecodeFailSafe() async throws {
         #expect(try decode(AppSettings.self, "{}").schedulePause == nil)

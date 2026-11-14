@@ -599,8 +599,8 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Result: Removed 2 backups. Their data stays until the next cleanup."), "details were \(lines)")
     }
 
-    @Test("a copied Activity row for a cleanup says what it freed")
-    func copyDetailsForACleanup() {
+    @Test("a copied Activity row for freeing space says what it freed")
+    func copyDetailsForFreedSpace() {
         var record = RunRecord(kind: .prune, planName: "Home NAS")
         record.outcome = .succeeded
         record.detailText = "Freed 3 MB."
@@ -672,6 +672,18 @@ struct RunRecordPresentationTests {
 
         let decoded = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(run))
         #expect(decoded.resticDetail == run.resticDetail)
+    }
+
+    @Test("a stopped run's copied Activity row says Stopped in its first line, with no Error line repeating it")
+    func copyDetailsOfAStop() {
+        var run = RunRecord(kind: .backup, planName: "Documents")
+        run.setOutcome(from: CancellationError(), cancellationMessage: "Stopped", location: nil)
+        let lines = RunRecordPresentation.detailsText(
+            for: run, repositoryName: "Home NAS",
+            versionsNow: RunLogVersions(app: "1", macOS: "26", restic: "0.19.1")
+        ).components(separatedBy: "\n")
+        #expect(lines.first == "Backup of “Documents” — Stopped")
+        #expect(!lines.contains { $0.hasPrefix("Error:") }, "details were \(lines)")
     }
 
     @Test("a stop stored in the old word still reads as the outcome, not as a second message")

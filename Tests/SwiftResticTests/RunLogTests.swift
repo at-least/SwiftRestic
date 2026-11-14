@@ -73,6 +73,20 @@ struct RunLogTests {
         #expect(!text.contains("omitted"))
     }
 
+    @Test("a stopped run's log says Stopped once, on its last line")
+    func stoppedRunSaysItOnce() {
+        var record = RunRecord(kind: .backup, planName: "Documents", startedAt: at(0))
+        record.finishedAt = at(2)
+        record.setOutcome(from: CancellationError(), cancellationMessage: "Stopped", location: nil)
+        let text = RunLog.render(
+            record: record, repositoryName: nil, repositoryKind: nil, versions: versions,
+            transcript: RunTranscript.Contents(entries: [], headCount: 0, omittedLineCount: 0, firstExitCode: nil),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        #expect(text.components(separatedBy: "\n").filter { $0.contains("Stopped") }
+            == ["Finished 2026-09-26 07:58:19 +0000 after 2s — Stopped"], "the log was \(text)")
+    }
+
     @Test("an entry that spans lines keeps the text column: continuation lines sit under it, never at the margin")
     func multilineEntryKeepsTheColumn() throws {
         let record = RunRecord(kind: .backup, planName: "Documents", startedAt: at(0))

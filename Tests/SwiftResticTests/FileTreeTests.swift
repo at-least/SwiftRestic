@@ -40,6 +40,7 @@ struct FileTreeTests {
         #expect(tree.expand(path: "/src") == nil)
         #expect(tree.rows.map(\.node.path) == ["/src", "/src/a.txt"])
         #expect(tree.expand(path: "/src/a.txt") == nil)
+        #expect(tree.rows.last?.expanded == false, "a file never opens")
     }
 
     @Test("children land at one level deeper, in order, under their parent")

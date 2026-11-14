@@ -406,8 +406,8 @@ struct MaintenanceSchedulingTests {
         return plan
     }
 
-    @Test("a cleanup comes due wherever a plan backs up, and is chosen over a check")
-    func pruneNeedsRetention() {
+    @Test("freeing space comes due only where a plan backs up, and goes before a verification")
+    func freeingSpaceNeedsAPlan() {
         let repository = repository { _ in }
         let now = utcDate("2026-10-10 00:00:00")
         #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: repository)], now: now).map(\.task) == [.prune])

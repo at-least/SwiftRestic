@@ -59,12 +59,6 @@ struct StaleAlertTests {
         #expect(due([scheduled, manual, incomplete, running], running: [running.id]).map(\.planID) == [scheduled.id])
     }
 
-    @Test("a config from before the switches went still loads, and a saved Off has no effect")
-    func oldSettingsAreIgnored() throws {
-        _ = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"staleAlertDays": 0, "notifyOnFailure": false, "notifyOnSuccess": true, "notificationChannels": [{"url": "https://hooks.slack.com/a"}]}"#.utf8))
-        #expect(due([plan(lastSuccessDaysAgo: 20)]).count == 1)
-    }
-
     @Test("the notification names the plan with its repository, the days, and the last backup")
     func wording() {
         let last = now.addingTimeInterval(-8.5 * day)

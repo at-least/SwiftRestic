@@ -235,8 +235,12 @@ struct FormattingTests {
             #expect(minute(times[0]) == minute(times[1]), "the fixture's two backups must share a minute")
             let labels = BackupRowMoments.labels(for: times, sectioned: sectioned)
             #expect(labels[times[0]] != labels[times[1]], "sectioned \(sectioned): \(labels)")
-            #expect(labels[times[0]] != minute(times[0]))
+            #expect(labels[times[0]] != minute(times[0]), "the newer of the pair shows its seconds")
+            #expect(labels[times[1]] != minute(times[1]), "the older of the pair shows its seconds")
             #expect(labels[times[2]] == minute(times[2]))
+            // With seconds, a row under a month header still drops the year;
+            // a flat list's row still says it.
+            #expect(labels[times[0]]?.contains("2025") == !sectioned, "sectioned \(sectioned): \(labels)")
         }
         #expect(BackupRowMoments.labels(for: [base], sectioned: true) == [base: Format.dayTime(base)])
     }

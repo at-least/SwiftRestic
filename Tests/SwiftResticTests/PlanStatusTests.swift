@@ -223,7 +223,7 @@ struct PlanStatusTests {
         #expect(running?.text == "Backing up…")
     }
 
-    @Test("a backup that skipped files has a short caption for a narrow column; other outcomes none")
+    @Test("only a backup that skipped files has a short caption for a narrow column")
     func captionShortForm() throws {
         let plan = completeDailyPlan()
         let withErrors = try #require(PlanStatus.sidebarCaption(
@@ -237,6 +237,15 @@ struct PlanStatusTests {
             existingRepositoryIDs: [repositoryID], now: now, relative: relative
         )
         #expect(failed?.shortText == nil)
+        // "Old backups not removed" fits as it is.
+        var retentionOnly = run(.completedWithErrors)
+        retentionOnly.itemErrors = [RunRecord.retentionSkippedPrefix + "repository is already locked"]
+        let retention = try #require(PlanStatus.sidebarCaption(
+            for: plan, activity: nil, problem: retentionOnly,
+            existingRepositoryIDs: [repositoryID], now: now, relative: relative
+        ))
+        #expect(retention.text.hasPrefix("Old backups not removed — "))
+        #expect(retention.shortText == nil)
     }
 
     @Test("a plan the scheduler skips never promises its schedule; a running one names its phase")
