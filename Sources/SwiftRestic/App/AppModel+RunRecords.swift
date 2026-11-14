@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 extension AppModel {
     var cancellationMessage: String {
@@ -31,9 +32,11 @@ extension AppModel {
             do {
                 try logs.write(text, for: sealed.id)
             } catch {
-                // The record still lands: it is what every surface reads,
-                // and nothing in the app reads the log (README's Logs/ is
-                // for a person or an agent debugging).
+                // The record still lands: it is what every surface reads.
+                // The log is for a person or an agent debugging (README's
+                // Logs/), so its failure goes to the unified log, not a
+                // banner: `log show --predicate 'subsystem == "com.newlix.SwiftRestic"'`.
+                runLogFailures.error("Couldn't write the log of run \(sealed.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }.value
     }
@@ -105,3 +108,5 @@ enum RunSnapshotLink: Equatable {
         return outcome == .loaded ? .removed : .unavailable
     }
 }
+
+private let runLogFailures = Logger(subsystem: "com.newlix.SwiftRestic", category: "RunLog")

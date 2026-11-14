@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Testing
 import UniformTypeIdentifiers
 
@@ -846,6 +847,32 @@ struct AppModelTests {
         #expect(model.configuration.runs.contains { $0.planID == harness.plan.id && $0.outcome == .skipped },
                 "the skip itself is still recorded")
         #expect(model.banners.isEmpty, "banners were \(model.banners.map(\.title))")
+
+        await model.shutdown()
+    }
+
+    @Test("a run log that cannot be written still records the run, and says so in the unified log")
+    func unwritableRunLogIsLogged() async throws {
+        let harness = try await makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let index = try #require(model.configuration.plans.firstIndex { $0.id == harness.plan.id })
+        model.configuration.plans[index].path = "/Volumes/SwiftRestic Test Drive/Documents"
+        // A file where the Logs folder goes: createDirectory then fails.
+        try Data().write(to: model.runLogs.directory)
+        let since = Date()
+
+        model.runBackup(planID: harness.plan.id)
+        await model.waitForRun(planID: harness.plan.id)
+        let run = try #require(model.configuration.runs.first)
+
+        let store = try OSLogStore(scope: .currentProcessIdentifier)
+        let messages = try store.getEntries(at: store.position(date: since))
+            .compactMap { $0 as? OSLogEntryLog }
+            .filter { $0.subsystem == "com.newlix.SwiftRestic" && $0.category == "RunLog" }
+            .map(\.composedMessage)
+        #expect(messages.contains { $0.contains(run.id.uuidString) },
+                "the RunLog entries were \(messages)")
 
         await model.shutdown()
     }
