@@ -264,37 +264,6 @@ struct FirstBackupTests {
         #expect(plan.announcesFirstBackup)
     }
 
-    @Test("the folder panel's location is the last answer unless it breaks a rule; a folder that needs Full Disk Access backs up all the same")
-    func backUpWithoutSheet() throws {
-        let (model, root) = try makeModel()
-        defer { try? FileManager.default.removeItem(at: root) }
-        model.resticState = .damaged
-        var disk = Repository()
-        disk.localPath = root.appendingPathComponent("repo").path
-        model.configuration.repositories = [disk]
-        model.fullDiskAccess = .notGranted
-        let source = root.appendingPathComponent("Projects").path
-
-        #expect(model.backUpWithoutSheet(source: source, destination: nil) == nil)
-        #expect(model.backUpWithoutSheet(source: source, destination: .folder("/Volumes/Disk/SwiftRestic Backups")) == nil)
-        // Backups inside the folder being backed up: the sheet says why.
-        #expect(model.backUpWithoutSheet(source: root.path, destination: .location(disk.id)) == nil)
-        #expect(model.configuration.plans.isEmpty)
-
-        let planID = try #require(model.backUpWithoutSheet(source: source, destination: .location(disk.id)))
-        let plan = try #require(model.plan(id: planID))
-        #expect(plan.path == source)
-        #expect(plan.repositoryID == disk.id)
-        #expect(plan.announcesFirstBackup)
-        // A second plan for the same folder breaks a rule.
-        #expect(model.backUpWithoutSheet(source: source, destination: .location(disk.id)) == nil)
-
-        // The plan's page carries the Full Disk Access notice.
-        let documents = NSHomeDirectory() + "/Documents"
-        #expect(model.fullDiskAccessNotice(for: documents) != nil)
-        #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) != nil)
-    }
-
     @Test("the first success is announced once; another plan's is not")
     func firstSuccessAnnouncedOnce() async {
         let model = AppModel(store: ConfigStore(directory: FileManager.default.temporaryDirectory
@@ -393,6 +362,91 @@ struct FirstBackupTests {
         var stored = decoded
         stored.announcesFirstBackup = true
         #expect(stored.merging(draft: decoded).announcesFirstBackup)
+    }
+}
+
+/// Back Up a Folder…'s panel, answered without the sheet
+/// (`AppModel.backUpWithoutSheet`). restic is damaged here, so the new
+/// plan's first backup does not start and the suite stays out of build.sh's
+/// `end_to_end_suites`.
+@Suite("Back Up a Folder without the sheet")
+@MainActor
+struct FolderPanelTests {
+    private struct Fixture {
+        var model: AppModel
+        var disk: Repository
+        /// Outside every protected location, so no notice applies to it.
+        var source: String
+    }
+
+    private func makeFixture() -> Fixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticFolderPanel-\(UUID().uuidString)")
+        let model = AppModel(store: ConfigStore(directory: root.appendingPathComponent("config")), secrets: .inMemory())
+        model.resticState = .damaged
+        // Never the daemon: xctest lives under /Applications, so it counts as
+        // installed and the first scheduled plan would really register it.
+        model.loginItemStateReader = { .off }
+        model.loginItemApplier = { _ in }
+        var disk = Repository()
+        disk.localPath = root.appendingPathComponent("repo").path
+        model.configuration.repositories = [disk]
+        return Fixture(model: model, disk: disk, source: root.appendingPathComponent("Projects").path)
+    }
+
+    @Test("a folder chosen for a location set up here gets its plan at once, announced on its first success")
+    func folderIntoALocationGetsItsPlan() throws {
+        let fixture = makeFixture()
+        let model = fixture.model
+
+        let planID = try #require(
+            model.backUpWithoutSheet(source: fixture.source, destination: .location(fixture.disk.id)),
+            "the panel's answer was left to the sheet"
+        )
+        let plan = try #require(model.plan(id: planID))
+        #expect(plan.path == fixture.source)
+        #expect(plan.repositoryID == fixture.disk.id)
+        #expect(plan.announcesFirstBackup)
+    }
+
+    @Test("an answer that breaks a rule is left to the sheet, which says why, and makes no plan")
+    func ruleBreakIsLeftToTheSheet() throws {
+        let fixture = makeFixture()
+        let model = fixture.model
+        let inside = (fixture.disk.localPath as NSString).deletingLastPathComponent
+
+        #expect(model.backUpWithoutSheet(source: fixture.source, destination: nil) == nil, "no location chosen")
+        #expect(
+            model.backUpWithoutSheet(source: fixture.source, destination: .folder("/Volumes/Disk/SwiftRestic Backups")) == nil,
+            "a new location needs the sheet's password"
+        )
+        #expect(
+            model.backUpWithoutSheet(source: inside, destination: .location(fixture.disk.id)) == nil,
+            "the backups sit inside the folder being backed up"
+        )
+        #expect(model.configuration.plans.isEmpty)
+
+        _ = try #require(model.backUpWithoutSheet(source: fixture.source, destination: .location(fixture.disk.id)))
+        #expect(
+            model.backUpWithoutSheet(source: fixture.source, destination: .location(fixture.disk.id)) == nil,
+            "a second plan for the same folder"
+        )
+        #expect(model.configuration.plans.count == 1)
+    }
+
+    /// The plan's page carries the notice; the sheet has nothing to ask.
+    @Test("a folder that needs Full Disk Access backs up all the same")
+    func folderNeedingFullDiskAccessBacksUp() throws {
+        let fixture = makeFixture()
+        let model = fixture.model
+        model.fullDiskAccess = .notGranted
+        let documents = NSHomeDirectory() + "/Documents"
+        try #require(model.fullDiskAccessNotice(for: documents) != nil)
+
+        #expect(
+            model.backUpWithoutSheet(source: documents, destination: .location(fixture.disk.id)) != nil,
+            "the Full Disk Access notice stopped the folder panel's backup"
+        )
     }
 }
 

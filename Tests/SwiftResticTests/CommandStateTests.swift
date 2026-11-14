@@ -545,8 +545,21 @@ struct CommandStateTests {
         #expect(!metered.backupsPaused && metered.canPauseBackups)
     }
 
-    @Test("every confirmation names its target, and a gone target asks nothing")
-    func confirmationCopyNamesItsTarget() {
+    @Test("Repair asks first, naming the location and saying damaged backups are replaced for good")
+    func repairConfirmationSaysWhatItReplaces() {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        model.configuration.repositories = [repository]
+
+        #expect(model.confirmationCopy(for: .repair(repository.id)) == ConfirmationCopy(
+            title: "Repair the backups in “NAS”?",
+            message: "Damaged backups are replaced with repaired copies."
+                + " Files that can’t be read are left out of them. This can’t be undone."
+        ))
+    }
+
+    @Test("removing a plan or a location asks by its name; a plan with no folder yet is Untitled Plan")
+    func removalConfirmationsNameTheirTarget() {
         let model = makeModel()
         let repository = makeRepository("NAS")
         let plan = makePlan("Docs", on: repository)
@@ -556,30 +569,93 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
-        #expect(model.confirmationCopy(for: .repair(repository.id)) == ConfirmationCopy(
-            title: "Repair the backups in “NAS”?",
-            message: "Damaged backups are replaced with repaired copies."
-                + " Files that can’t be read are left out of them. This can’t be undone."
-        ))
 
-        let stopping = "will be stopped"
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
-        model.activity[plan.id] = PlanActivity(of: plan)
-        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
-        #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
-            == model.removalConsequences(for: repository.id))
-        model.activity[plan.id] = nil
-
-        // A plan is called by its folder; one with no path yet has nothing
-        // to be called.
         var pathless = plan
         pathless.path = ""
         model.configuration.plans = [pathless]
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Untitled Plan”?")
+    }
+
+    @Test("removing a plan says its running backup will be stopped, and only while one runs")
+    func removingARunningPlanSaysItsBackupStops() {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        let plan = makePlan("Docs", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+
+        let stopping = "The running backup will be stopped."
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
+        model.activity[plan.id] = PlanActivity(of: plan)
+        #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == true)
+    }
+
+    @Test("removing a location says what goes with it: its plans, and the verification running in it")
+    func removingALocationSaysWhatStops() {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        let plan = makePlan("Docs", on: repository)
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [plan]
+
+        #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.message
+            == "Its plan “Docs” is removed too. The backups in it are kept.")
+        model.maintenance[repository.id] = MaintenanceActivity(task: .check)
+        #expect(
+            model.confirmationCopy(for: .deleteRepository(repository.id))?.message
+                == "Its plan “Docs” is removed too. The backups in it are kept."
+                + " A verification is running and will be stopped.",
+            "the removal dialog does not say the running verification stops"
+        )
+    }
+
+    @Test("a confirmation whose plan or location is gone asks nothing, whatever else is set up")
+    func goneTargetAsksNothing() {
+        let model = makeModel()
+        let repository = makeRepository("NAS")
+        model.configuration.repositories = [repository]
+        model.configuration.plans = [makePlan("Docs", on: repository)]
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)
         #expect(model.confirmationCopy(for: .deleteRepository(UUID())) == nil)
         #expect(model.confirmationCopy(for: .repair(UUID())) == nil)
     }
 
+    @Test("Restore is off while the location's disk is not connected, with the sentence that says to connect it")
+    func restoreIsOffWhileTheDiskIsAway() {
+        let model = makeModel()
+        let repository = makeRepository("Disk")
+        model.configuration.repositories = [repository]
+
+        model.snapshotListingOutcomes[repository.id] = .loaded
+        #expect(model.canRestore(from: repository.id), "Restore is off for a connected location")
+        #expect(model.restoreAwayReason(repositoryID: repository.id) == nil)
+
+        model.snapshotListingOutcomes[repository.id] = .notConnected(volume: "Photos Disk")
+        #expect(!model.canRestore(from: repository.id), "Restore is on while the disk is away")
+        #expect(model.restoreAwayReason(repositoryID: repository.id) == "Connect “Photos Disk” to see its backups.")
+    }
+
+    @Test("Restore is off while another restore runs")
+    func restoreIsOffWhileAnotherRuns() {
+        let model = makeModel()
+        let repository = makeRepository("Disk")
+        model.configuration.repositories = [repository]
+        model.snapshotListingOutcomes[repository.id] = .loaded
+
+        model.restoreActivity = OperationProgress()
+        #expect(!model.canRestore(from: repository.id))
+    }
+
+    @Test("a backup's rows offer no drag while the location's disk is not connected")
+    func dragRestoreIsOffWhileTheDiskIsAway() {
+        let model = makeModel()
+        let repository = makeRepository("Disk")
+        model.configuration.repositories = [repository]
+
+        model.snapshotListingOutcomes[repository.id] = .loaded
+        #expect(model.canDragRestore(repositoryID: repository.id), "no drag from a connected location")
+        model.snapshotListingOutcomes[repository.id] = .notConnected(volume: "Photos Disk")
+        #expect(!model.canDragRestore(repositoryID: repository.id), "a drag is offered while the disk is away")
+    }
 }

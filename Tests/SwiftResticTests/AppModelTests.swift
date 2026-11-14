@@ -2319,6 +2319,71 @@ struct UnreadableConfigurationTests {
     }
 }
 
+/// What launch says when the configuration did not read whole. The banner
+/// says what to check; the file and field names go to the unified log.
+@Suite("configuration banners at launch")
+@MainActor
+struct ConfigurationBannerTests {
+    private struct Said: Equatable {
+        var title: String
+        var message: String
+        var isError: Bool
+    }
+
+    private let aboutSettings = ["Your settings were restored from a saved copy", "Some settings couldn’t be read"]
+
+    /// One repository with no password stored, so the launch refresh never
+    /// runs restic.
+    private func saidAboutSettings(afterLaunchWith load: IndexOrphanSweepLaunchTests.Load?) async throws -> [Said] {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftResticLaunchBanner-\(UUID().uuidString)")
+        let config = root.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var repository = Repository()
+        repository.kind = .local
+        repository.localPath = root.appendingPathComponent("repo").path
+        var configuration = AppConfiguration()
+        configuration.repositories = [repository]
+        try writeConfiguration(
+            configuration, load: load,
+            replacing: repository.id.uuidString, with: "not-a-uuid",
+            in: config
+        )
+
+        let model = AppModel(store: ConfigStore(directory: config), secrets: .inMemory())
+        await model.bootstrap()
+        let said = model.banners
+            .filter { aboutSettings.contains($0.title) }
+            .map { Said(title: $0.title, message: $0.message, isError: $0.isError) }
+        await model.shutdown()
+        return said
+    }
+
+    @Test("settings loaded from a saved copy say so, and what needs setting again")
+    func restoredSettingsSayWhatToCheck() async throws {
+        #expect(try await saidAboutSettings(afterLaunchWith: .recovered) == [Said(
+            title: "Your settings were restored from a saved copy",
+            message: "Check your plans and locations. Anything changed since that copy needs setting again.",
+            isError: true
+        )])
+    }
+
+    @Test("a setting that couldn't be read says to check the plans and locations")
+    func partlyReadSettingsSayWhatToCheck() async throws {
+        #expect(try await saidAboutSettings(afterLaunchWith: .substitutedID) == [Said(
+            title: "Some settings couldn’t be read",
+            message: "Check your plans and locations.",
+            isError: true
+        )])
+    }
+
+    @Test("settings that read whole say nothing")
+    func wholeSettingsSayNothing() async throws {
+        #expect(try await saidAboutSettings(afterLaunchWith: nil) == [])
+    }
+}
+
 /// The drawer's snapshot link: whether a run's snapshot can still be opened,
 /// and why not when it cannot.
 @Suite("run snapshot link")

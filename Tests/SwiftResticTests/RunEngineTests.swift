@@ -913,33 +913,59 @@ struct MaintenanceRunEngineTests {
         #expect(sink.deliveredRecords.first?.detailText == "2 problems found after the repair.")
     }
 
-    @Test("a repair step that fails is the run's failure, in restic's words, and nothing after it runs")
-    func repairStepFailureFailsTheRun() async throws {
-        let refusal = ResticError.commandFailed(exitCode: 1, message: "Fatal: unable to rebuild the index")
+    private var refusedRepair: ResticError {
+        .commandFailed(exitCode: 1, message: "Fatal: unable to rebuild the index")
+    }
 
-        let indexSink = RecordingSink()
-        let indexClient = MockResticClient().onRepairIndex(.failure(refusal))
+    @Test("a repair whose index rebuild fails is one failed run in restic's words, and neither the backups nor the verification are touched")
+    func failedIndexRebuildStopsTheRepair() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onRepairIndex(.failure(refusedRepair))
         await MaintenanceRunEngine.perform(
-            repository: Repository(), task: .check, repairsFirst: true, sink: indexSink.serving(indexClient)
+            repository: Repository(), task: .check, repairsFirst: true, sink: sink.serving(client)
         )
-        #expect(indexClient.callLog == ["repairIndex"])
-        #expect(indexSink.deliveredRecords.count == 1)
-        #expect(indexSink.deliveredRecords.first?.outcome == .failed)
-        #expect(indexSink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+        #expect(client.callLog == ["repairIndex"], "a repair whose index rebuild failed asked restic for \(client.callLog)")
+        #expect(sink.deliveredRecords.map(\.outcome) == [.failed])
+        #expect(sink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+    }
 
-        let snapshotsSink = RecordingSink()
-        let snapshotsClient = MockResticClient().onRepairSnapshots(.failure(refusal))
+    @Test("a repair whose backups can't be repaired is a failed run in restic's words, and nothing is verified")
+    func failedBackupRepairStopsBeforeTheVerification() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onRepairSnapshots(.failure(refusedRepair))
         await MaintenanceRunEngine.perform(
-            repository: Repository(), task: .check, repairsFirst: true, sink: snapshotsSink.serving(snapshotsClient)
+            repository: Repository(), task: .check, repairsFirst: true, sink: sink.serving(client)
         )
-        #expect(snapshotsClient.callLog == ["repairIndex", "repairSnapshots"])
-        #expect(snapshotsSink.deliveredRecords.first?.outcome == .failed)
-        #expect(snapshotsSink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+        #expect(client.callLog == ["repairIndex", "repairSnapshots"], "a repair whose backups could not be repaired asked restic for \(client.callLog)")
+        #expect(sink.deliveredRecords.map(\.outcome) == [.failed])
+        #expect(sink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+    }
 
-        // A verification alone repairs nothing.
-        let plain = MockResticClient().onCheck(.success(ResticSummary()))
-        await MaintenanceRunEngine.perform(repository: Repository(), task: .check, sink: RecordingSink().serving(plain))
-        #expect(plain.callLog == ["check", "cleanupCache"])
+    @Test("a verification alone repairs nothing")
+    func verificationAloneRepairsNothing() async throws {
+        let client = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(repository: Repository(), task: .check, sink: RecordingSink().serving(client))
+        #expect(client.callLog == ["check", "cleanupCache"], "Verify Backups changed the location: restic was asked for \(client.callLog)")
+    }
+
+    /// Nothing runs a repair again unasked, so its failure promises no
+    /// retry; a verification's does (`liveLockFailsAfterOneRetry`).
+    @Test("a repair stopped by another Mac's lock says the location is in use, and promises no retry")
+    func lockedRepairPromisesNoRetry() async throws {
+        let sink = RecordingSink()
+        let locked = ResticError.commandFailed(
+            exitCode: 11, message: "unable to create lock in backend: repository is already locked by PID 4242 on other-mac"
+        )
+        let client = MockResticClient().onRepairIndex(.failure(locked))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(), task: .check, repairsFirst: true, sink: sink.serving(client)
+        )
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.outcome == .failed)
+        #expect(
+            record.failureMessage == "The backup location is in use by another Mac or app.",
+            "a locked repair must not say SwiftRestic tries again"
+        )
     }
 
     @Test("a missing password records nothing and stamps nothing")

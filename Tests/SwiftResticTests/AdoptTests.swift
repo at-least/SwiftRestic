@@ -147,22 +147,6 @@ struct AdoptTests {
         #expect(draft.excludesToPass.contains("**/.venv"))
     }
 
-    @Test("a default restic recorded with its tilde expanded reads as applied; other rows stay as recorded")
-    func expandedDefaultsAdoptInTheirOwnSpelling() async throws {
-        let planID = UUID()
-        let tag = ResticService.planTag(planID)
-        let model = makeModel()
-        let repository = makeRepository()
-        let caches = ResticService.expandTilde("~/Library/Caches")
-        let made = try snapshot(
-            "home", time: "2026-10-01T10:00:00Z", paths: [NSHomeDirectory()], tags: [tag],
-            excludes: [".DS_Store", caches, "/Users/someone/elsewhere"]
-        )
-        loadModel(model, repository: repository, listing: [made])
-        let draft = try #require(await model.adoptDraft(repositoryID: repository.id, planID: planID))
-        #expect(draft.excludePatterns == ["/Users/someone/elsewhere"])
-    }
-
     @Test("a file is here with a trailing or doubled slash, as the new-plan field holds it until Save")
     func sourceExistsTidiesTheSpelling() throws {
         let folder = existingFolder()

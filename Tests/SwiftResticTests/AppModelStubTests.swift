@@ -1437,6 +1437,27 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
+    @Test("Repair rebuilds the index, replaces the damaged backups, then verifies, and Activity gets the one verification")
+    func repairRepairsThenVerifies() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+
+        model.runRepair(repositoryID: id)
+        await model.waitForMaintenance(repositoryID: id)
+
+        let steps = [" repair index", " repair snapshots", " check "]
+        let ran = try invocations(harness).compactMap { line in steps.first { line.contains($0) } }
+        #expect(ran == steps, "Repair asked restic for \(ran)")
+        let verifications = model.configuration.runs.filter { $0.kind == .check }
+        #expect(verifications.map(\.outcome) == [.succeeded])
+        #expect(verifications.first?.detailText == "No problems found.")
+        #expect(model.repository(id: id)?.maintenance.lastCheckAt != nil, "the repair's verification did not count as the location's last one")
+
+        await model.shutdown()
+    }
+
     @Test("a check against a repository with no password records nothing at all")
     func missingPasswordMaintenanceRecordsNothing() async throws {
         let harness = try await makeHarness(mode: "default", password: nil)
@@ -2277,6 +2298,38 @@ struct AppModelStubTests {
         #expect(record.failureMessage == "The password doesn’t open “Stub Repo”.")
 
         await harness.model.shutdown()
+    }
+
+    /// The listing can still say connected for a disk just gone: restic
+    /// would then make an empty folder where the disk mounts and fail in
+    /// its own words.
+    @Test("a restore from a disk that has just gone fails saying it is not connected, and restic is not run")
+    func restoreFromADiskJustGoneSaysNotConnected() async throws {
+        let harness = try await makeHarness(mode: "default")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let model = harness.model
+        let id = harness.repository.id
+        let index = try #require(model.configuration.repositories.firstIndex { $0.id == id })
+        let volume = "SwiftResticAbsentDrive-\(UUID().uuidString)"
+        model.configuration.repositories[index].localPath = "/Volumes/\(volume)/restic"
+        try #require(model.canRestore(from: id), "the listing already says the disk is away")
+
+        model.restore(
+            repositoryID: id,
+            snapshotID: "latest",
+            node: SnapshotNode(name: "a.txt", type: .file, path: "/src/a.txt"),
+            to: harness.root.appendingPathComponent("restored"),
+            overwrite: .replaceExisting
+        )
+        await waitUntilRestoreFinishes(in: model)
+
+        let record = try #require(model.configuration.runs.first)
+        #expect(record.kind == .restore)
+        #expect(record.outcome == .failed)
+        #expect(record.failureMessage == "“\(volume)” is not connected.")
+        #expect(try !invocations(harness).contains { $0.contains(" restore ") }, "restic was run against a disk that is away")
+
+        await model.shutdown()
     }
 
     /// The stub logs one `start args=[…]` line per invocation; count the
