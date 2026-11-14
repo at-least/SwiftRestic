@@ -94,12 +94,15 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
             let user = sftpUser.isEmpty ? "" : "\(Self.percentEncoded(sftpUser, .urlUserAllowed))@"
             return "sftp://\(user)\(sftpHostName):\(port)/\(Self.percentEncoded(sftpPath, .urlPathAllowed))"
         case .s3:
-            let endpoint = s3Endpoint.isEmpty ? Self.awsEndpoint : s3Endpoint
-            return "s3:\(endpoint)/\(Self.trimSlashes(s3Bucket))"
+            return "s3:\(resolvedS3Endpoint)/\(Self.trimSlashes(s3Bucket))"
         }
     }
 
-    static let awsEndpoint = "s3.amazonaws.com"
+    private static let awsEndpoint = "s3.amazonaws.com"
+
+    var resolvedS3Endpoint: String {
+        s3Endpoint.isEmpty ? Self.awsEndpoint : s3Endpoint
+    }
 
     /// The editor's one Bucket field: `my-bucket` on AWS, or `host/bucket`
     /// elsewhere (`s3.us-west-004.backblazeb2.com/my-bucket`,
@@ -222,8 +225,7 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         case .sftp:
             return "\(sftpUserHost):\(sftpPath)"
         case .s3:
-            let endpoint = s3Endpoint.isEmpty ? Self.awsEndpoint : s3Endpoint
-            return "\(Self.trimSlashes(s3Bucket)) on \(endpoint)"
+            return "\(Self.trimSlashes(s3Bucket)) on \(resolvedS3Endpoint)"
         }
     }
 

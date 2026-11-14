@@ -124,7 +124,7 @@ struct FileVersionsView: View {
                 // list has. Each version falls under the month of the first
                 // backup that held it, near its modified date; its newest
                 // backup could be months later for a file left alone.
-                if let months = DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time) {
+                if let months = MonthHeadings.landmarks(in: versions, time: \.snapshots.last!.time) {
                     ForEach(months, id: \.label) { month in
                         Section(month.label) {
                             ForEach(month.items) { versionRow($0) }

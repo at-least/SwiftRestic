@@ -122,7 +122,7 @@ struct BackupsBrowserView: View {
             let openID = open?.id
             // Past one month, a section per month, so a deep history has
             // landmarks.
-            let months = DiffCandidateGrouping.landmarks(in: backups, time: \.time)
+            let months = MonthHeadings.landmarks(in: backups, time: \.time)
             let moments = BackupRowMoments.labels(for: backups.map(\.time), sectioned: months != nil)
             ScrollViewReader { proxy in
                 List(selection: Binding(

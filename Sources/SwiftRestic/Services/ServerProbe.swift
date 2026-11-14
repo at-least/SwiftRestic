@@ -53,7 +53,7 @@ struct ServerProbe: Sendable {
         case .local, .sftp:
             return nil
         case .s3:
-            let endpoint = repository.s3Endpoint.isEmpty ? "s3.amazonaws.com" : repository.s3Endpoint
+            let endpoint = repository.resolvedS3Endpoint
             return urlTarget(endpoint.contains("://") ? endpoint : "https://\(endpoint)")
         }
     }

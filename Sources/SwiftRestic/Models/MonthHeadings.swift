@@ -3,7 +3,7 @@ import Foundation
 /// Month headings for the backups and file-versions lists. Here with the
 /// model because the tests compile no views. Built for thousands of
 /// snapshots: one pass, and the date formatter runs once per month.
-enum DiffCandidateGrouping {
+enum MonthHeadings {
     struct Month<Item> {
         let label: String
         let items: [Item]

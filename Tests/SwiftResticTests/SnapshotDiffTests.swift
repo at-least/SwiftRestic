@@ -40,8 +40,8 @@ struct SnapshotDiffTests {
     }
 }
 
-@Suite("Diff candidate grouping")
-struct DiffCandidateGroupingTests {
+@Suite("Month headings")
+struct MonthHeadingsTests {
     private func snapshot(_ id: String, time: String) throws -> Snapshot {
         try snapshotFixture(id: id, time: time, paths: ["/x"], includeShortID: false, hostname: nil, tags: [])
     }
@@ -54,7 +54,7 @@ struct DiffCandidateGroupingTests {
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let buckets = DiffCandidateGrouping.months(in: [feb2, feb1, jan], time: \.time, calendar: calendar)
+        let buckets = MonthHeadings.months(in: [feb2, feb1, jan], time: \.time, calendar: calendar)
 
         #expect(buckets.count == 2)
         // Input is newest first, so first sight of a month names the group.
@@ -74,12 +74,12 @@ struct DiffCandidateGroupingTests {
             IndexVersion(id: "m1", time: day("2026-03-01T00:30:00Z")),
             IndexVersion(id: "f9", time: day("2026-02-28T23:30:00Z")),
         ]
-        let months = DiffCandidateGrouping.months(in: versions, time: \.time, calendar: calendar)
+        let months = MonthHeadings.months(in: versions, time: \.time, calendar: calendar)
         #expect(months.map { $0.items.map(\.id) } == [["m2", "m1"], ["f9"]])
         #expect(months.map(\.label) == ["March 2026", "February 2026"])
         // One month needs no landmark.
-        #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.time, calendar: calendar) == nil)
-        #expect(DiffCandidateGrouping.landmarks(in: versions, time: \.time, calendar: calendar)?.count == 2)
+        #expect(MonthHeadings.landmarks(in: Array(versions.prefix(2)), time: \.time, calendar: calendar) == nil)
+        #expect(MonthHeadings.landmarks(in: versions, time: \.time, calendar: calendar)?.count == 2)
     }
 
     @Test("a file's versions group by the month of the first backup that held each, as the file pane's list reads them")
@@ -100,14 +100,14 @@ struct DiffCandidateGroupingTests {
                 IndexVersion(id: "a1", time: day("2026-01-15T09:00:00Z")),
             ], since: nil),
         ]
-        let months = try #require(DiffCandidateGrouping.landmarks(in: versions, time: \.snapshots.last!.time, calendar: calendar))
+        let months = try #require(MonthHeadings.landmarks(in: versions, time: \.snapshots.last!.time, calendar: calendar))
         #expect(months.map(\.label) == ["March 2026", "January 2026"])
         #expect(months.map { $0.items.map(\.id) } == [["c", "b2"], ["a3"]])
-        #expect(DiffCandidateGrouping.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
+        #expect(MonthHeadings.landmarks(in: Array(versions.prefix(2)), time: \.snapshots.last!.time, calendar: calendar) == nil)
     }
 
     @Test("empty input groups to nothing")
     func emptyInput() throws {
-        #expect(DiffCandidateGrouping.months(in: [Snapshot](), time: \.time).isEmpty)
+        #expect(MonthHeadings.months(in: [Snapshot](), time: \.time).isEmpty)
     }
 }
