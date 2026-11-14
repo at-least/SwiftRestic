@@ -26,13 +26,12 @@ final class AppRouter {
         // the consume re-checks planCommands(for: router.selection) the same
         // way.
         case stopPlan(UUID)
-        case editPlan(UUID)
         case editRepository(UUID)
         case enterPassword(UUID)
         /// A refused network share's password alone
-        /// (`SharePasswordPromptSheet`); with no share saved for it — one
-        /// removed in Settings since the run — the editor of what it holds,
-        /// where the share is set up again.
+        /// (`SharePasswordPromptSheet`); with no share saved for it, where
+        /// the share is set up again: the location's editor, the plan's
+        /// page.
         case enterSharePassword(RunFix.ShareOwner)
         case confirm(CommandConfirmation)
         /// Verify Backups, from every surface that offers it: at once, with
@@ -58,11 +57,6 @@ final class AppRouter {
     /// page's "Last backup" value: the timestamp is the handle to its own
     /// record. Transient, never persisted; Activity consumes and clears it.
     var activityFocusRunID: RunRecord.ID?
-
-    /// Transient, never persisted: whether Activity shows every run or only
-    /// problems — Activity's own picker. A landing that may arrive on a clean
-    /// run (the plan page's Last backup) turns it off.
-    var activityShowsProblemsOnly = false
 
     /// An item a backup's tree should open its folders to and select when
     /// it next loads this exact record — Search All Backups' row, an
@@ -197,8 +191,8 @@ final class AppRouter {
     /// landing on "Plan not found" is a dead end whose only exit is the
     /// sidebar, so retarget to the landing pane instead. A selected
     /// Other-backups group falls back to its repository's page — the place
-    /// it lived — for every way it can disappear: adopted, its plan moved
-    /// by the editor, refreshed away, its repository removed.
+    /// it lived — for every way it can disappear: adopted, refreshed
+    /// away, its repository removed.
     static func revalidated(
         selection: SidebarItem?,
         repositories: [Repository],
@@ -219,7 +213,7 @@ final class AppRouter {
                 : landing
         case let .lineage(repositoryID, key)
             where shelves(repositoryID).lineageGroup(key) == nil:
-            // Gone also when forgotten or given a plan tag by the console.
+            // Gone also when forgotten or given a plan tag by restic elsewhere.
             return repositories.contains { $0.id == repositoryID }
                 ? .repository(repositoryID)
                 : landing
@@ -255,6 +249,9 @@ enum PageTab: Hashable, CaseIterable {
 enum CommandConfirmation: Hashable, Identifiable {
     case deletePlan(UUID)
     case deleteRepository(UUID)
+    /// `repair snapshots --forget` removes the damaged backups for good
+    /// (user 2026-11-15).
+    case repair(UUID)
 
     var id: Self { self }
 }

@@ -374,34 +374,6 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a console command that can change the backups re-reads the listing; one that only reads does not")
-    func consoleRefreshesAfterAMutatingCommand() async throws {
-        let harness = try await makeHarness()
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-        let model = harness.model
-        let id = harness.repository.id
-
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-        try "uno".write(to: harness.sourceDirectory.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        model.runBackup(planID: harness.plan.id)
-        await model.waitForRun(planID: harness.plan.id)
-        await model.tasks.drain()
-        #expect(model.snapshots(for: id).count == 2)
-
-        // Reading commands leave the listing alone.
-        _ = await model.runConsoleCommand(repositoryID: id, arguments: ["snapshots"])
-        await model.tasks.drain()
-        #expect(model.snapshots(for: id).count == 2)
-
-        // restic forgets one; the app's lists follow without a manual refresh.
-        _ = await model.runConsoleCommand(repositoryID: id, arguments: ["forget", "--keep-last", "1"])
-        await model.tasks.drain()
-        #expect(model.snapshots(for: id).count == 1)
-
-        await model.shutdown()
-    }
-
     @Test("the Restore pane's drag provider promises a file's or a folder's content, restored on demand")
     func dragProviderPromisesContent() async throws {
         let harness = try await makeHarness()
@@ -727,7 +699,7 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a backup to a repository whose drive is away is skipped, not failed; one whose folder is gone from a drive that is here fails with the editor as its fix")
+    @Test("a backup to a repository whose drive is away is skipped, not failed; one whose folder is gone from a drive that is here fails with Locate as its fix")
     func repositoryDriveAwayIsSkipped() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1351,8 +1323,8 @@ struct UpsertStampTests {
         model.configuration.plans[0].lastRunAt = ranAt
         model.configuration.plans[0].lastSuccessAt = ranAt
 
-        // The plan page changes How often while the editor is open; the
-        // editor's draft, taken before that, is saved with its own edit.
+        // The plan page changes How often; a draft taken before that is
+        // saved with its own edit.
         model.configuration.plans[0].schedule.frequency = .weekly
         var staleDraft = plan
         staleDraft.excludePatterns = ["/tmp/cache"]
@@ -1360,7 +1332,7 @@ struct UpsertStampTests {
 
         #expect(model.configuration.plans[0].lastRunAt == ranAt)
         #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
-        #expect(model.configuration.plans[0].schedule.frequency == .weekly, "the editor's save reverted How often from the plan page")
+        #expect(model.configuration.plans[0].schedule.frequency == .weekly, "the draft's save reverted How often from the plan page")
         #expect(model.configuration.plans[0].excludePatterns == ["/tmp/cache"])
     }
 
@@ -1477,7 +1449,7 @@ struct PausingTests {
 }
 
 /// The scheduler lives in the app's process, so a schedule dies with it. What
-/// the plan editor and the quit alert say about that, from the model's side.
+/// the quit alert says about that, from the model's side.
 @Suite("Start at login surfaces")
 @MainActor
 struct StartAtLoginSurfaceTests {

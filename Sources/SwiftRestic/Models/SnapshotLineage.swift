@@ -339,10 +339,6 @@ extension Snapshot {
         tags.filter { $0.hasPrefix(ResticService.planTagPrefix) }
     }
 
-    var userTags: [String] {
-        tags.filter { !$0.hasPrefix(ResticService.planTagPrefix) }
-    }
-
     /// `OtherBackupsGroup.grouping`'s rule, without regrouping.
     var otherGroupID: OtherBackupsGroup.ID {
         planID.map(OtherBackupsGroup.ID.plan) ?? .lineage(lineageKey)

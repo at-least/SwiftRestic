@@ -18,9 +18,8 @@ extension AppModel {
                   let context = try? await context(for: repository)
             else { return }
             // The coordinator's `shutdown()` is what stops backfills at quit.
-            // This covers the stretch before it, while the quit waits for
-            // the console: a backfill started there would spawn restic only
-            // to be cancelled.
+            // This covers the stretch before it: a backfill started there
+            // would spawn restic only to be cancelled.
             guard !isShuttingDown else { return }
             await indexCoordinator.startBackfill(repositoryID: repositoryID, service: service, context: context)
         })

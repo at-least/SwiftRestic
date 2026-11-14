@@ -81,6 +81,7 @@ enum RunLog {
         if let failure = record.failureMessage, failure != record.outcomeName {
             lines.append(failure)
         }
+        if let detail = record.resticDetail { lines.append("restic: \(detail)") }
         if record.outcome == .skipped, let reason = record.detailText {
             lines.append(reason)
         }

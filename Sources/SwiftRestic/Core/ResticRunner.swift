@@ -3,15 +3,14 @@ import Foundation
 struct ResticInvocation: Sendable {
     var arguments: [String]
     var environment: [String: String] = [:]
-    /// `backup` adds 3: "finished, but some files could not be read". `nil`
-    /// accepts any code, for callers that read the exit status themselves.
-    var allowedExitCodes: Set<Int32>? = [0]
+    /// `backup` adds 3: "finished, but some files could not be read".
+    var allowedExitCodes: Set<Int32> = [0]
     var timeout: TimeInterval?
     /// A stall cap: every received chunk resets the clock. For commands that
     /// stream NDJSON while they work (`backup`, `restore`, the index walks)
     /// silence means a hung child, while a total cap would kill slow work.
-    /// Commands silent for long stretches (`prune`, `forget`, the console's
-    /// `runRaw`) must not set it.
+    /// Commands silent for long stretches (`prune`, `forget`) must not set
+    /// it.
     var idleTimeout: TimeInterval?
     /// For commands that answer with one big JSON array (`snapshots`,
     /// `stats`, `forget`) rather than a line-per-event stream.
@@ -24,7 +23,7 @@ struct ResticInvocation: Sendable {
     /// Leaves the environment out, so the password stays out. Shell-style
     /// quoting keeps a path with spaces one word.
     fileprivate var displayCommand: String {
-        CommandLineTokenizer.render(["restic"] + arguments)
+        ShellCommandLine.render(["restic"] + arguments)
     }
 }
 
@@ -269,7 +268,7 @@ actor ResticRunner {
 
         transcript?.exited(exitCode)
 
-        if let allowed = invocation.allowedExitCodes, !allowed.contains(exitCode) {
+        if !invocation.allowedExitCodes.contains(exitCode) {
             throw ResticError.commandFailed(
                 exitCode: exitCode,
                 message: result.failureMessage

@@ -46,7 +46,6 @@ struct MaintenancePolicy: Codable, Sendable, Hashable {
 }
 
 enum CheckDataSubset: Equatable, Sendable {
-    case percent(Int)
     /// restic splits the packs into `total` groups by their IDs and reads
     /// group `n`.
     case slice(Int, of: Int)
@@ -54,7 +53,6 @@ enum CheckDataSubset: Equatable, Sendable {
     /// `--read-data-subset`
     var argument: String {
         switch self {
-        case let .percent(percent): "\(percent)%"
         case let .slice(n, total): "\(n)/\(total)"
         }
     }

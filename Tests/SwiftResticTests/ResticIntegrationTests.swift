@@ -190,18 +190,16 @@ struct ResticIntegrationTests {
         #expect(FileManager.default.fileExists(atPath: rebuilt.path))
     }
 
-    @Test("a backup's snapshot carries the plan tag and the plan's own tags")
-    func planTagsReachTheSnapshot() async throws {
+    @Test("a backup's snapshot carries the plan tag and no other")
+    func planTagReachesTheSnapshot() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         _ = try await fixture.service.initializeRepository(fixture.context)
-        var plan = fixture.plan
-        plan.tags = ["work"]
 
-        _ = try await fixture.service.backup(fixture.context, plan: plan)
+        _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
 
         let snapshot = try #require(try await fixture.service.snapshots(fixture.context).first)
-        #expect(snapshot.tags.sorted() == [ResticService.planTag(plan.id), "work"].sorted(), "the snapshot's tags: \(snapshot.tags)")
+        #expect(snapshot.tags == [ResticService.planTag(fixture.plan.id)], "the snapshot's tags: \(snapshot.tags)")
     }
 
     @Test("retention deletes only the plan's own extra snapshots")
@@ -322,7 +320,6 @@ struct ResticIntegrationTests {
 
         var planB = fixture.plan
         planB.id = UUID()
-        planB.tags = ["other"]
 
         var newest: [BackupPlan: String] = [:]
         for plan in [fixture.plan, planB] {
@@ -1283,7 +1280,7 @@ struct ResticIntegrationTests {
         _ = try await fixture.service.initializeRepository(fixture.context)
         _ = try await fixture.service.backup(fixture.context, plan: fixture.plan)
 
-        let summary = try await fixture.service.check(fixture.context, readDataSubset: .percent(100))
+        let summary = try await fixture.service.check(fixture.context, readDataSubset: .slice(1, of: 1))
         #expect(summary?.numErrors == 0)
 
         let stats = try await fixture.service.stats(fixture.context, timeout: nil)
@@ -1329,7 +1326,7 @@ struct ResticMaintenanceTests {
         let after = try await service.stats(context, timeout: nil)
         #expect(after.totalSize < before.totalSize)
 
-        let check = try await service.check(context, readDataSubset: .percent(100))
+        let check = try await service.check(context, readDataSubset: .slice(1, of: 1))
         #expect(check?.numErrors == 0)
     }
 }
@@ -1378,7 +1375,7 @@ struct ResticCheckDamageTests {
         contents[contents.count / 2] ^= 0xFF
         try contents.write(to: pack)
 
-        let summary = try await service.check(context, readDataSubset: .percent(100))
+        let summary = try await service.check(context, readDataSubset: .slice(1, of: 1))
         #expect(
             (summary?.numErrors ?? 0) > 0,
             "check exited 1 on damage but named no errors: \(String(describing: summary))"

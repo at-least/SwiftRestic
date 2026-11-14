@@ -48,8 +48,8 @@ struct FullDiskAccessTests {
 
     @Test("the settings link is the Full Disk Access list")
     func settingsLink() {
-        // A constant literal, pinned the way AppLinks are: a typo reads red
-        // here instead of opening the wrong pane.
+        // A constant literal: a typo reads red here instead of opening the
+        // wrong pane.
         #expect(FullDiskAccess.settingsURL.absoluteString
             == "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
     }

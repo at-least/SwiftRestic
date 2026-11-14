@@ -277,9 +277,9 @@ struct SnapshotLineageTests {
         hourly.path = "/Data/Docs"
         let h1 = try snapshot("h1", time: "2026-09-25T03:00:00Z", paths: ["/Data/Docs"],
                               tags: [ResticService.planTag(hourly.id)])
-        // The console backed up the same folders: one lineage, which the
+        // restic run by hand backed up the same folders: one lineage, which the
         // lineage rule names after its folders, "Docs".
-        let console = try snapshot("c1", time: "2026-09-26T05:00:00Z", paths: ["/Data/Docs"])
+        let byHand = try snapshot("c1", time: "2026-09-26T05:00:00Z", paths: ["/Data/Docs"])
         let model = AppModel(
             store: ConfigStore(directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("SwiftResticHeading-\(UUID().uuidString)")),
@@ -287,16 +287,16 @@ struct SnapshotLineageTests {
             localHostname: "mac"
         )
         model.configuration.plans = [hourly]
-        model.snapshots[repositoryID] = [console, h1]
+        model.snapshots[repositoryID] = [byHand, h1]
 
         // The sidebar shows h1 under its plan, so the header names the plan
         // — a plan's label, without the count an Other backups group wears.
         let planLabel = model.recordLabel(of: h1, repositoryID: repositoryID)
         #expect(SnapshotLineage.displayName(of: h1, label: planLabel) == "Docs")
         #expect(planLabel?.caption == nil)
-        // The console's backup sits under Other backups, named for its folders.
-        let groupLabel = model.recordLabel(of: console, repositoryID: repositoryID)
-        #expect(SnapshotLineage.displayName(of: console, label: groupLabel) == "Docs")
+        // That backup sits under Other backups, named for its folders.
+        let groupLabel = model.recordLabel(of: byHand, repositoryID: repositoryID)
+        #expect(SnapshotLineage.displayName(of: byHand, label: groupLabel) == "Docs")
         #expect(groupLabel?.caption != nil)
     }
 

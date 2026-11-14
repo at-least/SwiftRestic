@@ -58,7 +58,8 @@ struct BackupShelves: Equatable {
     /// folders changed: `SnapshotLineage.changeBaseline` finds a baseline by
     /// lineage, not by the row below. A plan with none here has no entry.
     let byPlan: [UUID: [Snapshot]]
-    /// Backups with no plan tag come from another Mac or the console.
+    /// Backups with no plan tag come from another Mac or restic run by
+    /// hand.
     let others: [OtherBackupsGroup]
 
     var hasOtherBackups: Bool { !others.isEmpty }
@@ -193,8 +194,7 @@ extension BackupShelves {
         byPlan[planID]?.count ?? orphanPlanGroup(planID)?.snapshots.count ?? 0
     }
 
-    /// Nil when it is gone: forgotten, tagged by the console, or refreshed
-    /// away.
+    /// Nil when it is gone: forgotten, tagged by hand, or refreshed away.
     func lineageGroup(_ key: SnapshotLineage.Key) -> OtherBackupsGroup? {
         others.first { $0.id == .lineage(key) }
     }

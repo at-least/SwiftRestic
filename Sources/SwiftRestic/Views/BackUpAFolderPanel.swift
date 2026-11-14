@@ -5,10 +5,11 @@ import AppKit
 /// the last answer (`AppModel.backUpWithoutSheet`), and New Location… goes
 /// on to the first-run sheet.
 ///
-/// The pop-up only: a live requirement line or Full Disk Access notice
-/// would follow the panel's selection through a delegate, in a panel macOS
-/// draws in another process for a sandboxed app. A choice that still needs
-/// either opens the sheet, which shows both.
+/// The pop-up only: a live requirement line would follow the panel's
+/// selection through a delegate, in a panel macOS draws in another process
+/// for a sandboxed app. A choice that breaks a rule opens the sheet, which
+/// says why. A folder that needs Full Disk Access backs up all the same:
+/// its plan's page carries the notice, and the grant backs it up again.
 @MainActor
 enum BackUpAFolderPanel {
     struct Answer {

@@ -818,8 +818,8 @@ struct StubResticTests {
             #expect(cause == "connection refused")
         }
         #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
-            == "Timed out after 5m and was stopped — it kept retrying: connection refused. Check the location’s connection and try again.")
-        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "Timed out after 5m and was stopped.")
+            == "It took longer than 5m and was stopped — it kept retrying: connection refused. Check the location’s connection and try again.")
+        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "It took longer than 5m and was stopped. Check the location’s connection and try again.")
     }
 
     @Test("a child that ignores SIGTERM is killed after the grace and still reported")
@@ -886,30 +886,6 @@ struct StubResticTests {
             #expect(code == 17)
             #expect(message.contains("unable to open config file"))
         }
-    }
-
-    @Test("the console's answer joins both streams and names the exit code")
-    func runRawComposesBothStreamsAndTheExitCode() async throws {
-        // An unknown code's bare bracket; stderr under whatever came on
-        // stdout — here nothing, so the fatal line leads.
-        let failed = try makeFixture(mode: "plainfail")
-        defer { cleanUp(failed.root) }
-        let answer = try await failed.service.runRaw(failed.context, arguments: ["list"])
-        #expect(answer.hasPrefix("Fatal: unable to open config file"))
-        #expect(answer.hasSuffix("\n\n[exit 17]"))
-
-        // A known code's description rides inside the bracket.
-        let warned = try makeFixture(mode: "warn")
-        defer { cleanUp(warned.root) }
-        let warnedAnswer = try await warned.service.runRaw(warned.context, arguments: ["backup"])
-        #expect(warnedAnswer.hasSuffix("\n\n[exit 3: Finished, but some data couldn’t be read]"))
-
-        // Both streams, stdout's summary first: the join the console shows.
-        let both = try makeFixture(mode: "tccblocked")
-        defer { cleanUp(both.root) }
-        let joined = try await both.service.runRaw(both.context, arguments: ["backup"])
-        #expect(joined.hasPrefix(#"{"message_type":"summary""#))
-        #expect(joined.contains("open /Users/stub/locked.txt: permission denied"))
     }
 
     @Test("a backup with undecodable messages is a warning, never a clean run")
@@ -1254,7 +1230,6 @@ struct StubResticTests {
         // up rather than throwing over it.
         let summary = try await fixture.service.check(fixture.context, readDataSubset: nil)
         #expect(summary?.numErrors == 2)
-        #expect(summary?.suggestPrune == true)
     }
 
     @Test("the index's diff with a line that did not decode fails, never a short stream the index would close runs from")

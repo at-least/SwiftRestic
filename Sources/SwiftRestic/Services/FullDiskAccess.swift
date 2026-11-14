@@ -43,6 +43,5 @@ enum FullDiskAccess {
     /// System Settings › Privacy & Security › Full Disk Access. The anchor
     /// is the pane's own key for the service (`Privacy_AllFiles` →
     /// `kTCCServiceSystemPolicyAllFiles` in its TCCServiceList.plist).
-    /// Pinned by a test, like `AppLinks`.
     static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
 }

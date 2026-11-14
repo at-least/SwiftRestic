@@ -10,7 +10,6 @@ struct PlanCommandState: Equatable {
     var backUpDisabledReason: String?
     var canStop = false
     var stopTitle = "Stop Backup"
-    var canEdit = false
     var canDelete = false
     var backupsPaused = false
     var canPauseBackups = false
@@ -65,7 +64,6 @@ extension AppModel {
             state.canStop = row.action == .stop
         }
         state.stopTitle = MenuBarStatus.stopTitle(for: activity[id]?.phase)
-        state.canEdit = true
         state.canDelete = true
         return state
     }
@@ -123,6 +121,13 @@ extension AppModel {
             return ConfirmationCopy(
                 title: "Remove “\(label(of: repository))” from SwiftRestic?",
                 message: removalConsequences(for: id)
+            )
+        case let .repair(id):
+            guard let repository = repository(id: id) else { return nil }
+            return ConfirmationCopy(
+                title: "Repair the backups in “\(label(of: repository))”?",
+                message: "Damaged backups are replaced with repaired copies."
+                    + " Files that can’t be read are left out of them. This can’t be undone."
             )
         }
     }

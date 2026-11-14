@@ -7,7 +7,7 @@ import Testing
 /// name a later gap while an earlier one exists is a regression.
 @Suite("Editor requirement chains")
 struct EditorRequirementTests {
-    @Test("the plan editor names the first unmet requirement in the order the sheet shows its fields")
+    @Test("a new plan names its first unmet requirement: the folder, then the location")
     func planRequirementOrdering() {
         var plan = BackupPlan()
         #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder or file to back up.")
@@ -54,17 +54,6 @@ struct EditorRequirementTests {
         twin.id = UUID()
         #expect(EditorRequirements.plan(saved, isNew: false, among: [saved, twin]) == nil)
         #expect(EditorRequirements.plan(twin, isNew: false, among: [saved, twin]) == nil)
-    }
-
-    @Test("a new plan's repository is chosen for it only when there is one to choose")
-    func initialRepository() {
-        let one = Repository()
-        let two = Repository()
-        #expect(EditorRequirements.initialRepositoryID(nil, among: [one]) == one.id)
-        // Two or more: the picker says Choose, and the footer asks.
-        #expect(EditorRequirements.initialRepositoryID(nil, among: [one, two]) == nil)
-        #expect(EditorRequirements.initialRepositoryID(nil, among: []) == nil)
-        #expect(EditorRequirements.initialRepositoryID(two.id, among: [one, two]) == two.id)
     }
 
     @Test("Change Password names what stops the change: nothing typed, two that differ, spaces restic would drop")

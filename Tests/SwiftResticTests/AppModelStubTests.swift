@@ -3,7 +3,7 @@ import Testing
 
 /// Drives `AppModel` against the stub restic binary, so the model-level glue
 /// the integration suite cannot reach — restore bookkeeping, refresh error
-/// paths, the run-history cap, the console, a lock in the way, deletion — is
+/// paths, the run-history cap, a lock in the way, deletion — is
 /// exercised on every machine, not only where restic is installed.
 @MainActor
 @Suite("AppModel with stub restic", .serialized)
@@ -1384,42 +1384,6 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
-    @Test("the console returns restic's own output, or explains there is nothing")
-    func consoleOutput() async throws {
-        let harness = try await makeHarness(mode: "default")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        let output = await harness.model.runConsoleCommand(
-            repositoryID: harness.repository.id,
-            arguments: ["snapshots", "--compact"]
-        )
-        #expect(output == "[]")
-
-        let unknown = await harness.model.runConsoleCommand(
-            repositoryID: UUID(),
-            arguments: ["snapshots"]
-        )
-        #expect(unknown == "No such backup location.")
-
-        await harness.model.shutdown()
-    }
-
-    @Test("a console command that fails still shows restic's words and its exit code")
-    func consoleFailureShowsExitCode() async throws {
-        let harness = try await makeHarness(mode: "plainfail")
-        defer { try? FileManager.default.removeItem(at: harness.root) }
-
-        // The console never throws: whatever restic said, the user reads.
-        let output = await harness.model.runConsoleCommand(
-            repositoryID: harness.repository.id,
-            arguments: ["snapshots"]
-        )
-        #expect(output.contains("unable to open config file"))
-        #expect(output.contains("[exit 17]"))
-
-        await harness.model.shutdown()
-    }
-
     @Test("a run a stale lock stopped unlocks the location and runs again once, unasked: backup and check alike")
     func staleLockIsUnlockedAndTheRunRetried() async throws {
         let harness = try await makeHarness(mode: "stalelock")
@@ -1621,7 +1585,7 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    @Test("a backup whose network share refuses its saved password fails with the editor holding that password as its fix, once a problem, its repeats one record")
+    @Test("a backup whose network share refuses its saved password fails with entering that password as its fix, once a problem, its repeats one record")
     func refusedShareFailsTheBackup() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2688,7 +2652,7 @@ struct AppModelStubTests {
         #expect(record.outcome == .completedWithErrors)
         #expect(record.itemErrors == ["/src/gone does not exist, skipping"])
         #expect(record.exitCode == 3)
-        #expect(RunRecordPresentation.detail(for: record) == "1 unreadable item")
+        #expect(RunRecordPresentation.detail(for: record) == "1 file skipped")
         let log = try logText(for: record, in: harness)
         #expect(log.contains("err  /src/gone does not exist, skipping"), "log was \(log)")
         #expect(log.contains("note Removed 0 backups"))

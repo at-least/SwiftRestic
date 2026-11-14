@@ -9,14 +9,6 @@ import Foundation
 /// across launches.
 enum FullDiskAccessStatus: String, Codable, Sendable, Hashable {
     case granted, notGranted, unknown
-
-    var displayName: String {
-        switch self {
-        case .granted: "Granted"
-        case .notGranted: "Not granted"
-        case .unknown: "Unknown"
-        }
-    }
 }
 
 /// Why restic could not read an item, from the words it used — and so what
@@ -194,7 +186,8 @@ enum ItemErrorDiagnosis {
 }
 
 /// Where a plan's path reaches data macOS keeps behind Full Disk Access,
-/// for the plan editor's warning before a backup finds out the hard way.
+/// for the warning shown before a backup finds out the hard way
+/// (`AppModel.fullDiskAccessNotice`).
 ///
 /// The list is not Apple's and not exhaustive: a path only under the Photos
 /// library, Group Containers or other apps' containers gets no warning here;

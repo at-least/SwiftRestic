@@ -67,19 +67,16 @@ extension AppModel {
             removedPlanNames: plans.map { label(of: $0) },
             isRestoring: restoreRepositoryID == repositoryID,
             runningBackupNames: plans.filter { activity[$0.id] != nil }.map { label(of: $0) },
-            runningMaintenance: maintenance[repositoryID]?.task,
-            isConsoleRunning: console.runningRepositoryID == repositoryID
+            runningMaintenance: maintenance[repositoryID]?.task
         )
     }
 
-    /// Static so tests can word it without a live model (the console's
-    /// running state is `private(set)`).
+    /// Static so tests can word it without a live model.
     nonisolated static func removalConsequences(
         removedPlanNames: [String],
         isRestoring: Bool,
         runningBackupNames: [String],
-        runningMaintenance: MaintenanceTask?,
-        isConsoleRunning: Bool
+        runningMaintenance: MaintenanceTask?
     ) -> String {
         var consequences = ""
         if !removedPlanNames.isEmpty {
@@ -101,9 +98,6 @@ extension AppModel {
         if let runningMaintenance {
             consequences += " \(runningMaintenance.runningClause(count: 1)) and will be stopped."
         }
-        if isConsoleRunning {
-            consequences += " A console command is running and will be stopped."
-        }
         return consequences
     }
 
@@ -118,7 +112,6 @@ extension AppModel {
         }
         tasks.cancel(.maintenance(id))
         if restoreRepositoryID == id { tasks.cancel(.restore) }
-        if console.runningRepositoryID == id { console.cancelRunningCommand() }
         // Before the repository list shrinks: the cancelled child can take
         // seconds to unwind, and `maintenanceLines` reads that list, so the
         // other order leaves the menu blank until the unwind lands.

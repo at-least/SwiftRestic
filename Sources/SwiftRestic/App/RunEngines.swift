@@ -355,7 +355,9 @@ enum BackupRunEngine {
 }
 
 /// One `check` or `prune` run, kept apart from its effects as
-/// `BackupRunEngine` is.
+/// `BackupRunEngine` is. A repair is a `check` run that first runs restic's
+/// `repair index` and `repair snapshots`: its record is the verification
+/// the location's page and the scheduler read.
 @MainActor
 enum MaintenanceRunEngine {
     @MainActor
@@ -378,8 +380,10 @@ enum MaintenanceRunEngine {
     static func perform(
         repository: Repository,
         task: MaintenanceTask,
+        repairsFirst: Bool = false,
         sink: Sink
     ) async {
+        precondition(!repairsFirst || task == .check, "only a verification repairs first")
         let startedAt = Date.now
         var record = RunRecord(
             kind: task == .prune ? .prune : .check,
@@ -430,6 +434,14 @@ enum MaintenanceRunEngine {
 
             switch task {
             case .check:
+                if repairsFirst {
+                    try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
+                        try await service.repairIndex(context)
+                    }
+                    try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
+                        try await service.repairSnapshots(context)
+                    }
+                }
                 // By hand or scheduled; a slice moves on only once read.
                 let subset = repository.maintenance.scheduledDataSubset(for: repository.kind)
                 let summary = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
@@ -446,11 +458,12 @@ enum MaintenanceRunEngine {
                 }
                 let errors = summary?.numErrors ?? 0
                 record.outcome = errors == 0 ? .succeeded : .completedWithErrors
-                record.detailText = errors == 0
-                    ? "No errors found."
-                    : "\(Format.plural(errors, "error")) found. Click Repair… to fix them."
-                if summary?.suggestPrune == true {
-                    record.detailText? += " Freeing space is suggested."
+                record.detailText = if errors == 0 {
+                    "No problems found."
+                } else if repairsFirst {
+                    "\(Format.plural(errors, "problem")) found after the repair."
+                } else {
+                    "\(Format.plural(errors, "problem")) found. Click Repair to fix them."
                 }
             case .prune:
                 let output = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
@@ -471,7 +484,8 @@ enum MaintenanceRunEngine {
                 from: error, cancellationMessage: sink.cancellationMessage,
                 location: (sink.label(of: repository), repository.kind)
             )
-            if ResticError.isRepositoryLocked(error) {
+            // Not a repair: nothing runs one again unasked.
+            if ResticError.isRepositoryLocked(error), !repairsFirst {
                 record.failureMessage = inUseMessage(location: sink.label(of: repository), nextRun: task == .check ? "verification" : "scheduled time")
             }
             sink.noteAuthFailure(error, repositoryID: repository.id)

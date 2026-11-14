@@ -155,7 +155,7 @@ struct RunDetailPanel: View {
                 // of the list it explains.
                 ItemErrorHintsView(run: run)
                 if run.itemErrorCount > 0 {
-                    Text("Unreadable items (\(Format.count(run.itemErrorCount)))")
+                    Text("Skipped files (\(Format.count(run.itemErrorCount)))")
                         .font(.callout.weight(.semibold))
                 }
                 ForEach(Array(unreadable.enumerated()), id: \.offset) { _, message in
@@ -230,25 +230,12 @@ struct RunFixButton: View {
             if let intent = fix.intent {
                 router.request(intent)
             } else if case let .locate(id) = fix {
-                locate(id)
+                model.chooseWhereRepositoryMoved(id: id)
             } else if case let .locateFolder(planID) = fix {
                 locateFolder(planID)
             }
         }
         .modifier(TileHelp(help: fix.help))
-    }
-
-    private func locate(_ id: UUID) {
-        guard let repository = model.repository(id: id),
-              let url = FilePicker.chooseDirectory(message: "Choose the folder “\(model.label(of: repository))” moved to")
-        else { return }
-        Task {
-            do {
-                try await model.locateRepository(id: id, atPath: url.path)
-            } catch {
-                postFolderFailure(error)
-            }
-        }
     }
 
     private func locateFolder(_ planID: UUID) {
@@ -258,29 +245,42 @@ struct RunFixButton: View {
         do {
             router.selection = .plan(try model.movePlan(id: planID, toPath: url.path))
         } catch {
-            postFolderFailure(error)
+            model.postFolderFailure(error)
         }
-    }
-
-    private func postFolderFailure(_ error: Error) {
-        model.post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
     }
 }
 
-/// Opens the restic console on a repository whose check found damage. It
-/// types nothing: repair stays a command the user writes, and the console
-/// asks before running it.
+extension AppModel {
+    /// Locate…, wherever it is offered: the panel, then the move.
+    func chooseWhereRepositoryMoved(id: UUID) {
+        guard let repository = repository(id: id),
+              let url = FilePicker.chooseDirectory(message: "Choose the folder “\(label(of: repository))” moved to")
+        else { return }
+        Task {
+            do {
+                try await locateRepository(id: id, atPath: url.path)
+            } catch {
+                postFolderFailure(error)
+            }
+        }
+    }
+
+    fileprivate func postFolderFailure(_ error: Error) {
+        post(Banner(title: "Couldn’t use that folder", message: error.localizedDescription, level: .error))
+    }
+}
+
+/// For a location whose verification found damage.
 struct RepairButton: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
+    @Environment(AppRouter.self) private var router
     let repositoryID: UUID
 
     var body: some View {
-        Button("Repair…") {
-            model.pointConsole(at: repositoryID)
-            openWindow(id: SwiftResticApp.consoleWindowID)
+        Button("Repair") {
+            router.request(.confirm(.repair(repositoryID)))
         }
-        .disabled(!model.isResticAvailable)
+        .disabled(!model.repositoryCommands(for: .repository(repositoryID)).canMaintain)
     }
 }
 

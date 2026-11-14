@@ -183,11 +183,11 @@ extension AppModel {
 
     /// A warning with no unreadable items (a skipped retention step, an
     /// unnamed exit 3) says what Activity's Detail column says, never
-    /// "0 unreadable items".
+    /// "0 files skipped".
     static func notificationBody(for record: RunRecord) -> String {
         switch record.outcome {
         case .succeeded:
-            return "Backed up \(Format.bytes(record.dataAdded)) of new data in \(Format.duration(record.duration))."
+            return "Added \(Format.bytes(record.dataAdded)) in \(Format.duration(record.duration))."
         case .completedWithErrors where record.itemErrorCount > 0:
             let hint = ItemErrorDiagnosis.headline(for: record).map { " " + $0 } ?? ""
             return "\(record.outcomeName): \(record.itemErrorCount) couldn’t be read.\(hint)"

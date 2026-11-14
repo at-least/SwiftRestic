@@ -73,7 +73,8 @@ struct UpToDateLine: Equatable, Sendable {
 
 /// The repository page's Status line.
 struct UpToDateSummary: Equatable, Sendable {
-    /// "2 of 2 plans up to date · Last backup 1 hour ago", with the hold's
+    /// "Up to date · Last backup 1 hour ago", or "2 of 3 plans up to date · …"
+    /// while some are behind, with the hold's
     /// own words joined on while one is on.
     var text: String
     /// The hold is the user's own Pause Backups, so the line ends with a
@@ -288,7 +289,7 @@ enum OverviewMetrics {
     }
 
     /// The caveat and the location page's tooltip say it the same way.
-    static let listingIdleText = "List of backups not loaded yet"
+    static let listingIdleText = "Backups not read yet"
 
     /// Nil unless the listing succeeded: no count is honest before it lands
     /// or after it fails. With no plans, the line names the repository's
@@ -312,8 +313,11 @@ enum OverviewMetrics {
         } else {
             // A plan still being read is in neither number.
             let known = rows.filter(\.isKnown)
+            let upToDate = known.filter(\.isUpToDate).count
             segments = [
-                "\(known.filter(\.isUpToDate).count) of \(Format.plural(known.count, "plan")) up to date"
+                !known.isEmpty && upToDate == known.count
+                    ? "Up to date"
+                    : "\(upToDate) of \(Format.plural(known.count, "plan")) up to date"
             ]
             // During a first backup "0 of 1 plan up to date" alone would read
             // as an alarm while the remedy is under way.
@@ -374,7 +378,7 @@ enum OverviewMetrics {
     }
 
     /// The rest go on the sidebar's "Other backups" shelf, whatever made
-    /// them (another Mac, a deleted plan, the console, restic elsewhere), so
+    /// them (another Mac, a deleted plan, restic run by hand), so
     /// the line names no cause. A repository with no plans
     /// has nothing to split. `noun` leads with the word ("12 backups") where
     /// no row label above says it.

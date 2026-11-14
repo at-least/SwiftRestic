@@ -69,8 +69,7 @@ extension AppModel {
               FirstBackupDestination.requirement(
                   source: source, destination: destination, password: "", confirmPassword: "",
                   holdsBackups: false, plans: configuration.plans, repositories: configuration.repositories
-              ) == nil,
-              fullDiskAccessNotice(for: source) == nil
+              ) == nil
         else { return nil }
         return createFirstPlan(source: source, repositoryID: repositoryID)
     }

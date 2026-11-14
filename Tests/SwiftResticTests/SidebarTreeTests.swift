@@ -95,7 +95,7 @@ struct SidebarTreeTests {
         // A plan that now backs up elsewhere left these behind.
         let m1 = try snapshot("m1", time: "2026-09-28T02:00:00Z", paths: ["/Data/Music"],
                               tags: [ResticService.planTag(movedAway.id)])
-        // Another Mac or the console: no plan tag at all.
+        // Another Mac or restic run by hand: no plan tag at all.
         let x1 = try snapshot("x1", time: "2026-09-27T02:00:00Z", paths: ["/Data/Music"], host: "old-mac")
         let g1 = try snapshot("g1", time: "2026-09-26T02:00:00Z", paths: ["/Data/Gone"],
                               tags: [ResticService.planTag(deleted)])
@@ -129,7 +129,7 @@ struct SidebarTreeTests {
         #expect(shelves.byPlan[photos.id] == nil)
         #expect(BackupShelves.owner(of: both, among: [documents, photos]) == documents.id)
         #expect(BackupShelves.owner(of: both, among: [photos, documents]) == photos.id)
-        // The plan editor counts it where the page does: once.
+        // Counted where the page shows it: once.
         #expect(shelves.backupCount(ofPlan: documents.id) == 1)
         #expect(shelves.backupCount(ofPlan: photos.id) == 0)
     }
@@ -210,7 +210,7 @@ struct SidebarTreeTests {
     func captionKinds() throws {
         let offsite = repository("Offsite")
         let music = plan("Music", in: offsite.id)
-        // A plan that now backs up elsewhere; a console backup; a deleted
+        // A plan that now backs up elsewhere; a backup made by hand; a deleted
         // plan's history. All from this Mac, so no caption names a host.
         let m1 = try snapshot("m1", time: "2026-09-30T02:00:00Z", paths: ["/Data/Music"],
                               tags: [ResticService.planTag(music.id)])
@@ -300,8 +300,8 @@ struct SidebarTreeTests {
         #expect(shelves.label(of: h0, repositories: [offsite], localHost: "mac")?.qualifier == "/Data/Docs, /Data/Notes")
 
         // Under Other backups, among the groups shown there together: the
-        // console's lineage came from another Mac, so it says which, while
-        // this Mac's goes unnamed; the moved plan's group and the console's
+        // untagged lineage came from another Mac, so it says which, while
+        // this Mac's goes unnamed; the moved plan's group and the untagged
         // lineage share the title "Music", so the folders qualify both. The
         // caption's kind word is what tells them apart.
         let others = shelves.otherLabels(repositories: [offsite], localHost: "mac")
@@ -334,7 +334,7 @@ struct SidebarTreeTests {
         let shelves = BackupShelves(listing: [m1, x1], plans: [], allPlans: [documents])
         // The classification is configuration-wide: the plan belongs to
         // another repository, so the group is its former one — never one to
-        // adopt. A deleted plan's and a console backup's groups are not.
+        // adopt. A deleted plan's and an untagged backup's groups are not.
         #expect(shelves.others.map { shelves.formerPlan(of: $0)?.id } == [documents.id, nil])
         let gone = BackupShelves(listing: [m1], plans: [], allPlans: [])
         #expect(gone.others.map { gone.formerPlan(of: $0)?.id } == [nil])
@@ -343,8 +343,8 @@ struct SidebarTreeTests {
     @Test("the repository page adopts the groups no configuration sets up, and counts every other backup")
     func adoptableGroupsAndCount() throws {
         let nas = UUID()
-        // A plan that now backs up elsewhere, a deleted plan, and the
-        // console's lineage — the sidebar shows all three, the page's card
+        // A plan that now backs up elsewhere, a deleted plan, and an
+        // untagged lineage — the sidebar shows all three, the page's card
         // offers only the deleted plan's.
         let movedAway = plan("Music", in: UUID())
         let m1 = try snapshot("m1", time: "2026-09-30T02:00:00Z", tags: [ResticService.planTag(movedAway.id)])

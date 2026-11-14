@@ -74,7 +74,7 @@ enum PlanStatus {
     /// The one source of a run's problem facts, so every surface reads the
     /// same words. The unreadable count is `itemErrorCount`, never the
     /// stored line count: a lock-contention retention skip (`restic forget`
-    /// exit 11) would otherwise read "1 unreadable item".
+    /// exit 11) would otherwise read "1 file skipped".
     static func facts(for run: RunRecord) -> [String] {
         var facts: [String] = []
         if run.itemErrorCount > 0 {
@@ -91,7 +91,7 @@ enum PlanStatus {
     }
 
     private static func unreadableFact(of run: RunRecord) -> String {
-        Format.plural(run.itemErrorCount, "unreadable item")
+        "\(Format.plural(run.itemErrorCount, "file")) skipped"
     }
 
     /// Always says something. A decoding gap or skipped retention step is
@@ -165,11 +165,7 @@ enum PlanStatus {
         isBackingUp: Bool = false,
         now: Date = .now
     ) -> TileFace {
-        guard plan.isScheduled else {
-            // Not "Manually": the row asks when; the schedule row above
-            // says how.
-            return TileFace(value: "When you click Back Up Now", help: nil)
-        }
+        precondition(plan.isScheduled, "a plan backed up manually has no next backup")
         guard let next = Scheduler.upcomingRuns(
             in: [plan],
             now: now,
@@ -178,7 +174,7 @@ enum PlanStatus {
         ).first?.date else {
             return TileFace(
                 value: "Not scheduled",
-                help: "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
+                help: "This plan isn’t scheduled because it has no backup location or no folder. Remove the plan, then choose Back Up a Folder."
             )
         }
         // Nothing stamps the slot until the run ends, so "Running now" must

@@ -78,17 +78,17 @@ enum ResticError: Error, LocalizedError, Equatable {
         case let .itemNotListed(name):
             return "“\(name)” isn’t in this backup any more. Select the backup again, then restore."
         case let .passwordMissing(name):
-            return "No password is stored for “\(name)”."
+            return "No password is saved for “\(name)”. Enter it to back up again."
         case let .processLaunchFailed(reason):
             return "SwiftRestic couldn’t start the backup: \(reason). If this keeps happening, install SwiftRestic again."
         case let .timedOut(seconds, cause):
             return cause.isEmpty
-                ? "Timed out after \(Format.duration(seconds)) and was stopped."
-                : "Timed out after \(Format.duration(seconds)) and was stopped — it kept retrying: \(cause). Check the location’s connection and try again."
+                ? "It took longer than \(Format.duration(seconds)) and was stopped. Check the location’s connection and try again."
+                : "It took longer than \(Format.duration(seconds)) and was stopped — it kept retrying: \(cause). Check the location’s connection and try again."
         case let .idleStalled(seconds):
             return "Nothing moved for \(Format.duration(seconds)), so it was stopped. Check the location’s connection and try again."
-        case let .malformedOutput(detail):
-            return "It finished, but its result couldn’t be read (\(detail))."
+        case .malformedOutput:
+            return "SwiftRestic couldn’t read the result. Try again."
         case let .stagedFileMoveFailed(path, reason):
             return "The restored file couldn’t be written at \(path): \(reason). Nothing at the destination was changed."
         case let .snapshotsNotRemoved(removed, refused, reason):
@@ -111,12 +111,19 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     private static let fatalWord = "Fatal: "
 
-    /// restic's first sentence behind an `errorDescription` that says the fix
-    /// instead, for the run's details text.
+    /// What an `errorDescription` that says the fix instead leaves out, for
+    /// the run's details text: restic's first sentence, or what in its
+    /// output did not decode.
     var resticDetail: String? {
-        guard case let .commandFailed(_, message) = self else { return nil }
-        let first = Format.firstSentence(message)
-        return first.isEmpty ? nil : first
+        switch self {
+        case let .commandFailed(_, message):
+            let first = Format.firstSentence(message)
+            return first.isEmpty ? nil : first
+        case let .malformedOutput(detail):
+            return detail
+        default:
+            return nil
+        }
     }
 
     /// A server never seen is accepted (`RepositoryContext.globalArguments`),
@@ -153,7 +160,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// Exit 10 on a server or in the cloud, or where the location is unknown.
     private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
 
-    /// Replaces the console's words where they name restic as the actor.
+    /// `knownExitCodeDescription` without restic as the actor.
     private static func exitCodeWords(_ code: Int32) -> String? {
         switch code {
         case 1: "It stopped with an error"
@@ -163,7 +170,6 @@ enum ResticError: Error, LocalizedError, Equatable {
         }
     }
 
-    /// The restic Console's "[exit N: …]" line.
     static func knownExitCodeDescription(_ code: Int32) -> String? {
         switch code {
         case 1: "restic stopped with an error"

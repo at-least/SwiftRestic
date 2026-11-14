@@ -26,8 +26,8 @@ extension AppModel {
     }
 
     /// The plan an orphan group's backups continue under: the group's UUID,
-    /// so its tag, and its newest backup's folder, excludes and tags, on a
-    /// new plan's schedule.
+    /// so its tag, and its newest backup's folder and excludes, on a new
+    /// plan's schedule.
     private func continuingDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
         shelves(for: repositoryID).orphanPlanGroup(planID).flatMap { continuingDraft(repositoryID: repositoryID, group: $0) }
     }
@@ -57,7 +57,6 @@ extension AppModel {
         // A run records the applied rules among the excludes (not the
         // markers): what they do not pass is the user's own list.
         draft.excludePatterns = BackupPlan.withoutAppliedRules(recorded)
-        draft.tags = prefill.userTags
         return draft
     }
 

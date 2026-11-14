@@ -36,9 +36,9 @@ protocol ResticClient: Sendable {
         onRawLine: (@Sendable (String) -> Void)?
     ) async throws -> String
 
-    /// Any exit code is returned rather than thrown: the console shows
-    /// whatever restic said, including its complaints.
-    func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String
+    func repairIndex(_ context: RepositoryContext) async throws
+
+    func repairSnapshots(_ context: RepositoryContext) async throws
 
     func snapshots(
         _ context: RepositoryContext,

@@ -141,9 +141,9 @@ struct FileVersionsView: View {
             .contextMenu(forSelectionType: String.self) { ids in
                 if let version = versions.first(where: { ids.contains($0.id) }) {
                     Button("Restore") { restoreVersion(version) }
-                        .disabled(model.isRestoring)
+                        .disabled(!model.canRestore(from: node.repositoryID))
                     Button("Restore To…") { restoreVersion(version, choosingDestination: true) }
-                        .disabled(model.isRestoring)
+                        .disabled(!model.canRestore(from: node.repositoryID))
                     Button("Preview") { preview(version) }
                         .disabled(previewBlock(for: version) != nil || previewer.isCopying)
                 }
@@ -152,7 +152,7 @@ struct FileVersionsView: View {
             }
             .onKeyPress(.return, phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]),
-                      chosen != nil, !model.isRestoring
+                      chosen != nil, model.canRestore(from: node.repositoryID)
                 else { return .ignored }
                 restoreChosen(choosingDestination: false)
                 return .handled
@@ -202,7 +202,7 @@ struct FileVersionsView: View {
     /// list's own.
     private var restore: RestoreCommand {
         RestoreCommand(
-            isEnabled: chosen != nil && !model.isRestoring,
+            isEnabled: chosen != nil && model.canRestore(from: node.repositoryID),
             run: { restoreChosen(choosingDestination: $0) }
         )
     }

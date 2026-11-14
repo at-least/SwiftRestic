@@ -7,7 +7,7 @@ final class LocationUITests: XCTestCase {
 
     /// Verify Backups runs at once, with no confirmation dialog.
     @MainActor
-    func testVerifyFindsNoErrors() throws {
+    func testVerifyFindsNoProblems() throws {
         let folders = try UITestFolders.make("Verify")
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
@@ -20,7 +20,7 @@ final class LocationUITests: XCTestCase {
         let table = app.outlines[AccessibilityID.Activity.table]
         let verification = table.outlineRows.containing(NSPredicate(format: "value == %@", "Verification")).firstMatch
         XCTAssertTrue(verification.waitForExistence(timeout: 120))
-        let verdict = verification.staticTexts.matching(NSPredicate(format: "value == %@", "No errors found")).firstMatch
+        let verdict = verification.staticTexts.matching(NSPredicate(format: "value == %@", "No problems found")).firstMatch
         XCTAssertTrue(verdict.waitForExistence(timeout: 120))
         attachScreenshot()
     }

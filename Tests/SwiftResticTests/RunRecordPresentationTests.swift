@@ -319,8 +319,7 @@ struct RunRecordPresentationTests {
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.backup, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.maintenanceRetry(for: run(.check, .failed), repositoryExists: false) == nil)
 
-        // Only a check that found damage routes to the console, whose
-        // `restic repair` its verdict advises.
+        // Only a check that found damage offers Repair.
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .completedWithErrors), repositoryExists: true) == repository)
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .failed), repositoryExists: true) == nil)
         #expect(RunRecordPresentation.repairRoute(for: run(.check, .succeeded), repositoryExists: true) == nil)
@@ -370,7 +369,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.itemErrors = ["/a: permission denied", "/b: permission denied"]
             $0.itemErrorCount = 2
-        }) == "2 unreadable items")
+        }) == "2 files skipped")
 
         // restic's count, not the stored lines: the retention line stored
         // after the unreadable item is a fact of its own, never a second item.
@@ -378,7 +377,7 @@ struct RunRecordPresentationTests {
             $0.outcome = .completedWithErrors
             $0.itemErrors = ["/a: permission denied", RunRecord.retentionSkippedPrefix + "locked"]
             $0.itemErrorCount = 1
-        }) == "1 unreadable item · Old backups not removed")
+        }) == "1 file skipped · Old backups not removed")
 
         #expect(detail(backup {
             $0.outcome = .completedWithErrors
@@ -549,9 +548,9 @@ struct RunRecordPresentationTests {
         #expect(lines.contains("Backup: \(snapshotID)"))
         // The drawer's words for the numbers, the notification's "new data".
         #expect(lines.contains("Files: 2 new · 1 changed · 13 unchanged"))
-        #expect(lines.contains("Size: Checked \(Format.bytes(3_400_000_000)) · \(Format.bytes(120_000_000)) of new data"))
+        #expect(lines.contains("Size: \(Format.bytes(3_400_000_000)) · added \(Format.bytes(120_000_000))"))
         #expect(lines.contains("restic exit: 3"))
-        #expect(lines.contains("Unreadable items (1):"))
+        #expect(lines.contains("Skipped files (1):"))
         #expect(lines.contains("  open /Users/me/Documents/Taxes/2025/locked.pdf: permission denied"))
         #expect(lines.contains("restic 0.19.1 compiled with go1.26.5 on darwin/arm64"))
         #expect(lines.last == "Copied from SwiftRestic 0.1.0 (1) on macOS 26.6.2 (Build 25G83)")
@@ -676,7 +675,7 @@ struct RunRecordPresentationTests {
         ))
         #expect(lines.contains("Items: /src/Documents/a.pdf, /src/Documents/b.pdf"))
         #expect(lines.contains("Destination: /tmp/there"))
-        #expect(lines.contains("Unreadable items (3):"))
+        #expect(lines.contains("Skipped files (3):"))
         #expect(lines.contains("  … and 2 more"))
     }
 }

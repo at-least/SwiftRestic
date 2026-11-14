@@ -44,7 +44,11 @@ struct RepositoryDetailView: View {
                         Text(Format.bytes(model.repositoryStats[repositoryID]?.totalSize))
                             .accessibilityIdentifier(AccessibilityID.Repository.size)
                     }
-                    LabeledContent("Backups") { snapshotsValue }
+                    // With one plan and nothing from elsewhere, the plan
+                    // page's Total says the same sentence.
+                    if model.plans(in: repositoryID).count > 1 || model.shelves(for: repositoryID).otherBackupsCount > 0 {
+                        LabeledContent("Backups") { snapshotsValue }
+                    }
                 }
                 diskRow(repository)
             }
@@ -114,57 +118,60 @@ struct RepositoryDetailView: View {
         }
     }
 
+    /// A stamp is written for every attempt, so a row shows from the first
+    /// one on; the section, once it has a row or a run in flight.
+    @ViewBuilder
     private func maintenanceSection(_ repository: Repository) -> some View {
-        Section {
-            if let activity = model.maintenance[repositoryID] {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    // A live elapsed time: a verification can run for
-                    // hours, and "14 min" is what separates working from
-                    // hung.
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(
-                            "\(activity.task.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
+        let activity = model.maintenance[repositoryID]
+        let wasVerified = repository.maintenance.lastCheckAt != nil
+        let wasFreed = repository.maintenance.lastPruneAt != nil
+            && Scheduler.freesSpace(repository, plans: model.configuration.plans)
+        if activity != nil || wasVerified || wasFreed {
+            Section("Verification and Space") {
+                if let activity {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        // A live elapsed time: a verification can run for
+                        // hours, and "14 min" is what separates working from
+                        // hung.
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(
+                                "\(activity.inFlightTitle) \(Format.duration(context.date.timeIntervalSince(activity.startedAt)))"
+                            )
+                            .monospacedDigit()
+                        }
+                        Spacer()
+                        Button("Stop") {
+                            model.cancelMaintenance(repositoryID: repositoryID)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
+                let runs = model.configuration.runs
+                let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
+                if wasVerified {
+                    LabeledContent("Last verified") {
+                        MaintenanceRunValue(
+                            text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
+                            run: check
                         )
-                        .monospacedDigit()
                     }
-                    Spacer()
-                    Button("Stop") {
-                        model.cancelMaintenance(repositoryID: repositoryID)
+                }
+                if wasFreed {
+                    let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
+                    LabeledContent("Space last freed") {
+                        MaintenanceRunValue(
+                            text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
+                            run: prune
+                        )
                     }
-                    .controlSize(.small)
+                }
+
+                if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
+                    RepairButton(repositoryID: repositoryID)
                 }
             }
-
-            let runs = model.configuration.runs
-            let check = Scheduler.newestMaintenanceRun(.check, of: repository, runs: runs)
-            let prune = Scheduler.newestMaintenanceRun(.prune, of: repository, runs: runs)
-            LabeledContent("Last verified") {
-                MaintenanceRunValue(
-                    text: Scheduler.lastMaintenanceText(.check, of: repository, newest: check, now: now),
-                    run: check
-                )
-            }
-            if Scheduler.freesSpace(repository, plans: model.configuration.plans) {
-                LabeledContent("Space last freed") {
-                    MaintenanceRunValue(
-                        text: Scheduler.lastMaintenanceText(.prune, of: repository, newest: prune, now: now),
-                        run: prune
-                    )
-                }
-            }
-
-            // A verification that found damage: the console, where `restic
-            // repair` runs with the password supplied.
-            if let check, RunRecordPresentation.repairRoute(for: check, repositoryExists: true) != nil {
-                RepairButton(repositoryID: repositoryID)
-            }
-
-            if model.repositoriesMissingPassword.contains(repositoryID) {
-                WarningLine(text: "Waiting for a password. Nothing is scheduled until one is saved.")
-            }
-        } header: {
-            Text("Verification and Space")
         }
     }
 }

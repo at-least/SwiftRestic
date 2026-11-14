@@ -41,7 +41,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             activity: model.activity,
             maintenance: model.maintenance,
             isRestoring: model.isRestoring,
-            isConsoleRunning: model.console.isRunning,
             hasNoRepositories: model.configuration.repositories.isEmpty,
             runs: model.configuration.runs,
             rows: model.protectionRows(for: model.configuration.plans, now: .now),
@@ -91,7 +90,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             for: state, hold: hold, isResticDamaged: isResticDamaged,
             isWorking: MenuBarStatus.isWorking(
                 activity: model.activity, maintenance: model.maintenance,
-                isRestoring: model.isRestoring, isConsoleRunning: model.console.isRunning
+                isRestoring: model.isRestoring
             )
         ))
     }
@@ -197,12 +196,18 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             case .status(let text):
                 menu.addItem(disabledItem(text))
             case .problem(let text, let runID):
-                let item = NSMenuItem(title: text, action: #selector(showProblem(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = runID.uuidString
-                item.toolTip = "Show in Activity"
-                menu.addItem(item)
+                menu.addItem(problemItem(text, runID: runID))
             }
+        }
+        if model.loginItemNeedsApproval {
+            let item = NSMenuItem(
+                title: "SwiftRestic can’t start at login — Open Login Items",
+                action: #selector(openLoginItems),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.toolTip = LoginItem.approvalNeeded
+            menu.addItem(item)
         }
 
         menu.addItem(.separator())
@@ -292,13 +297,21 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             item.representedObject = row.planID.uuidString
             menu.addItem(item)
         }
-        let news = group.newsLines.filter { !skippingNews.contains($0) }
+        let news = group.newsLines.filter { !skippingNews.contains($0.text) }
         if !news.isEmpty {
             menu.addItem(.separator())
             for line in news {
-                menu.addItem(disabledItem(line))
+                menu.addItem(problemItem(line.text, runID: line.runID))
             }
         }
+    }
+
+    private func problemItem(_ title: String, runID: UUID) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(showProblem(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = runID.uuidString
+        item.toolTip = "Show in Activity"
+        return item
     }
 
     /// The news line the top problem line repeats, built from the same
@@ -316,7 +329,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             activity: model.activity[plan.id],
             problem: problem,
             now: .now
-        ).prefix(1))
+        ).map(\.text))
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {
@@ -367,6 +380,10 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         let fix = model.configuration.runs.first { $0.id == runID }.flatMap(model.fix(for:))
         router.focusRun(runID, openingFix: fix)
         openMainWindow()
+    }
+
+    @objc private func openLoginItems() {
+        LoginItem.openLoginItemsSettings()
     }
 
     @objc private func pauseBackups(_ sender: NSMenuItem) {

@@ -12,6 +12,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var cleanupCacheScript: Result<Void, Error> = .success(())
     private var forgetScript: Result<Int, Error> = .success(0)
     private var checkScript: Result<ResticSummary?, Error> = .success(nil)
+    private var repairIndexScript: Result<Void, Error> = .success(())
+    private var repairSnapshotsScript: Result<Void, Error> = .success(())
     private var pruneScript: Result<String, Error> = .success("")
     private var pruneRawLines: [String] = []
     private var snapshotsScript: Result<[Snapshot], Error> = .success([])
@@ -52,6 +54,16 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
 
     func onCheck(_ result: Result<ResticSummary?, Error>) -> Self {
         locked { checkScript = result }
+        return self
+    }
+
+    func onRepairIndex(_ result: Result<Void, Error>) -> Self {
+        locked { repairIndexScript = result }
+        return self
+    }
+
+    func onRepairSnapshots(_ result: Result<Void, Error>) -> Self {
+        locked { repairSnapshotsScript = result }
         return self
     }
 
@@ -214,9 +226,16 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return try locked { pruneScript }.get()
     }
 
-    func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {
-        record("raw:\(arguments.first ?? "")")
-        return ""
+    func repairIndex(_ context: RepositoryContext) async throws {
+        record("repairIndex")
+        transcribe("repairIndex")
+        try locked { repairIndexScript }.get()
+    }
+
+    func repairSnapshots(_ context: RepositoryContext) async throws {
+        record("repairSnapshots")
+        transcribe("repairSnapshots")
+        try locked { repairSnapshotsScript }.get()
     }
 
     func snapshots(

@@ -410,9 +410,9 @@ struct RestorePaneView<VersionsPane: View>: View {
             if !clicked.isEmpty {
                 let picked = clicked.map { RestoreSource($0, snapshotID: record.id, backupTime: record.time) }
                 Button("Restore") { restore(picked, choosingDestination: false) }
-                    .disabled(model.isRestoring)
+                    .disabled(!model.canRestore(from: repositoryID))
                 Button("Restore To…") { restore(picked, choosingDestination: true) }
-                    .disabled(model.isRestoring)
+                    .disabled(!model.canRestore(from: repositoryID))
             }
         }
     }
@@ -425,7 +425,7 @@ struct RestorePaneView<VersionsPane: View>: View {
     /// restores everything, Original location included.
     private func restore(record: Snapshot?) -> RestoreCommand {
         RestoreCommand(
-            isEnabled: hasSelection && !model.isRestoring && record != nil,
+            isEnabled: hasSelection && model.canRestore(from: repositoryID) && record != nil,
             run: { restoreSelection(choosingDestination: $0) }
         )
     }
@@ -436,12 +436,17 @@ struct RestorePaneView<VersionsPane: View>: View {
     /// something is in the way, not a permanent caption under every browse.
     private func footer(record: Snapshot?) -> some View {
         HStack(spacing: 12) {
+            if let away = model.restoreAwayReason(repositoryID: repositoryID) {
+                Text(away)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Spacer(minLength: 12)
             Button("Restore") { restoreSelection() }
                 .accessibilityIdentifier(AccessibilityID.RestorePane.restore)
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(!hasSelection || model.isRestoring || record == nil)
+                .disabled(!hasSelection || !model.canRestore(from: repositoryID) || record == nil)
                 .help(selectedRow.map { !$0.isDirectory } == true
                     ? "Put the version selected below back where the file was (Return)"
                     : "Put the selected items back where they were, from this backup (Return)")
@@ -569,7 +574,7 @@ struct RestorePaneView<VersionsPane: View>: View {
         // button.
         if press.key == .return, isPlain,
            selectedNodes.count > 1 || selectedRow.map({ !$0.isDirectory }) == true {
-            guard !model.isRestoring, record != nil else { return .ignored }
+            guard model.canRestore(from: repositoryID), record != nil else { return .ignored }
             restoreSelection()
             return .handled
         }

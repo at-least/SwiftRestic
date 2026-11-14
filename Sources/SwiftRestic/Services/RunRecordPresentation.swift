@@ -96,9 +96,7 @@ enum RunRecordPresentation {
         }
     }
 
-    /// A check that found damage goes to the restic console: its verdict
-    /// advises restic's repair commands, and the console is where the
-    /// repository's password is supplied.
+    /// A check that found damage offers Repair.
     static func repairRoute(for run: RunRecord, repositoryExists: Bool) -> UUID? {
         guard repositoryExists, run.kind == .check, run.outcome == .completedWithErrors else { return nil }
         return run.repositoryID
@@ -222,7 +220,7 @@ enum RunRecordPresentation {
         case .check:
             // The glyph already says the outcome; the count is what the
             // column adds. No final period: the column's other entries ("2
-            // unreadable items", "0 new · 1 changed") carry none.
+            // files skipped", "0 new · 1 changed") carry none.
             guard let verdict = run.detailText else { return run.outcomeName }
             return Format.withoutFinalPeriod(Format.firstSentence(verdict))
         }
@@ -308,7 +306,7 @@ enum RunRecordPresentation {
     }
 
     static func backupSize(_ run: RunRecord) -> String {
-        "Checked \(Format.bytes(run.bytesProcessed)) · \(Format.bytes(run.dataAdded)) of new data"
+        "\(Format.bytes(run.bytesProcessed)) · added \(Format.bytes(run.dataAdded))"
     }
 
     static func restoreFiles(_ run: RunRecord) -> String {
@@ -367,7 +365,7 @@ enum RunRecordPresentation {
             lines.append("restic exit: \(text)")
         }
         if run.itemErrorCount > 0 {
-            lines.append("Unreadable items (\(Format.count(run.itemErrorCount))):")
+            lines.append("Skipped files (\(Format.count(run.itemErrorCount))):")
             lines += run.unreadableItems.map { "  \($0)" }
             let unlisted = run.itemErrorCount - run.unreadableItems.count
             if unlisted > 0 { lines.append("  … and \(Format.count(unlisted)) more") }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The plan editor's line naming what every plan leaves out.
+/// The plan page's line naming what every plan leaves out.
 enum PlanSkips {
     static let always = "Always excluded: caches, system files, developer files, the Trash and online-only files."
 

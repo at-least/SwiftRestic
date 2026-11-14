@@ -243,9 +243,6 @@ struct RepositoryEditorSheet: View {
     private var settingsForm: some View {
         Form {
             Section {
-                // The kinds grouped by where the backup lives: the
-                // destination answers "where is it" as the section header
-                // above each kind, so one control carries both questions.
                 // A saved repository's kind is part of where it is, fixed
                 // with its location (`locationFields`).
                 if isNew, firstBackupSource == nil {
@@ -377,14 +374,8 @@ struct RepositoryEditorSheet: View {
 
     private var kindPicker: some View {
         Picker("Type", selection: $draft.kind) {
-            Section("On this Mac") {
-                Text(Repository.Kind.local.displayName).tag(Repository.Kind.local)
-            }
-            Section("On another computer") {
-                Text(Repository.Kind.sftp.displayName).tag(Repository.Kind.sftp)
-            }
-            Section("In the cloud") {
-                Text(Repository.Kind.s3.displayName).tag(Repository.Kind.s3)
+            ForEach(Repository.Kind.allCases) { kind in
+                Text(kind.displayName).tag(kind)
             }
         }
     }

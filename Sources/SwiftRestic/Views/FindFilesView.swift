@@ -182,7 +182,7 @@ struct FindFilesView: View {
     private var results: some View {
         if query.isEmpty {
             ContentUnavailableView(
-                "Find a file without knowing which backup holds it",
+                "Search for a file without knowing which backup holds it",
                 systemImage: "magnifyingglass"
             )
         } else if let search {
@@ -266,9 +266,9 @@ struct FindFilesView: View {
             let picked = rows.filter { ids.contains($0.id) }
             if picked.count == 1, let row = picked.first {
                 Button("Restore") { restoreSelection(picked) }
-                    .disabled(model.isRestoring)
+                    .disabled(!canRestore(picked))
                 Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
-                    .disabled(model.isRestoring)
+                    .disabled(!canRestore(picked))
                 if let open = showInBackups(row) {
                     Button("Show in Backups", action: open)
                 }
@@ -278,9 +278,9 @@ struct FindFilesView: View {
                 }
             } else if picked.count > 1, Self.oneRepository(picked) {
                 Button("Restore") { restoreSelection(picked) }
-                    .disabled(model.isRestoring)
+                    .disabled(!canRestore(picked))
                 Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
-                    .disabled(model.isRestoring)
+                    .disabled(!canRestore(picked))
             }
         } primaryAction: { ids in
             guard ids.count == 1, let row = rows.first(where: { ids.contains($0.id) }),
@@ -296,7 +296,7 @@ struct FindFilesView: View {
         // The table hands Return to its double-click action too: spent here
         // first, Return stays the footer's Restore.
         .onKeyPress(.return, phases: .down) { press in
-            guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]), canRestoreSelection
+            guard press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]), canRestore(selectedRows)
             else { return .ignored }
             restoreSelection(selectedRows)
             return .handled
@@ -343,12 +343,18 @@ struct FindFilesView: View {
                     .help(failure.message)
             }
             Spacer()
+            if let repositoryID = selectedRows.first?.repositoryID, Self.oneRepository(selectedRows),
+               let away = model.restoreAwayReason(repositoryID: repositoryID) {
+                Text(away)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Button("Restore") { restoreSelection(selectedRows) }
                 .buttonStyle(.borderedProminent)
                 // Same grammar as the Restore pane: Return restores, asking
                 // first when something is in the way.
                 .keyboardShortcut(.defaultAction)
-                .disabled(!canRestoreSelection)
+                .disabled(!canRestore(selectedRows))
                 .help(Self.oneRepository(selectedRows)
                     ? "Restore the selected items, each from the backup it was found in (Return)"
                     : "Select items from one location at a time")
@@ -360,8 +366,10 @@ struct FindFilesView: View {
         rows.filter { selection.contains($0.id) }
     }
 
-    private var canRestoreSelection: Bool {
-        !selectedRows.isEmpty && Self.oneRepository(selectedRows) && !model.isRestoring
+    /// One restore runs against one repository, which must be connected.
+    private func canRestore(_ rows: [AllBackupsSearch.Row]) -> Bool {
+        guard let repositoryID = rows.first?.repositoryID, Self.oneRepository(rows) else { return false }
+        return model.canRestore(from: repositoryID)
     }
 
     /// One restore runs against one repository, and its password.
@@ -390,7 +398,7 @@ struct FindFilesView: View {
     /// selected rows.
     private var restore: RestoreCommand {
         RestoreCommand(
-            isEnabled: canRestoreSelection,
+            isEnabled: canRestore(selectedRows),
             run: { restoreSelection(selectedRows, choosingDestination: $0) }
         )
     }

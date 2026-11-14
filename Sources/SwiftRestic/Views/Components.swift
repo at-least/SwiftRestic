@@ -145,53 +145,6 @@ struct NetworkSharePasswordRows: View {
     }
 }
 
-
-/// A form caption whose teaching text sits behind an info button: the
-/// summary line is always visible, the rest for whoever wants it.
-struct ExpandableCaption: View {
-    let summary: String
-    /// What reveals on demand; written to read continuously after the summary.
-    let detail: String
-
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                // The macOS minimum control size, 20×20, without growing the
-                // caption line: the square hangs 4 pt past its layout box
-                // above and below. The padding sits outside the Button —
-                // inside the label, the Button hit-tests only the 20×12 box
-                // (macOS 26).
-                Button {
-                    isExpanded.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .padding(.vertical, -4)
-                .foregroundStyle(.secondary)
-                .help("More about this")
-                .accessibilityLabel("More about this")
-            }
-            if isExpanded {
-                // Not height-pinned, for BannerView's reason: the console
-                // hosts this caption outside any scroll view.
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-        }
-    }
-}
-
 struct OperationProgressView: View {
     let title: String
     let progress: OperationProgress
@@ -280,18 +233,12 @@ struct SnapshotListingCaveat: View {
     var body: some View {
         let outcome = model.snapshotListingOutcome(for: repositoryID)
         if case let .notConnected(volume) = outcome {
-            // A normal state, not a failed read: its sentence alone, with
-            // Locate for a disk renamed.
-            VStack(alignment: .leading, spacing: 6) {
-                Text(SnapshotListingOutcome.connectText(volume: volume))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let repositoryID {
-                    RunFixButton(fix: .locate(repositoryID))
-                        .controlSize(.small)
-                }
-            }
+            // A normal state, not a failed read: its sentence alone.
+            // Locate, for a disk renamed, is in the sidebar row's menu.
+            Text(SnapshotListingOutcome.connectText(volume: volume))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } else if let message = outcome.failureMessage {
             // The glyph carries the alarm and the words stay secondary:
             // a warning-coloured sentence at caption size is too
@@ -428,7 +375,7 @@ struct PathListEditor: View {
     @State private var isDropTargeted = false
 
     /// About six one-line rows: the list scrolls past them rather than
-    /// growing the sheet.
+    /// growing the page.
     private static let listHeight: CGFloat = 132
 
     var body: some View {
@@ -492,12 +439,13 @@ struct PathListEditor: View {
         selection.subtract(items)
     }
 
+    /// One write to `paths`: the plan's page saves on each.
     private func addPaths(_ rawPaths: [String]) {
-        for path in rawPaths {
-            let value = ResticService.globEscaped(path)
-            guard !paths.contains(value) else { continue }
-            paths.append(value)
+        var added = paths
+        for value in rawPaths.map(ResticService.globEscaped) where !added.contains(value) {
+            added.append(value)
         }
+        paths = added
     }
 
     private func browse() {
@@ -631,7 +579,7 @@ struct ItemErrorHintsView: View {
 /// One unreadable item's line, with Show in Finder and Exclude from the plan
 /// in a menu at its end and in its context menu, where the run stored the
 /// item's path (`RunRecord.unreadableItemPaths`). Exclude acts at once; the
-/// plan editor's Excluded Items list takes it back.
+/// plan page's Excluded Items list takes it back.
 struct UnreadableItemLine: View {
     @Environment(AppModel.self) private var model
     let run: RunRecord

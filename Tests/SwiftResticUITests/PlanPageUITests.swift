@@ -1,13 +1,13 @@
 import XCTest
 
-final class PlanEditorUITests: XCTestCase {
+final class PlanPageUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
-    /// A file added to Exclude (+, the open panel) is in the first backup
-    /// and not in the next one: the newest backup restored holds the folder's
-    /// other file alone.
+    /// A file added to the plan page's Excluded Items (+, the open panel) is
+    /// in the first backup and not in the next one: the newest backup
+    /// restored holds the folder's other file alone.
     @MainActor
     func testExcludedFileIsLeftOutOfTheNextBackup() throws {
         let folders = try UITestFolders.make("Exclude")
@@ -18,18 +18,17 @@ final class PlanEditorUITests: XCTestCase {
         let app = UITest.launch(folders)
         UITest.backUpFirstFolder(folders, in: app)
 
-        app.buttons[AccessibilityID.Plan.edit].click()
-        let save = app.buttons[AccessibilityID.PlanEditor.save]
-        XCTAssertTrue(save.waitForExistence(timeout: 10))
-        // Exclude's + is in view as the editor opens, no scrolling: above
-        // the Cancel and Save bar. XCUITest calls a + below the fold hittable
-        // too, and the click lands on whatever covers it.
+        // Excluded Items' + is in view on the page, no scrolling. XCUITest
+        // calls a + below the fold hittable too, and the click lands on
+        // whatever covers it.
         let add = app.buttons[AccessibilityID.PathList.add]
-        XCTAssertLessThan(add.frame.maxY, save.frame.minY)
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertLessThan(add.frame.maxY, app.windows.firstMatch.frame.maxY)
         add.click()
         UITest.choose(secret, in: app)
-        save.click()
-        XCTAssertTrue(save.waitForNonExistence(timeout: 10))
+        // Saved as it lands in the list: no Save to click.
+        let excluded = app.staticTexts.matching(NSPredicate(format: "value ENDSWITH %@", "/secret.txt")).firstMatch
+        XCTAssertTrue(excluded.waitForExistence(timeout: 10))
 
         app.buttons[AccessibilityID.Plan.backUpNow].click()
         XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.total].waitForValue(beginningWith: "2 backups · since ", timeout: 120))
@@ -40,8 +39,8 @@ final class PlanEditorUITests: XCTestCase {
         attachScreenshot()
     }
 
-    /// How often, set on the plan page, is saved at once: Manually, and the
-    /// next backup waits for Back Up Now.
+    /// How often, set on the plan page, is saved at once: Manually, and no
+    /// next backup is named.
     @MainActor
     func testManuallyWaitsForBackUpNow() throws {
         let folders = try UITestFolders.make("Manually")
@@ -49,12 +48,14 @@ final class PlanEditorUITests: XCTestCase {
         UITest.backUpFirstFolder(folders, in: app)
         let howOften = app.popUpButtons[AccessibilityID.Plan.frequency]
         XCTAssertTrue(howOften.waitForValue("Daily"))
+        let nextBackup = app.staticTexts[AccessibilityID.Plan.nextBackup]
+        XCTAssertTrue(nextBackup.exists)
 
         howOften.click()
         howOften.menuItems["Manually"].click()
 
         XCTAssertTrue(howOften.waitForValue("Manually"))
-        XCTAssertTrue(app.staticTexts[AccessibilityID.Plan.nextBackup].waitForValue("When you click Back Up Now"))
+        XCTAssertTrue(nextBackup.waitForNonExistence(timeout: 10))
         attachScreenshot()
     }
 

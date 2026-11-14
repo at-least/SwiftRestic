@@ -43,9 +43,16 @@ extension AppModel {
         plan.repositoryID.flatMap { lockedRepositories[$0] }
     }
 
+    /// `repair index`, `repair snapshots`, then the verification, as one
+    /// run.
+    func runRepair(repositoryID: UUID) {
+        runMaintenance(repositoryID: repositoryID, task: .check, repairsFirst: true)
+    }
+
     func runMaintenance(
         repositoryID: UUID,
         task: MaintenanceTask,
+        repairsFirst: Bool = false,
         askedByUser: Bool = true
     ) {
         guard !isShuttingDown else { return }
@@ -56,26 +63,23 @@ extension AppModel {
             return
         }
 
-        installMaintenanceActivity(repositoryID: repositoryID, task: task, askedByUser: askedByUser)
+        // A new run token, so a line still in flight from the previous job
+        // drops.
+        rotateRunToken(for: .maintenance(repositoryID))
+        maintenance[repositoryID] = MaintenanceActivity(task: task, repairsFirst: repairsFirst, askedByUser: askedByUser)
+        reconcileSleepAssertion()
         tasks.install(Task { [weak self] in
             if let self {
                 await MaintenanceRunEngine.perform(
                     repository: repository,
                     task: task,
+                    repairsFirst: repairsFirst,
                     sink: self
                 )
             }
             self?.unwindMaintenanceRun(repositoryID)
             if task == .prune { self?.rerunBackupsAfterFreeingSpace(in: repositoryID) }
         }, in: .maintenance(repositoryID))
-    }
-
-    /// A new run token, so a line still in flight from the previous job
-    /// drops.
-    private func installMaintenanceActivity(repositoryID: UUID, task: MaintenanceTask, askedByUser: Bool) {
-        rotateRunToken(for: .maintenance(repositoryID))
-        maintenance[repositoryID] = MaintenanceActivity(task: task, askedByUser: askedByUser)
-        reconcileSleepAssertion()
     }
 
     /// Call only from the job's own task: `clear` while a cancelled run is

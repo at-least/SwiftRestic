@@ -54,7 +54,7 @@ struct RunLogTests {
         #expect(Array(lines.prefix(5)) == [
             "SwiftRestic 0.1.0 (1) · macOS 26.6.2 (Build 25G83)",
             "restic 0.19.1 compiled with go1.26.5 on darwin/arm64",
-            "Backup of “Documents” — location “Home NAS” (Local folder or disk)",
+            "Backup of “Documents” — location “Home NAS” (Folder or Disk)",
             "Started 2026-09-26 07:58:17 +0000",
             "",
         ], "log began \(lines.prefix(5))")
@@ -66,7 +66,7 @@ struct RunLogTests {
         #expect(lines.contains("Finished 2026-09-26 07:58:19 +0000 after 2s — Some files skipped"))
         #expect(lines.contains("Backup 61b0f11423fd96e36f2fb2ddefdb4d41a4331adf2041828fcef2f679eaf97bfe"))
         #expect(lines.contains("Files: 1 new · 0 changed · 2 unchanged"))
-        #expect(lines.contains("Size: Checked \(Format.bytes(5000)) · \(Format.bytes(5300)) of new data"))
+        #expect(lines.contains("Size: \(Format.bytes(5000)) · added \(Format.bytes(5300))"))
         // Named and kinded, never located: the location can carry a host,
         // a bucket or a user name the log has no business repeating.
         #expect(!text.contains("/Volumes/Home NAS/repo"))
@@ -258,8 +258,8 @@ struct RunLogTests {
         #expect(!FileManager.default.fileExists(atPath: absent.directory.path))
     }
 
-    @Test("a skipped run's reason, a failed restore's destination and the failure line each reach the log")
-    func skippedAndFailedRestoreLines() {
+    @Test("a skipped run's reason, a failed restore's destination, the failure line and restic's detail each reach the log")
+    func skippedAndFailedRestoreLines() throws {
         func record(_ kind: RunRecord.Kind) -> RunRecord {
             var record = RunRecord(kind: kind, planName: "Documents")
             record.startedAt = at(0)
@@ -270,7 +270,7 @@ struct RunLogTests {
             RunLog.render(
                 record: record,
                 repositoryName: "Home NAS",
-                repositoryKind: "Local folder or disk",
+                repositoryKind: "Folder or Disk",
                 versions: versions,
                 transcript: RunTranscript.Contents(),
                 timeZone: TimeZone(identifier: "UTC")!
@@ -295,5 +295,16 @@ struct RunLogTests {
             "A folder is already at /tmp/there, where a restored file would go, so nothing was restored."
         ))
         #expect(failedLines.contains("Destination /tmp/there"))
+        #expect(!failedLines.contains { $0.hasPrefix("restic: ") })
+
+        var unread = record(.backup)
+        unread.setOutcome(
+            from: ResticError.malformedOutput(detail: "1 change line did not decode"),
+            cancellationMessage: "Stopped",
+            location: nil
+        )
+        let unreadLines = render(unread)
+        let failureLine = try #require(unreadLines.firstIndex(of: "SwiftRestic couldn’t read the result. Try again."))
+        #expect(unreadLines[failureLine + 1] == "restic: 1 change line did not decode")
     }
 }

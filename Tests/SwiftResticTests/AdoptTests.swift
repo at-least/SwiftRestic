@@ -113,7 +113,6 @@ struct AdoptTests {
         #expect(model.label(of: draft) == "Docs")
         #expect(draft.path == "/Data/Docs")
         #expect(draft.excludePatterns == ["node_modules", ".env"])
-        #expect(draft.tags == ["travel"])
         // The app has never run this plan; its stamps say so.
         #expect(draft.lastRunAt == nil && draft.lastSuccessAt == nil)
     }
@@ -224,10 +223,10 @@ struct AdoptTests {
 
     @Test("an untagged group has no UUID to adopt")
     func untaggedGroupHasNoUUID() async throws {
-        let console = try snapshot("c1", time: "2026-10-02T11:45:00Z", tags: [])
+        let untagged = try snapshot("c1", time: "2026-10-02T11:45:00Z", tags: [])
         let model = makeModel()
         let repository = makeRepository()
-        loadModel(model, repository: repository, listing: [console])
+        loadModel(model, repository: repository, listing: [untagged])
 
         let shelves = model.shelves(for: repository.id)
         // Every group the listing built is a lineage — none carries a plan
@@ -402,7 +401,6 @@ struct AdoptTests {
         #expect(model.configuration.plans.map(\.id) == [planID])
         let plan = try #require(model.plan(id: planID))
         #expect(plan.path == "/Data/Docs" && plan.repositoryID == repository.id)
-        #expect(plan.tags == ["work"])
         #expect(plan.schedule.frequency == BackupPlan().schedule.frequency)
         #expect(model.shelves(for: repository.id).byPlan[planID]?.map(\.id) == ["h2", "h1"])
         #expect(model.banners.first?.title == "Continuing “Docs”")

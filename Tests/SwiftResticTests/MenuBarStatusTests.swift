@@ -241,7 +241,6 @@ struct MenuBarStatusTests {
             activity: [UUID: PlanActivity] = [:],
             maintenance: [UUID: MaintenanceActivity] = [:],
             isRestoring: Bool = false,
-            isConsoleRunning: Bool = false,
             hasNoRepositories: Bool = false,
             runs: [RunRecord] = []
         ) -> MenuBarStatus.IconState {
@@ -249,7 +248,6 @@ struct MenuBarStatusTests {
                 activity: activity,
                 maintenance: maintenance,
                 isRestoring: isRestoring,
-                isConsoleRunning: isConsoleRunning,
                 hasNoRepositories: hasNoRepositories,
                 runs: runs
             )
@@ -260,7 +258,6 @@ struct MenuBarStatusTests {
         #expect(state(activity: busyActivity) == .running)
         #expect(state(maintenance: [repository.id: MaintenanceActivity(task: .check)]) == .running)
         #expect(state(isRestoring: true) == .running)
-        #expect(state(isConsoleRunning: true) == .running)
         // Running beats even having no repository — the icon should never
         // claim setup is needed while work it can't explain is in flight.
         #expect(state(activity: busyActivity, hasNoRepositories: true) == .running)
@@ -352,10 +349,10 @@ struct MenuBarStatusTests {
 
         let plans = [code, photos, quiet]
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
-            == ["Code: Failed — 2 hours ago"])
+            == [MenuBarStatus.NewsLine(text: "Code: Failed — 2 hours ago", runID: failed.id)])
         #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
         #expect(MenuBarStatus.newsLines(for: photos, among: plans, activity: nil, problem: failed, now: now, relative: Self.ago)
-            == ["Photos: Failed — 2 hours ago"])
+            == [MenuBarStatus.NewsLine(text: "Photos: Failed — 2 hours ago", runID: failed.id)])
         #expect(MenuBarStatus.newsLines(for: quiet, among: plans, activity: nil, problem: nil, now: now, relative: Self.ago).isEmpty)
         #expect(MenuBarStatus.newsLines(for: code, among: plans, activity: PlanActivity(phase: .backingUp), problem: failed, now: now).isEmpty)
 
@@ -363,7 +360,7 @@ struct MenuBarStatusTests {
             plans: [code, photos, quiet], repositories: [home], activity: [:], isResticDamaged: false,
             problem: { $0 == code.id ? failed : nil }, now: now, relative: Self.ago
         )
-        #expect(groups.first?.newsLines == ["Code: Failed — 2 hours ago"])
+        #expect(groups.first?.newsLines == [MenuBarStatus.NewsLine(text: "Code: Failed — 2 hours ago", runID: failed.id)])
     }
 
     @Test("Back Up Now waits while its repository is locked exclusively, and says why")
@@ -495,7 +492,6 @@ struct MenuBarStatusTests {
             activity: [:],
             maintenance: [:],
             isRestoring: false,
-            isConsoleRunning: false,
             hasNoRepositories: false,
             runs: runs
         )
@@ -588,7 +584,6 @@ struct MenuBarStatusTests {
                 activity: [:],
                 maintenance: [:],
                 isRestoring: false,
-                isConsoleRunning: false,
                 hasNoRepositories: true,
                 runs: [failed]
             ) == .unconfigured
@@ -802,7 +797,7 @@ struct MenuBarStatusTests {
     func iconFollowsTheVerdict() {
         func state(rows: [UpToDateRow], isResticDamaged: Bool = false, activity: [UUID: PlanActivity] = [:]) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
-                activity: activity, maintenance: [:], isRestoring: false, isConsoleRunning: false,
+                activity: activity, maintenance: [:], isRestoring: false,
                 hasNoRepositories: false, runs: [], rows: rows, isResticDamaged: isResticDamaged
             )
         }
@@ -821,7 +816,7 @@ struct MenuBarStatusTests {
     func problemOutranksRunning() {
         func state(rows: [UpToDateRow] = [], runs: [RunRecord] = [], isRestoring: Bool = false, hasNoRepositories: Bool = false) -> MenuBarStatus.IconState {
             MenuBarStatus.iconState(
-                activity: [:], maintenance: [:], isRestoring: isRestoring, isConsoleRunning: false,
+                activity: [:], maintenance: [:], isRestoring: isRestoring,
                 hasNoRepositories: hasNoRepositories, runs: runs, rows: rows
             )
         }

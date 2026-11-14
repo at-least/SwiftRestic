@@ -244,9 +244,10 @@ private struct RestoreFlow: ViewModifier {
 
 /// Another Mac's backup, and Restore when the items' own place is not
 /// available: Arq's "Restore to:" window. It opens on the folder (the
-/// Desktop until another is chosen). Return, Return (the pane's default
-/// action, then this sheet's) never replaces anything: the question's
-/// Replace has no Return.
+/// Desktop until another is chosen). Opened for a place that is not
+/// available, it says why under its title and asks for the folder alone.
+/// Return, Return (the pane's default action, then this sheet's) never
+/// replaces anything: the question's Replace has no Return.
 private struct RestoreDestinationSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -281,20 +282,28 @@ private struct RestoreDestinationSheet: View {
                     caption(note)
                         .padding(.top, 4)
                 }
+                if let originalUnavailableReason {
+                    caption(originalUnavailableReason)
+                        .padding(.top, 4)
+                }
             }
 
             Form {
                 LabeledContent("Restore to") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Picker("Restore to", selection: $kind) {
+                        if originalUnavailableReason == nil {
+                            Picker("Restore to", selection: $kind) {
+                                Text(FileManager.default.displayName(atPath: folder.path))
+                                    .tag(RestoreDestinationKind.folder)
+                                Text("Original location")
+                                    .tag(RestoreDestinationKind.originalLocation)
+                            }
+                            .pickerStyle(.radioGroup)
+                            .labelsHidden()
+                        } else {
                             Text(FileManager.default.displayName(atPath: folder.path))
-                                .tag(RestoreDestinationKind.folder)
-                            Text("Original location")
-                                .tag(RestoreDestinationKind.originalLocation)
                         }
-                        .pickerStyle(.radioGroup)
-                        .labelsHidden()
-                        // Beside the folder's radio, the first baseline.
+                        // Beside the folder, the first baseline.
                         Button("Choose…") { chooseFolder() }
                             .accessibilityIdentifier(AccessibilityID.RestoreSheet.chooseFolder)
                             .controlSize(.small)
@@ -329,6 +338,14 @@ private struct RestoreDestinationSheet: View {
         .frame(width: 460)
         .task { if original == nil { await checkOriginalLocation() } }
         .onDisappear { confirmation?.cancel() }
+    }
+
+    /// Why Restore came here in place of putting the items back
+    /// (`RestoreFlow.restoreInPlace`); nil for another Mac's backup, whose
+    /// sheet looks for itself and keeps both choices.
+    private var originalUnavailableReason: String? {
+        if case let .unavailable(reason) = request.original { return reason }
+        return nil
     }
 
     private var itemName: String? {

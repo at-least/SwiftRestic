@@ -19,8 +19,8 @@ extension View {
     }
 }
 
-/// No "Restore a File…" beside them: Edit ▸ Find… (⌘F) is the way in to a
-/// file not on screen (the user's call).
+/// No "Restore a File…" beside them: Edit ▸ Search All Backups (⌘F) is the
+/// way in to a file not on screen (the user's call).
 struct RestoreCommands: Commands {
     @FocusedValue(\.restoreCommand) private var command
 

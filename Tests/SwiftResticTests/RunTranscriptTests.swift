@@ -86,7 +86,7 @@ struct RunTranscriptTests {
         let text = RunLog.render(
             record: record,
             repositoryName: "NAS",
-            repositoryKind: "Local folder or disk",
+            repositoryKind: "Folder or Disk",
             versions: RunLogVersions(app: "SwiftRestic 0.1.0 (1)", macOS: "macOS 26.6.2", restic: "restic 0.19.1"),
             transcript: contents,
             timeZone: TimeZone(identifier: "UTC")!
@@ -125,7 +125,7 @@ struct RunTranscriptTests {
         var plan = BackupPlan()
         plan.excludePatterns = ["*.iso"]
         let excludes = plan.excludesToPass.flatMap { ["--exclude", ResticService.expandTilde($0)] }
-        let command = CommandLineTokenizer.render(["restic", "backup", "--json", "/src"] + excludes)
+        let command = ShellCommandLine.render(["restic", "backup", "--json", "/src"] + excludes)
         #expect(command.utf8.count > RunTranscript.lineByteLimit)
         transcript.command(command)
         #expect(try #require(transcript.contents.entries.first).text == command)

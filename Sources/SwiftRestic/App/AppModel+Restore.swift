@@ -5,6 +5,17 @@ import UniformTypeIdentifiers
 extension AppModel {
     var isRestoring: Bool { restoreActivity != nil }
 
+    /// The sentence beside a greyed Restore while the location's disk is
+    /// not connected; nil when a restore from it can start.
+    func restoreAwayReason(repositoryID: UUID) -> String? {
+        guard case let .notConnected(volume) = snapshotListingOutcome(for: repositoryID) else { return nil }
+        return SnapshotListingOutcome.connectText(volume: volume)
+    }
+
+    func canRestore(from repositoryID: UUID) -> Bool {
+        !isRestoring && restoreAwayReason(repositoryID: repositoryID) == nil
+    }
+
     /// A progress hop can still be in flight when a cancelled restore
     /// unwinds; the run token, rotated at unwind, drops it so it cannot
     /// resurrect the strip.
@@ -284,6 +295,10 @@ extension AppModel {
                 throw ResticError.repositoryRemoved
             }
             let (service, context) = try await resticContext(for: repository)
+            // The listing can still say connected for a disk just gone.
+            if await isVolumeMissing(repository) {
+                throw MessageError(message: RunRecord.skippedReason(sources: [repository.resolvedLocalPath]))
+            }
             let summary = try await RunTranscript.$current.withValue(transcript) {
                 try await step.operation(service, context)
             }
@@ -338,7 +353,7 @@ extension AppModel {
     /// Lists ask on every row mouse-down, so they offer no drag when this is
     /// false instead of `dragRestoreProvider` posting a banner per click.
     func canDragRestore(repositoryID: UUID) -> Bool {
-        repository(id: repositoryID) != nil && isResticAvailable
+        repository(id: repositoryID) != nil && isResticAvailable && restoreAwayReason(repositoryID: repositoryID) == nil
     }
 
     /// A promised file: the restore runs when Finder's drop asks for the

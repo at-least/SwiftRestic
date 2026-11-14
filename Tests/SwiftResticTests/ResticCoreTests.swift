@@ -165,7 +165,7 @@ struct ResticErrorTests {
 
     @Test("a missing password names the location it is missing for")
     func passwordMissingNamesTheLocation() {
-        #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is stored for “NAS”.")
+        #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is saved for “NAS”. Enter it to back up again.")
     }
 
     @Test("a launch failure, an unreadable answer and an unrestored item each say what happened, without naming restic")
@@ -173,7 +173,8 @@ struct ResticErrorTests {
         #expect(ResticError.processLaunchFailed("The file “restic” doesn’t exist").errorDescription
             == "SwiftRestic couldn’t start the backup: The file “restic” doesn’t exist. If this keeps happening, install SwiftRestic again.")
         #expect(ResticError.malformedOutput(detail: "1 change line did not decode").errorDescription
-            == "It finished, but its result couldn’t be read (1 change line did not decode).")
+            == "SwiftRestic couldn’t read the result. Try again.")
+        #expect(ResticError.malformedOutput(detail: "1 change line did not decode").resticDetail == "1 change line did not decode")
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt"]).errorDescription
             == "/Restored/a.txt wasn’t restored: nothing by that name is in the backup. A name written on another kind of computer can do this.")
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt", "/Restored/b.txt"]).errorDescription
@@ -414,8 +415,6 @@ struct PasswordPrecedenceTests {
 
     @Test("an empty repository string leaves the extra environment's location standing")
     func incompleteRepositoryKeepsExtraLocation() {
-        // The console can reach a repository the plan editor would call
-        // incomplete; clobbering RESTIC_REPOSITORY with "" would break that.
         var repository = Repository()
         repository.kind = .local
         repository.localPath = ""

@@ -22,13 +22,8 @@ enum AccessibilityID {
     enum Plan {
         static let total = "plan.total"
         static let backUpNow = "plan.backUpNow"
-        static let edit = "plan.edit"
         static let frequency = "plan.frequency"
         static let nextBackup = "plan.nextBackup"
-    }
-
-    enum PlanEditor {
-        static let save = "planEditor.save"
     }
 
     enum PathList {

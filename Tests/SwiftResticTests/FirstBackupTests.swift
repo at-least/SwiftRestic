@@ -264,7 +264,7 @@ struct FirstBackupTests {
         #expect(plan.announcesFirstBackup)
     }
 
-    @Test("the folder panel's location is the last answer unless it breaks a rule or the folder needs Full Disk Access")
+    @Test("the folder panel's location is the last answer unless it breaks a rule; a folder that needs Full Disk Access backs up all the same")
     func backUpWithoutSheet() throws {
         let (model, root) = try makeModel()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -279,9 +279,6 @@ struct FirstBackupTests {
         #expect(model.backUpWithoutSheet(source: source, destination: .folder("/Volumes/Disk/SwiftRestic Backups")) == nil)
         // Backups inside the folder being backed up: the sheet says why.
         #expect(model.backUpWithoutSheet(source: root.path, destination: .location(disk.id)) == nil)
-        // The sheet carries the Full Disk Access notice.
-        let documents = NSHomeDirectory() + "/Documents"
-        #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) == nil)
         #expect(model.configuration.plans.isEmpty)
 
         let planID = try #require(model.backUpWithoutSheet(source: source, destination: .location(disk.id)))
@@ -292,7 +289,9 @@ struct FirstBackupTests {
         // A second plan for the same folder breaks a rule.
         #expect(model.backUpWithoutSheet(source: source, destination: .location(disk.id)) == nil)
 
-        model.fullDiskAccess = .granted
+        // The plan's page carries the Full Disk Access notice.
+        let documents = NSHomeDirectory() + "/Documents"
+        #expect(model.fullDiskAccessNotice(for: documents) != nil)
         #expect(model.backUpWithoutSheet(source: documents, destination: .location(disk.id)) != nil)
     }
 
@@ -637,7 +636,7 @@ struct RepositoryBackUpNowTests {
 
         let state = model.planCommands(for: .repository(repository.id))
         #expect(state.canBackUp && state.repositoryPlanIDs == [plan.id])
-        #expect(state.planID == nil && !state.canStop && !state.canEdit && !state.canDelete)
+        #expect(state.planID == nil && !state.canStop && !state.canDelete)
         #expect(!model.planCommands(for: .repository(empty.id)).canBackUp)
     }
 

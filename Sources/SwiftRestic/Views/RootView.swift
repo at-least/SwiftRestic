@@ -10,7 +10,6 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
-    @State private var editingPlan: BackupPlan?
     @State private var editingRepository: Repository?
     /// Enter Password…, a missing or refused password's fix.
     @State private var enteringPassword: Repository?
@@ -22,6 +21,10 @@ struct RootView: View {
     /// cloud kinds: set from the sheet's handoff until the editor closes,
     /// its Back Up then creating the plan as the sheet's would.
     @State private var firstBackupHandoff: FirstBackupHandoff?
+    /// The editor opened from the handoff made its plan; closing without
+    /// one goes back to the first-run sheet. Not the handoff cleared on
+    /// creation: the closing editor still renders from it.
+    @State private var handoffMadeItsPlan = false
     /// The missing location the repository editor is adding a replacement
     /// for, until the editor closes.
     @State private var replacedRepositoryID: UUID?
@@ -63,7 +66,6 @@ struct RootView: View {
 
     private var sidebar: some View {
         SidebarView(
-            onEditPlan: { editingPlan = $0 },
             onNewPlan: startBackUpAFolder(in:),
             onEditRepository: { editingRepository = $0 },
             onNewRepository: addRepository,
@@ -88,10 +90,6 @@ struct RootView: View {
 
     private func presented<V: View>(over content: V) -> some View {
         content
-        .sheet(item: $editingPlan) { plan in
-            PlanEditorSheet(plan: plan)
-                .environment(model)
-        }
         // Not sheet(isPresented:) beside a separate source: its content kept
         // the source from before the panel, and the sheet opened on an empty
         // folder (seen in the UI tests).
@@ -104,10 +102,7 @@ struct RootView: View {
             )
             .environment(model)
         }
-        .sheet(item: $editingRepository, onDismiss: {
-            firstBackupHandoff = nil
-            replacedRepositoryID = nil
-        }) { repository in
+        .sheet(item: $editingRepository, onDismiss: repositoryEditorClosed) { repository in
             // A new repository lands on its own page, where "Back Up a
             // Folder" is the first thing it offers; one added for the
             // first-run sheet lands on the plan made in it.
@@ -119,6 +114,7 @@ struct RootView: View {
                 replacing: replacedRepositoryID,
                 onCreated: { id in
                     if let handoff = firstBackupHandoff {
+                        handoffMadeItsPlan = true
                         router.selection = .plan(model.createFirstPlan(source: handoff.source, repositoryID: id))
                     } else {
                         router.selection = .repository(id)
@@ -271,6 +267,18 @@ struct RootView: View {
         editingRepository = repository
     }
 
+    /// Cancel in the editor the first-run sheet handed off to: back to that
+    /// sheet, on the folder and the destination it held.
+    private func repositoryEditorClosed() {
+        replacedRepositoryID = nil
+        guard let handoff = firstBackupHandoff else { return }
+        firstBackupHandoff = nil
+        if !handoffMadeItsPlan {
+            firstBackupSource = FirstBackupSource(path: handoff.source, destination: handoff.destination)
+        }
+        handoffMadeItsPlan = false
+    }
+
     private func addRepository() {
         guard model.isResticAvailable else {
             NSSound.beep()
@@ -335,7 +343,6 @@ struct RootView: View {
                 router.showBackup(newest.id, on: .plan(plan.id), repositoryID: repositoryID, focusPath: ResticPath.normalized(item))
             }
         case "concepts": openWindow(id: SwiftResticApp.helpWindowID)
-        case "console": openWindow(id: SwiftResticApp.consoleWindowID)
         // The restore pane needs a snapshot row to select, and those arrive
         // only after the launch refresh — the selection happens in
         // `RootDetailView`'s snapshots onChange.
@@ -351,11 +358,8 @@ struct RootView: View {
             pendingCaptureGroupPane = .lineage
         // A saved repository's editor: its kind's fields, filled.
         case "repositoryEditor": editingRepository = model.configuration.repositories.first
-        // The new-repository editor: only it has the destination-before-kind
-        // picker.
+        // The new-repository editor: only it has the Type picker.
         case "newRepository": editingRepository = Repository()
-        case "planRetention": editingPlan = model.configuration.plans.first
-        case "planEditor": editingPlan = model.configuration.plans.first
         default: break
         }
         applyCaptureTab()
@@ -428,7 +432,7 @@ struct RootView: View {
     /// while the plan changed.
     private func consumeIntent() {
         guard let intent = router.takePendingIntent() else { return }
-        let sheetsUp = editingPlan != nil || editingRepository != nil || enteringPassword != nil
+        let sheetsUp = editingRepository != nil || enteringPassword != nil
             || enteringSharePassword != nil || firstBackupSource != nil
             || pendingConfirmation != nil || adoptingPlan != nil
             || NSApp.windows.contains { $0.attachedSheet != nil }
@@ -456,8 +460,6 @@ struct RootView: View {
             runSelectedPlan()
         case let .stopPlan(id):
             if model.planCommands(for: .plan(id)).canStop { model.cancelBackup(planID: id) }
-        case let .editPlan(id):
-            editingPlan = model.plan(id: id)
         case let .editRepository(id):
             editingRepository = model.repository(id: id)
         case let .enterPassword(id):
@@ -472,7 +474,7 @@ struct RootView: View {
             if let share = model.savedShare(forPlan: id) {
                 enteringSharePassword = share
             } else {
-                editingPlan = model.plan(id: id)
+                showOverview(ofPlan: id)
             }
         case let .confirm(confirmation):
             if model.confirmationCopy(for: confirmation) != nil {
@@ -487,6 +489,13 @@ struct RootView: View {
             model.runMaintenance(repositoryID: id, task: .prune)
             router.showMaintenance(of: id)
         }
+    }
+
+    /// Where a plan's folder notices and its share's password are.
+    private func showOverview(ofPlan id: UUID) {
+        guard model.plan(id: id) != nil else { return }
+        router.setTab(.overview, of: .plan(id))
+        router.selection = .plan(id)
     }
 
     /// The rules live on `AppRouter.revalidated`, where tests reach them;

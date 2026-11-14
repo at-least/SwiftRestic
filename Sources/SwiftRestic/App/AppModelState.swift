@@ -48,9 +48,15 @@ struct QueuedBackup: Sendable, Equatable {
 
 struct MaintenanceActivity: Sendable, Equatable {
     var task: MaintenanceTask
+    /// A verification that repairs first (`AppModel.runRepair`).
+    var repairsFirst = false
     /// False for the scheduler's runs: a skip nobody asked for posts nothing.
     var askedByUser = true
     var startedAt: Date = .now
+
+    var inFlightTitle: String {
+        repairsFirst ? "Repairing…" : task.inFlightTitle
+    }
 }
 
 struct Banner: Identifiable, Equatable {

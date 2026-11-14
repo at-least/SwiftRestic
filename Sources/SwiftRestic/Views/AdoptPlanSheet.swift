@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Continue Backups: the history a new plan takes over, said once, with one
 /// button. The plan's settings come from those backups
-/// (`AppModel.adoptDraft`) and a new plan's defaults; Edit Plan… changes
-/// them afterwards.
+/// (`AppModel.adoptDraft`) and a new plan's defaults; the plan's page
+/// changes them afterwards.
 struct AdoptPlanSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss

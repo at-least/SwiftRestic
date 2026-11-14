@@ -19,10 +19,9 @@ enum MenuBarStatus {
     static func isWorking(
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
-        isRestoring: Bool,
-        isConsoleRunning: Bool
+        isRestoring: Bool
     ) -> Bool {
-        !activity.isEmpty || !maintenance.isEmpty || isRestoring || isConsoleRunning
+        !activity.isEmpty || !maintenance.isEmpty || isRestoring
     }
 
     /// A problem is what `verdict` would lead with: a damaged install, a run's
@@ -31,14 +30,13 @@ enum MenuBarStatus {
         activity: [UUID: PlanActivity],
         maintenance: [UUID: MaintenanceActivity],
         isRestoring: Bool,
-        isConsoleRunning: Bool,
         hasNoRepositories: Bool,
         runs: [RunRecord],
         rows: [UpToDateRow] = [],
         isResticDamaged: Bool = false,
         now: Date = .now
     ) -> IconState {
-        let isRunning = isWorking(activity: activity, maintenance: maintenance, isRestoring: isRestoring, isConsoleRunning: isConsoleRunning)
+        let isRunning = isWorking(activity: activity, maintenance: maintenance, isRestoring: isRestoring)
         if hasNoRepositories { return isRunning ? .running : .unconfigured }
         let isHealthy = !isResticDamaged
             && newestStandingProblem(runs: runs, now: now) == nil
@@ -141,8 +139,7 @@ enum MenuBarStatus {
         return "\(subject)\(verdict) \(relative(newest.finishedAt))"
     }
 
-    /// `nil` while anything runs: the running lines replace it. Console work
-    /// has no running line, so it does not hold the headline back. `nil`
+    /// `nil` while anything runs: the running lines replace it. `nil`
     /// under a hold or while restic is damaged: their own line leads the
     /// menu, and a next-run headline would announce a run the scheduler will
     /// not fire. The plan is named with its repository: two repositories can
@@ -242,12 +239,19 @@ enum MenuBarStatus {
         var protection: String?
         var rows: [PlanRow]
         /// One plan's failure must not hide another's.
-        var newsLines: [String] = []
+        var newsLines: [NewsLine] = []
 
         /// The Status line where no submenu title names the repository.
         var labeledStatus: String? {
             protection.map { "\(title) — \($0)" }
         }
+    }
+
+    /// Carries the run it names: the line opens that run's fix, as the
+    /// menu's top problem line does.
+    struct NewsLine: Equatable {
+        var text: String
+        var runID: UUID
     }
 
     /// A single repository's rows sit in the menu itself, a hover closer
@@ -267,9 +271,9 @@ enum MenuBarStatus {
         problem: RunRecord?,
         now: Date,
         relative: (Date) -> String = { Format.relative($0) }
-    ) -> [String] {
+    ) -> [NewsLine] {
         guard activity == nil else { return [] }
-        guard problem != nil, let caption = PlanStatus.sidebarCaption(
+        guard let problem, let caption = PlanStatus.sidebarCaption(
             for: plan,
             activity: nil,
             problem: problem,
@@ -277,7 +281,7 @@ enum MenuBarStatus {
             now: now,
             relative: relative
         ) else { return [] }
-        return ["\(plan.label(among: plans)): \(caption.text)"]
+        return [NewsLine(text: "\(plan.label(among: plans)): \(caption.text)", runID: problem.id)]
     }
 
     static func planGroups(
@@ -345,7 +349,7 @@ enum MenuBarStatus {
             guard let work = maintenance[repository.id] else { return nil }
             return RunningLine(
                 id: "maintenance-\(repository.id.uuidString)",
-                text: "\(repository.label(among: repositories)) — \(work.task.inFlightTitle)"
+                text: "\(repository.label(among: repositories)) — \(work.inFlightTitle)"
             )
         }
     }
@@ -368,8 +372,8 @@ enum MenuBarStatus {
     /// Leads the tray's menu, before the repository rows.
     enum TrayLine: Equatable {
         case status(String)
-        /// The menu's one line that goes somewhere (Show in Activity), so it
-        /// carries the run it names.
+        /// Goes somewhere (Show in Activity), so it carries the run it
+        /// names.
         case problem(text: String, runID: UUID)
     }
 

@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Back Up a Folder… in three questions: what, where, a password. Everything
-/// else is a plan's and a repository's defaults, and lives in their editors.
+/// else is a plan's and a repository's defaults, and lives on the plan's
+/// page and in the location's editor.
 /// With locations set up, where is one of them, and they already have
 /// their passwords.
 struct FirstBackupSheet: View {
@@ -78,6 +79,9 @@ struct FirstBackupSheet: View {
                 }
             }
             .formStyle(.grouped)
+            // The sheet follows the form's height, growing with the
+            // password section.
+            .fixedSize(horizontal: false, vertical: true)
             .disabled(isWorking)
 
             Divider()
@@ -112,7 +116,7 @@ struct FirstBackupSheet: View {
             }
             .padding(12)
         }
-        .frame(minWidth: 520, idealWidth: 560, minHeight: 480, idealHeight: 540)
+        .frame(width: 560)
         .onAppear(perform: readDisks)
         .task(id: chosenFolder) {
             guard let folder = chosenFolder else {
@@ -216,7 +220,8 @@ struct FirstBackupSheet: View {
                 // No wait for the menu, unlike the panel: the editor opens
                 // in this sheet's onDismiss, after its closing animation.
                 onServerOrCloud(FirstBackupHandoff(
-                    kind: kind, source: source, password: password, confirmPassword: confirmPassword
+                    kind: kind, source: source, destination: destination,
+                    password: password, confirmPassword: confirmPassword
                 ))
                 dismiss()
             }
@@ -281,6 +286,9 @@ struct FirstBackupHandoff {
     /// The editor opens on it, with no Type pop-up.
     let kind: Repository.Kind
     let source: String
+    /// What the sheet held for Back up to, which a cancelled editor
+    /// returns to.
+    let destination: FirstBackupDestination?
     let password: String
     let confirmPassword: String
 }

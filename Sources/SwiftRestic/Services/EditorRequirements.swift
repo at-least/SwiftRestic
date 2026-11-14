@@ -5,13 +5,11 @@ import Foundation
 /// pins — the footer must never name a later gap while an earlier one exists.
 enum EditorRequirements {
     /// The first requirement `BackupPlan.isConfigurationComplete` checks but
-    /// does not name, in the order the plan sheet's header presents them —
-    /// Folder or file, Repository — then the one a configuration checks: a
-    /// repository holds one plan per path (`plans`, every configured plan,
-    /// the draft's own saved entry among them), its history being restic's
-    /// for that path. That one binds only a plan being added — new, or
-    /// adopted: a saved plan's path is fixed, so in an edit it could only
-    /// grey Save with nothing in the sheet to change.
+    /// does not name — Folder or file, Repository — then the one a
+    /// configuration checks: a repository holds one plan per path (`plans`,
+    /// every configured plan, the draft's own saved entry among them), its
+    /// history being restic's for that path. That one binds only a plan
+    /// being added — new, moved or adopted.
     static func plan(_ draft: BackupPlan, isNew: Bool, among plans: [BackupPlan]) -> String? {
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Choose a folder or file to back up."
@@ -114,14 +112,6 @@ enum EditorRequirements {
 
     private static func comparableLocation(_ repository: Repository) -> String {
         ResticPath.normalized(repository.resticRepositoryString)
-    }
-
-    /// The repository a plan editor opens on: the plan's own, else the
-    /// only one there is. With two or more the picker says Choose and the
-    /// footer asks — a silent first pick lands the plan wherever the first
-    /// row points.
-    static func initialRepositoryID(_ current: UUID?, among repositories: [Repository]) -> UUID? {
-        current ?? (repositories.count == 1 ? repositories[0].id : nil)
     }
 
     /// The first requirement `Repository.isConfigurationComplete` plus the

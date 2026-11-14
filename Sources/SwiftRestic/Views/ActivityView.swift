@@ -13,32 +13,16 @@ struct ActivityView: View {
         KeyPathComparator(\RunRecord.startedAt, order: .reverse)
     ]
 
-    private var visibleRuns: [RunRecord] {
-        let base = router.activityShowsProblemsOnly
-            ? model.configuration.runs.filter(\.outcome.isProblem)
-            : model.configuration.runs
-        return base.sorted(using: sortOrder)
-    }
-
     var body: some View {
-        @Bindable var model = model
-        @Bindable var router = router
-        // One filter+sort per render: the empty-state check, the table and
-        // the detail lookup all need the same list, and the computed property
-        // would re-run the history's sort at every access.
-        let runs = visibleRuns
+        // One sort per render: the table and the detail lookup need the
+        // same list.
+        let runs = model.configuration.runs.sorted(using: sortOrder)
         return VStack(alignment: .leading, spacing: 0) {
-            if model.configuration.runs.isEmpty {
+            if runs.isEmpty {
                 ContentUnavailableView(
                     "No activity yet",
                     systemImage: "list.bullet.rectangle",
                     description: Text("Backups, restores, verifications and freeing space show here when they finish.")
-                )
-            } else if runs.isEmpty {
-                ContentUnavailableView(
-                    "No problems recorded",
-                    systemImage: "checkmark.circle",
-                    description: Text("Nothing in Activity failed or had problems.")
                 )
             } else {
                 Table(runs, selection: $selection, sortOrder: $sortOrder) {
@@ -164,35 +148,12 @@ struct ActivityView: View {
         // Being open is the read: on arrival, and for a problem that lands
         // while the table already shows it.
         .onChange(of: model.configuration.runs, initial: true) { model.markActivitySeen() }
-        .toolbar {
-            ToolbarItemGroup {
-                // Two states: what went wrong, or everything. Full
-                // per-outcome filtering would serve nobody who reaches for it.
-                Picker("Show", selection: $router.activityShowsProblemsOnly) {
-                    Text("All").tag(false)
-                    Text("Problems").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-            }
-        }
-        .task(id: router.activityShowsProblemsOnly) {
-            // Switching to Problems selects the newest problem, so the
-            // drawer is not empty.
-            guard router.activityShowsProblemsOnly,
-                  !visibleRuns.contains(where: { $0.id == selection })
-            else { return }
-            selection = visibleRuns.first?.id
-        }
         // The "Last backup" value's landing: the plan page hands over a run
         // to land selected.
         .task(id: router.activityFocusRunID) {
             guard let id = router.activityFocusRunID else { return }
             router.activityFocusRunID = nil
-            if router.activityShowsProblemsOnly, !visibleRuns.contains(where: { $0.id == id }) {
-                router.activityShowsProblemsOnly = false
-            }
-            if visibleRuns.contains(where: { $0.id == id }) {
+            if model.configuration.runs.contains(where: { $0.id == id }) {
                 selection = id
             }
         }

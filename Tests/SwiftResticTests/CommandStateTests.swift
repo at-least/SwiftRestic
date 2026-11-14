@@ -339,7 +339,7 @@ struct CommandStateTests {
                                          .orphanPlan(repositoryID: repository.id, planID: UUID())] {
             let state = model.planCommands(for: selection)
             #expect(state.planID == nil, "selection \(String(describing: selection))")
-            #expect(!state.canBackUp && !state.canStop && !state.canEdit)
+            #expect(!state.canBackUp && !state.canStop)
             #expect(!state.canDelete)
             #expect(state.stopTitle == "Stop Backup")
         }
@@ -347,7 +347,7 @@ struct CommandStateTests {
 
         let idle = model.planCommands(for: .plan(plan.id))
         #expect(idle.planID == plan.id)
-        #expect(idle.canBackUp && idle.canEdit && idle.canDelete)
+        #expect(idle.canBackUp && idle.canDelete)
         #expect(!idle.canStop)
     }
 
@@ -410,7 +410,7 @@ struct CommandStateTests {
 
         let state = model.planCommands(for: .plan(plan.id))
         #expect(!state.canBackUp)
-        #expect(state.canEdit && state.canDelete)
+        #expect(state.canDelete)
 
         let repositoryState = model.repositoryCommands(for: .repository(repository.id))
         #expect(!repositoryState.canMaintain)
@@ -556,6 +556,11 @@ struct CommandStateTests {
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.title == "Remove “Docs”?")
         #expect(model.confirmationCopy(for: .deleteRepository(repository.id))?.title
             == "Remove “NAS” from SwiftRestic?")
+        #expect(model.confirmationCopy(for: .repair(repository.id)) == ConfirmationCopy(
+            title: "Repair the backups in “NAS”?",
+            message: "Damaged backups are replaced with repaired copies."
+                + " Files that can’t be read are left out of them. This can’t be undone."
+        ))
 
         let stopping = "will be stopped"
         #expect(model.confirmationCopy(for: .deletePlan(plan.id))?.message.contains(stopping) == false)
@@ -574,6 +579,7 @@ struct CommandStateTests {
 
         #expect(model.confirmationCopy(for: .deletePlan(UUID())) == nil)
         #expect(model.confirmationCopy(for: .deleteRepository(UUID())) == nil)
+        #expect(model.confirmationCopy(for: .repair(UUID())) == nil)
     }
 
 }

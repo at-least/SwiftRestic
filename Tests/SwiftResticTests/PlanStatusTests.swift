@@ -32,7 +32,7 @@ struct PlanStatusTests {
         )
         #expect(
             PlanStatus.nextBackupTile(for: orphaned, existingRepositoryIDs: [repositoryID], now: now).help
-                == "This plan isn’t scheduled because its setup is incomplete. To finish it, choose Edit Plan"
+                == "This plan isn’t scheduled because it has no backup location or no folder. Remove the plan, then choose Back Up a Folder."
         )
 
         let dangling = completeDailyPlan()
@@ -52,12 +52,6 @@ struct PlanStatusTests {
         let tile = PlanStatus.nextBackupTile(for: plan, existingRepositoryIDs: [repositoryID], now: now)
         #expect(tile.value == Format.tileTimestamp(scheduled, now: now))
         #expect(tile.help == Format.timestamp(scheduled))
-
-        var manual = completeDailyPlan()
-        manual.schedule.frequency = .manual
-        // The row asks when; the schedule row above it says "Manually".
-        #expect(PlanStatus.nextBackupTile(for: manual, existingRepositoryIDs: [repositoryID], now: now).value
-            == "When you click Back Up Now")
     }
 
     @Test("a backup that started this minute counts at once: the window's clock is the minute's start, earlier than the run's stamp")
@@ -355,7 +349,7 @@ struct PlanStatusTests {
         #expect(summary.items == Array(items.prefix(5)))
         #expect(summary.unlistedItemCount == 115)
         #expect(summary.message == RunRecord.retentionSkippedOnScreenPrefix + "locked")
-        #expect(summary.facts == ["120 unreadable items", "Old backups not removed"])
+        #expect(summary.facts == ["120 files skipped", "Old backups not removed"])
 
         // Two items: both listed, nothing left over, no message to repeat
         // them — and the count dropped from the facts, which the item list
@@ -387,7 +381,7 @@ struct PlanStatusTests {
             "Retention skipped: repository is already locked by PID 4242 on demo-mac",
         ]
         stored.itemErrorCount = 1
-        #expect(PlanStatus.facts(for: stored) == ["1 unreadable item", "Old backups not removed"])
+        #expect(PlanStatus.facts(for: stored) == ["1 file skipped", "Old backups not removed"])
     }
 
     @Test("a bare exit 3 still says something")

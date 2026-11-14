@@ -107,10 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Coming back from System Settings is the only sign that Full Disk
-    /// Access or the login item changed, so every activation asks again —
-    /// here rather than in Settings, so the plan editor catches up while no
-    /// Settings window exists. An activation before the model arrives is
-    /// covered by bootstrap's own reads.
+    /// Access or the login item changed, so every activation asks again. An
+    /// activation before the model arrives is covered by bootstrap's own
+    /// reads.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { await model?.refreshFullDiskAccess() }
         Task { await model?.refreshLoginItemStatus() }
@@ -193,7 +192,6 @@ struct SwiftResticApp: App {
 
     private static let mainWindowID = "main"
     static let helpWindowID = "help"
-    static let consoleWindowID = "console"
 
     var body: some Scene {
         // `Window`, not `WindowGroup`: a group is multi-instance, so opening
@@ -236,7 +234,7 @@ struct SwiftResticApp: App {
                     .keyboardShortcut("?", modifiers: .command)
             }
             CommandGroup(after: .textEditing) {
-                Button("Find…") { ask(.showFind) }
+                Button("Search All Backups") { ask(.showFind) }
                     .keyboardShortcut("f", modifiers: .command)
                     .disabled(!model.repositoryCommands(for: router.selection).canFind)
             }
@@ -250,25 +248,10 @@ struct SwiftResticApp: App {
             locationMenu
         }
 
-        Settings {
-            SettingsView()
-                .environment(model)
-        }
-        .windowResizability(.contentSize)
-
         Window("SwiftRestic Help", id: Self.helpWindowID) {
             ConceptsView()
         }
         .defaultSize(width: 480, height: 600)
-
-        // Opened only from the damage it repairs (`RepairButton`):
-        // without commandsRemoved the Window menu lists it.
-        Window("restic Console", id: Self.consoleWindowID) {
-            ResticConsoleView()
-                .environment(model)
-        }
-        .defaultSize(width: 720, height: 480)
-        .commandsRemoved()
     }
 
     /// Also opens the window: an intent parked while no window exists would
@@ -308,13 +291,6 @@ struct SwiftResticApp: App {
 
             Divider()
 
-            Button("Edit Plan…") {
-                if let id = p.planID { ask(.editPlan(id)) }
-            }
-            .disabled(!p.canEdit)
-
-            Divider()
-
             Button("Remove Plan…") {
                 if let id = p.planID { ask(.confirm(.deletePlan(id))) }
             }
@@ -340,12 +316,6 @@ struct SwiftResticApp: App {
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                 .disabled(!offered)
             }
-            Divider()
-            Toggle("Show Problems Only", isOn: Binding(
-                get: { router.activityShowsProblemsOnly },
-                set: { router.activityShowsProblemsOnly = $0 }
-            ))
-            .disabled(router.selection != .activity)
             Divider()
         }
     }

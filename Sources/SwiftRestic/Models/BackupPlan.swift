@@ -91,7 +91,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     /// The editor's Excluded Items list. The always-applied rules are not
     /// stored here; a run adds them (`excludesToPass`).
     var excludePatterns: [String] = []
-    var tags: [String] = []
     var schedule = Schedule()
     var retention = RetentionPolicy()
     var lastRunAt: Date?
@@ -104,7 +103,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var announcesFirstBackup = false
 
     private enum CodingKeys: String, CodingKey {
-        case id, repositoryID, path, excludePatterns, tags, schedule
+        case id, repositoryID, path, excludePatterns, schedule
         case lastRunAt, lastSuccessAt, staleAlertedFor, announcesFirstBackup
     }
 
@@ -115,7 +114,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         id = c.value(.id, default: UUID())
         repositoryID = c.optional(.repositoryID)
         path = c.value(.path, default: "")
-        tags = c.value(.tags, default: [])
         schedule = c.value(.schedule, default: Schedule())
         lastRunAt = c.optional(.lastRunAt)
         lastSuccessAt = c.optional(.lastSuccessAt)
@@ -190,10 +188,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         schedule.nextRunDate(after: lastRunAt, now: now).flatMap { $0 <= now ? $0 : nil }
     }
 
-    /// The fields the editor does not edit come from the stored plan: the
-    /// run stamps, the quiet-plan alert's mark, and the schedule the plan
-    /// page saves while the editor is open. A new field written outside the
-    /// editor joins this list, or the next save reverts it to the draft.
+    /// What the model and the plan page write comes from the stored plan,
+    /// not a draft's older copy: the run stamps, the quiet-plan alert's
+    /// mark and the schedule. A new field written that way joins this
+    /// list, or a whole-plan save reverts it to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt

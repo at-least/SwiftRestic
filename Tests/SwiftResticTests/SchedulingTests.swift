@@ -438,7 +438,6 @@ struct MaintenanceSchedulingTests {
         let added = utcDate("2026-10-09 00:00:00")
         #expect(saved.nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
-        #expect(CheckDataSubset.percent(5).argument == "5%")
     }
 
     @Test("a hand-edited slice outside 1 to 12 checks the nearest slice there is, never one restic has no group for")
@@ -547,7 +546,7 @@ struct MaintenanceSchedulingTests {
         // A record older than the stamp is not the last check — the history
         // lost the newer one: the stamp's moment, without a verdict.
         #expect(last([check(.failed, at: "2026-09-02 12:00:00")]) == ago)
-        // The same record is the page's route to the console when it found
+        // The same record is what the page offers Repair for when it found
         // damage, and only then.
         let damaged = check(.completedWithErrors, at: "2026-09-09 12:00:00")
         let found = Scheduler.newestMaintenanceRun(.check, of: repository, runs: [damaged])

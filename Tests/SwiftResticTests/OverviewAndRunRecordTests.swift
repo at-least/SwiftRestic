@@ -209,7 +209,7 @@ struct OverviewMetricsTests {
         let adoptedSurfaces = surfaces(adopted, newest: snapshot("snapDocs", at: adoptedSnapshotTime))
         #expect(adoptedSurfaces.row == "Last backup \(adoptedWords)")
         #expect(adoptedSurfaces.page == adoptedWords)
-        #expect(adoptedSurfaces.line == "1 of 1 plan up to date · Last backup \(adoptedWords)")
+        #expect(adoptedSurfaces.line == "Up to date · Last backup \(adoptedWords)")
 
         // A run of the plan's own: the run's start is the moment even while
         // restic stamped the snapshot later, so
@@ -220,7 +220,7 @@ struct OverviewMetricsTests {
         let ranSurfaces = surfaces(ranHere, newest: snapshot("snapPhotos", at: tick.addingTimeInterval(-162)))
         #expect(ranSurfaces.row == "Last backup \(ranWords)")
         #expect(ranSurfaces.page == ranWords)
-        #expect(ranSurfaces.line == "1 of 1 plan up to date · Last backup \(ranWords)")
+        #expect(ranSurfaces.line == "Up to date · Last backup \(ranWords)")
 
         #expect(PlanStatus.lastBackupAt(plan: plan("Empty", repository: repository), latestSnapshotTime: nil) == nil)
     }
@@ -237,7 +237,7 @@ struct OverviewMetricsTests {
             activity: { _ in nil },
             standingProblem: { _ in nil }
         )
-        #expect(rows.map(\.stateText) == ["List of backups not loaded yet"])
+        #expect(rows.map(\.stateText) == ["Backups not read yet"])
         #expect(rows.first?.isKnown == false)
     }
 
@@ -452,14 +452,14 @@ struct OverviewMetricsTests {
         #expect(onMetered?.text == "1 of 2 plans up to date · Last backup 1 hour ago · Backups paused on a metered network")
         #expect(onMetered?.showsResume == false)
 
-        // One plan spells its own noun; no plan with a backup yet omits the
-        // moment entirely rather than promising "Never".
+        // No plan with a backup yet omits the moment entirely rather than
+        // promising "Never".
         let single = OverviewMetrics.upToDateSummary(
             rows: [protectionRow("Only", isKnown: true, isUpToDate: true, lastBackupAt: nil)],
             listingLoaded: true, otherBackupsCount: 0, willNotRun: { _ in nil }, hold: nil,
             now: utcDate("2026-09-05 11:00:00"), relative: { _ in "1 hour ago" }
         )
-        #expect(single?.text == "1 of 1 plan up to date")
+        #expect(single?.text == "Up to date")
         let neverRan = OverviewMetrics.upToDateSummary(
             rows: [
                 protectionRow("Empty", isKnown: true, isUpToDate: false),
@@ -514,7 +514,7 @@ struct OverviewMetricsTests {
             willNotRun: { byID[$0].flatMap(caption) },
             hold: nil, now: now, relative: { _ in "1 hour ago" }
         )
-        #expect(summary?.text == "5 of 5 plans up to date · Last backup 1 hour ago")
+        #expect(summary?.text == "Up to date · Last backup 1 hour ago")
         // An up-to-date plan that will not run by itself needs the user.
         #expect(summary?.attentionLines.map(\.text) == ["Code: Not scheduled"])
 
@@ -658,8 +658,8 @@ struct OverviewMetricsTests {
 
     @Test("the Snapshots value splits off the backups no plan here made")
     func snapshotsValueSplit() {
-        // Other backups hold another Mac's, a deleted plan's and the
-        // console's alike: the line names no cause.
+        // Other backups hold another Mac's, a deleted plan's and restic's
+        // own alike: the line names no cause.
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 6, repositoryHasPlans: true) == "11, 6 from elsewhere")
         #expect(OverviewMetrics.snapshotsLine(total: 11, otherBackups: 0, repositoryHasPlans: true) == "11")
         // Plans, but none of the backups theirs: said, not left out.
@@ -779,76 +779,6 @@ struct RunRecordTests {
         )
         #expect(record.outcome == .failed)
         #expect(record.failureMessage == "The password doesn’t open “NAS”.", "the failure said restic's words, not the location's")
-    }
-}
-
-@Suite("Console command parsing")
-struct CommandLineTokenizerTests {
-    @Test("arguments split on whitespace")
-    func simple() {
-        #expect(CommandLineTokenizer.tokenize("snapshots --compact") == ["snapshots", "--compact"])
-        #expect(CommandLineTokenizer.tokenize("   ") == [])
-    }
-
-    @Test("quotes hold a path with spaces together")
-    func quoting() {
-        // restic is launched directly, so nothing else would put this back together.
-        #expect(CommandLineTokenizer.tokenize(#"ls latest "/Users/me/My Documents""#)
-            == ["ls", "latest", "/Users/me/My Documents"])
-        #expect(CommandLineTokenizer.tokenize("backup '/tmp/a b'") == ["backup", "/tmp/a b"])
-        #expect(CommandLineTokenizer.tokenize(#"--tag "a b" --tag c"#) == ["--tag", "a b", "--tag", "c"])
-    }
-
-    @Test("escapes and empty quoted arguments")
-    func escapes() {
-        #expect(CommandLineTokenizer.tokenize(#"ls /tmp/a\ b"#) == ["ls", "/tmp/a b"])
-        #expect(CommandLineTokenizer.tokenize(#"--tag """#) == ["--tag", ""])
-        // A backslash is literal inside single quotes.
-        #expect(CommandLineTokenizer.tokenize(#"'a\b'"#) == [#"a\b"#])
-        // POSIX keeps a double-quoted backslash literal except before the
-        // characters it reserves — a Windows path must not lose its slashes.
-        #expect(CommandLineTokenizer.tokenize(#"ls "C:\Users\me""#) == ["ls", #"C:\Users\me"#])
-        #expect(CommandLineTokenizer.tokenize(#"echo "a\$b""#) == ["echo", "a$b"])
-        // Inside double quotes a backslash still escapes a backslash.
-        #expect(CommandLineTokenizer.tokenize(#"ls "a\\b""#) == ["ls", #"a\b"#])
-    }
-
-    @Test("a line ending inside an open quote is refused, not silently closed")
-    func unterminatedQuotes() {
-        #expect(CommandLineTokenizer.hasUnterminatedQuote(#"forget --keep-daily "7"#))
-        #expect(CommandLineTokenizer.hasUnterminatedQuote("snapshots --tag 'weekly"))
-        // A backslash can hide the closing quote, and the walk must know it.
-        #expect(!CommandLineTokenizer.hasUnterminatedQuote(#"ls "/tmp/a\"b""#))
-        #expect(!CommandLineTokenizer.hasUnterminatedQuote("snapshots --compact"))
-        #expect(!CommandLineTokenizer.hasUnterminatedQuote(""))
-    }
-
-    @Test("commands that change the repository are flagged for confirmation")
-    func destructiveDetection() {
-        #expect(CommandLineTokenizer.isDestructive(["forget", "--keep-last", "1"]))
-        #expect(CommandLineTokenizer.isDestructive(["prune"]))
-        #expect(CommandLineTokenizer.isDestructive(["unlock"]))
-        // `restore` leaves the repository alone but overwrites whatever sits
-        // at the destination, so it confirms too.
-        #expect(CommandLineTokenizer.isDestructive(["restore", "latest", "--target", "/tmp/x"]))
-        // Leading flags must not hide the subcommand.
-        #expect(CommandLineTokenizer.isDestructive(["--verbose", "repair", "index"]))
-        // Global flags that take a value: the value must not step in as the
-        // "subcommand" and arm no confirmation for what follows it.
-        #expect(CommandLineTokenizer.isDestructive(["-r", "/repo", "prune"]))
-        #expect(CommandLineTokenizer.isDestructive(["--repo", "/x", "forget", "--keep-daily", "7"]))
-
-        #expect(!CommandLineTokenizer.isDestructive(["snapshots"]))
-        #expect(!CommandLineTokenizer.isDestructive(["ls", "latest"]))
-        #expect(!CommandLineTokenizer.isDestructive([]))
-
-        // What may change the backups the app lists: those, and `tag` and
-        // `copy`, which confirm nothing but write snapshots.
-        #expect(CommandLineTokenizer.mayChangeSnapshots(["-r", "/repo", "forget", "--keep-last", "1"]))
-        #expect(CommandLineTokenizer.mayChangeSnapshots(["tag", "--add", "x", "latest"]))
-        #expect(CommandLineTokenizer.mayChangeSnapshots(["copy", "--from-repo", "/other"]))
-        #expect(!CommandLineTokenizer.mayChangeSnapshots(["snapshots"]))
-        #expect(!CommandLineTokenizer.mayChangeSnapshots(["ls", "latest"]))
     }
 }
 

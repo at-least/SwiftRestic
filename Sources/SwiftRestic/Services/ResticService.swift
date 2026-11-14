@@ -15,8 +15,8 @@ struct RepositoryContext: Sendable {
         for key in ResticRunner.protectedEnvironmentKeys where key != "RESTIC_REPOSITORY" {
             env.removeValue(forKey: key)
         }
-        // Only set when non-empty: the console can legitimately reach a
-        // repository the plan editor would call incomplete.
+        // Only when non-empty: an empty string would replace a location
+        // the extra environment carries.
         let repositoryString = repository.resticRepositoryString
         if !repositoryString.isEmpty { env["RESTIC_REPOSITORY"] = repositoryString }
         // Another process of this user can read it with `ps -E`: accepted
@@ -79,7 +79,7 @@ struct ResticService: ResticClient {
     /// `restore`, the index walks): total silence this long means the child
     /// is hung (a black-holed network path), while a legitimate run of any
     /// length keeps reporting. Not for legitimately silent commands
-    /// (`prune`, `forget`, console `runRaw`).
+    /// (`prune`, `forget`, `repair`).
     private static let streamingIdleTimeout: TimeInterval = 15 * 60
     /// `restic check`'s exit when it finds damage.
     private static let checkFoundDamageCode: Int32 = 1
@@ -297,27 +297,17 @@ struct ResticService: ResticClient {
         return nil
     }
 
-    /// Any exit code is returned rather than thrown: the console shows
-    /// whatever restic said, including its complaints.
-    func runRaw(_ context: RepositoryContext, arguments: [String]) async throws -> String {
-        let result = try await run(
-            context,
-            ResticInvocation(
-                arguments: arguments,
-                allowedExitCodes: nil,
-                retainFullOutput: true
-            )
-        )
-        var output = result.stdout
-        if !result.stderr.isEmpty {
-            if !output.isEmpty { output += "\n" }
-            output += result.stderr
-        }
-        if result.exitCode != 0 {
-            let known = ResticError.knownExitCodeDescription(result.exitCode)
-            output += "\n\n[exit \(result.exitCode)\(known.map { ": \($0)" } ?? "")]"
-        }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    func repairIndex(_ context: RepositoryContext) async throws {
+        _ = try await run(context, ResticInvocation(arguments: ["repair", "index"]))
+    }
+
+    /// Cuts what can no longer be read out of each damaged backup and
+    /// removes the damaged original. `--forget` is what clears the damage:
+    /// without it the original stays beside its repaired copy and the next
+    /// `check` still fails (restic 0.19.1, probed: one pack deleted, 5
+    /// errors after a repair without it, 0 after one with it).
+    func repairSnapshots(_ context: RepositoryContext) async throws {
+        _ = try await run(context, ResticInvocation(arguments: ["repair", "snapshots", "--forget"]))
     }
 
     /// Lock-free, for `find`'s reasons.
@@ -526,9 +516,6 @@ struct ResticService: ResticClient {
         }
         args += ["--exclude-caches", "--exclude-cloud-files"]
         args += ["--tag", Self.planTag(plan.id)]
-        for tag in plan.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {
-            args += ["--tag", tag]
-        }
 
         let result = try await run(
             context,

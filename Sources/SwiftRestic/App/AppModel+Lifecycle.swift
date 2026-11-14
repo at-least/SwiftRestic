@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+import os
+
+private let configurationLog = Logger(subsystem: "com.newlix.SwiftRestic", category: "Configuration")
 
 /// What `followPlans` compares across a configuration write.
 private struct PlanFootprint {
@@ -32,7 +35,6 @@ extension AppModel {
             if running > 0 { reasons.append("\(task.runningClause(count: running)).") }
         }
         if isRestoring { reasons.append("A restore is running.") }
-        if console.isRunning { reasons.append("A console command is running.") }
         return reasons
     }
 
@@ -128,17 +130,20 @@ extension AppModel {
             // The next save replaces the live file with this copy; that must
             // not happen silently.
             if let recovered = loaded.recoveredFrom {
+                configurationLog.error("config.json couldn’t be read; \(recovered, privacy: .public) was loaded instead")
                 post(Banner(
-                    title: "Your configuration was restored from a backup copy",
-                    message: "config.json couldn’t be read; \(recovered) was loaded instead. Saving will replace both files.",
+                    title: "Your settings were restored from a saved copy",
+                    message: "Check your plans and locations. Anything changed since that copy needs setting again.",
                     level: .error
                 ))
             }
             if !loaded.decodeNotes.isEmpty {
+                for note in loaded.decodeNotes {
+                    configurationLog.error("\(note, privacy: .public)")
+                }
                 post(Banner(
-                    title: "Some stored settings couldn’t be read",
-                    message: loaded.decodeNotes.prefix(3).joined(separator: " · ")
-                        + (loaded.decodeNotes.count > 3 ? " · …" : ""),
+                    title: "Some settings couldn’t be read",
+                    message: "Check your plans and locations.",
                     level: .error
                 ))
             }
@@ -221,11 +226,6 @@ extension AppModel {
         networkMonitor?.cancel()
         stopMountWatcher()
         tasks.cancelSlots()
-        // Awaited, not merely cancelled: a command that may change the
-        // backups schedules its refresh on the way out, and that must not
-        // race the teardown below.
-        console.cancelRunningCommand()
-        await console.waitForCommand()
         // Before `terminateAll`: a backfill walk killed by it would read as
         // a failed snapshot and move on to the next snapshot's walk.
         await indexCoordinator.shutdown()

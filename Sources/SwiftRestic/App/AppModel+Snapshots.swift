@@ -1,4 +1,14 @@
 import Foundation
+import os
+
+/// What a banner or a page's failure line leaves out
+/// (`ResticError.resticDetail`): no run record carries it here.
+private let listingFailures = Logger(subsystem: "com.newlix.SwiftRestic", category: "Listing")
+
+private func logResticDetail(of error: Error, reading what: String) {
+    guard let detail = (error as? ResticError)?.resticDetail else { return }
+    listingFailures.error("\(what, privacy: .public): \(detail, privacy: .public)")
+}
 
 extension AppModel {
     /// A black-holed SFTP host or S3 endpoint would otherwise hang the
@@ -162,6 +172,7 @@ extension AppModel {
                 stats = repositoryStats[repositoryID]
             } catch {
                 stats = nil
+                logResticDetail(of: error, reading: "size")
                 if !statsFailureNoted.contains(repositoryID), configuration.repository(id: repositoryID) != nil {
                     statsFailureNoted.insert(repositoryID)
                     post(Banner(
@@ -201,6 +212,7 @@ extension AppModel {
             // No banner: the sidebar row and the pages already say it.
             guard configuration.repository(id: repositoryID) != nil else { return }
             noteAuthFailure(error, repositoryID: repositoryID)
+            logResticDetail(of: error, reading: "backups")
             snapshotListingOutcomes[repositoryID] = .failed(error.localizedDescription)
         }
     }

@@ -34,6 +34,13 @@ struct StatusSection: View {
             } else {
                 SnapshotListingCaveat(repositoryID: repositoryID)
             }
+            if model.loginItemNeedsApproval {
+                HStack(spacing: 8) {
+                    WarningLine(text: LoginItem.approvalNeeded)
+                    Spacer(minLength: 8)
+                    Button("Open Login Items") { LoginItem.openLoginItemsSettings() }
+                }
+            }
             // Not while the location can't be read: a plan for a drive that
             // isn't here is not the next step, reaching it is.
             if case .loaded = model.snapshotListingOutcome(for: repositoryID) {

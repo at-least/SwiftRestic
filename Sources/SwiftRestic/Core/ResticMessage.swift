@@ -7,7 +7,7 @@ import Foundation
 enum ResticMessage: Sendable, Equatable {
     case status(ResticStatus)
     case summary(ResticSummary)
-    /// Per-item progress from `--verbose`, which only the console passes.
+    /// Per-item progress from `--verbose`, which no command here passes.
     /// No payload: nothing reads one, and the log drops these lines.
     case verboseStatus
     case error(ResticErrorMessage)
@@ -18,7 +18,7 @@ enum ResticMessage: Sendable, Equatable {
     case change(ResticDiffChange)
     case statistics(ResticDiffStatistics)
     /// A `message_type` a newer restic added: ignored. The raw line still
-    /// reaches the log and the console.
+    /// reaches the log.
     case unknown
     /// A known `message_type` whose payload failed to decode: a reporting
     /// gap, which callers count, unlike `unknown`.
@@ -82,7 +82,6 @@ struct ResticSummary: Sendable, Equatable, Decodable {
     var filesSkipped: Int?
     // check
     var numErrors: Int?
-    var suggestPrune: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case filesNew = "files_new"
@@ -96,7 +95,6 @@ struct ResticSummary: Sendable, Equatable, Decodable {
         case bytesRestored = "bytes_restored"
         case filesSkipped = "files_skipped"
         case numErrors = "num_errors"
-        case suggestPrune = "suggest_prune"
     }
 }
 

@@ -23,7 +23,6 @@ struct SidebarView: View {
     /// in a page's list has taken it away.
     @FocusState private var isFocused: Bool
 
-    let onEditPlan: (BackupPlan) -> Void
     let onNewPlan: (_ repositoryID: UUID?) -> Void
     let onEditRepository: (Repository) -> Void
     let onNewRepository: () -> Void
@@ -124,7 +123,6 @@ struct SidebarView: View {
         } else if commands.canBackUp {
             Button("Back Up Now") { model.runBackup(planID: plan.id) }
         }
-        Button("Edit Plan…") { onEditPlan(plan) }
         Divider()
         Button("Remove Plan…", role: .destructive) { onDeletePlan(plan) }
     }
@@ -134,9 +132,22 @@ struct SidebarView: View {
         Button("Back Up a Folder…") { onNewPlan(repository.id) }
         Divider()
         Button("Edit Location…") { onEditRepository(repository) }
+        // A disk renamed never mounts under the saved name.
+        if case .notConnected = model.snapshotListingOutcome(for: repository.id) {
+            Button(RunFix.locate(repository.id).title) { locate(repository.id) }
+        }
         Divider()
         Button("Remove Location…", role: .destructive) {
             onRemoveRepository(repository)
+        }
+    }
+
+    private func locate(_ repositoryID: UUID) {
+        let model = model
+        // After the menu has finished tracking: a panel run inside it gets
+        // no keys (`FirstBackupSheet`'s Other Folder…).
+        RunLoop.main.perform(inModes: [.default]) {
+            MainActor.assumeIsolated { model.chooseWhereRepositoryMoved(id: repositoryID) }
         }
     }
 

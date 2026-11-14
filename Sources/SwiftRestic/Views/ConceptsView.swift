@@ -2,8 +2,7 @@ import SwiftUI
 
 /// Help ▸ SwiftRestic Help's window, whose own close button and ⌘W close
 /// it: how to do the few things the app is for, each in the menu's and the
-/// buttons' own words, then the handful of terms the app uses — with a link
-/// out to restic's documentation for the rest.
+/// buttons' own words.
 struct ConceptsView: View {
     private struct Topic: Identifiable {
         let title: String
@@ -18,7 +17,7 @@ struct ConceptsView: View {
         ),
         Topic(
             title: "Get a file back",
-            text: "Choose Edit ▸ Find (⌘F) and type its name. Or open the plan’s Backups tab, pick a backup in the list, and select the file: its earlier versions appear below. Click Restore to put it back where it was, or choose File ▸ Restore To… to pick a folder. To bring back everything from one moment, select the backup’s top folders and click Restore."
+            text: "Choose Edit ▸ Search All Backups (⌘F) and type its name. Or open the plan’s Backups tab, pick a backup in the list, and select the file: its earlier versions appear below. Click Restore to put it back where it was, or choose File ▸ Restore To… to pick a folder. To bring back everything from one moment, select the backup’s top folders and click Restore."
         ),
         Topic(
             title: "When a backup fails",
@@ -34,39 +33,17 @@ struct ConceptsView: View {
         ),
     ]
 
-    private let terms: [Topic] = [
-        Topic(title: "Backup Location", text: "Where backups are kept: a disk, another computer, or cloud storage. Everything in it is encrypted with its password. restic calls it a repository."),
-        Topic(title: "Backup Plan", text: "One folder, the backup location it backs up to, and when."),
-        Topic(title: "Backup", text: "The folder as it was at one moment. restic calls it a snapshot."),
-        Topic(title: "Freeing space", text: "Frees the space of removed backups, on its own. Slow; backups to the location wait for it."),
-        Topic(title: "Verification", text: "Makes sure a location’s backups are sound."),
-    ]
-
     var body: some View {
-        VStack(spacing: 0) {
-            // A page to read, not a list to select from.
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("How to")
-                        .font(.title3.weight(.semibold))
-                        .accessibilityAddTraits(.isHeader)
-                    ForEach(tasks) { topic in row(topic) }
-                    Divider()
-                    Text("Terms")
-                        .font(.title3.weight(.semibold))
-                        .accessibilityAddTraits(.isHeader)
-                    ForEach(terms) { topic in row(topic) }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+        // A page to read, not a list to select from.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("How to")
+                    .font(.title3.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(tasks) { topic in row(topic) }
             }
-            Divider()
-
-            HStack {
-                Link("restic documentation", destination: AppLinks.documentation)
-                Spacer()
-            }
-            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
         }
         .frame(minWidth: 440, idealWidth: 460, minHeight: 480, idealHeight: 520)
     }

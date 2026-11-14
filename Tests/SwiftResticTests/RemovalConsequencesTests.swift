@@ -15,8 +15,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos"],
                 isRestoring: false,
                 runningBackupNames: [],
-                runningMaintenance: nil,
-                isConsoleRunning: false
+                runningMaintenance: nil
             ) == "Its plans “Documents” and “Photos” are removed too. The backups in it are kept."
         )
         #expect(
@@ -24,8 +23,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents"],
                 isRestoring: false,
                 runningBackupNames: [],
-                runningMaintenance: nil,
-                isConsoleRunning: false
+                runningMaintenance: nil
             ) == "Its plan “Documents” is removed too. The backups in it are kept."
         )
         // Three, joined as every list in the app is (`Format.list`), not
@@ -35,8 +33,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: ["Documents", "Photos", "Music"],
                 isRestoring: false,
                 runningBackupNames: [],
-                runningMaintenance: nil,
-                isConsoleRunning: false
+                runningMaintenance: nil
             ) == "Its plans “Documents”, “Photos” and “Music” are removed too. The backups in it are kept."
         )
         #expect(
@@ -44,8 +41,7 @@ struct RemovalConsequencesTests {
                 removedPlanNames: [],
                 isRestoring: false,
                 runningBackupNames: [],
-                runningMaintenance: nil,
-                isConsoleRunning: false
+                runningMaintenance: nil
             ) == "The backups in it are kept."
         )
     }
@@ -56,12 +52,10 @@ struct RemovalConsequencesTests {
             removedPlanNames: ["Nightly"],
             isRestoring: true,
             runningBackupNames: ["Nightly", "Untitled Plan"],
-            runningMaintenance: .prune,
-            isConsoleRunning: true
+            runningMaintenance: .prune
         )
         #expect(sentence.contains("A restore from this location is running and will be stopped."))
         #expect(sentence.contains("Backups of “Nightly” and “Untitled Plan” are running and will be stopped."))
         #expect(sentence.contains("Space is being freed and will be stopped."))
-        #expect(sentence.contains("A console command is running and will be stopped."))
     }
 }

@@ -133,7 +133,7 @@ extension AppDelegate {
         // Sheets that are real content, not the tiny helper windows AppKit
         // creates for tooltips and popovers.
         let candidate = NSApp.windows.first(where: {
-            $0.isSheet && $0.isVisible && $0.frame.width > 200 && $0.frame.height > 200
+            $0.isSheet && $0.isVisible && $0.frame.width > 200 && $0.frame.height > 100
         })
             ?? NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })

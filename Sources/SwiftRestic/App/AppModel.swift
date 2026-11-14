@@ -193,7 +193,6 @@ final class AppModel {
     /// Drag restores and previews copy files here; the only folder the
     /// launch sweep empties.
     let stagingDirectory: URL
-    let console = ConsoleModel()
     @ObservationIgnored let tasks = TaskRegistry()
     var schedulerTask: Task<Void, Never>?
     var saveTask: Task<Void, Never>?
@@ -248,11 +247,6 @@ final class AppModel {
         self.stagingDirectory = Self.stagingDirectory(for: store.directory)
         self.viewDefaults = defaults
         self.activitySeenAt = ActivitySeenStore.loadActivitySeenAt(from: defaults)
-        // A gone owner is the quit unwinding.
-        console.runCommand = { [weak self] repositoryID, arguments in
-            await self?.runConsoleCommand(repositoryID: repositoryID, arguments: arguments)
-                ?? ResticError.cancelled.localizedDescription
-        }
     }
 
     /// Every configured plan goes in: it tells a moved plan's group under

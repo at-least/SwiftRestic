@@ -48,7 +48,6 @@ struct AppRouterTests {
 
         for intent: AppRouter.Intent in [
             .stopPlan(plan),
-            .editPlan(plan),
             .editRepository(a),
             .confirm(.deletePlan(plan)),
         ] {
@@ -219,7 +218,7 @@ struct AppRouterTests {
                                           includeShortID: true, hostname: "mac", tags: [ResticService.planTag(moved.id)])],
             plans: [kept], allPlans: [kept, moved])
 
-        // Adopted, moved by the editor, refreshed away — not yet: the group
+        // Adopted, refreshed away — not yet: the group
         // is held, the selection stays.
         #expect(self.revalidated(.orphanPlan(repositoryID: first.id, planID: moved.id),
                                  repositories: [first, second], plans: [kept, moved], shelves: held)
@@ -270,19 +269,5 @@ struct AppRouterTests {
     func activityAndNothingStay() {
         #expect(self.revalidated(.activity, repositories: [], plans: [], isResticAvailable: false) == .activity)
         #expect(self.revalidated(nil, repositories: [], plans: [], isResticAvailable: false) == nil)
-    }
-}
-
-
-/// The documentation links are constant literals — a typo would hide until
-/// clicked. Pinned here so it hides until CI instead.
-@Suite("app links")
-struct AppLinksTests {
-    @Test("every documentation link parses as https")
-    func linksAreValid() {
-        for url in [AppLinks.documentation] {
-            #expect(url.scheme == "https")
-            #expect(url.host()?.hasSuffix("readthedocs.io") == true)
-        }
     }
 }

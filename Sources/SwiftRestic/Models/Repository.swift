@@ -9,9 +9,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
 
         var displayName: String {
             switch self {
-            case .local: "Local folder or disk"
-            case .sftp: "SFTP"
-            case .s3: "S3-compatible"
+            case .local: "Folder or Disk"
+            case .sftp: "SFTP Server"
+            case .s3: "S3-Compatible Storage"
             }
         }
 

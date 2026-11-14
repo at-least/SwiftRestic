@@ -7,6 +7,7 @@ import SwiftUI
 /// limit.
 struct CommandPresentations: ViewModifier {
     @Environment(AppModel.self) private var model
+    @Environment(AppRouter.self) private var router
     @Binding var pendingConfirmation: CommandConfirmation?
 
     func body(content: Content) -> some View {
@@ -39,6 +40,13 @@ struct CommandPresentations: ViewModifier {
             Button("Remove Plan") { model.deletePlan(id: id) }
         case let .deleteRepository(id):
             Button("Remove") { model.deleteRepository(id: id) }
+        case let .repair(id):
+            // Then the location's page, the only place showing the repair's
+            // progress and its Stop.
+            Button("Repair") {
+                model.runRepair(repositoryID: id)
+                router.showMaintenance(of: id)
+            }
         }
     }
 }

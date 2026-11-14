@@ -37,9 +37,9 @@ struct ResticMessageTests {
 
     @Test("a verbose_status line is recognised and dropped, whatever its shape")
     func verboseStatus() throws {
-        // The app's own commands never pass --verbose; the case exists so the
-        // log's drop rule catches the line, and the console shows restic's
-        // raw stdout either way. backup's and restore's spellings both land.
+        // The app's commands never pass --verbose; the case exists so the
+        // log's drop rule catches the line. backup's and restore's spellings
+        // both land.
         let backup = #"{"message_type":"verbose_status","action":"new","item":"/restic-capture/src/a.txt","duration":0.004700167,"data_size":12,"data_size_in_repo":94,"metadata_size":0,"metadata_size_in_repo":0,"total_files":0}"#
         #expect(ResticMessageDecoder.decode(line: backup) == .verboseStatus)
         let restore = #"{"message_type":"verbose_status","action":"restored","item":"/restic-capture/src/sub/b.txt","size":7}"#
@@ -83,7 +83,6 @@ struct ResticMessageTests {
             return
         }
         #expect(summary.numErrors == 0)
-        #expect(summary.suggestPrune == false)
         #expect(summary.filesNew == nil)
     }
 

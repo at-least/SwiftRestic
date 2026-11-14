@@ -20,8 +20,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         /// counts it (`detailText` says why).
         case skipped
 
-        /// What every problem surface counts: Activity's Problems filter,
-        /// the overview, a stretch, a retry.
+        /// What every problem surface counts: the overview, a stretch, a
+        /// retry.
         var isProblem: Bool { self == .failed || self == .completedWithErrors }
 
         /// Read through `RunRecord.outcomeName`, which words a warning by

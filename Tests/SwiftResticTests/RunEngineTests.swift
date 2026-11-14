@@ -702,7 +702,7 @@ struct MaintenanceRunEngineTests {
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .succeeded)
-        #expect(sink.deliveredRecords[0].detailText == "No errors found.")
+        #expect(sink.deliveredRecords[0].detailText == "No problems found.")
         #expect(sink.log.contains("stamp:check"))
     }
 
@@ -858,13 +858,12 @@ struct MaintenanceRunEngineTests {
         )
     }
 
-    @Test("a check that found errors is a warning, and suggests prune when restic does")
+    @Test("a check that found errors is a warning that points at Repair")
     func checkWithErrors() async throws {
         let sink = RecordingSink()
         var summary = ResticSummary()
         // One error, the fewest that is still a warning.
         summary.numErrors = 1
-        summary.suggestPrune = true
         let client = MockResticClient().onCheck(.success(summary))
         await MaintenanceRunEngine.perform(
             repository: Repository(),
@@ -872,11 +871,75 @@ struct MaintenanceRunEngineTests {
             sink: sink.serving(client)
         )
         #expect(sink.deliveredRecords[0].outcome == .completedWithErrors)
-        // The Result column shows the count; the way to Repair… and restic's
-        // advice stay in the drawer.
-        #expect(sink.deliveredRecords[0].detailText
-            == "1 error found. Click Repair… to fix them. Freeing space is suggested.")
-        #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0]) == "1 error found")
+        // The Result column shows the count; the way to Repair stays in the
+        // drawer.
+        #expect(sink.deliveredRecords[0].detailText == "1 problem found. Click Repair to fix them.")
+        #expect(RunRecordPresentation.detail(for: sink.deliveredRecords[0]) == "1 problem found")
+    }
+
+    @Test("a repair rebuilds the index, repairs the backups, then verifies, as one verification run")
+    func repairRunsItsStepsInOrder() async throws {
+        let sink = RecordingSink()
+        let client = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(),
+            task: .check,
+            repairsFirst: true,
+            sink: sink.serving(client)
+        )
+        #expect(client.callLog == ["repairIndex", "repairSnapshots", "check", "cleanupCache"])
+        #expect(client.transcriptBound == ["repairIndex": true, "repairSnapshots": true, "check": true])
+        #expect(sink.deliveredRecords.count == 1)
+        let record = try #require(sink.deliveredRecords.first)
+        #expect(record.kind == .check)
+        #expect(record.outcome == .succeeded)
+        #expect(record.detailText == "No problems found.")
+        #expect(sink.log.contains("stamp:check"))
+    }
+
+    @Test("damage a repair left behind does not point at Repair again")
+    func repairThatLeavesDamage() async throws {
+        let sink = RecordingSink()
+        var summary = ResticSummary()
+        summary.numErrors = 2
+        let client = MockResticClient().onCheck(.success(summary))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(),
+            task: .check,
+            repairsFirst: true,
+            sink: sink.serving(client)
+        )
+        #expect(sink.deliveredRecords.first?.outcome == .completedWithErrors)
+        #expect(sink.deliveredRecords.first?.detailText == "2 problems found after the repair.")
+    }
+
+    @Test("a repair step that fails is the run's failure, in restic's words, and nothing after it runs")
+    func repairStepFailureFailsTheRun() async throws {
+        let refusal = ResticError.commandFailed(exitCode: 1, message: "Fatal: unable to rebuild the index")
+
+        let indexSink = RecordingSink()
+        let indexClient = MockResticClient().onRepairIndex(.failure(refusal))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(), task: .check, repairsFirst: true, sink: indexSink.serving(indexClient)
+        )
+        #expect(indexClient.callLog == ["repairIndex"])
+        #expect(indexSink.deliveredRecords.count == 1)
+        #expect(indexSink.deliveredRecords.first?.outcome == .failed)
+        #expect(indexSink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+
+        let snapshotsSink = RecordingSink()
+        let snapshotsClient = MockResticClient().onRepairSnapshots(.failure(refusal))
+        await MaintenanceRunEngine.perform(
+            repository: Repository(), task: .check, repairsFirst: true, sink: snapshotsSink.serving(snapshotsClient)
+        )
+        #expect(snapshotsClient.callLog == ["repairIndex", "repairSnapshots"])
+        #expect(snapshotsSink.deliveredRecords.first?.outcome == .failed)
+        #expect(snapshotsSink.deliveredRecords.first?.failureMessage == "Unable to rebuild the index")
+
+        // A verification alone repairs nothing.
+        let plain = MockResticClient().onCheck(.success(ResticSummary()))
+        await MaintenanceRunEngine.perform(repository: Repository(), task: .check, sink: RecordingSink().serving(plain))
+        #expect(plain.callLog == ["check", "cleanupCache"])
     }
 
     @Test("a missing password records nothing and stamps nothing")

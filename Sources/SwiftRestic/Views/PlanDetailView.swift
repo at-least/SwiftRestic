@@ -6,6 +6,18 @@ struct PlanDetailView: View {
     @Environment(\.now) private var now
     let planID: UUID
 
+    /// The network share the plan's folder is on while mounted
+    /// (`VolumePresence.mountedShare`), read off the main actor.
+    @State private var mountedShare: MountedShare?
+    /// The plan path last read as gone from this Mac, beside
+    /// `mountedShare`: a stalled share can hold the read. The path, not a
+    /// flag: this view outlives a switch to another plan.
+    @State private var missingPath: String?
+    /// Each share's password as typed, by volume name.
+    @State private var sharePasswords: [String: String] = [:]
+    @State private var sharePasswordFailure: String?
+    @State private var isSavingSharePassword = false
+
     private var plan: BackupPlan? { model.plan(id: planID) }
 
     var body: some View {
@@ -20,8 +32,8 @@ struct PlanDetailView: View {
             }
         }
         // A plan is its path: the label names the page, the path under it
-        // says which folder that is — or, on the Backups tab, the moment of
-        // the backup open there.
+        // says which folder that is. None on the Backups tab: the selected
+        // backup's row already says its moment.
         .navigationTitle(plan.map { model.label(of: $0) } ?? "Plan")
         .navigationSubtitle(plan.map(subtitle) ?? "")
         .pageTabPicker(router.tabBinding(for: .plan(planID)), tabs: SidebarItem.plan(planID).pageTabs)
@@ -167,17 +179,113 @@ struct PlanDetailView: View {
             if model.snapshotListingOutcome(for: plan.repositoryID) != .loaded {
                 Section { SnapshotListingCaveat(repositoryID: plan.repositoryID) }
             }
+            folderNotices(plan)
             scheduleSection(plan)
+            excludedItemsSection(plan)
         }
         .formStyle(.grouped)
+        .task(id: plan.path) {
+            let path = plan.path
+            let (share, isMissing) = await Task.detached {
+                (
+                    VolumePresence.mountedShare(holding: ResticService.expandTilde(path)),
+                    !path.isEmpty && !AppModel.sourceExists(path)
+                )
+            }.value
+            guard !Task.isCancelled else { return }
+            mountedShare = share
+            missingPath = isMissing ? path : nil
+        }
     }
 
+    /// The label is the path when two plans of a location share a folder
+    /// name (`BackupPlan.label`).
     private func subtitle(_ plan: BackupPlan) -> String {
-        if router.tab(of: .plan(planID)) == .backups,
-           let open = BackupsBrowserView.openBackup(in: planBackups(plan), picked: router.backupSelection[.plan(planID)]) {
-            return Format.timestamp(open.time)
+        guard router.tab(of: .plan(planID)) == .overview else { return "" }
+        let path = (plan.resolvedPath as NSString).abbreviatingWithTildeInPath
+        return path == model.label(of: plan) ? "" : path
+    }
+
+    /// What the folder needs before it can be backed up.
+    @ViewBuilder
+    private func folderNotices(_ plan: BackupPlan) -> some View {
+        // A folder that is gone fails every backup.
+        let isMissing = missingPath == plan.path
+        let accessNotice = model.fullDiskAccessNotice(for: plan.path)
+        if isMissing || accessNotice != nil {
+            Section {
+                if isMissing {
+                    WarningLine(text: AppModel.missingSourcesWarning)
+                }
+                if let accessNotice {
+                    HStack(alignment: .firstTextBaseline) {
+                        WarningLine(text: accessNotice)
+                        Spacer(minLength: 8)
+                        FullDiskAccessButton()
+                            .controlSize(.small)
+                    }
+                }
+            }
         }
-        return (plan.path as NSString).abbreviatingWithTildeInPath
+        // A folder on a network share: its password, so a backup can
+        // reconnect it.
+        if let row = model.shareRow(for: plan.resolvedPath, mounted: mountedShare) {
+            let typed = sharePasswords[row.share.volumeName] ?? ""
+            Section {
+                NetworkSharePasswordRows(
+                    url: row.share.url,
+                    isSaved: row.isSaved,
+                    password: Binding(
+                        get: { typed },
+                        set: {
+                            sharePasswords[row.share.volumeName] = $0
+                            sharePasswordFailure = nil
+                        }
+                    )
+                )
+                if let sharePasswordFailure {
+                    // A form's inline error: red text, without a glyph.
+                    Text(sharePasswordFailure)
+                        .foregroundStyle(Theme.danger)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack {
+                    Spacer()
+                    Button("Save Password") { Task { await saveSharePassword(typed, for: row.share) } }
+                        .controlSize(.small)
+                        .disabled(typed.isEmpty || isSavingSharePassword)
+                }
+            }
+        }
+    }
+
+    private func saveSharePassword(_ password: String, for share: MountedShare) async {
+        isSavingSharePassword = true
+        defer { isSavingSharePassword = false }
+        do {
+            try await model.saveNetworkShare(share, password: password)
+            sharePasswords[share.volumeName] = nil
+        } catch {
+            sharePasswordFailure = error.localizedDescription
+        }
+    }
+
+    /// Saved as it changes, as How often is. The list holds only what the
+    /// user added; the footer names what the app leaves out.
+    private func excludedItemsSection(_ plan: BackupPlan) -> some View {
+        Section {
+            PathListEditor(paths: Binding(
+                get: { plan.excludePatterns },
+                set: { patterns in model.updatePlan(plan.id) { $0.excludePatterns = patterns } }
+            ))
+        } header: {
+            Text("Excluded Items")
+        } footer: {
+            Text(PlanSkips.always)
+                .foregroundStyle(.secondary)
+                .help(PlanSkips.alwaysHelp)
+        }
     }
 
     /// The backups the plan made in its repository, newest first — its
@@ -205,8 +313,6 @@ struct PlanDetailView: View {
         } description: {
             Text("Its backup location is no longer in SwiftRestic.")
         } actions: {
-            // Not Edit Plan…: the editor shows a saved plan's repository
-            // without a picker and refuses to save one without a repository.
             Button("Remove Plan…") { router.request(.confirm(.deletePlan(planID))) }
         }
     }
@@ -235,14 +341,7 @@ struct PlanDetailView: View {
     /// The scheduler's own answer for the next run, so one it skips never shows
     /// a date.
     private func scheduleSection(_ plan: BackupPlan) -> some View {
-        let next = PlanStatus.nextBackupTile(
-            for: plan,
-            existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
-            hold: model.scheduleHold(repositoryID: plan.repositoryID, now: now),
-            isBackingUp: model.activity[plan.id] != nil,
-            now: now
-        )
-        return Section {
+        Section("Schedule") {
             // Saved as it changes, as System Settings' pop-ups are.
             Picker("How often", selection: Binding(
                 get: { plan.schedule.frequency },
@@ -253,21 +352,20 @@ struct PlanDetailView: View {
                 }
             }
             .accessibilityIdentifier(AccessibilityID.Plan.frequency)
-            LabeledContent("Next backup") {
-                Text(next.value)
-                    .accessibilityIdentifier(AccessibilityID.Plan.nextBackup)
-                    .modifier(TileHelp(help: next.help))
-            }
-        } header: {
-            Text("Schedule")
-        } footer: {
-            // Under the last section, outside its card: what the plan leaves
-            // out is in the editor, as System Settings keeps a pane's rarer
-            // settings behind Options….
-            HStack {
-                Spacer()
-                Button("Edit Plan…") { router.request(.editPlan(plan.id)) }
-                    .accessibilityIdentifier(AccessibilityID.Plan.edit)
+            // Manually has no next backup: the row would restate How often.
+            if plan.isScheduled {
+                let next = PlanStatus.nextBackupTile(
+                    for: plan,
+                    existingRepositoryIDs: Set(model.configuration.repositories.map(\.id)),
+                    hold: model.scheduleHold(repositoryID: plan.repositoryID, now: now),
+                    isBackingUp: model.activity[plan.id] != nil,
+                    now: now
+                )
+                LabeledContent("Next backup") {
+                    Text(next.value)
+                        .accessibilityIdentifier(AccessibilityID.Plan.nextBackup)
+                        .modifier(TileHelp(help: next.help))
+                }
             }
         }
     }
