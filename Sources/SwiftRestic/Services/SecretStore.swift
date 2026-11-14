@@ -16,7 +16,7 @@ struct SecretStore: Sendable {
 
     /// `SecItem*` calls block and macOS may put an authorisation dialog in front
     /// of them, so every one of them is pushed off the caller's actor.
-    static let keychain = SecretStore(
+    private static let keychain = SecretStore(
         load: { repositoryID in
             try await Task.detached(priority: .userInitiated) {
                 (

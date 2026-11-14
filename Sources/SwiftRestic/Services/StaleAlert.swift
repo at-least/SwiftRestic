@@ -18,7 +18,7 @@ struct StalePlanAlert: Equatable, Sendable {
 enum StaleAlert {
     private static let day: TimeInterval = 86_400
 
-    static let thresholdDays = 7
+    private static let thresholdDays = 7
 
     /// The threshold, or one schedule interval and a day when that is
     /// longer: a weekly plan is due again exactly seven days after its last

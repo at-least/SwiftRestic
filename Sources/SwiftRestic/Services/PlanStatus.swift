@@ -78,7 +78,7 @@ enum PlanStatus {
     static func facts(for run: RunRecord) -> [String] {
         var facts: [String] = []
         if run.itemErrorCount > 0 {
-            facts.append(Format.plural(run.itemErrorCount, "unreadable item"))
+            facts.append(unreadableFact(of: run))
         } else if run.kind == .backup, run.exitCode == ResticError.backupPartialSuccessCode {
             // Exit 3 with nothing named: without this fact the run would
             // pass for clean, or the retention skip for the whole story.
@@ -88,6 +88,10 @@ enum PlanStatus {
             facts.append(retentionSkippedFact)
         }
         return facts
+    }
+
+    private static func unreadableFact(of run: RunRecord) -> String {
+        Format.plural(run.itemErrorCount, "unreadable item")
     }
 
     /// Always says something. A decoding gap or skipped retention step is
@@ -110,7 +114,7 @@ enum PlanStatus {
         // Once every item is listed the count says nothing new; it stays
         // while items are left to Activity or none was listed.
         if !listedItems.isEmpty, unlisted == 0 {
-            facts.removeAll { $0 == Format.plural(run.itemErrorCount, "unreadable item") }
+            facts.removeAll { $0 == unreadableFact(of: run) }
         }
         // A retention-only warning says so in its message; beside any other
         // fact the line stays, matching Activity's Detail column.

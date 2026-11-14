@@ -68,15 +68,17 @@ struct LoadedConfiguration: Sendable {
 /// file will not read.
 actor ConfigStore {
     let directory: URL
-    private let fileURL: URL
+    /// The live file, then its copies `rotateBackups` keeps, newest first.
+    private let generations: [URL]
+    private var fileURL: URL { generations[0] }
 
     init(directory: URL? = nil) {
         let base = directory ?? ConfigStore.defaultDirectory()
         self.directory = base
-        self.fileURL = base.appendingPathComponent("config.json")
+        self.generations = ["config.json", "config.json.1", "config.json.2"].map { base.appendingPathComponent($0) }
     }
 
-    static func defaultDirectory() -> URL {
+    private static func defaultDirectory() -> URL {
         #if DEBUG
         // A seam for running the app against a throwaway configuration without
         // touching the real one.
@@ -96,19 +98,14 @@ actor ConfigStore {
         // interrupted save (or an external deletion) — recovering it beats
         // starting empty, and only a genuine first install finds no files
         // at all.
-        let generations = [
-            (name: "config.json", url: fileURL),
-            (name: "config.json.1", url: directory.appendingPathComponent("config.json.1")),
-            (name: "config.json.2", url: directory.appendingPathComponent("config.json.2")),
-        ]
         var lastError: Error?
         for (index, generation) in generations.enumerated() {
-            guard FileManager.default.fileExists(atPath: generation.url.path) else { continue }
+            guard FileManager.default.fileExists(atPath: generation.path) else { continue }
             do {
-                let (configuration, decodeNotes) = try Self.read(from: generation.url)
+                let (configuration, decodeNotes) = try Self.read(from: generation)
                 return LoadedConfiguration(
                     configuration: configuration,
-                    recoveredFrom: index == 0 ? nil : generation.name,
+                    recoveredFrom: index == 0 ? nil : generation.lastPathComponent,
                     decodeNotes: decodeNotes
                 )
             } catch {
@@ -150,8 +147,8 @@ actor ConfigStore {
     /// the rotation and the write leaves a readable live file and its copy,
     /// never the empty configuration a move could strand.
     private func rotateBackups() {
-        let firstBackup = directory.appendingPathComponent("config.json.1")
-        let secondBackup = directory.appendingPathComponent("config.json.2")
+        let firstBackup = generations[1]
+        let secondBackup = generations[2]
         if FileManager.default.fileExists(atPath: secondBackup.path) {
             try? FileManager.default.removeItem(at: secondBackup)
         }

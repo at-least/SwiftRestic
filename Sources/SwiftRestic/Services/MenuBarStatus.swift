@@ -70,8 +70,7 @@ enum MenuBarStatus {
         for state: IconState,
         hold: ScheduleHold? = nil,
         isResticDamaged: Bool = false,
-        isWorking: Bool = false,
-        now: Date = .now
+        isWorking: Bool = false
     ) -> String {
         let base = switch state {
         case .unconfigured: "SwiftRestic, no backup location set"
@@ -82,7 +81,7 @@ enum MenuBarStatus {
         var clauses: [String] = []
         if isWorking, state != .running { clauses.append("work in progress") }
         if let hold {
-            let summary = hold.summary(now: now)
+            let summary = hold.summary()
             clauses.append(summary.prefix(1).lowercased() + summary.dropFirst())
         }
         if isResticDamaged { clauses.append(ResticError.damagedInstall.localizedDescription) }
@@ -114,11 +113,10 @@ enum MenuBarStatus {
         hasNoRepositories: Bool,
         plans: [BackupPlan] = [],
         repositories: [Repository] = [],
-        now: Date = .now,
         relative: (Date) -> String = { Format.relative($0) }
     ) -> String? {
         guard !hasNoRepositories else { return nil }
-        guard let newest = newestStandingProblem(runs: runs, now: now) else { return nil }
+        guard let newest = newestStandingProblem(runs: runs) else { return nil }
 
         // A check or prune names the repository alone, with its kind first:
         // "NAS failed" would read as the NAS failing.
