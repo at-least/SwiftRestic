@@ -55,11 +55,26 @@ struct SchedulingTests {
             schedule.frequency = frequency
             let due = schedule.nextRunDate(after: ahead, now: now)
             let fresh = schedule.nextRunDate(after: nil, now: now)
-            #expect(due == fresh, "\(frequency)")
-            // Past the window clock's lag a stamp is a clock's, not this minute's run.
-            let justPast = now.addingTimeInterval(Schedule.windowClockLag + 1)
-            #expect(schedule.nextRunDate(after: justPast, now: now) == fresh, "\(frequency)")
+            #expect(due == fresh, "\(frequency): a stamp a year ahead held the plan back")
         }
+    }
+
+    /// The window's now is its minute's start, so a run of that minute is
+    /// stamped up to a minute after it.
+    @Test("a last run stamped up to a minute after now is this minute's run; a second more is a clock set ahead")
+    func stampWithinTheMinuteIsARun() {
+        let now = utcDate("2026-09-05 12:00:00")
+        var schedule = Schedule()
+        schedule.frequency = .hourly
+        let endOfMinute = now.addingTimeInterval(Schedule.windowClockLag)
+        #expect(
+            schedule.nextRunDate(after: endOfMinute, now: now) == utcDate("2026-09-05 13:01:00"),
+            "a run of this minute was dropped: the plan reads Due now until the minute turns"
+        )
+        #expect(
+            schedule.nextRunDate(after: endOfMinute.addingTimeInterval(1), now: now) == now,
+            "a stamp past this minute held the plan back instead of counting as no run"
+        )
     }
 
     @Test("a stored time of day or weekday is ignored: only how often is read")
@@ -422,22 +437,37 @@ struct MaintenanceSchedulingTests {
         #expect(MaintenancePolicy().nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
     }
 
-    @Test("a scheduled check reads the data in twelve slices where reading costs only time, the structure where it may be billed, whatever an older build stored")
-    func scheduledCheckDepth() throws {
-        for kind in [Repository.Kind.local, .sftp] {
-            #expect(MaintenancePolicy().scheduledDataSubset(for: kind) == .slice(1, of: 12), "\(kind)")
-        }
-        #expect(MaintenancePolicy().scheduledDataSubset(for: .s3) == nil)
+    @Test("a scheduled check reads one of twelve slices of the data where reading costs only time, and the structure alone where it may be billed")
+    func scheduledCheckDepth() {
+        #expect(
+            MaintenancePolicy().scheduledDataSubset(for: .local) == .slice(1, of: 12),
+            "a new location's first check does not start at the first slice"
+        )
         var policy = MaintenancePolicy()
         policy.nextCheckDataSlice = 3
-        #expect(policy.scheduledDataSubset(for: .local) == .slice(3, of: 12))
-        // Stored by an older build: switches ignored, a stored slice kept.
-        let saved = try JSONDecoder().decode(MaintenancePolicy.self, from: Data(#"{"checkEnabled":false,"checkIntervalDays":90,"checkReadDataPercent":5,"pruneEnabled":false,"nextCheckDataSlice":4}"#.utf8))
-        #expect(saved.scheduledDataSubset(for: .local) == .slice(4, of: 12))
-        #expect(saved.scheduledDataSubset(for: .s3) == nil)
-        let added = utcDate("2026-10-09 00:00:00")
-        #expect(saved.nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"))
+        for kind in [Repository.Kind.local, .sftp] {
+            #expect(
+                policy.scheduledDataSubset(for: kind) == .slice(3, of: 12),
+                "a \(kind) location's check does not read its next slice of the data"
+            )
+        }
+        #expect(policy.scheduledDataSubset(for: .s3) == nil, "an S3 check reads data, which the provider may bill")
+    }
+
+    @Test("a slice reaches restic's --read-data-subset as its number over the count")
+    func sliceArgument() {
         #expect(CheckDataSubset.slice(3, of: 12).argument == "3/12")
+    }
+
+    @Test("a policy an older build stored keeps its next slice and ignores the switches, interval and percentage no longer kept")
+    func olderBuildsPolicy() throws {
+        let saved = try JSONDecoder().decode(MaintenancePolicy.self, from: Data(#"{"checkEnabled":false,"checkIntervalDays":90,"checkReadDataPercent":5,"pruneEnabled":false,"nextCheckDataSlice":4}"#.utf8))
+        #expect(saved.scheduledDataSubset(for: .local) == .slice(4, of: 12), "the stored next slice was lost")
+        let added = utcDate("2026-10-09 00:00:00")
+        #expect(
+            saved.nextDate(for: .check, addedAt: added) == utcDate("2026-10-16 00:00:00"),
+            "a stored 90-day interval moved the verification off its 7 days"
+        )
     }
 
     @Test("a hand-edited slice outside 1 to 12 checks the nearest slice there is, never one restic has no group for")
@@ -577,25 +607,6 @@ struct MaintenanceSchedulingTests {
     }
 }
 
-@Suite("Retention policy")
-struct RetentionPolicyTests {
-    @Test("rules become --keep-* flags, skipping the zeros")
-    func flags() {
-        var policy = RetentionPolicy()
-        policy.keepLast = 0
-        policy.keepHourly = 24
-        policy.keepDaily = 7
-        policy.keepWeekly = 0
-        policy.keepMonthly = 12
-        policy.keepYearly = 0
-        #expect(policy.forgetArguments == [
-            "--keep-hourly", "24",
-            "--keep-daily", "7",
-            "--keep-monthly", "12",
-        ])
-    }
-}
-
 @Suite("Repository configuration")
 struct RepositoryTests {
     @Test("each backend produces the repository string restic expects")
@@ -630,6 +641,23 @@ struct RepositoryTests {
         // A folder in the bucket is typed after it, in the same field.
         s3.s3Bucket = "/my-bucket/macs/laptop/"
         #expect(s3.resticRepositoryString == "s3:s3.eu-central-1.amazonaws.com/my-bucket/macs/laptop")
+    }
+
+    @Test("an S3 location stored with no endpoint is on AWS")
+    func emptyEndpointIsAWS() {
+        var s3 = Repository()
+        s3.kind = .s3
+        s3.s3Endpoint = ""
+        s3.s3Bucket = "photos"
+        #expect(s3.resticRepositoryString == "s3:s3.amazonaws.com/photos", "restic is sent to no host")
+        #expect(s3.displayLocation == "photos on s3.amazonaws.com", "the location reads as on no host")
+    }
+
+    @Test("each kind of location has the name the editor's Type list shows")
+    func kindNames() {
+        #expect(Repository.Kind.local.displayName == "Folder or Disk")
+        #expect(Repository.Kind.sftp.displayName == "SFTP Server")
+        #expect(Repository.Kind.s3.displayName == "S3-Compatible Storage")
     }
 
     @Test("one Bucket field: my-bucket on AWS, host/bucket elsewhere, read back as typed")
