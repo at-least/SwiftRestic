@@ -11,8 +11,6 @@ import Foundation
 final class TaskChain {
     private var tail: Task<Void, Never>?
 
-    var isIdle: Bool { tail == nil }
-
     func run(_ work: @escaping @MainActor @Sendable () async -> Void) async {
         let previous = tail
         let task = Task { @MainActor in

@@ -75,27 +75,13 @@ struct Banner: Identifiable, Equatable {
         var url: URL
     }
 
-    var id = UUID()
+    let id = UUID()
     var title: String
     var message: String
     var level: Level
     /// Non-empty: the banner offers Show in Finder, which selects them all.
     var revealPaths: [String] = []
     var link: Link?
-
-    init(
-        title: String,
-        message: String,
-        level: Level,
-        revealPaths: [String] = [],
-        link: Link? = nil
-    ) {
-        self.title = title
-        self.message = message
-        self.level = level
-        self.revealPaths = revealPaths
-        self.link = link
-    }
 
     var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
@@ -199,7 +185,7 @@ enum SnapshotListingOutcome: Equatable {
     var failureMessage: String? {
         switch self {
         case let .failed(message, _): message
-        case let .passwordRefused(name): Self.passwordRefusedText(repositoryName: name)
+        case let .passwordRefused(name): ResticError.wrongPassword(location: name)
         case .idle, .loaded, .notConnected: nil
         }
     }
@@ -210,10 +196,6 @@ enum SnapshotListingOutcome: Equatable {
         case .passwordRefused: .enterPassword(repositoryID)
         case .idle, .loaded, .notConnected: nil
         }
-    }
-
-    static func passwordRefusedText(repositoryName: String) -> String {
-        ResticError.wrongPassword(location: repositoryName)
     }
 
     static func connectText(volume: String) -> String {

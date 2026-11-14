@@ -187,13 +187,6 @@ extension BackupShelves {
         others.first { $0.id == .plan(planID) }
     }
 
-    /// A configured plan's shelf, so a backup two plans' tags claim counts
-    /// once; a plan being adopted has no shelf yet, so its group under Other
-    /// backups.
-    func backupCount(ofPlan planID: UUID) -> Int {
-        byPlan[planID]?.count ?? orphanPlanGroup(planID)?.snapshots.count ?? 0
-    }
-
     /// Nil when it is gone: forgotten, tagged by hand, or refreshed away.
     func lineageGroup(_ key: SnapshotLineage.Key) -> OtherBackupsGroup? {
         others.first { $0.id == .lineage(key) }

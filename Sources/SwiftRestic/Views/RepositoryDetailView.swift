@@ -94,7 +94,7 @@ struct RepositoryDetailView: View {
         case let .failed(message, _):
             Text("—").help(message)
         case let .passwordRefused(name):
-            Text("—").help(SnapshotListingOutcome.passwordRefusedText(repositoryName: name))
+            Text("—").help(ResticError.wrongPassword(location: name))
         case .idle:
             Text("—").help(OverviewMetrics.listingIdleText)
         }

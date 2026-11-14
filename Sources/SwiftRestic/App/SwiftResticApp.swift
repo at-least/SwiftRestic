@@ -18,8 +18,8 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 /// are flushed and running restic terminated before the process goes away.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var model: AppModel?
-    var router: AppRouter?
+    private(set) var model: AppModel?
+    private(set) var router: AppRouter?
 
     /// The tray (AppKit-owned, see TrayStatusItem) is created once, when the
     /// scene's `task` hands over the model and router.

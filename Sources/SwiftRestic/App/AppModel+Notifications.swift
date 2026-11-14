@@ -92,12 +92,12 @@ extension AppModel {
         }
     }
 
-    func notify(about record: RunRecord, now: Date = .now) {
+    func notify(about record: RunRecord) {
         guard wantsNotification(for: record) else { return }
         var firstBackup: (title: String, body: String)?
         var announcedPlanID: UUID?
         if announcesFirstBackup(record), let planID = record.planID, let plan = plan(id: planID) {
-            firstBackup = Self.firstBackupNotification(plan: plan, among: configuration.plans, now: now)
+            firstBackup = Self.firstBackupNotification(plan: plan, among: configuration.plans, now: .now)
             announcedPlanID = planID
         }
 

@@ -3,7 +3,7 @@ import os
 
 /// What a banner or a page's failure line leaves out
 /// (`ResticError.resticDetail`): no run record carries it here.
-private let listingFailures = Logger(subsystem: "com.newlix.SwiftRestic", category: "Listing")
+private let listingFailures = Logger(category: "Listing")
 
 private func logResticDetail(of error: Error, reading what: String) {
     guard let detail = (error as? ResticError)?.resticDetail else { return }

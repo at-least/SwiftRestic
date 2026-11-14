@@ -65,7 +65,6 @@ extension AppModel {
         })
     }
 
-    /// Shared with the views that report truncation.
     static let indexSearchLimit = 200
 
     /// The searches ask for one hit past the limit, so a full page is not

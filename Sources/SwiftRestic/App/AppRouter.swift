@@ -76,7 +76,7 @@ final class AppRouter {
     /// through `tab(of:)`, never directly — a page without the chosen view
     /// shows another. Transient: every page opens on its overview after a
     /// launch, where "is it backing up" is answered.
-    private(set) var pageTab: PageTab = .overview
+    private var pageTab: PageTab = .overview
 
     /// The backup each page's Backups tab has open, by the page. Transient,
     /// as the tabs are: a page keeps its pick for the session, and its tab

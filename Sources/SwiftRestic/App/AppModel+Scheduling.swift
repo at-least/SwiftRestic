@@ -82,7 +82,7 @@ extension AppModel {
     }
 
     var scheduleHold: ScheduleHold? {
-        Scheduler.hold(pause: configuration.settings.schedulePause, isOnMeteredNetwork: false, repositoryUsesNetwork: false)
+        scheduleHold(repositoryID: nil)
     }
 
     func scheduleHold(repositoryID: UUID?, now: Date = .now) -> ScheduleHold? {

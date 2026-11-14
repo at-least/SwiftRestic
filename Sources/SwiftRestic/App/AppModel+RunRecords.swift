@@ -110,4 +110,10 @@ enum RunSnapshotLink: Equatable {
     }
 }
 
-private let runLogFailures = Logger(subsystem: "com.newlix.SwiftRestic", category: "RunLog")
+private let runLogFailures = Logger(category: "RunLog")
+
+extension Logger {
+    init(category: String) {
+        self.init(subsystem: "com.newlix.SwiftRestic", category: category)
+    }
+}

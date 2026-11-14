@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-private let configurationLog = Logger(subsystem: "com.newlix.SwiftRestic", category: "Configuration")
+private let configurationLog = Logger(category: "Configuration")
 
 /// What `followPlans` compares across a configuration write.
 private struct PlanFootprint {

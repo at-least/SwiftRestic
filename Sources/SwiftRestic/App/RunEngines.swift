@@ -113,6 +113,8 @@ enum ReachabilityGate {
 
 @MainActor
 protocol RunEngineSink: AnyObject {
+    /// The user's Stop or the app quitting.
+    var cancellationMessage: String { get }
     func label(of repository: Repository) -> String
     func service() throws -> any ResticClient
     func context(for repository: Repository) async throws -> RepositoryContext
@@ -143,8 +145,6 @@ extension RunEngineSink {
 enum BackupRunEngine {
     @MainActor
     protocol Sink: RunEngineSink {
-        /// The user's Stop or the app quitting.
-        var cancellationMessage: String { get }
         func label(of plan: BackupPlan) -> String
         /// Nil-anchored like the activity entry itself: a phase for a plan
         /// whose run has already unwound is dropped, never resurrected.
@@ -362,7 +362,6 @@ enum BackupRunEngine {
 enum MaintenanceRunEngine {
     @MainActor
     protocol Sink: RunEngineSink {
-        var cancellationMessage: String { get }
         func stampMaintenance(repositoryID: UUID, task: MaintenanceTask, at date: Date)
         /// Not-yet-configured repositories record nothing and stamp nothing.
         func markPasswordMissing(repositoryID: UUID)

@@ -34,7 +34,6 @@ struct TaskChainTests {
 
         #expect(trace.order == [1, 2, 3])
         #expect(trace.mostAtOnce == 1)
-        #expect(chain.isIdle)
     }
 
     @Test("a call made after the chain went idle runs at once")
@@ -42,9 +41,7 @@ struct TaskChainTests {
         let chain = TaskChain()
         let trace = Trace()
         await chain.run { trace.order.append(1) }
-        #expect(chain.isIdle)
         await chain.run { trace.order.append(2) }
         #expect(trace.order == [1, 2])
-        #expect(chain.isIdle)
     }
 }

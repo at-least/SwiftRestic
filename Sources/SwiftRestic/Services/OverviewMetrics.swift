@@ -271,7 +271,7 @@ enum OverviewMetrics {
         case let .failed(message, _):
             return failedRow(listingFailureText(message))
         case let .passwordRefused(name):
-            return failedRow(listingFailureText(SnapshotListingOutcome.passwordRefusedText(repositoryName: name)))
+            return failedRow(listingFailureText(ResticError.wrongPassword(location: name)))
         case .idle:
             let checking = isChecking(repositoryID)
             return UpToDateRow(

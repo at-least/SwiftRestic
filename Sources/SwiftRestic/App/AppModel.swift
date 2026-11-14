@@ -31,7 +31,7 @@ final class AppModel {
     /// Derived once per history write, not per row. A snapshot whose run
     /// left the history, or was never recorded here, is absent: unknown,
     /// never complete.
-    private(set) var backupRunsBySnapshot: [String: RunRecord] = [:]
+    private var backupRunsBySnapshot: [String: RunRecord] = [:]
 
     func backupRun(forSnapshot id: String) -> RunRecord? {
         backupRunsBySnapshot[id]
