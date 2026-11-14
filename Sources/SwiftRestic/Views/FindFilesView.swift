@@ -264,11 +264,13 @@ struct FindFilesView: View {
             // The rows clicked are passed directly: a right-click on an
             // unselected row must not depend on selection state.
             let picked = rows.filter { ids.contains($0.id) }
-            if picked.count == 1, let row = picked.first {
+            if !picked.isEmpty, Self.oneRepository(picked) {
                 Button("Restore") { restoreSelection(picked) }
                     .disabled(!canRestore(picked))
                 Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
                     .disabled(!canRestore(picked))
+            }
+            if picked.count == 1, let row = picked.first {
                 if let open = showInBackups(row) {
                     Button("Show in Backups", action: open)
                 }
@@ -276,11 +278,6 @@ struct FindFilesView: View {
                     Button("Preview") { preview(row) }
                         .disabled(!model.isResticAvailable || previewer.isCopying)
                 }
-            } else if picked.count > 1, Self.oneRepository(picked) {
-                Button("Restore") { restoreSelection(picked) }
-                    .disabled(!canRestore(picked))
-                Button("Restore To…") { restoreSelection(picked, choosingDestination: true) }
-                    .disabled(!canRestore(picked))
             }
         } primaryAction: { ids in
             guard ids.count == 1, let row = rows.first(where: { ids.contains($0.id) }),
@@ -427,5 +424,3 @@ struct FindFilesView: View {
         )
     }
 }
-
-

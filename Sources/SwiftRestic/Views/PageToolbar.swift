@@ -18,9 +18,7 @@ extension View {
             }
         }
     }
-}
 
-extension View {
     /// Every page's search, in the window toolbar's trailing field (the
     /// HIG's place for it): its first keystroke turns the page to Search
     /// All Backups, the query in that page's field in the same place,

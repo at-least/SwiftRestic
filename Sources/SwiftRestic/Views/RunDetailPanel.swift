@@ -101,10 +101,10 @@ struct RunDetailPanel: View {
                 DetailRow("Files", RunRecordPresentation.restoreFiles(run))
             }
             repositoryRow
-        default:
+        case .check, .prune:
             repositoryRow
             // A check's verdict or the space a prune freed: the copied details' Result line.
-            if run.kind == .check || run.kind == .prune, let result = run.detailText {
+            if let result = run.detailText {
                 DetailRow("Result") {
                     Text(result).textSelection(.enabled)
                 }

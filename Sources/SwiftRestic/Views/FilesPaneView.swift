@@ -96,7 +96,17 @@ struct FilesPaneView: View {
     @ViewBuilder
     private var content: some View {
         if let loadError {
-            IndexFailureView(title: "Couldn’t read its backups", message: loadError, repositoryID: node.repositoryID)
+            // Nothing the index answered can be trusted as "no backup holds
+            // it" while this stands.
+            ContentUnavailableView {
+                Label("Couldn’t read its backups", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(loadError)
+            } actions: {
+                Button("Try Again") {
+                    model.rebuildIndex(repositoryID: node.repositoryID)
+                }
+            }
         } else if !didOpen {
             // The first read only: a re-read while the index has not
             // reached the item yet keeps the empty state up rather than

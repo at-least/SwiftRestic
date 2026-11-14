@@ -418,3 +418,119 @@ struct PlanDetailView: View {
         }
     }
 }
+
+/// A plan's exclude list: + chooses items in a panel, as Time Machine's
+/// exclusions do, a drop from Finder adds them, − removes the selected rows.
+/// Every entry is an item's own path, glob characters escaped
+/// (`ResticService.globEscaped`): "a[1].txt" would otherwise match "a1.txt"
+/// and not itself. A pattern not added here still lists and removes.
+private struct PathListEditor: View {
+    @Binding var paths: [String]
+
+    @State private var selection: Set<String> = []
+    @State private var isDropTargeted = false
+
+    /// About six one-line rows: the list scrolls past them rather than
+    /// growing the page.
+    private static let listHeight: CGFloat = 132
+
+    var body: some View {
+        VStack(spacing: 0) {
+            List(selection: $selection) {
+                ForEach(paths, id: \.self) { path in
+                    Text(path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(path)
+                }
+            }
+            .contextMenu(forSelectionType: String.self) { items in
+                Button("Remove") { remove(items) }
+            }
+            .accessibilityLabel("Excluded Items")
+            .listStyle(.plain)
+            .alternatingRowBackgrounds()
+            .environment(\.defaultMinListRowHeight, 22)
+            .overlay {
+                if paths.isEmpty {
+                    Text("Drag folders and files here, or click +.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: Self.listHeight)
+            .dropDestination(for: URL.self) { urls, _ in
+                // Only file URLs are paths: a dragged web link's `.path`
+                // would silently become a pattern matching nothing.
+                let filePaths = urls.filter(\.isFileURL).map(\.path)
+                guard !filePaths.isEmpty else { return false }
+                addPaths(filePaths)
+                return true
+            } isTargeted: { isDropTargeted = $0 }
+            Divider()
+            HStack(spacing: 0) {
+                ListBarButton(symbol: "plus", title: "Choose items") { browse() }
+                    .accessibilityIdentifier(AccessibilityID.PathList.add)
+                Divider()
+                    .frame(height: 14)
+                ListBarButton(symbol: "minus", title: "Remove") { remove(selection) }
+                    .disabled(selection.isEmpty)
+                Spacer()
+            }
+            .padding(.leading, 2)
+            .frame(height: 26)
+        }
+        .overlay {
+            if isDropTargeted {
+                Rectangle().strokeBorder(Theme.tint, lineWidth: 2)
+            }
+        }
+    }
+
+    private func remove(_ items: Set<String>) {
+        paths.removeAll { items.contains($0) }
+        selection.subtract(items)
+    }
+
+    /// One write to `paths`: the plan's page saves on each.
+    private func addPaths(_ rawPaths: [String]) {
+        var added = paths
+        for value in rawPaths.map(ResticService.globEscaped) where !added.contains(value) {
+            added.append(value)
+        }
+        paths = added
+    }
+
+    /// `NSOpenPanel`, not SwiftUI's `fileImporter`: the list needs
+    /// multi-select across both files and folders.
+    private func browse() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose folders and files to exclude from backups"
+        panel.prompt = "Exclude"
+        guard panel.runModal() == .OK else { return }
+        addPaths(panel.urls.map(\.path))
+    }
+}
+
+private struct ListBarButton: View {
+    let symbol: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}

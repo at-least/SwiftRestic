@@ -80,11 +80,11 @@ struct RepositoryEditorSheet: View {
     /// missing location `repository` is the `Repository.replacement` of.
     init(
         repository: Repository,
-        firstBackupSource: String? = nil,
-        password: String = "",
-        confirmPassword: String = "",
-        replacing: UUID? = nil,
-        onCreated: @escaping (UUID) -> Void = { _ in }
+        firstBackupSource: String?,
+        password: String,
+        confirmPassword: String,
+        replacing: UUID?,
+        onCreated: @escaping (UUID) -> Void
     ) {
         // A new repository opens with its location blank: `Repository()`,
         // or one of the first-run sheet's server kinds; a replacement opens
@@ -180,7 +180,7 @@ struct RepositoryEditorSheet: View {
                     .accessibilityIdentifier(AccessibilityID.RepositoryEditor.save)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!canSubmit || isWorking)
+                    .disabled(missingRequirement != nil || isWorking)
             }
             .padding(12)
         }
@@ -217,7 +217,10 @@ struct RepositoryEditorSheet: View {
             mountedShare = share
             holdsBackups = holds
         }
-        .discardChangesDialog(isPresented: $isConfirmingDiscard) { dismiss() }
+        .confirmationDialog("Discard changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     private var isDirty: Bool {
@@ -436,10 +439,6 @@ struct RepositoryEditorSheet: View {
         }
     }
 
-    /// The footer's reason and the buttons' state are one derivation: a
-    /// greyed button always has its reason beside it.
-    private var canSubmit: Bool { missingRequirement == nil }
-
     private var missingRequirement: String? {
         if entersPassword, password.isEmpty { return "Enter the password to save it." }
         return EditorRequirements.repository(
@@ -482,9 +481,8 @@ struct RepositoryEditorSheet: View {
     }
 
     private var passwordPrompt: String {
-        if isNew { return "Required" }
-        if secretsReadFailed { return "Not read from Keychain" }
-        return "Required"
+        // Only a saved location's read can fail (`loadStoredSecrets`).
+        secretsReadFailed ? "Not read from Keychain" : "Required"
     }
 
     /// A saved location's secrets, or, for a replacement, the missing
@@ -622,7 +620,7 @@ struct RepositoryEditorSheet: View {
         } catch {
             model.post(Banner(
                 title: "Couldn’t save the password for “\(share.url)”",
-                message: "“\(draft.label(among: model.configuration.repositories))” is saved. \(error.localizedDescription)",
+                message: "“\(draftLabel)” is saved. \(error.localizedDescription)",
                 level: .error
             ))
         }
@@ -633,7 +631,7 @@ struct RepositoryEditorSheet: View {
 /// The one-line orientation the new-repository picker owes each kind: the
 /// picker names the backend, this names what it is for. Editor-local teaching
 /// copy, so `Repository.Kind` stays a plain configuration model.
-extension Repository.Kind {
+private extension Repository.Kind {
     var summary: String {
         switch self {
         case .local: "A folder or an external disk attached to this Mac."

@@ -211,7 +211,7 @@ struct FirstBackupSheet: View {
                 let destination = $destination
                 RunLoop.main.perform(inModes: [.default]) {
                     MainActor.assumeIsolated {
-                        if let url = FilePicker.chooseDirectory(message: Self.folderPanelMessage) {
+                        if let url = FilePicker.chooseDirectory(message: "Choose where to keep the backups") {
                             destination.wrappedValue = .folder(url.path)
                         }
                     }
@@ -227,8 +227,6 @@ struct FirstBackupSheet: View {
             }
         }
     }
-
-    private static let folderPanelMessage = "Choose where to keep the backups"
 
     private var missingRequirement: String? {
         FirstBackupDestination.requirement(

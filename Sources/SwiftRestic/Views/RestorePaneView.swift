@@ -187,7 +187,11 @@ struct RestorePaneView<VersionsPane: View>: View {
             ProgressView("Reading…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
-            FailureUnavailableView(title: "Couldn’t read this folder", message: loadError)
+            ContentUnavailableView {
+                Label("Couldn’t read this folder", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(loadError).textSelection(.enabled)
+            }
         } else if folderMissing {
             ContentUnavailableView {
                 Label("Not in this backup", systemImage: "folder.badge.questionmark")
@@ -939,11 +943,7 @@ private struct IncompleteSnapshotStrip: View {
                 }
             }
             Spacer(minLength: 8)
-            Button("Show in Activity") {
-                // A problem run, so the problems filter already shows it;
-                // the landing leaves that filter as the user set it.
-                router.focusRun(run.id)
-            }
+            Button("Show in Activity") { router.focusRun(run.id) }
             .controlSize(.small)
             .help("See this backup in Activity")
         }
@@ -1029,7 +1029,7 @@ private enum BrowserListGrammar {
     /// The ⌫ key as `onKeyPress` delivers it: U+007F, what AppKit's Delete
     /// key types. SwiftUI's `KeyEquivalent.delete` is U+0008, which ⌫ never
     /// produces, so only this constant matches the key.
-    static let deleteKey = KeyEquivalent("\u{7F}")
+    private static let deleteKey = KeyEquivalent("\u{7F}")
 
     static func keyPress(
         _ press: KeyPress,
@@ -1066,19 +1066,6 @@ private enum BrowserListGrammar {
     }
 }
 
-private struct FailureUnavailableView: View {
-    let title: LocalizedStringKey
-    let message: String
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message).textSelection(.enabled)
-        }
-    }
-}
-
 /// A file picked in a backup's tree, by the backup it was picked in.
 struct RestorePanePick: Equatable {
     let path: String
@@ -1098,4 +1085,25 @@ private struct PresenceKey: Equatable {
     let rows: [String]
     let loaded: String?
     let diskGeneration: UInt64
+}
+
+private extension SnapshotNode {
+    var iconType: UTType {
+        switch type {
+        case .dir: .folder
+        case .symlink: .symbolicLink
+        case .file: .backedUp(name: name, isDirectory: false)
+        default: .item
+        }
+    }
+
+    /// The icon's meaning, for VoiceOver.
+    var kindName: String {
+        switch type {
+        case .dir: "Folder"
+        case .symlink: "Symbolic link"
+        case .file: "File"
+        default: "Special file"
+        }
+    }
 }

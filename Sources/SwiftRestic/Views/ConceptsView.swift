@@ -10,7 +10,7 @@ struct ConceptsView: View {
         var id: String { title }
     }
 
-    private let tasks: [Topic] = [
+    private let topics: [Topic] = [
         Topic(
             title: "Back up a folder",
             text: "Click Back Up a Folder, choose the folder, a disk and a password, and click Back Up. Its first backup starts right away, then it runs on its schedule while SwiftRestic is open. For another folder, choose File ▸ Back Up a Folder."
@@ -40,7 +40,7 @@ struct ConceptsView: View {
                 Text("How to")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
-                ForEach(tasks) { topic in row(topic) }
+                ForEach(topics) { topic in row(topic) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)

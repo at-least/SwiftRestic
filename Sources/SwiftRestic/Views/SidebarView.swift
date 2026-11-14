@@ -304,7 +304,6 @@ struct SidebarView: View {
         // left backups in two repositories.
         .accessibilityLabel("\(title), \(caption.text), in “\(model.label(of: repository))”")
     }
-
 }
 
 /// A repository's children's leading indentation: their icons under the
@@ -411,4 +410,3 @@ private struct PlanSidebarRow: View {
         .font(.caption)
     }
 }
-

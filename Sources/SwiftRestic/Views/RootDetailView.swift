@@ -179,3 +179,90 @@ private struct RestoreProgressStrip: View {
         model.restoreDescription.isEmpty ? "Restoring…" : model.restoreDescription
     }
 }
+
+/// Banners built in place (rather than posted to the queue) have nothing to
+/// dismiss, so they hide the close button. Only an error and a warning carry
+/// a glyph, bare, with no coloured plate behind it.
+private struct BannerView: View {
+    @Environment(AppModel.self) private var model
+    let banner: Banner
+    var isDismissible = true
+
+    /// The status palette's glyph, hue and spoken name for a run that failed
+    /// or completed with warnings, so a colour means one thing app-wide. Not
+    /// every error's title says it failed ("Keychain"), so the glyph is named.
+    private var mark: (symbol: String, hue: Color, label: String)? {
+        switch banner.level {
+        case .error: (RunRecord.Outcome.failed.symbolName!, StatusPalette.status(.failed), "Error")
+        case .warning:
+            (RunRecord.Outcome.completedWithErrors.symbolName!, StatusPalette.status(.completedWithErrors), "Warning")
+        case .notice: nil
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            if let mark {
+                Image(systemName: mark.symbol)
+                    .imageScale(.large)
+                    .foregroundStyle(mark.hue)
+                    .accessibilityLabel(mark.label)
+            }
+            // Title and message read as one utterance; the Show in Finder action and
+            // the dismiss button stay their own elements beside them.
+            VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(banner.title).font(.headline)
+                    if !banner.message.isEmpty {
+                        // Never fixedSize(vertical:): the split view asks its
+                        // detail column for a minimum size at zero width, where
+                        // a height-pinned message wraps to about a character
+                        // per line, and the non-scrolling hosts then lay out
+                        // thousands of points taller than the window and
+                        // render blank.
+                        Text(banner.message)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                if !banner.revealPaths.isEmpty {
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting(banner.revealPaths.map { URL(fileURLWithPath: $0) })
+                    }
+                    .controlSize(.small)
+                }
+                // The fix as a button, where the words would only say
+                // where it is.
+                if let link = banner.link {
+                    Button(link.title) { NSWorkspace.shared.open(link.url) }
+                        .controlSize(.small)
+                }
+            }
+            Spacer()
+            if isDismissible {
+                Button {
+                    model.dismiss(banner)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Dismiss")
+                .accessibilityLabel("Dismiss")
+            }
+        }
+        .detailStrip()
+    }
+}
+
+private extension View {
+    /// A strip across the top of the detail column, above every pane: a
+    /// banner, the restore's progress.
+    func detailStrip() -> some View {
+        padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+    }
+}

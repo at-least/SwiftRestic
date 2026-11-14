@@ -6,19 +6,20 @@ import SwiftUI
 /// what is already there are asked in one place.
 struct RestoreDestinationRequest: Identifiable {
     let id = UUID()
-    let subject: RestoreSubject
-    let route: RestoreDestinationRoute
-    /// `restoreFlow`'s look at the original location, carried into the
-    /// sheet so it does not look again; nil until something looked.
-    var original: OriginalLocation?
+    fileprivate let subject: RestoreSubject
+    fileprivate let route: RestoreDestinationRoute
+    /// `restoreFlow`'s look at the original location, when it found the
+    /// place unavailable: the sheet then says why and asks for the folder
+    /// alone. Nil for another Mac's backup, whose sheet looks for itself.
+    fileprivate var original: OriginalLocation?
     /// A line under the headline about how the selection became the
     /// subject: selected items inside a selected folder, which come with it
     /// (`RestoreBatch.coveredNote`).
     fileprivate var selectionNote: String?
-    let backupTime: Date?
+    fileprivate let backupTime: Date?
     /// How many backups the items come from: Search All Backups restores each row
     /// from the backup it was found in.
-    var backupCount = 1
+    fileprivate var backupCount = 1
     /// The version's own modified time, when the request came from a row
     /// named by it (a file's versions): the sheet then repeats
     /// the words the user chose by beside the backup the bytes come from.
@@ -26,7 +27,7 @@ struct RestoreDestinationRequest: Identifiable {
     /// Starts the restore with this policy, into these directories: one per
     /// item, in order (`RestoreSubject.directoryCount`) — the same folder for
     /// all, or for Original location each item's own parent.
-    let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
+    fileprivate let perform: @MainActor ([URL], RestoreOverwritePolicy) -> Void
 
     /// Every selection's restore, by one rule and one wording
     /// (`RestoreSelection`): items inside a selected folder of the same
@@ -56,16 +57,22 @@ struct RestoreDestinationRequest: Identifiable {
         }
     }
 
-    /// The folder panel's message: the item and the backup it comes from.
-    fileprivate var panelMessage: String {
-        let what = switch subject {
+    fileprivate var headline: String {
+        switch subject {
         case let .item(name, _, _): "Restore “\(name)”"
         case let .items(items): "Restore \(Format.plural(items.count, "item"))"
         }
-        let backupLine = RestoreSelection.backupLine(
+    }
+
+    fileprivate var backupLine: String {
+        RestoreSelection.backupLine(
             backupCount: backupCount, backupTime: backupTime, versionModified: versionModified
         )
-        return "\(what)\(versionModified == nil ? " " : ", ")\(backupLine)."
+    }
+
+    /// The folder panel's message: the item and the backup it comes from.
+    fileprivate var panelMessage: String {
+        "\(headline)\(versionModified == nil ? " " : ", ")\(backupLine)."
     }
 }
 
@@ -255,14 +262,10 @@ private struct RestoreDestinationSheet: View {
     let request: RestoreDestinationRequest
     @State private var kind: RestoreDestinationKind = .folder
     @State private var folder: URL = .desktopDirectory
-    /// Nil until the detached check answers: the parent may sit on a
-    /// stalled network mount, which must not stall the main actor.
+    /// Another Mac's backup only. Nil until the detached check answers: the
+    /// parent may sit on a stalled network mount, which must not stall the
+    /// main actor.
     @State private var original: OriginalLocation?
-
-    init(request: RestoreDestinationRequest) {
-        self.request = request
-        _original = State(initialValue: request.original)
-    }
     @State private var isConfirming = false
     /// The Replace pre-check, which Cancel and the sheet's closing stop: a
     /// look at a stalled mount can outlast the user's patience, and a
@@ -272,11 +275,11 @@ private struct RestoreDestinationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(headline)
+                Text(request.headline)
                     .font(.headline)
                     .lineLimit(2)
                     .truncationMode(.middle)
-                Text(backupLine)
+                Text(request.backupLine)
                     .foregroundStyle(.secondary)
                 if let note = request.selectionNote {
                     caption(note)
@@ -336,7 +339,7 @@ private struct RestoreDestinationSheet: View {
         }
         .padding(20)
         .frame(width: 460)
-        .task { if original == nil { await checkOriginalLocation() } }
+        .task { if request.original == nil { await checkOriginalLocation() } }
         .onDisappear { confirmation?.cancel() }
     }
 
@@ -348,29 +351,9 @@ private struct RestoreDestinationSheet: View {
         return nil
     }
 
-    private var itemName: String? {
-        if case let .item(name, _, _) = request.subject { return name }
-        return nil
-    }
-
     private var items: [RestoreItem]? {
         if case let .items(items) = request.subject { return items }
         return nil
-    }
-
-    private var headline: String {
-        switch request.subject {
-        case let .item(name, _, _): "Restore “\(name)”"
-        case let .items(items): "Restore \(Format.plural(items.count, "item"))"
-        }
-    }
-
-    private var backupLine: String {
-        RestoreSelection.backupLine(
-            backupCount: request.backupCount,
-            backupTime: request.backupTime,
-            versionModified: request.versionModified
-        )
     }
 
     private var subjectName: String {
@@ -425,7 +408,7 @@ private struct RestoreDestinationSheet: View {
                         caption("Will put each of the \(Format.plural(items.count, "item")) back in the folder it was backed up from.")
                     }
                 } else {
-                    pathCaption("Will put “\(itemName ?? "")” back at \(Self.abbreviated(landings[0]))", fullPath: landings[0].path)
+                    pathCaption("Will put \(subjectName) back at \(Self.abbreviated(landings[0]))", fullPath: landings[0].path)
                 }
             case let .unavailable(reason)?:
                 // A sentence, not a path: it wraps rather than truncating.
@@ -483,12 +466,8 @@ private struct RestoreDestinationSheet: View {
             defer { isConfirming = false }
             // Cancel pressed while the look ran: nothing starts.
             guard let policy = await request.overwritePolicy(into: directories) else { return }
-            commit(directories, policy)
+            dismiss()
+            request.perform(directories, policy)
         }
-    }
-
-    private func commit(_ directories: [URL], _ policy: RestoreOverwritePolicy) {
-        dismiss()
-        request.perform(directories, policy)
     }
 }

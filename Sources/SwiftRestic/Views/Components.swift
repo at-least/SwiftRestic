@@ -2,101 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-
-/// Banners built in place (rather than posted to the queue) have nothing to
-/// dismiss, so they hide the close button. Only an error and a warning carry
-/// a glyph, bare, with no coloured plate behind it.
-struct BannerView: View {
-    @Environment(AppModel.self) private var model
-    let banner: Banner
-    var isDismissible = true
-
-    /// The status palette's glyph, hue and spoken name for a run that failed
-    /// or completed with warnings, so a colour means one thing app-wide. Not
-    /// every error's title says it failed ("Keychain"), so the glyph is named.
-    private var mark: (symbol: String, hue: Color, label: String)? {
-        switch banner.level {
-        case .error: (RunRecord.Outcome.failed.symbolName!, StatusPalette.status(.failed), "Error")
-        case .warning:
-            (RunRecord.Outcome.completedWithErrors.symbolName!, StatusPalette.status(.completedWithErrors), "Warning")
-        case .notice: nil
-        }
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            if let mark {
-                Image(systemName: mark.symbol)
-                    .imageScale(.large)
-                    .foregroundStyle(mark.hue)
-                    .accessibilityLabel(mark.label)
-            }
-            // Title and message read as one utterance; the Show in Finder action and
-            // the dismiss button stay their own elements beside them.
-            VStack(alignment: .leading, spacing: 4) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(banner.title).font(.headline)
-                    if !banner.message.isEmpty {
-                        // Never fixedSize(vertical:): the split view asks its
-                        // detail column for a minimum size at zero width, where
-                        // a height-pinned message wraps to about a character
-                        // per line, and the non-scrolling hosts then lay out
-                        // thousands of points taller than the window and
-                        // render blank.
-                        Text(banner.message)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                if !banner.revealPaths.isEmpty {
-                    Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting(banner.revealPaths.map { URL(fileURLWithPath: $0) })
-                    }
-                    .controlSize(.small)
-                }
-                // The fix as a button, where the words would only say
-                // where it is.
-                if let link = banner.link {
-                    Button(link.title) { NSWorkspace.shared.open(link.url) }
-                        .controlSize(.small)
-                }
-            }
-            Spacer()
-            if isDismissible {
-                Button {
-                    model.dismiss(banner)
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.borderless)
-                .help("Dismiss")
-                .accessibilityLabel("Dismiss")
-            }
-        }
-        .detailStrip()
-    }
-}
-
-extension View {
-    /// A strip across the top of the detail column, above every pane: a
-    /// banner, the restore's progress.
-    func detailStrip() -> some View {
-        padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
-    }
-
-    func discardChangesDialog(isPresented: Binding<Bool>, discard: @escaping () -> Void) -> some View {
-        confirmationDialog("Discard changes?", isPresented: isPresented, titleVisibility: .visible) {
-            Button("Discard Changes", role: .destructive, action: discard)
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-}
-
 /// `.help` only when there is text to show; an empty tooltip would still hit.
 struct TileHelp: ViewModifier {
     let help: String?
@@ -203,7 +108,6 @@ struct OperationProgressView: View {
     }
 }
 
-
 /// Orange on the glyph only, the words secondary — the contrast rule the
 /// sidebar's captions follow.
 struct WarningLine: View {
@@ -220,7 +124,6 @@ struct WarningLine: View {
         }
     }
 }
-
 
 /// Why a Snapshots value may read "—", in visible text: a reason only a
 /// hovering mouse user can reach is no reason at all for a keyboard or
@@ -342,151 +245,7 @@ extension UTType {
     }
 }
 
-extension SnapshotNode {
-    var iconType: UTType {
-        switch type {
-        case .dir: .folder
-        case .symlink: .symbolicLink
-        case .file: .backedUp(name: name, isDirectory: false)
-        default: .item
-        }
-    }
-
-    /// The icon's meaning, for VoiceOver.
-    var kindName: String {
-        switch type {
-        case .dir: "Folder"
-        case .symlink: "Symbolic link"
-        case .file: "File"
-        default: "Special file"
-        }
-    }
-}
-
-/// A plan's exclude list: + chooses items in a panel, as Time Machine's
-/// exclusions do, a drop from Finder adds them, − removes the selected rows.
-/// Every entry is an item's own path, glob characters escaped
-/// (`ResticService.globEscaped`): "a[1].txt" would otherwise match "a1.txt"
-/// and not itself. A pattern not added here still lists and removes.
-struct PathListEditor: View {
-    @Binding var paths: [String]
-
-    @State private var selection: Set<String> = []
-    @State private var isDropTargeted = false
-
-    /// About six one-line rows: the list scrolls past them rather than
-    /// growing the page.
-    private static let listHeight: CGFloat = 132
-
-    var body: some View {
-        VStack(spacing: 0) {
-            List(selection: $selection) {
-                ForEach(paths, id: \.self) { path in
-                    Text(path)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(path)
-                }
-            }
-            .contextMenu(forSelectionType: String.self) { items in
-                Button("Remove") { remove(items) }
-            }
-            .accessibilityLabel("Excluded Items")
-            .listStyle(.plain)
-            .alternatingRowBackgrounds()
-            .environment(\.defaultMinListRowHeight, 22)
-            .overlay {
-                if paths.isEmpty {
-                    Text("Drag folders and files here, or click +.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(12)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(height: Self.listHeight)
-            .dropDestination(for: URL.self) { urls, _ in
-                // Only file URLs are paths: a dragged web link's `.path`
-                // would silently become a pattern matching nothing.
-                let filePaths = urls.filter(\.isFileURL).map(\.path)
-                guard !filePaths.isEmpty else { return false }
-                addPaths(filePaths)
-                return true
-            } isTargeted: { isDropTargeted = $0 }
-            Divider()
-            HStack(spacing: 0) {
-                ListBarButton(symbol: "plus", title: "Choose items") { browse() }
-                    .accessibilityIdentifier(AccessibilityID.PathList.add)
-                Divider()
-                    .frame(height: 14)
-                ListBarButton(symbol: "minus", title: "Remove") { remove(selection) }
-                    .disabled(selection.isEmpty)
-                Spacer()
-            }
-            .padding(.leading, 2)
-            .frame(height: 26)
-        }
-        .overlay {
-            if isDropTargeted {
-                Rectangle().strokeBorder(Theme.tint, lineWidth: 2)
-            }
-        }
-    }
-
-    private func remove(_ items: Set<String>) {
-        paths.removeAll { items.contains($0) }
-        selection.subtract(items)
-    }
-
-    /// One write to `paths`: the plan's page saves on each.
-    private func addPaths(_ rawPaths: [String]) {
-        var added = paths
-        for value in rawPaths.map(ResticService.globEscaped) where !added.contains(value) {
-            added.append(value)
-        }
-        paths = added
-    }
-
-    private func browse() {
-        guard let chosen = FilePicker.chooseFoldersAndFiles(
-            message: "Choose folders and files to exclude from backups", prompt: "Exclude"
-        ) else { return }
-        addPaths(chosen.map(\.path))
-    }
-}
-
-private struct ListBarButton: View {
-    let symbol: String
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .frame(width: 24, height: 20)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .help(title)
-        .accessibilityLabel(title)
-    }
-}
-
-/// `NSOpenPanel`, not SwiftUI's `fileImporter`: the exclude list needs
-/// multi-select across both files and folders.
 enum FilePicker {
-    @MainActor
-    fileprivate static func chooseFoldersAndFiles(message: String, prompt: String) -> [URL]? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = true
-        panel.message = message
-        panel.prompt = prompt
-        return panel.runModal() == .OK ? panel.urls : nil
-    }
-
     /// `directoryURL` is where the panel opens; nil leaves it to AppKit's
     /// own memory of the last folder.
     @MainActor
@@ -646,35 +405,6 @@ struct UnreadableItemLine: View {
             Button("Exclude from “\(model.label(of: plan))”") { model.exclude(paths: [path], fromPlan: plan.id) }
                 .disabled(plan.excludePatterns.contains(ResticService.globEscaped(path)))
         }
-    }
-}
-
-/// A broken search index's failure, with its way out. Nothing the index
-/// answered can be trusted as "nothing matches" while this stands.
-struct IndexFailureView: View {
-    @Environment(AppModel.self) private var model
-    let title: String
-    let message: String
-    let repositoryID: UUID
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Try Again") {
-                model.rebuildIndex(repositoryID: repositoryID)
-            }
-        }
-    }
-}
-
-/// The files panes' empty state, shared word for word and glyph for glyph:
-/// the path is indexed, and no backup in the location holds a version of it.
-struct NoBackupHoldsItYet: View {
-    var body: some View {
-        ContentUnavailableView("No backup holds it yet", systemImage: "clock.arrow.circlepath")
     }
 }
 
