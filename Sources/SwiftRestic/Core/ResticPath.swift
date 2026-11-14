@@ -69,11 +69,6 @@ enum ResticPath {
     static func insidePrefix(of folder: String) -> String {
         folder == "/" ? "/" : folder + "/"
     }
-
-    /// nil unless `path` is strictly inside `folder`.
-    static func relative(_ path: String, below folder: String) -> String? {
-        path.removingBytePrefix(insidePrefix(of: folder))
-    }
 }
 
 /// For a restic line that carries a path: the Character forms join a
