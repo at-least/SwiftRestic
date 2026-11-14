@@ -136,8 +136,8 @@ extension RunEngineSink {
     }
 }
 
-/// One backup run's order — gate → start ping → backup → retention →
-/// closing refresh → record — kept apart from its effects so a mock sink can
+/// One backup run's order — gate → backup → retention → closing refresh →
+/// record — kept apart from its effects so a mock sink can
 /// test it. Everything observable goes through the sink (`AppModel`).
 @MainActor
 enum BackupRunEngine {

@@ -27,8 +27,8 @@ extension AppModel {
         ActivitySeenStore.saveActivitySeenAt(activitySeenAt!, to: viewDefaults)
     }
 
-    /// Backups only: Apply Retention Now records its forget under the
-    /// plan's ID, and a failed forget is not the plan's problem.
+    /// Backups only: a `.forget` record carries the plan's ID too, and a
+    /// failed forget is not the plan's problem.
     private func newestProblemRun(for planID: UUID) -> RunRecord? {
         configuration.runs
             .filter { $0.isBackup(ofPlan: planID) && [.failed, .completedWithErrors].contains($0.outcome) }

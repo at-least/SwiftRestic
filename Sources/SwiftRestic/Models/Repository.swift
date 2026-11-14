@@ -152,9 +152,9 @@ struct Repository: Identifiable, Codable, Sendable, Hashable {
         value.addingPercentEncoding(withAllowedCharacters: allowed)!
     }
 
-    /// The user ends at the last `@`, the host at the next colon. restic's `sftp:` form
-    /// cuts the host at a colon too, so a port left in the host would start
-    /// the path and ssh would dial 22.
+    /// The user ends at the last `@`, the host at the next colon. restic's
+    /// `sftp:` form cuts the host at a colon too, so a port left in the host
+    /// would start the path and ssh would dial 22.
     private var sftpHostParts: (user: String, name: String, port: String) {
         var user = ""
         var rest = sftpHost

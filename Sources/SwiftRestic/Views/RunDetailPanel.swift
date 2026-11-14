@@ -75,8 +75,6 @@ struct RunDetailPanel: View {
             if let snapshotID = run.snapshotID {
                 DetailRow("Backup") { RunSnapshotRow(run: run, snapshotID: snapshotID) }
             }
-            // Records that predate destination tracking have none; their
-            // rows are left out rather than guessed.
             if let destination = run.destinationPath {
                 if let paths = run.sourcePaths {
                     DetailRow("Items") {

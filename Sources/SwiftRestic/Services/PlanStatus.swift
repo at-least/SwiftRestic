@@ -216,8 +216,7 @@ enum PlanStatus {
 
     /// A standing problem is named for as long as it stands, seen or not.
     /// Nil keeps the row one line. The caption carries no next run: that
-    /// stays with the surfaces that act on it (the plan page, the tray,
-    /// Settings).
+    /// stays with the surfaces that act on it (the plan page and the tray).
     static func sidebarCaption(
         for plan: BackupPlan,
         activity: PlanActivity?,

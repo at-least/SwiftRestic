@@ -64,8 +64,9 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var filesUnmodified: Int = 0
     var bytesProcessed: Int64 = 0
     var dataAdded: Int64 = 0
-    /// restic's words about the user's files. Capped at `storedItemErrorLimit` so a pathological
-    /// run cannot bloat the history; `itemErrorCount` keeps the total.
+    /// restic's words about the user's files. Capped at
+    /// `storedItemErrorLimit` so a pathological run cannot bloat the
+    /// history; `itemErrorCount` keeps the total.
     ///
     /// The order is relied on (`unreadableItems` slices it): the unreadable
     /// items first — sources restic skipped, then its error events — then
@@ -90,9 +91,8 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
     var failureMessage: String?
     /// `ResticError.resticDetail`, for the run's details text.
     var resticDetail: String?
-    /// The tail of what `prune` printed (no JSON output in restic 0.19.1, so
-    /// the only record of what it did), a check's verdict, or what Apply
-    /// Retention Now removed.
+    /// What `prune` freed, read from its plain text (no JSON output in
+    /// restic 0.19.1), a check's verdict, or why a backup was skipped.
     var detailText: String?
     /// restic's `version` line when the run was stored.
     var resticVersion: String?

@@ -2,8 +2,7 @@ import Foundation
 
 /// One read of an index as Search All Backups' rows.
 enum FindResultGrouping {
-    /// Rows newest first by `time`, ties keeping arrival order, so equal times never shuffle
-    /// between searches.
+    /// Ties keep arrival order, so equal times never shuffle between searches.
     fileprivate static func newestFirst<T>(_ rows: [T], time: (T) -> Date?) -> [T] {
         rows.enumerated()
             .sorted { a, b in

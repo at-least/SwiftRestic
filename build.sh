@@ -85,8 +85,8 @@ if [ "$ACTION" = "test" ]; then
     refuse_concurrent_test_session
 fi
 
-# The suites that drive the real restic: ~614 of the suite's ~740 seconds,
-# measured 2026-11-14. `test` runs every other suite first and these only
+# The suites that drive the real restic: ~614 of the suite's ~740 seconds.
+# `test` runs every other suite first and these only
 # once the rest pass, so a unit failure answers in about two minutes. A
 # suite left off this list still runs, in the first phase.
 end_to_end_suites=(
@@ -97,9 +97,8 @@ end_to_end_suites=(
 
 # One xcodebuild run: the full log to a temporary file, the interesting
 # lines to the terminal; the status is xcodebuild's own, not grep's.
-# Tests run in parallel: the generated scheme says parallelizable NO, which
-# ran every suite one after another; three parallel runs of each phase
-# passed with no failure (2026-11-14). Parallel output interleaves and cuts
+# Tests run in parallel, overriding the generated scheme's parallelizable NO;
+# three parallel runs of each phase passed with no failure. Parallel output interleaves and cuts
 # lines, so the counts come from the result bundle, not the log.
 work="$(mktemp -d)"
 log="$work/log"
@@ -158,7 +157,6 @@ else
     run_xcodebuild "$ACTION" || status=$?
 fi
 
-# The built app must carry the pinned restic under a seal that holds.
 if [ "$status" -eq 0 ]; then
     app="$(xcodebuild "${xcodebuild_arguments[@]}" -showBuildSettings 2>/dev/null \
         | awk -F' = ' '/^ *TARGET_BUILD_DIR = /{dir=$2} /^ *WRAPPER_NAME = /{name=$2} END{print dir"/"name}')"

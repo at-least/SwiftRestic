@@ -79,12 +79,11 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     var id: UUID = UUID()
     var repositoryID: UUID?
     /// As typed or picked; a tilde expands at run time. Fixed once the plan
-    /// is saved, like its
-    /// repository: restic keeps one history per set of paths (a backup's
-    /// parent is the newest of the same host whose paths cover its own, and
-    /// retention groups by `host,paths`; restic 0.19.1), so another path is
-    /// another plan, and a list of folders that lost one for a run would
-    /// split its history and retention.
+    /// is saved, like its repository: restic keeps one history per set of
+    /// paths (a backup's parent is the newest of the same host whose paths
+    /// cover its own, and retention groups by `host,paths`; restic 0.19.1),
+    /// so another path is another plan, and a list of folders that lost one
+    /// for a run would split its history and retention.
     var path: String = ""
 
     var resolvedPath: String { ResticService.expandTilde(path) }
@@ -127,9 +126,10 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         excludePatterns = Self.withoutAppliedRules(Self.withoutDuplicates(c.value(.excludePatterns, default: [])))
     }
 
-    /// Every plan passes them, whatever its path: a rule naming nothing
-    /// under it matches nothing. Not stored on the plan, so a rule added
-    /// here reaches every plan.
+    /// Every plan passes them all but one covering its path
+    /// (`ResticService.pattern(_:covers:)`); a rule naming nothing under the
+    /// path matches nothing. Not stored on the plan, so a rule added here
+    /// reaches every plan.
     static let appliedExcludes = (ExcludeRule.defaults + ExcludeRule.developer).map(\.pattern)
 
     /// `--exclude-if-present` file names: restic leaves out the contents of a
@@ -192,9 +192,8 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     /// The fields the editor does not edit come from the stored plan: the
     /// run stamps, the quiet-plan alert's mark, and the schedule the plan
-    /// page saves while the editor is open. A new field
-    /// written outside the editor joins this list, or the next save reverts
-    /// it to the draft.
+    /// page saves while the editor is open. A new field written outside the
+    /// editor joins this list, or the next save reverts it to the draft.
     func merging(draft: BackupPlan) -> BackupPlan {
         var merged = draft
         merged.lastRunAt = lastRunAt

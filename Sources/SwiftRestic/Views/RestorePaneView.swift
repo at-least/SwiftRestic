@@ -119,7 +119,6 @@ struct RestorePaneView<VersionsPane: View>: View {
         }
         .restoreFlow($destinationRequest)
         .onDisappear {
-            // The pane's listings must not keep running after the pane is gone.
             for (_, task) in fetchTasks { task.cancel() }
         }
     }

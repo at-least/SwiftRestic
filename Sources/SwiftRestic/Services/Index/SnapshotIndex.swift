@@ -191,9 +191,8 @@ struct SearchHit: Sendable, Equatable, Identifiable {
 }
 
 /// A search and, from the same read, which of its hits one snapshot holds.
-/// One read, not a search and then a lookup:
-/// the search knows each hit's node, but a node id means nothing outside
-/// the transaction that read it — housekeeping may delete the node and a
+/// One read, not a search and then a lookup: the search knows each hit's
+/// node, but a node id means nothing outside the transaction that read it — housekeeping may delete the node and a
 /// later ingest reuse its id — and asking again by path text resolves every
 /// hit a second time, component by component.
 struct SearchWithMembership: Sendable, Equatable {
@@ -1262,7 +1261,7 @@ final class SnapshotIndex: @unchecked Sendable {
     /// A token whose composed and decomposed forms differ is asked in both:
     /// unicode61 folds Latin marks only, so a kana voicing mark or Hangul
     /// written decomposed (restic keeps the name's bytes) is another token.
-    /// Not normalized in the index: its rows are node's own names, which
+    /// Not normalized in the index: its rows are the nodes' own names, which
     /// FTS5's delete and integrity-check compare against.
     private static func ftsQuery(from input: String) -> String {
         input.split(whereSeparator: \.isWhitespace)
@@ -1346,10 +1345,10 @@ final class SnapshotIndex: @unchecked Sendable {
     /// (a)–(c) and (l) — the queue is empty, no closed run claims nothing, no
     /// chain is left without snapshots, no mark splits nothing — hold only
     /// right after `housekeeping()`, which is what establishes them; callers
-    /// filter by letter. (i) has one allowed
-    /// exception the store cannot see: the nodes of a stream that was open
-    /// when its connection went away (a crash or a reopen), which nothing
-    /// collects. Runs on the writer, because `stage` lives there.
+    /// filter by letter. (i) has one allowed exception the store cannot
+    /// see: the nodes of a stream that was open when its connection went
+    /// away (a crash or a reopen), which nothing collects. Runs on the
+    /// writer, because `stage` lives there.
     func invariantViolations() throws -> [String] {
         try pool.write { db in
             var out: [String] = []

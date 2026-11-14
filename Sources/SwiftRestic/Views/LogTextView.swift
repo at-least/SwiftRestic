@@ -41,8 +41,8 @@ struct LogTextView: NSViewRepresentable {
 /// The way to the text view's find bar. `usesFindBar` alone never shows it
 /// here: AppKit opens the bar only for a find action whose sender's tag
 /// names it, which a standard Edit ▸ Find menu item sends on ⌘F — and this
-/// app's Edit menu has no Find items, while the standard key bindings bind
-/// nothing to ⌘F.
+/// app's Edit ▸ Find… (⌘F) is its own, opening Search All Backups, while the
+/// standard key bindings bind nothing to ⌘F.
 @MainActor
 final class LogFinder {
     fileprivate weak var textView: NSTextView?

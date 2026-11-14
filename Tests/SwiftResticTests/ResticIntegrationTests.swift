@@ -677,7 +677,6 @@ struct ResticIntegrationTests {
 
         #expect(outcome.exitCode == ResticError.backupPartialSuccessCode)
         #expect(outcome.completedWithErrors)
-        // restic skipped the file but still wrote everything else.
         let snapshotID = try #require(outcome.summary?.snapshotID, "a partial backup must still produce a snapshot")
         #expect(outcome.itemErrors.contains { $0.contains("locked.dat") })
 

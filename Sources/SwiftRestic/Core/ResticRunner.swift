@@ -314,10 +314,9 @@ actor ResticRunner {
 
     /// A GUI app inherits a nearly empty environment, so PATH is rebuilt. It
     /// has no `SSH_AUTH_SOCK` and no terminal, so an SFTP repository's key
-    /// must be passphrase-less or named in `~/.ssh/config`, and its host key
-    /// accepted once with `ssh` beforehand. Inherited repository and password
-    /// variables would win over the app's (restic ranks PASSWORD_COMMAND and
-    /// PASSWORD_FILE above PASSWORD), so they go.
+    /// must be passphrase-less or named in `~/.ssh/config`. Inherited
+    /// repository and password variables would win over the app's (restic
+    /// ranks PASSWORD_COMMAND and PASSWORD_FILE above PASSWORD), so they go.
     static func baseEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         for key in Self.protectedEnvironmentKeys {

@@ -4,9 +4,10 @@ import SwiftUI
 /// A page's Backups tab: the page's backups on the leading side, the open
 /// one's files on the trailing side (`RestorePaneView`), and the versions of
 /// the file picked there under the tree (`FilesPaneView`): Time Machine's
-/// way, one moment's folders beside the moments. The backups are not folded under their plan in the sidebar: the HIG's
-/// Sidebars asks for no more than two levels there and a content list
-/// between sidebar and detail beyond that, which this list is.
+/// way, one moment's folders beside the moments. The backups are not
+/// folded under their plan in the sidebar: the HIG's Sidebars asks for no
+/// more than two levels there and a content list between sidebar and detail
+/// beyond that, which this list is.
 ///
 /// Which backup is open is the router's, per page, so leaving the page and
 /// coming back finds it as it was left.

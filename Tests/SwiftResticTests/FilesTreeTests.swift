@@ -80,8 +80,6 @@ struct FilesTreeTests {
         #expect(FileStandingWords.notBackedUpReason(notRead: nil) == "No backup of this plan holds it")
         #expect(FileStandingWords.notBackedUpReason(notRead: "permission denied") == "The newest backup couldn’t read it (permission denied)")
 
-        // On this Mac, but missing from the newest backup an older one is
-        // not: the pane's line.
         #expect(FileStandingWords.standing(notRead: nil, lastBackedUp: when) == "Not in the newest backup — last backed up \(stamp)")
         #expect(FileStandingWords.standing(notRead: "permission denied", lastBackedUp: when)
             == "Not read by the newest backup (permission denied) — last backed up \(stamp)")

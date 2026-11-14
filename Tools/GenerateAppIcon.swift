@@ -95,8 +95,7 @@ struct Proportions {
     var drawsShadow: Bool
 
     /// The snapshot stack, shared with `MenuBarLogo` — keep the two in sync.
-    /// Bottom plate first; the last one is the newest snapshot and fully
-    /// opaque.
+    /// Bottom plate first; the last one is the newest snapshot.
     static let plateWidth: CGFloat = 0.190
     static let plateSpacing: CGFloat = 0.160
     static let plateAlphas: [CGFloat] = [0.60, 1.0]

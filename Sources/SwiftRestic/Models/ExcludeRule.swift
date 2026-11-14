@@ -273,10 +273,10 @@ struct ExcludeRule: Hashable, Sendable {
     /// obj stays, a folder holding the file the build writes into it does
     /// not. Cargo writes its marker into the target folder (not into
     /// ~/.cargo); NuGet's restore writes project.assets.json into a
-    /// project's obj folder. Each applies to every path. The Cargo marker takes the user's files with it only where
-    /// `CARGO_TARGET_DIR` or `build.target-dir` points the build into a
-    /// folder that holds them: restic then keeps the marker alone, exit 0
-    /// (0.19.1, probed).
+    /// project's obj folder. Each applies to every path. The Cargo marker
+    /// takes the user's files with it only where `CARGO_TARGET_DIR` or
+    /// `build.target-dir` points the build into a folder that holds them:
+    /// restic then keeps the marker alone, exit 0 (0.19.1, probed).
     static let developerMarkers: [ExcludeRule] = [
         ExcludeRule(".rustc_info.json", .rust, "Cargo build output, the marker kept", "cargo build makes it again"),
         ExcludeRule("project.assets.json", .dotnet, ".NET intermediate build output, the marker kept", "dotnet build makes it again"),

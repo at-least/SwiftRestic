@@ -107,7 +107,6 @@ struct SnapshotIndexFilesTests {
         let index = checked.index
         let all = [try snap("s1", 10), try snap("s2", 20), try snap("s3", 30)]
         try checked.reconcile(all)
-        // A, then B, then A again.
         try checked.runToDone(
             ["s1": file, "s2": file, "s3": file],
             revisions: ["s1": ["/data/f": 1], "s2": ["/data/f": 2], "s3": ["/data/f": 1]]

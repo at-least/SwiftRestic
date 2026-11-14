@@ -1,9 +1,9 @@
 import Foundation
 
-/// Every in-flight task the quit path must cancel and await: named slots for
-/// runs that own an identity, and an unnamed lane for fire-and-forget sends
-/// (start pings). Registering here is what keeps a run kind from being
-/// forgotten by the quit path.
+/// Every in-flight task the quit path must await: named slots for runs that
+/// own an identity, and an unnamed lane for fire-and-forget work (refreshes,
+/// index reconciles, sweeps). Registering here is what keeps a task from
+/// being forgotten by the quit path.
 @MainActor
 final class TaskRegistry {
     enum Slot: Hashable {
@@ -39,8 +39,6 @@ final class TaskRegistry {
         slots[slot] = nil
     }
 
-    /// Sends the quit awaits but nothing cancels individually.
-    ///
     /// Keyed by token rather than appended to an array: entries reap
     /// themselves when their task completes. An `isCancelled` sweep would
     /// prune nothing: it is false for a finished task.
@@ -55,9 +53,7 @@ final class TaskRegistry {
         }
     }
 
-    /// Not the background lane: a start ping in flight is awaited, never
-    /// aborted — its monitor must hear that the run started, even one that
-    /// quit stopped.
+    /// Not the background lane: `drain` awaits it uncancelled.
     func cancelSlots() {
         for task in slots.values { task.cancel() }
     }

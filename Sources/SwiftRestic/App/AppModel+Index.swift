@@ -177,12 +177,12 @@ private final class ChangeMap: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         raw.append(change)
-        // Directories arrive with a trailing slash; the tree keys paths
-        // without one. Bytewise (`ResticPath`): a Character test misses the
-        // slash after a Prepend character.
         storage[Self.key(change)] = change
     }
 
+    /// Directories arrive with a trailing slash; the tree keys paths
+    /// without one. Bytewise (`ResticPath`): a Character test misses the
+    /// slash after a Prepend character.
     static func key(_ change: ResticDiffChange) -> PathKey { PathKey(ResticPath.normalized(change.path)) }
 
     var map: [PathKey: ResticDiffChange] {

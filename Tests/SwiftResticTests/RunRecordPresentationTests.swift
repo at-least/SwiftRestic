@@ -458,7 +458,7 @@ struct RunRecordPresentationTests {
         failedCheck.outcome = .completedWithErrors
         #expect(detail(failedCheck) == "Problems found")
 
-        // A cleanup's is what it freed, as a retention run's is what it removed.
+        // A prune's is what it freed, as a retention run's is what it removed.
         var cleanup = RunRecord(kind: .prune, planName: "Home NAS")
         cleanup.detailText = "Freed 3 MB."
         #expect(detail(cleanup) == "Freed 3 MB.", "a cleanup's Detail names what it freed")

@@ -366,7 +366,6 @@ private final class ChainModel {
         try body(pending, true)
     }
 
-    /// Nodes alive at every tick of the model: the steady part of the tree.
     func permanentFiles() -> [Int32] {
         (0 ..< Int32(nodeCount)).filter { !isDir[Int($0)] && born[Int($0)] == 0 && died[Int($0)] == Self.never }
     }

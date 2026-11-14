@@ -182,7 +182,6 @@ enum RunRecordPresentation {
         run.planID.flatMap { plans.withID($0)?.label(among: plans) } ?? run.planName
     }
 
-    /// Settings' "Next backup" line, in the tray headline's words.
     static func nextRunLine(plan: BackupPlan, date: Date, plans: [BackupPlan], repositories: [Repository]) -> String {
         let name = planWithRepository(plan, plans: plans, repositories: repositories)
         return "\(name) — \(Format.tileTimestamp(date))"
@@ -195,7 +194,7 @@ enum RunRecordPresentation {
         // the whole message.
         if let failure = run.failureMessage {
             let reason = Format.firstSentence(failure)
-        // A standing failure for the same folders gone, as a skip.
+            // A standing failure for the same folders gone, as a skip.
             guard let count = run.skipCount, let since = run.skippedSince else { return reason }
             let sentence = Format.fullSentence(reason)
             return "\(sentence) Failed \(count) times since \(Format.timestamp(since))."

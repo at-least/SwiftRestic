@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every pause ends by itself (user decision): no Until I Resume.
+/// Every pause ends by itself (user decision): none waits for a resume.
 enum PauseLength: String, CaseIterable, Identifiable, Sendable {
     case oneHour
     case untilTomorrow

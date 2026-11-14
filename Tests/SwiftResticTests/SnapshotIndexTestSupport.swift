@@ -665,7 +665,6 @@ func entry(_ path: String, _ isDirectory: Bool = false) -> IndexedEntry {
 }
 
 extension SnapshotIndex {
-    /// `plannedStep`'s step alone — what the planner loops drive.
     func nextStep(skipping: Set<String> = []) throws -> IndexStep {
         try plannedStep(skipping: skipping).step
     }

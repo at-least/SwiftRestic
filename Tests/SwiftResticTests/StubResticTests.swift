@@ -1275,12 +1275,13 @@ struct StubResticTests {
         _ = try await fixture.service.listDirectory(fixture.context, snapshotID: "feedface", path: "/src")
         _ = try await fixture.service.snapshots(fixture.context, planID: nil, timeout: nil)
         try await fixture.service.walkDiff(fixture.context, olderID: "feedface", newerID: "cafebabe") { _ in }
-        // The refresh's size, which the default arm's "[]" does not decode as.
+        // The refresh's size read. `try?`: the stub's default "[]" does not
+        // decode as stats, and only the command line matters here.
         _ = try? await fixture.service.stats(fixture.context, timeout: nil)
 
         let trace = try String(contentsOf: fixture.root.appendingPathComponent("stub-trace.log"), encoding: .utf8)
         let starts = trace.split(separator: "\n").map(String.init).filter { $0.hasPrefix("start args=[") }
-        // Without it each read pays restic's lock wait — 200 ms when the
+        // Without --no-lock each read pays restic's lock wait — 200 ms when the
         // repository is locked — and fails with exit 11 under retention's
         // exclusive lock; a forget starting meanwhile fails the same way.
         for command in ["find", "ls", "snapshots", "diff", "stats"] {

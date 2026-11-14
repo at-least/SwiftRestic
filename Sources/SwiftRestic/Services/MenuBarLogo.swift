@@ -62,7 +62,6 @@ enum MenuBarLogo {
     static let exclamationDotCenter: CGFloat = -0.135
     private static let exclamationDotRadius: CGFloat = 0.040
 
-    /// Which running frame is showing at a given moment.
     static func phase(at date: Date) -> Int {
         let step = Int((date.timeIntervalSinceReferenceDate / frameInterval).rounded(.down))
         return ((step % runningAlphaFrames.count) + runningAlphaFrames.count) % runningAlphaFrames.count

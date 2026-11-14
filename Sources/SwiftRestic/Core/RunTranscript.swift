@@ -49,8 +49,9 @@ final class RunTranscript: @unchecked Sendable {
     static let headByteLimit = 256 * 1024
     static let tailEntryLimit = 200
     static let lineByteLimit = 4096
-    /// A plan's switches alone pass some 150 excludes, past `lineByteLimit`,
-    /// and the command line is what the log is read for first.
+    /// Every backup passes `BackupPlan.appliedExcludes`, some 130, past
+    /// `lineByteLimit`, and the command line is what the log is read for
+    /// first.
     static let commandByteLimit = 64 * 1024
 
     private let lock = NSLock()

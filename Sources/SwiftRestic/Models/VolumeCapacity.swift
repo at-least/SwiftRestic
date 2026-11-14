@@ -1,6 +1,6 @@
 import Foundation
 
-/// The repository page's used/free strip; restic cannot report the disk.
+/// The repository page's Disk row; restic cannot report the disk.
 struct VolumeCapacity: Equatable {
     let totalBytes: Int64
     let freeBytes: Int64

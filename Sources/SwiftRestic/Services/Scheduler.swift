@@ -2,7 +2,7 @@ import Foundation
 
 /// What holds a scheduled run back: the user's Pause Backups, for every run,
 /// or a metered network, for runs that would use it. One value, so the tray,
-/// a repository's page, Settings and the plan page say what the scheduler does.
+/// a repository's page and the plan page say what the scheduler does.
 enum ScheduleHold: Equatable, Sendable {
     /// Pause Backups.
     case paused(until: Date)

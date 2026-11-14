@@ -23,9 +23,7 @@ enum LoginItem {
         }
     }
 
-    /// Said while macOS waits for the user to allow the login item: the
-    /// scheduler lives in this process, so a schedule does not survive a
-    /// restart or logout by itself.
+    /// Said while macOS waits for the user to allow the login item.
     static let approvalNeeded = "SwiftRestic starts at login once you allow it in Login Items. Until then, scheduled backups stop after a restart or logout."
 
     /// Whether this copy of the app is somewhere a login item can point at.

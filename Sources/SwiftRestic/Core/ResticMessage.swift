@@ -121,13 +121,11 @@ struct ResticErrorMessage: Sendable, Equatable, Decodable {
     }
 }
 
-/// `{"message_type":"exit_error","code":12,"message":"..."}`
 struct ResticExitError: Sendable, Equatable, Decodable {
     var code: Int32
     var message: String
 }
 
-/// `restic init --json`
 struct ResticInitialized: Sendable, Equatable, Decodable {
     var id: String
     var repository: String

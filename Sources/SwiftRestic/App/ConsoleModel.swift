@@ -27,10 +27,9 @@ final class ConsoleModel {
     var commandText = "snapshots --compact"
     private(set) var output = ""
     private(set) var isRunning = false
-    /// The repository the in-flight command runs against, captured at submit:
-    /// another location's Repair… may point the console elsewhere while it
-    /// runs, and deletion needs the run's own
-    /// answer to "would cancelling this still the removed repository's work?".
+    /// Captured at submit: another location's Repair… may point the console
+    /// elsewhere while it runs, and removing a repository must know whether
+    /// the running command is its own.
     private(set) var runningRepositoryID: UUID?
     /// Newest first, as typed, for this session only — what ↑ and ↓ walk.
     private(set) var history: [String] = []
@@ -131,8 +130,7 @@ final class ConsoleModel {
         runTask?.cancel()
     }
 
-    /// Empties the output pane. A running command's stream owns the pane, so
-    /// this waits for stillness rather than fighting it.
+    /// A running command's stream owns the pane.
     func clearOutput() {
         guard !isRunning else { return }
         output = ""

@@ -220,8 +220,6 @@ extension AppModel {
         schedulerTask?.cancel()
         networkMonitor?.cancel()
         stopMountWatcher()
-        // Slotted runs only: a start ping in flight is awaited below, never
-        // aborted — its monitor must hear that the run started.
         tasks.cancelSlots()
         // Awaited, not merely cancelled: a command that may change the
         // backups schedules its refresh on the way out, and that must not
@@ -234,8 +232,7 @@ extension AppModel {
         await runner.terminateAll()
 
         // The cancelled runs' unwinds append their records, which reach disk
-        // only through the flush below. The drain also awaits start pings: a
-        // monitor must not think the backup was never attempted.
+        // only through the flush below.
         await tasks.drain()
 
         saveTask?.cancel()

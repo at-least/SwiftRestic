@@ -2564,7 +2564,7 @@ struct IndexCompletenessTests {
     }
 }
 
-/// The "Items kept in Activity" cap and what a standing problem still reads:
+/// The run history cap (`activityHistoryLimit`) and what a standing problem still reads:
 /// the trim drops the oldest records by count, except the ones a standing
 /// surface would lose its problem with.
 @Suite("Run history trim")

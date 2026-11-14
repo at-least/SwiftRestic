@@ -874,10 +874,8 @@ private final class StoreRegistry: @unchecked Sendable {
 
 /// The browse-cache captures in flight: `cacheListing`, `cacheDiff` and
 /// `cacheFileNodes` hand a write over and return, and a quit still waits for
-/// it. Off the actor,
-/// like `StoreRegistry`, so handing one over never waits on the actor
-/// either. Each task removes its own entry when it ends; after `close`,
-/// nothing new starts.
+/// it. Off the actor, like `StoreRegistry`, so handing one over never waits
+/// on the actor either.
 private final class CacheWrites: @unchecked Sendable {
     private let lock = NSLock()
     private var running: [UUID: Task<Void, Never>] = [:]
@@ -1047,8 +1045,8 @@ final class BackfillBuffer: @unchecked Sendable {
         let empty = !receivedAny
         lock.unlock()
         if let failed { throw failed }
-        // Its walk unwinds with its own error and never finishes it; one that
-        // did must not read as a full read landed.
+        // A cancelled buffer's walk unwinds with its own error and never
+        // calls this; one that did must not read as a full read landed.
         if cancelled { throw CancellationError() }
         guard !empty else { throw IncompleteStream.emptyListing }
         // Thrown, not captured as a chunk's error is: this failure must

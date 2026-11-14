@@ -3,8 +3,8 @@ import Foundation
 /// The formatter-backed helpers are paid for per row per render — lists,
 /// tables, the once-a-second progress strips — and formatter construction is
 /// the expensive half of each call, so the instances are built once. Not all
-/// of them are Sendable across SDKs (these helpers also run on the
-/// notification broadcast's background task), so every use takes the lock.
+/// of them are Sendable across SDKs (these helpers also run off the main
+/// actor), so every use takes the lock.
 enum Format {
     static let justNowWindow: TimeInterval = 45
 

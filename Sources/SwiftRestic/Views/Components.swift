@@ -89,7 +89,6 @@ extension View {
             .overlay(alignment: .bottom) { Divider() }
     }
 
-    /// An editor sheet's Cancel with unsaved edits.
     func discardChangesDialog(isPresented: Binding<Bool>, discard: @escaping () -> Void) -> some View {
         confirmationDialog("Discard changes?", isPresented: isPresented, titleVisibility: .visible) {
             Button("Discard Changes", role: .destructive, action: discard)
@@ -549,7 +548,6 @@ enum FilePicker {
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
-    /// One folder, which the panel can also create.
     @MainActor
     static func directoryPanel(message: String, prompt: String) -> NSOpenPanel {
         let panel = NSOpenPanel()

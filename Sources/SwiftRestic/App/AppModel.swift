@@ -139,7 +139,7 @@ final class AppModel {
     /// So only a change calls `networkPathChanged`.
     @ObservationIgnored var networkSignature: String?
     @ObservationIgnored var mountObserver: (any NSObjectProtocol)?
-    /// How many runs Activity keeps; a standing problem is kept past it.
+    /// A standing problem is kept past it.
     @ObservationIgnored var activityHistoryLimit = 300
     /// Newest first. A queue, not a single slot: an unread error must not be
     /// erased by the next message.

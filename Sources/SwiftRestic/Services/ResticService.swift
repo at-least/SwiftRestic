@@ -98,8 +98,8 @@ struct ResticService: ResticClient {
         Self.planTagPrefix + planID.uuidString.lowercased()
     }
 
-    /// The snapshot index decides a snapshot's chain by this prefix too;
-    /// this one constant keeps the two in sync.
+    /// `SnapshotLineage` tells a snapshot's plan tags from its user tags by
+    /// this prefix; this one constant keeps the two in sync.
     static let planTagPrefix = "swiftrestic-plan-"
 
     /// Accepts exactly the tags `planTag` writes, so an upper-case UUID or
@@ -450,10 +450,10 @@ struct ResticService: ResticClient {
         }
     }
 
-    /// Feeds the index after each backup and the Backups tab's Change
-    /// column. The stream is unbounded, so the
-    /// callback must consume incrementally. `+` means present only in
-    /// `newer`. `--no-lock` for `walkSnapshot`'s reason.
+    /// Feeds the index after each backup and the restore pane's Change
+    /// column. The stream is unbounded, so the callback must consume
+    /// incrementally. `+` means present only in `newer`. `--no-lock` for
+    /// `walkSnapshot`'s reason.
     func walkDiff(
         _ context: RepositoryContext,
         olderID: String,
@@ -641,9 +641,9 @@ struct ResticService: ResticClient {
     /// under "remove", deleted or not), then one "unable to remove
     /// snapshot/<id> from the repository" line per snapshot it could not
     /// delete, so the ones that went are the difference; its `--prune` is
-    /// then skipped, so the space waits for the next Free Up Space. Without those
-    /// lines, or with JSON that does not decode, it stays restic's failure:
-    /// no count is claimed unread.
+    /// then skipped, so the space waits for the next Free Up Space. Without
+    /// those lines, or with JSON that does not decode, it stays restic's
+    /// failure: no count is claimed unread.
     static func removalFailure(_ result: ResticRunResult) -> ResticError {
         let lines = result.stderr.split(separator: "\n")
         let refused = lines.filter { $0.hasPrefix("unable to remove snapshot/") }.count

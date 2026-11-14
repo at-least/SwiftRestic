@@ -153,9 +153,8 @@ enum ItemErrorDiagnosis {
     }
 
     /// The sentence a finished run's announcements carry — the banner and
-    /// the notification — or nil when there is nothing to advise.
-    /// They go out as the run ends, so the state stamped on it is the state
-    /// now.
+    /// the notification — or nil when there is nothing to advise. They go
+    /// out as the run ends, so the state stamped on it is the state now.
     static func headline(for record: RunRecord) -> String? {
         hints(for: record, accessNow: record.fullDiskAccessAtRun ?? .unknown).first.map(headline)
     }

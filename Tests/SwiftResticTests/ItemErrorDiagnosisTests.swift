@@ -89,8 +89,8 @@ struct ItemErrorDiagnosisTests {
             == "macOS blocked 1 item even though SwiftRestic had Full Disk Access — it is likely protected by macOS itself. Exclude it if this keeps happening.")
         #expect(ItemErrorDiagnosis.detail(.filePermissions(1), offersExclude: false)
             == "1 item can’t be read with your account’s file permissions. Full Disk Access doesn’t change that — fix it in Finder with File ▸ Get Info, or exclude it.")
-        // Exclude These Items under the sentence: it says the exclusion, the
-        // sentence no longer does.
+        // With Exclude These Items under it, the sentence leaves the
+        // exclusion to the button.
         #expect(ItemErrorDiagnosis.detail(.protectedEvenWithAccess(2), offersExclude: true)
             == "macOS blocked 2 items even though SwiftRestic had Full Disk Access — they are likely protected by macOS itself.")
         #expect(ItemErrorDiagnosis.detail(.filePermissions(2), offersExclude: true)
@@ -104,7 +104,7 @@ struct ItemErrorDiagnosisTests {
 
     @Test("a hint's Exclude covers its own cause's stored paths, all the hint counts or none, and none where the grant is the fix")
     func excludablePathsFollowTheHint() {
-        // The shapes of a home-folder backup with the grant on, 2026-10-24:
+        // The shapes of a home-folder backup with the grant on:
         // two files macOS protects, one the account cannot open, one item
         // that fails otherwise.
         let speech = "/Users/u/Library/Group Containers/group.com.apple.CoreSpeech/Caches/a.bnnsir"

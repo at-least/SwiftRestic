@@ -29,9 +29,9 @@ struct RunLogVersions: Sendable, Equatable {
 
 /// restic's lines are written verbatim — the log is a diagnostic record of
 /// what restic printed, and exactness beats prettiness. The header names
-/// the repository by name and kind only, never
-/// by location, which can carry a host, a bucket or a user name — restic's
-/// own error lines may still name it, with a URL's password masked as `***`.
+/// the repository by name and kind only, never by location, which can carry
+/// a host, a bucket or a user name — restic's own error lines may still name
+/// it, with a URL's password masked as `***`.
 enum RunLog {
     static func render(
         record: RunRecord,

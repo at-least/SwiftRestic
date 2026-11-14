@@ -196,24 +196,24 @@ enum MenuBarStatus {
             let name = plan.label(among: plans)
             switch activity[plan.id]?.phase {
             case nil:
-        // Disabled while the repository is locked exclusively, as every
-        // Back Up Now is: restic would refuse at once.
+                // Disabled while the repository is locked exclusively, as every
+                // Back Up Now is: restic would refuse at once.
                 let lockReason = plan.repositoryID.flatMap { lockedRepositories[$0] }
                 return PlanRow(
                     planID: plan.id,
                     title: "Back Up “\(name)” Now",
                     action: .backUp,
                     isEnabled: plan.isConfigurationComplete && !isResticDamaged && lockReason == nil,
-        // The Backup menu's own words for each reason.
+                    // The Backup menu's own words for each reason.
                     disabledReason: !plan.isConfigurationComplete ? BackupPlan.incompleteConfigurationReason
                         : isResticDamaged ? ResticError.damagedInstall.localizedDescription : lockReason
                 )
             case .cancelling?:
                 return PlanRow(planID: plan.id, title: "Stopping “\(name)”…", action: .none, isEnabled: false)
             case let phase?:
-        // No percentage: restic's measure is reading, not uploading, and
-        // "Stop (100%)" would make stopping look free. The running line
-        // above keeps restic's figure.
+                // No percentage: restic's measure is reading, not uploading, and
+                // "Stop (100%)" would make stopping look free. The running line
+                // above keeps restic's figure.
                 return PlanRow(planID: plan.id, title: stopTitle(for: phase, planName: name), action: .stop, isEnabled: true)
             }
         }

@@ -80,7 +80,7 @@ extension AppModel {
 
     /// Call only from the job's own task: `clear` while a cancelled run is
     /// still unwinding would remove its slot, and quit's `tasks.drain()`
-    /// would no longer wait for its record.
+    /// would not wait for its record.
     private func unwindMaintenanceRun(_ repositoryID: UUID) {
         tasks.clear(.maintenance(repositoryID))
         retireRunToken(for: .maintenance(repositoryID))

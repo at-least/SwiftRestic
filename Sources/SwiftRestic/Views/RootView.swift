@@ -349,10 +349,10 @@ struct RootView: View {
             pendingCaptureGroupPane = .moved
         case "lineage":
             pendingCaptureGroupPane = .lineage
-        // Same sheet on its first tab: captures a specific kind's fields.
+        // A saved repository's editor: its kind's fields, filled.
         case "repositoryEditor": editingRepository = model.configuration.repositories.first
-        // Lets a capture run photograph the *new*-repository sheet, whose
-        // destination-before-kind picker only exists before a repository exists.
+        // The new-repository editor: only it has the destination-before-kind
+        // picker.
         case "newRepository": editingRepository = Repository()
         case "planRetention": editingPlan = model.configuration.plans.first
         case "planEditor": editingPlan = model.configuration.plans.first

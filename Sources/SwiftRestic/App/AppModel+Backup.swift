@@ -37,8 +37,7 @@ extension AppModel {
         }, in: .plan(planID))
     }
 
-    /// Every run in the plan's slot (backup, Apply Retention Now) unwinds
-    /// here. Call only from the run's own task: `clear` while a cancelled
+    /// Call only from the run's own task: `clear` while a cancelled
     /// run is still unwinding would remove its slot, and quit's
     /// `tasks.drain()` would not wait for its record.
     func unwindPlanRun(_ planID: UUID) {
@@ -166,9 +165,6 @@ extension AppModel: BackupRunEngine.Sink {
 
     func progressReporter(planID: UUID) -> @Sendable (OperationProgress) -> Void {
         hopWriter(for: .plan(planID)) { model, progress in
-            // The write lands in `planProgress` — its own observable
-            // storage — so the tick invalidates the running strip, not every
-            // view that reads the plan's phase.
             // A status queued behind the end of copying would put the
             // numbers back, frozen, under "Removing old backups…".
             guard model.activity[planID]?.phase.isPastCopying != true else { return }

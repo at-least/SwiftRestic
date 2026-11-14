@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
-/// A notification's identifier is its run's ID (`AppModel.notify`): the
-/// click takes the tray's problem line's route (`TrayStatusItem.showRun`).
+/// Identifiers are read by `NotificationRoute`; a run's click takes the
+/// tray's problem line's route (`TrayStatusItem.showRun`).
 extension AppDelegate: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
