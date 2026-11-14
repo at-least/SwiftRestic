@@ -283,6 +283,7 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
         to menu: NSMenu,
         skippingNews: Set<String> = []
     ) {
+        assert(!menu.autoenablesItems, "an auto-enabling menu ignores a row's isEnabled")
         for row in group.rows {
             let action: Selector? = switch row.action {
             case .backUp: #selector(backUpNow(_:))
@@ -291,7 +292,6 @@ final class TrayStatusItem: NSObject, NSMenuDelegate {
             }
             let item = NSMenuItem(title: row.title, action: action, keyEquivalent: "")
             item.target = self
-            // Every menu here sets `autoenablesItems = false`.
             item.isEnabled = row.isEnabled
             item.toolTip = row.disabledReason
             item.representedObject = row.planID.uuidString

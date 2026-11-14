@@ -330,7 +330,7 @@ private struct RunSnapshotRow: View {
     private func completenessMark(for snapshotID: String) -> some View {
         SnapshotCompletenessMark(run: run.kind == .backup ? run : model.backupRun(forSnapshot: snapshotID))
             .font(.caption)
-            .frame(width: 14)
+            .frame(width: SnapshotCompletenessMark.slotWidth)
     }
 
     private func showInBackupsButton(_ snapshotID: String) -> some View {

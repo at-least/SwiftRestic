@@ -184,11 +184,16 @@ struct BackupsBrowserView: View {
         }
     }
 
-    /// How far the list's edge drags: no narrower than a backup's moment
-    /// needs, no wider than leaves the pane its tree.
+    /// What a backup's moment needs.
+    private static let narrowestListWidth = 225.0
+    private static let widestListWidth = 360.0
+
+    /// How far the list's edge drags.
     private var listBounds: ClosedRange<Double> {
-        let lower = 225.0
-        return lower...max(lower, min(360, Double(width) - 400))
+        let widthLeavingThePaneItsTree = Double(width - RestorePaneMetrics.minimumWidth)
+        return Self.narrowestListWidth...max(
+            Self.narrowestListWidth, min(Self.widestListWidth, widthLeavingThePaneItsTree)
+        )
     }
 }
 
@@ -205,21 +210,19 @@ private struct BackupRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             // State trails identity, the sidebar's rule: the mark sits at
             // the row's right end, and only a visible one claims room there.
-            .padding(.trailing, run?.snapshotCompleteness == .incomplete ? Self.markWidth + 6 : 0)
+            .padding(.trailing, run?.snapshotCompleteness == .incomplete ? SnapshotCompletenessMark.slotWidth + 6 : 0)
             // An overlay, so the clear "Complete" text and the hidden
             // slot-holder stay in the row — VoiceOver keeps its
             // Complete/Incomplete word — without taking the date's width.
             .overlay(alignment: .trailing) {
                 SnapshotCompletenessMark(run: run)
                     .font(.caption)
-                    .frame(width: Self.markWidth)
+                    .frame(width: SnapshotCompletenessMark.slotWidth)
             }
             // One utterance per backup: the mark's label, when it has one,
             // merges with the date.
             .accessibilityElement(children: .combine)
     }
-
-    private static let markWidth: CGFloat = 14
 }
 
 /// What a page's Backups tab says while it lists no backup. A plan's page

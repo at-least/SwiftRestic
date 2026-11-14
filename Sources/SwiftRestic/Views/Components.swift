@@ -180,7 +180,8 @@ struct SnapshotListingCaveat: View {
 /// completed-with-errors triangle, because that is what the run behind it
 /// was. A known-complete snapshot keeps an invisible "Complete" for
 /// VoiceOver; one with no run record here makes no claim. The caller's
-/// fixed-width slot lines neighbouring text up whether or not a glyph shows.
+/// slot, `slotWidth` wide, lines neighbouring text up whether or not a
+/// glyph shows.
 ///
 /// The invisible label is clear ink: on macOS 26 a zero-opacity Text or
 /// Image is dropped from the accessibility tree in both a List row and a
@@ -188,6 +189,8 @@ struct SnapshotListingCaveat: View {
 /// A clear Text survives as its own static text in both.
 struct SnapshotCompletenessMark: View {
     let run: RunRecord?
+
+    static let slotWidth: CGFloat = 14
 
     private static let outcome = RunRecord.Outcome.completedWithErrors
     private static let symbolName = outcome.symbolName!
@@ -220,7 +223,7 @@ struct SnapshotCompletenessMark: View {
 struct FileKindIcon: View {
     let type: UTType
 
-    private static let size: CGFloat = 16
+    static let size: CGFloat = 16
 
     @MainActor private static var icons: [String: NSImage] = [:]
 

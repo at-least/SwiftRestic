@@ -228,10 +228,10 @@ struct FormattingTests {
 
     @Test("backup list rows that would read the same minute as a neighbour show seconds, those rows only")
     func backupRowMomentsShowSecondsOnlyWhenNeeded() {
-        let base = Date(timeIntervalSince1970: 1_758_999_960) // on the minute
+        let minuteStart = Date(timeIntervalSince1970: 1_758_999_960)
         // Newest first: two backups 20 s apart in one minute, then one an
         // hour earlier.
-        let times = [base.addingTimeInterval(25), base.addingTimeInterval(5), base.addingTimeInterval(-3_600)]
+        let times = [minuteStart.addingTimeInterval(25), minuteStart.addingTimeInterval(5), minuteStart.addingTimeInterval(-3_600)]
         for sectioned in [true, false] {
             let minute = { (date: Date) in sectioned ? Format.dayTime(date) : Format.timestamp(date) }
             #expect(minute(times[0]) == minute(times[1]), "the fixture's two backups must share a minute")
@@ -244,7 +244,7 @@ struct FormattingTests {
             // a flat list's row still says it.
             #expect(labels[times[0]]?.contains("2025") == !sectioned, "sectioned \(sectioned): \(labels)")
         }
-        #expect(BackupRowMoments.labels(for: [base], sectioned: true) == [base: Format.dayTime(base)])
+        #expect(BackupRowMoments.labels(for: [minuteStart], sectioned: true) == [minuteStart: Format.dayTime(minuteStart)])
     }
 
     @Test("firstSentence cuts at the first real sentence boundary")

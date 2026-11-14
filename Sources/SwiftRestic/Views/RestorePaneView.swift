@@ -147,10 +147,7 @@ struct RestorePaneView<VersionsPane: View>: View {
             footer(record: record)
         }
         .restoreCommand(restore(record: record))
-        // At most the narrowest detail column the window allows beside the
-        // Backups tab's list. Still a minimum: it also bounds the split
-        // view's zero-width sizing query.
-        .frame(minWidth: 400)
+        .frame(minWidth: RestorePaneMetrics.minimumWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -223,13 +220,13 @@ struct RestorePaneView<VersionsPane: View>: View {
     private func treeList(hasChangeColumn: Bool) -> some View {
         ScrollViewReader { proxy in
             List(tree.rows, selection: $selection) { row in
-                HStack(spacing: 6) {
+                HStack(spacing: TreeColumn.spacing) {
                     Spacer().frame(width: CGFloat(row.depth) * 16)
                     Group {
                         if row.node.isDirectory {
                             disclosure(for: row)
                         } else {
-                            Spacer().frame(width: 20)
+                            Spacer().frame(width: TreeColumn.disclosure)
                         }
                     }
                     let isGone = notOnThisMac.contains(PathKey(row.node.path))
@@ -257,7 +254,7 @@ struct RestorePaneView<VersionsPane: View>: View {
                     }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(width: 140, alignment: .trailing)
+                        .frame(width: TreeColumn.dateModified, alignment: .trailing)
                     // Reserved even for directories: a branch-less cell becomes
                     // an EmptyView, and EmptyView drops `.frame` — the mtime
                     // column would slide into the Size column's spot.
@@ -271,7 +268,7 @@ struct RestorePaneView<VersionsPane: View>: View {
                             }
                         }
                         .font(.caption)
-                        .frame(width: 70, alignment: .trailing)
+                        .frame(width: TreeColumn.size, alignment: .trailing)
                 }
                 // The column header copies this width — a geometry read; the
                 // row carries no gesture (see the drag below).
@@ -342,7 +339,7 @@ struct RestorePaneView<VersionsPane: View>: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-                .frame(width: 20, height: 20)
+                .frame(width: TreeColumn.disclosure, height: TreeColumn.disclosure)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -486,7 +483,7 @@ struct RestorePaneView<VersionsPane: View>: View {
                     .font(.caption)
                     .lineLimit(1)
                     .help(change.explanation)
-                    .frame(width: 56, alignment: .leading)
+                    .frame(width: TreeColumn.change, alignment: .leading)
             } else if let inside = changesInside[PathKey(path)], inside.total > 0 {
                 // A folder the diff never names, whose subtree it does: the
                 // count leads the expansion toward the leaves, so a
@@ -496,9 +493,9 @@ struct RestorePaneView<VersionsPane: View>: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(insideHelp(inside))
-                    .frame(width: 56, alignment: .leading)
+                    .frame(width: TreeColumn.change, alignment: .leading)
             } else {
-                Spacer().frame(width: 56)
+                Spacer().frame(width: TreeColumn.change)
             }
         }
     }
@@ -976,10 +973,17 @@ private final class RowContentWidth {
     var value: CGFloat?
 }
 
-/// A table header over the outline: the columns the rows below carry,
-/// aligned to the same fixed gutters. Its own view, so the rows' width —
-/// which moves with every resize step — re-renders the header, never the
-/// tree.
+private enum TreeColumn {
+    static let spacing: CGFloat = 6
+    static let disclosure: CGFloat = 20
+    static let change: CGFloat = 56
+    static let dateModified: CGFloat = 140
+    static let size: CGFloat = 70
+}
+
+/// A table header over the outline: the columns the rows below carry
+/// (`TreeColumn`). Its own view, so the rows' width — which moves with
+/// every resize step — re-renders the header, never the tree.
 private struct TreeColumnHeader: View {
     let rowContentWidth: RowContentWidth
     let hasChangeColumn: Bool
@@ -989,12 +993,12 @@ private struct TreeColumnHeader: View {
     let isComparing: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: TreeColumn.spacing) {
             // The rows' depth indent: zero wide at the top level, but still
             // a slot the row's stack spaces.
             Spacer().frame(width: 0)
-            Spacer().frame(width: 20)
-            Spacer().frame(width: 16)
+            Spacer().frame(width: TreeColumn.disclosure)
+            Spacer().frame(width: FileKindIcon.size)
             Text("Name")
             Spacer(minLength: 12)
             if hasChangeColumn {
@@ -1002,13 +1006,13 @@ private struct TreeColumnHeader: View {
                     Text("Change")
                     if isComparing { ProgressView().controlSize(.mini) }
                 }
-                .frame(width: 56, alignment: .leading)
+                .frame(width: TreeColumn.change, alignment: .leading)
                 .modifier(TileHelp(help: changeHelp))
             }
             Text("Date Modified")
-                .frame(width: 140, alignment: .trailing)
+                .frame(width: TreeColumn.dateModified, alignment: .trailing)
             Text("Size")
-                .frame(width: 70, alignment: .trailing)
+                .frame(width: TreeColumn.size, alignment: .trailing)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -1064,6 +1068,13 @@ private enum BrowserListGrammar {
         let parent = ResticPath.parent(of: path)
         return parent == "/" ? nil : parent
     }
+}
+
+enum RestorePaneMetrics {
+    /// At most the narrowest detail column the window allows beside the
+    /// Backups tab's list. Still a minimum: it also bounds the split
+    /// view's zero-width sizing query.
+    static let minimumWidth: CGFloat = 400
 }
 
 /// A file picked in a backup's tree, by the backup it was picked in.

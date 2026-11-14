@@ -43,6 +43,8 @@ struct FindFilesView: View {
 
     private var rows: [AllBackupsSearch.Row] { search?.rows ?? [] }
 
+    private static let keystrokePause: Duration = .milliseconds(200)
+
     /// A search's key: the query, and what can change its answer — a
     /// repository added or removed, a listing the index took.
     private struct SearchKey: Equatable {
@@ -81,7 +83,7 @@ struct FindFilesView: View {
             router.focusesFindField = false
             searchIsFocused = true
         }
-        // As it is typed, a keystroke's pause first so a word typed is one
+        // As it is typed, after `keystrokePause` so a word typed is one
         // search; and again every `recheckInterval` while an index reads, so
         // hits from the backups it reaches meanwhile fill in.
         .task(id: SearchKey(
@@ -95,7 +97,7 @@ struct FindFilesView: View {
                 return
             }
             do {
-                try await Task.sleep(for: .milliseconds(200))
+                try await Task.sleep(for: Self.keystrokePause)
             } catch {
                 return
             }

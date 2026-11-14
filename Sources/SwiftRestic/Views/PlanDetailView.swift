@@ -430,9 +430,9 @@ private struct PathListEditor: View {
     @State private var selection: Set<String> = []
     @State private var isDropTargeted = false
 
-    /// About six one-line rows: the list scrolls past them rather than
-    /// growing the page.
-    private static let listHeight: CGFloat = 132
+    private static let rowHeight: CGFloat = 22
+    /// The list scrolls past them rather than growing the page.
+    private static let rowsInView: CGFloat = 6
 
     var body: some View {
         VStack(spacing: 0) {
@@ -450,7 +450,7 @@ private struct PathListEditor: View {
             .accessibilityLabel("Excluded Items")
             .listStyle(.plain)
             .alternatingRowBackgrounds()
-            .environment(\.defaultMinListRowHeight, 22)
+            .environment(\.defaultMinListRowHeight, Self.rowHeight)
             .overlay {
                 if paths.isEmpty {
                     Text("Drag folders and files here, or click +.")
@@ -461,7 +461,7 @@ private struct PathListEditor: View {
                         .allowsHitTesting(false)
                 }
             }
-            .frame(height: Self.listHeight)
+            .frame(height: Self.rowsInView * Self.rowHeight)
             .dropDestination(for: URL.self) { urls, _ in
                 // Only file URLs are paths: a dragged web link's `.path`
                 // would silently become a pattern matching nothing.

@@ -37,6 +37,8 @@ struct ResticRunResult: Sendable {
     /// schema change shows up as a count.
     var malformedCount: Int = 0
 
+    private static let subprocessLinesKept = 3
+
     private var exitError: ResticExitError? {
         for message in messages.reversed() {
             if case let .exitError(error) = message { return error }
@@ -47,12 +49,13 @@ struct ResticRunResult: Sendable {
     /// restic's JSON fatal-error line, else the tail of stderr. Under
     /// `--json` the fatal line can lose the cause: what ssh said reaches
     /// stderr only as plain lines prefixed "subprocess " ("subprocess ssh:
-    /// Host key verification failed.", restic 0.19.1), so the last three of
-    /// those follow — ssh's verdict comes after a banner of a dozen lines.
+    /// Host key verification failed.", restic 0.19.1), so the last
+    /// `subprocessLinesKept` of those follow — ssh's verdict comes after a
+    /// banner of a dozen lines.
     var failureMessage: String {
         guard let fatal = exitError?.message else { return ResticRunner.tail(of: stderr, limit: 2000) }
         let lines = stderr.split(separator: "\n")
-        let subprocess = lines.filter { $0.hasPrefix("subprocess ") }.suffix(3).map(String.init)
+        let subprocess = lines.filter { $0.hasPrefix("subprocess ") }.suffix(Self.subprocessLinesKept).map(String.init)
         return ([Self.withoutGoStackTrace(fatal)] + subprocess).joined(separator: "\n")
     }
 

@@ -23,17 +23,20 @@ struct UpToDateRow: Identifiable, Sendable, Equatable {
     let isAwaitingFirstBackup: Bool
     var id: UUID { planID }
 
-    /// Scanning order is severity, not sidebar order: unreadable first,
-    /// then exposed, then pending, then a run in flight, up to date last.
-    fileprivate var severityRank: Int {
-        if didFail { return 0 }
+    /// The rows' scanning order, most severe first; not sidebar order.
+    fileprivate enum Severity: Comparable {
+        case unreadable, exposed, pending, running, upToDate
+    }
+
+    fileprivate var severity: Severity {
+        if didFail { return .unreadable }
         // Ahead of the listing's verdict: a first backup in flight has no
         // snapshot yet, and is news being made, not an alarm.
-        if isRunning { return 3 }
-        if isAwaitingFirstBackup { return 2 }
-        if isKnown, !isUpToDate { return 1 }
-        if !isKnown { return 2 }
-        return 4
+        if isRunning { return .running }
+        if isAwaitingFirstBackup { return .pending }
+        if isKnown, !isUpToDate { return .exposed }
+        if !isKnown { return .pending }
+        return .upToDate
     }
 
     init(
@@ -156,7 +159,7 @@ enum OverviewMetrics {
     /// A repository's sidebar row and the menu bar's face wear a warning for
     /// these.
     static func needingAttention(_ rows: [UpToDateRow]) -> [UpToDateRow] {
-        rows.filter { $0.severityRank <= 1 }
+        rows.filter { $0.severity <= .exposed }
     }
 
     /// The lookups are closures so the derivation stays pure while the view
@@ -214,7 +217,7 @@ enum OverviewMetrics {
                 }
                 return listed
             }
-            .sorted { $0.severityRank < $1.severityRank }
+            .sorted { $0.severity < $1.severity }
     }
 
     private static func listingRow(

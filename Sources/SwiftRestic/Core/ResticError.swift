@@ -67,9 +67,7 @@ enum ResticError: Error, LocalizedError, Equatable {
             let known = Self.exitCodeWords(code)
             if message.isEmpty { return "\(known ?? "It stopped unexpectedly")." }
             let reason = message.hasPrefix(Self.fatalWord) ? String(message.dropFirst(Self.fatalWord.count)) : message
-            // Exit 1 is every restic fatal error: the reason alone, as a
-            // sentence.
-            if code == 1 { return reason.prefix(1).uppercased() + reason.dropFirst() }
+            if code == Self.anyFatalErrorCode { return reason.prefix(1).uppercased() + reason.dropFirst() }
             return known.map { "\($0) — \(reason)" } ?? reason
         case .cancelled:
             return "The operation was stopped."
@@ -162,7 +160,7 @@ enum ResticError: Error, LocalizedError, Equatable {
 
     private static func exitCodeWords(_ code: Int32) -> String? {
         switch code {
-        case 1: "It stopped with an error"
+        case anyFatalErrorCode: "It stopped with an error"
         case 2: "It stopped unexpectedly"
         case 3: "Finished, but some data couldn’t be read"
         case 130: "It was interrupted"
@@ -173,6 +171,7 @@ enum ResticError: Error, LocalizedError, Equatable {
     /// A warning for `backup` (some source unreadable), not a failure.
     /// `forget`'s 3 is a failure (`snapshotsNotRemoved`).
     static let backupPartialSuccessCode: Int32 = 3
+    private static let anyFatalErrorCode: Int32 = 1
     static let repositoryMissingCode: Int32 = 10
     private static let repositoryLockedCode: Int32 = 11
     static let wrongPasswordCode: Int32 = 12

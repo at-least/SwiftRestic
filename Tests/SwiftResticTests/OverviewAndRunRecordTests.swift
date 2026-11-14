@@ -29,32 +29,32 @@ struct OverviewMetricsTests {
 
     @Test("protection rows sort by severity and spell each state")
     func protectionRowsOrderAndSpelling() {
-        let failed = UUID() // listing failed
-        let healthy = UUID() // loaded, and the plan has a snapshot in it
-        let checking = UUID() // idle, refresh in flight
-        let empty = UUID() // loaded, but the repository holds nothing
-        let adopted = UUID() // loaded, snapshots exist, none from this plan
+        let unreadable = UUID()
+        let holdingThePlansBackup = UUID()
+        let beingRead = UUID()
+        let holdingNothing = UUID()
+        let holdingOnlyOtherBackups = UUID()
         let plans = [
-            plan("Fine", repository: healthy),
+            plan("Fine", repository: holdingThePlansBackup),
             plan("NoRepo", repository: nil),
-            plan("Checking", repository: checking),
-            plan("Failed", repository: failed),
-            plan("Empty", repository: empty),
-            plan("Adopted", repository: adopted),
+            plan("Checking", repository: beingRead),
+            plan("Failed", repository: unreadable),
+            plan("Empty", repository: holdingNothing),
+            plan("Adopted", repository: holdingOnlyOtherBackups),
         ]
         let latest = snapshot("snapHealthy", at: utcDate("2026-09-05 10:00:00"))
         let rows = OverviewMetrics.protectionRows(
             plans: plans,
-            latestSnapshot: { repository, _ in repository == healthy ? latest : nil },
-            repositoryHasSnapshots: { $0 == healthy || $0 == adopted },
+            latestSnapshot: { repository, _ in repository == holdingThePlansBackup ? latest : nil },
+            repositoryHasSnapshots: { $0 == holdingThePlansBackup || $0 == holdingOnlyOtherBackups },
             listingOutcome: { repository in
                 switch repository {
-                case failed: .failed("Repository /nas is not reachable. Check the host and try again.")
-                case checking: .idle
+                case unreadable: .failed("Repository /nas is not reachable. Check the host and try again.")
+                case beingRead: .idle
                 default: .loaded
                 }
             },
-            isChecking: { $0 == checking },
+            isChecking: { $0 == beingRead },
             activity: { _ in nil },
             standingProblem: { _ in nil },
             now: utcDate("2026-09-05 12:00:00")
@@ -243,10 +243,10 @@ struct OverviewMetricsTests {
 
     @Test("a run in flight says its phase and sorts calm, between pending and up to date")
     func runInFlight() {
-        let empty = UUID() // loaded, nothing in it yet: the first backup is running
+        let runningItsFirstBackup = UUID()
         let idle = UUID()
         let healthy = UUID()
-        let first = plan("First", repository: empty)
+        let first = plan("First", repository: runningItsFirstBackup)
         let rows = OverviewMetrics.protectionRows(
             plans: [plan("Fine", repository: healthy), first, plan("Waiting", repository: idle)],
             latestSnapshot: { repository, _ in
