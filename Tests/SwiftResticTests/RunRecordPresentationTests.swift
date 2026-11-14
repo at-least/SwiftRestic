@@ -344,7 +344,7 @@ struct RunRecordPresentationTests {
             record.detailText = verdict
             return record
         }
-        let damaged = check(.completedWithErrors, "2 errors — restic repair can recover some damage. A cleanup is suggested.")
+        let damaged = check(.completedWithErrors, "2 errors — restic repair can recover some damage. Freeing space is suggested.")
         #expect(RunRecordPresentation.detail(for: damaged) == "2 errors — restic repair can recover some damage")
         #expect(RunRecordPresentation.verdictClause(for: damaged) == "2 errors — restic repair can recover some damage")
         // A stored verdict with a period before the command, which the

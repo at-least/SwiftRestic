@@ -94,8 +94,6 @@ struct TaskRegistryTests {
         registry.addBackground(background)
         registry.cancelSlots()
         #expect(slotted.isCancelled)
-        // A start ping already in flight is awaited, never aborted: its
-        // monitor must hear that the run started, even one quit stopped.
         #expect(!background.isCancelled)
     }
 

@@ -373,7 +373,7 @@ struct MenuBarStatusTests {
         var plan = BackupPlan()
         plan.repositoryID = repository.id
         plan.path = "/Users/someone/Documents"
-        let reason = "“Home NAS” is running a cleanup — backups wait until it finishes."
+        let reason = "“Home NAS” is freeing space — backups wait until it finishes."
         let locked = MenuBarStatus.planRows(
             plans: [plan], activity: [:], isResticDamaged: false,
             lockedRepositories: [repository.id: reason]
@@ -399,7 +399,7 @@ struct MenuBarStatusTests {
 
         let rows = MenuBarStatus.planRows(
             plans: [plan], activity: [:], isResticDamaged: true,
-            lockedRepositories: [plan.repositoryID!: "“Home NAS” is running a cleanup — backups wait until it finishes."]
+            lockedRepositories: [plan.repositoryID!: "“Home NAS” is freeing space — backups wait until it finishes."]
         )
         #expect(rows.first?.isEnabled == false)
         // The cause no wait cures leads.

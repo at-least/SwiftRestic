@@ -415,7 +415,7 @@ struct MaintenanceSchedulingTests {
         #expect(Scheduler.dueMaintenance(in: [repository], plans: [plan(on: self.repository { _ in })], now: now).map(\.task) == [.check])
     }
 
-    @Test("checks run 7 days and cleanups 30 days after a repository is added")
+    @Test("verification runs 7 days and freeing space 30 days after a repository is added")
     func fixedIntervals() {
         let added = utcDate("2026-10-09 00:00:00")
         #expect(MaintenancePolicy().nextDate(for: .prune, addedAt: added) == utcDate("2026-11-08 00:00:00"))
@@ -529,7 +529,7 @@ struct MaintenanceSchedulingTests {
         // A check that found damage says what it found, in its record's
         // own words — the Detail column's — not a second spelling.
         var withVerdict = check(.completedWithErrors, at: "2026-09-09 12:00:00")
-        withVerdict.detailText = "2 errors — restic repair can recover some damage. A cleanup is suggested."
+        withVerdict.detailText = "2 errors — restic repair can recover some damage. Freeing space is suggested."
         #expect(last([withVerdict]) == "\(ago) · 2 errors — restic repair can recover some damage")
         // A record from before the verdict was stored: the outcome itself.
         #expect(last([check(.completedWithErrors, at: "2026-09-09 12:00:00")]) == "\(ago) · problems found")

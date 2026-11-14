@@ -966,7 +966,7 @@ struct MaintenanceRunEngineTests {
             await MaintenanceRunEngine.perform(repository: Repository(), task: .prune, sink: sink.serving(client))
             let record = try #require(sink.deliveredRecords.first)
             #expect(record.outcome == .succeeded)
-            #expect(record.detailText == nil, "a cleanup's Detail says “\(record.detailText ?? "")” for restic's “\(output)”")
+            #expect(record.detailText == nil, "freed space's Detail says “\(record.detailText ?? "")” for restic's “\(output)”")
             #expect(RunRecordPresentation.detail(for: record) == record.outcomeName)
         }
     }

@@ -2209,7 +2209,7 @@ struct AppModelStubTests {
         await model.shutdown()
     }
 
-    @Test("Full Disk Access granted backs up again each scheduled plan whose newest backup ran without it and missed files, and no other")
+    @Test("Full Disk Access granted backs up again each scheduled plan whose newest backup ran without it and missed files, unless backups are paused, and no other")
     func grantedFullDiskAccessRerunsBackups() async throws {
         let harness = try await makeHarness(mode: "default")
         defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -2238,6 +2238,10 @@ struct AppModelStubTests {
         // change before the configuration loaded: the backup is still owed.
         model.configuration.runs[0].itemErrorCount = 2
         #expect(model.fullDiskAccess == .granted)
+        model.pauseBackups(for: .untilTomorrow)
+        await model.refreshFullDiskAccess()
+        #expect(!model.isRunning(planID: planID), "a paused backup ran again")
+        model.resumeBackups()
         await model.refreshFullDiskAccess()
         #expect(model.isRunning(planID: planID), "the backup that ran without Full Disk Access did not run again")
         await model.waitForRun(planID: planID)

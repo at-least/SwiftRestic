@@ -630,8 +630,8 @@ struct AppModelTests {
         await model.shutdown()
     }
 
-    @Test("a cleanup that succeeds on a location whose backup found it full runs that backup again, unless backups are paused; any other cleanup reruns nothing")
-    func cleanupRerunsTheFullLocationsBackup() async throws {
+    @Test("freeing space that succeeds on a location whose backup found it full runs that backup again, unless backups are paused; any other freeing of space reruns nothing")
+    func freedSpaceRerunsTheFullLocationsBackup() async throws {
         let harness = try await makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.root) }
         let model = harness.model
@@ -654,10 +654,10 @@ struct AppModelTests {
 
         // Newest first.
         expectNoRerun([record(.prune, .succeeded), record(.backup, .failed)], "a failure that was not a full location ran again")
-        expectNoRerun([record(.prune, .failed), record(.backup, .failed, full: true)], "a cleanup that failed ran the backup again")
+        expectNoRerun([record(.prune, .failed), record(.backup, .failed, full: true)], "freeing space that failed ran the backup again")
         expectNoRerun(
             [record(.prune, .succeeded, repositoryID: UUID()), record(.prune, .failed), record(.backup, .failed, full: true)],
-            "another location's cleanup ran this location's backup again"
+            "freeing space on another location ran this location's backup again"
         )
         expectNoRerun(
             [record(.prune, .succeeded), record(.backup, .succeeded), record(.backup, .failed, full: true)],
@@ -667,13 +667,13 @@ struct AppModelTests {
         expectNoRerun([record(.prune, .succeeded), record(.backup, .failed, full: true)], "a paused backup ran again")
         model.resumeBackups()
 
-        // A cleanup run on the location the backup found full.
+        // Space freed on the location the backup found full.
         model.configuration.runs = [record(.backup, .failed, full: true)]
         model.runMaintenance(repositoryID: harness.repository.id, task: .prune)
         await model.waitForMaintenance(repositoryID: harness.repository.id)
         #expect(model.configuration.runs.first?.kind == .prune)
         await model.waitForRun(planID: plan.id)
-        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded, "the backup that found the location full did not run again after its cleanup")
+        #expect(model.configuration.runs.first { $0.kind == .backup }?.outcome == .succeeded, "the backup that found the location full did not run again after space was freed")
 
         await model.shutdown()
     }

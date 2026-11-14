@@ -58,7 +58,7 @@ struct AppRouterTests {
         #expect(CommandConfirmation.deleteRepository(a).id == .deleteRepository(a))
     }
 
-    @Test("Verify Backups and Clean Up land on the location's page, the only place their progress shows")
+    @Test("Verify Backups and Free Up Space land on the location's page, the only place their progress shows")
     func maintenanceShowsTheLocationPage() {
         let router = AppRouter()
         let repository = UUID()

@@ -191,7 +191,7 @@ struct CommandStateTests {
         #expect(model.backupQueue[repository.id]?.map(\.planID) == [documents.id])
     }
 
-    @Test("Verify or Clean Up Now on a location a backup is using says it is busy and starts nothing")
+    @Test("Verify Backups or Free Up Space on a location a backup is using says it is busy and starts nothing")
     func maintenanceOnABusyLocationIsAnswered() {
         let model = makeModel()
         let repository = makeRepository("Home NAS")
