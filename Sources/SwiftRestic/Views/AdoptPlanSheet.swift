@@ -20,7 +20,7 @@ struct AdoptPlanSheet: View {
         // Derived on every render, so a backup landing or the group leaving
         // while the sheet is open keeps the words true.
         let briefing = model.adoptBriefing(for: draft, sourceExists: sourceExists)
-        let missingRequirement = EditorRequirements.plan(draft, isNew: true, among: model.configuration.plans)
+        let missingRequirement = EditorRequirements.plan(draft, among: model.configuration.plans)
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Continue “\(model.label(of: draft))” on this Mac?")

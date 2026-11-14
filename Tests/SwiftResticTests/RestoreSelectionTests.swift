@@ -18,13 +18,12 @@ struct RestoreSelectionTests {
         )
     }
 
-    @Test("one item is restored as one; several from one backup carry its time and short ID")
+    @Test("one item is restored as one; several from one backup carry its time")
     func oneBackup() throws {
         let one = try #require(RestoreSelection([source("/d/a.txt", "1e40fdf63e69", oct1)]))
         #expect(one.subject == .item(name: "a.txt", path: "/d/a.txt", isDirectory: false))
         #expect(one.backupCount == 1)
         #expect(one.backupTime == oct1)
-        #expect(one.snapshotShortID == "1e40fdf6")
         #expect(one.note == nil)
 
         let several = try #require(RestoreSelection([
@@ -49,7 +48,6 @@ struct RestoreSelectionTests {
         #expect(selection.sources.map(\.path) == ["/src/notes", "/src/notes/notes.txt"])
         #expect(selection.backupCount == 2)
         #expect(selection.backupTime == nil)
-        #expect(selection.snapshotShortID == "487ad622")
         #expect(selection.note == "“keep.txt” is inside “notes” and is restored with it.")
         // The row's node travels with it: nil means its kind in that backup is read first.
         #expect(selection.sources.map { $0.node == nil } == [false, true])

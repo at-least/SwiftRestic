@@ -18,7 +18,6 @@ enum FindResultGrouping {
         var snapshotID: String
         var snapshotTime: Date
         var count: Int
-        var hit: SearchHit
     }
 
     /// The rows from one read of the index — FTS over basenames, each hit
@@ -42,8 +41,7 @@ enum FindResultGrouping {
                 match: FindMatch(path: hit.path, type: hit.isDirectory ? .dir : .file, size: nil, mtime: nil),
                 snapshotID: summary.newest.id,
                 snapshotTime: summary.newest.time,
-                count: summary.count,
-                hit: hit
+                count: summary.count
             ))
         }
         return (newestFirst(rows) { $0.snapshotTime }, dropped)

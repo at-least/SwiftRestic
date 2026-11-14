@@ -1487,8 +1487,6 @@ struct ResticFindTests {
         #expect(match.name == "recovery-codes.txt")
         #expect(match.size == 9)
 
-        #expect(try await service.find(context, patterns: ["RECOVERY-*.TXT"]).count == 1)
-
         // The match restores through the same path a browsed node does.
         let destination = fixture.root.appendingPathComponent("restored")
         _ = try await service.restore(
@@ -1523,7 +1521,7 @@ struct ResticFindTests {
         for (name, sizes) in [("a[1].txt", Set<Int64>([3, 11])), ("b*c.txt", Set<Int64>([3]))] {
             let path = source.appendingPathComponent(name).path
             let results = try await service.find(
-                context, patterns: [ResticService.globEscaped(path)], ignoreCase: false
+                context, patterns: [ResticService.globEscaped(path)]
             )
             #expect(results.count == 2, "\(name): one result per backup")
             #expect(results.allSatisfy { $0.matches.map(\.path) == [path] }, "\(name): \(results.map { $0.matches.map(\.path) })")
@@ -1538,7 +1536,6 @@ struct ResticFindTests {
         let narrowed = try await service.find(
             context,
             patterns: [ResticService.globEscaped(path)],
-            ignoreCase: false,
             snapshotIDs: [older.id, String(repeating: "0", count: 64)]
         )
         #expect(narrowed.map(\.snapshot) == [older.id])

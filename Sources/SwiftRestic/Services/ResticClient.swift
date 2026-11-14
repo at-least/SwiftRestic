@@ -31,10 +31,7 @@ protocol ResticClient: Sendable {
 
     func check(_ context: RepositoryContext, readDataSubset: CheckDataSubset?) async throws -> ResticSummary?
 
-    func prune(
-        _ context: RepositoryContext,
-        onRawLine: (@Sendable (String) -> Void)?
-    ) async throws -> String
+    func prune(_ context: RepositoryContext) async throws -> String
 
     func repairIndex(_ context: RepositoryContext) async throws
 
@@ -67,7 +64,6 @@ protocol ResticClient: Sendable {
     func find(
         _ context: RepositoryContext,
         patterns: [String],
-        ignoreCase: Bool,
         snapshotIDs: [String]
     ) async throws -> [FindResult]
 

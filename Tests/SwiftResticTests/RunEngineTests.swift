@@ -1010,7 +1010,7 @@ struct MaintenanceRunEngineTests {
         done
         """
         let client = MockResticClient()
-            .onPrune(.success(output), rawLines: ["counting packs", "done"])
+            .onPrune(.success(output))
             .onExit("prune", 0)
         await MaintenanceRunEngine.perform(
             repository: Repository(),

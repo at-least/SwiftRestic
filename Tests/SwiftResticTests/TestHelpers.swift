@@ -127,3 +127,46 @@ extension PlanActivity {
         self.init(repositoryID: UUID(), planName: "", phase: phase)
     }
 }
+
+extension SecretStore {
+    static func inMemory(_ initial: [UUID: (password: String, providerSecret: String?)] = [:]) -> SecretStore {
+        let box = InMemorySecrets(initial)
+        return SecretStore(
+            load: { await box.load($0) },
+            save: { await box.save($0, $1, $2) },
+            remove: { await box.remove($0) },
+            loadSharePassword: { await box.sharePassword($0) },
+            saveSharePassword: { await box.saveSharePassword($0, $1) }
+        )
+    }
+}
+
+private actor InMemorySecrets {
+    private var storage: [UUID: (password: String?, providerSecret: String?)]
+
+    init(_ initial: [UUID: (password: String, providerSecret: String?)]) {
+        storage = initial.mapValues { ($0.password, $0.providerSecret) }
+    }
+
+    func load(_ id: UUID) -> (password: String?, providerSecret: String?) {
+        storage[id] ?? (nil, nil)
+    }
+
+    func save(_ id: UUID, _ password: String?, _ providerSecret: String?) {
+        var entry = storage[id] ?? (nil, nil)
+        if let password, !password.isEmpty { entry.password = password }
+        // Empty removes, as `KeychainStore.write` does.
+        if let providerSecret { entry.providerSecret = providerSecret.isEmpty ? nil : providerSecret }
+        storage[id] = entry
+    }
+
+    func remove(_ id: UUID) { storage[id] = nil }
+
+    private var sharePasswords: [UUID: String] = [:]
+
+    func sharePassword(_ id: UUID) -> String? { sharePasswords[id] }
+
+    func saveSharePassword(_ id: UUID, _ password: String?) {
+        sharePasswords[id] = password.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}

@@ -78,9 +78,6 @@ struct RestoreSelection: Sendable, Equatable {
     /// counts instead.
     var backupTime: Date? { backupCount == 1 ? sources[0].backupTime : nil }
 
-    /// The first item's backup as restic shortens its ID.
-    var snapshotShortID: String { String(sources[0].snapshotID.prefix(Snapshot.shortIDLength)) }
-
     /// The destination sheet's second line: where the bytes come from.
     /// Several backups are counted; one is dated — and when the request
     /// came from a version row, named by its modified time rather than its

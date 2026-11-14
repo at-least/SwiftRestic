@@ -30,7 +30,7 @@ struct FindResultGroupingTests {
         #expect(tied.rows.map(\.match.path) == ["/d/b.txt", "/d/a.txt"])
     }
 
-    @Test("a search's rows carry the hit and the summary's facts; a hit without its summary is dropped, not a row")
+    @Test("a search's rows carry the summary's facts; a hit without its summary is dropped, not a row")
     func indexRowsFacts() {
         let newest = IndexVersion(id: "s9", time: Date(timeIntervalSince1970: 3_000))
         let folder = SearchHit(path: "/d/Sub", isDirectory: true)
@@ -50,7 +50,6 @@ struct FindResultGroupingTests {
         #expect(byPath["/d/Sub"]?.count == 3)
         #expect(byPath["/d/a.txt"]?.count == 7)
         #expect(built.rows.allSatisfy { $0.snapshotID == "s9" && $0.snapshotTime == newest.time })
-        #expect(byPath["/d/a.txt"]?.hit == file)
         #expect(byPath["/d/Sub"]?.match.size == nil && byPath["/d/Sub"]?.match.mtime == nil)
     }
 }
@@ -62,8 +61,7 @@ struct AllBackupsSearchTests {
             match: FindMatch(path: path, type: .file, size: nil, mtime: nil),
             snapshotID: "s\(Int(seconds))",
             snapshotTime: Date(timeIntervalSince1970: seconds),
-            count: 2,
-            hit: SearchHit(path: path, isDirectory: false)
+            count: 2
         )
     }
 

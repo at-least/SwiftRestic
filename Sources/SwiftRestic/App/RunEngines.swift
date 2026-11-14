@@ -467,7 +467,7 @@ enum MaintenanceRunEngine {
                 }
             case .prune:
                 let output = try await unlockingStaleLocks(service: service, context: context, transcript: transcript) {
-                    try await service.prune(context, onRawLine: nil)
+                    try await service.prune(context)
                 }
                 // Nothing freed says nothing: "Freed Zero KB." reads as a fault.
                 record.detailText = ResticService.pruneFreedBytes(in: output)

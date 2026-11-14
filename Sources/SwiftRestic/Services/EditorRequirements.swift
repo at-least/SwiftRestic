@@ -8,9 +8,8 @@ enum EditorRequirements {
     /// does not name — Folder or file, Repository — then the one a
     /// configuration checks: a repository holds one plan per path (`plans`,
     /// every configured plan, the draft's own saved entry among them), its
-    /// history being restic's for that path. That one binds only a plan
-    /// being added — new, moved or adopted.
-    static func plan(_ draft: BackupPlan, isNew: Bool, among plans: [BackupPlan]) -> String? {
+    /// history being restic's for that path.
+    static func plan(_ draft: BackupPlan, among plans: [BackupPlan]) -> String? {
         if draft.path.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Choose a folder or file to back up."
         }
@@ -18,7 +17,7 @@ enum EditorRequirements {
             return "Choose a backup location to save it."
         }
         let path = comparable(draft.path)
-        if isNew, plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
+        if plans.contains(where: { $0.id != draft.id && $0.repositoryID == draft.repositoryID && comparable($0.path) == path }) {
             return "This location already has a plan for this folder or file."
         }
         return nil

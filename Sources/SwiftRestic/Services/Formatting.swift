@@ -274,12 +274,6 @@ enum Format {
         }
     }
 
-    static func rate(bytes: Int64, over seconds: TimeInterval) -> String {
-        guard seconds > 0.5, bytes > 0 else { return "—" }
-        let perSecond = Int64(Double(bytes) / seconds)
-        return "\(Self.bytes(perSecond))/s"
-    }
-
     /// The root that contains an absolute path, longest match first: a
     /// whole-disk root (`/`) contains every absolute path, and where it
     /// coexists with narrower roots the narrower one is the honest answer.

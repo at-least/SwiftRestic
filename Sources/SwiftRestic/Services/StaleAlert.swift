@@ -24,7 +24,7 @@ enum StaleAlert {
     /// longer: a weekly plan is due again exactly seven days after its last
     /// success, and a bare seven-day threshold would name it before every
     /// run.
-    static func window(schedule: Schedule) -> TimeInterval {
+    private static func window(schedule: Schedule) -> TimeInterval {
         max(TimeInterval(thresholdDays) * day, (schedule.interval ?? 0) + day)
     }
 

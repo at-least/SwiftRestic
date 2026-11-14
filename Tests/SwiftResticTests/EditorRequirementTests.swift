@@ -10,19 +10,19 @@ struct EditorRequirementTests {
     @Test("a new plan names its first unmet requirement: the folder, then the location")
     func planRequirementOrdering() {
         var plan = BackupPlan()
-        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder or file to back up.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder or file to back up.")
 
         plan.path = "/Users/demo/Documents"
-        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a backup location to save it.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a backup location to save it.")
 
         plan.repositoryID = UUID()
-        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == nil, "a complete plan has nothing to name")
+        #expect(EditorRequirements.plan(plan, among: []) == nil, "a complete plan has nothing to name")
 
         plan.path = "  "
-        #expect(EditorRequirements.plan(plan, isNew: true, among: []) == "Choose a folder or file to back up.")
+        #expect(EditorRequirements.plan(plan, among: []) == "Choose a folder or file to back up.")
     }
 
-    @Test("a path another plan already backs up to the repository cannot be added again; another repository, an edit, or twins an older configuration holds can be saved")
+    @Test("a path another plan already backs up to the repository cannot be added again; another repository, or the plan’s own saved entry, can")
     func planPathIsOncePerRepository() {
         let home = UUID()
         var saved = BackupPlan()
@@ -34,26 +34,19 @@ struct EditorRequirementTests {
         let taken = "This location already has a plan for this folder or file."
         for spelling in ["/Users/demo/Documents", "/Users/demo/Documents/", " /Users/demo/Documents"] {
             draft.path = spelling
-            #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == taken, "spelled \(spelling)")
+            #expect(EditorRequirements.plan(draft, among: [saved]) == taken, "spelled \(spelling)")
         }
         var inHome = saved
         inHome.path = NSHomeDirectory() + "/Documents"
         draft.path = "~/Documents"
-        #expect(EditorRequirements.plan(draft, isNew: true, among: [inHome]) == taken)
+        #expect(EditorRequirements.plan(draft, among: [inHome]) == taken)
 
         draft.path = "/Users/demo/Documents/Taxes"
-        #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
+        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
         draft.path = "/Users/demo/Documents"
         draft.repositoryID = UUID()
-        #expect(EditorRequirements.plan(draft, isNew: true, among: [saved]) == nil)
-        #expect(EditorRequirements.plan(saved, isNew: false, among: [saved]) == nil)
-        // Twins (two plans, one folder, one repository) can be in a
-        // configuration, and a plan's path is fixed once saved, so editing
-        // either — its schedule, its excludes — must save.
-        var twin = saved
-        twin.id = UUID()
-        #expect(EditorRequirements.plan(saved, isNew: false, among: [saved, twin]) == nil)
-        #expect(EditorRequirements.plan(twin, isNew: false, among: [saved, twin]) == nil)
+        #expect(EditorRequirements.plan(draft, among: [saved]) == nil)
+        #expect(EditorRequirements.plan(saved, among: [saved]) == nil)
     }
 
     @Test("Change Password names what stops the change: nothing typed, two that differ, spaces restic would drop")

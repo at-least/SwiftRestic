@@ -15,7 +15,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     private var repairIndexScript: Result<Void, Error> = .success(())
     private var repairSnapshotsScript: Result<Void, Error> = .success(())
     private var pruneScript: Result<String, Error> = .success("")
-    private var pruneRawLines: [String] = []
     private var snapshotsScript: Result<[Snapshot], Error> = .success([])
     private var statsScript: Result<RepositoryStats, Error> =
         .success(RepositoryStats(totalSize: 0))
@@ -67,11 +66,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return self
     }
 
-    func onPrune(_ result: Result<String, Error>, rawLines: [String] = []) -> Self {
-        locked {
-            pruneScript = result
-            pruneRawLines = rawLines
-        }
+    func onPrune(_ result: Result<String, Error>) -> Self {
+        locked { pruneScript = result }
         return self
     }
 
@@ -215,13 +211,8 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
         return try locked { checkScript }.get()
     }
 
-    func prune(
-        _ context: RepositoryContext,
-        onRawLine: (@Sendable (String) -> Void)?
-    ) async throws -> String {
+    func prune(_ context: RepositoryContext) async throws -> String {
         record("prune")
-        let lines = locked { pruneRawLines }
-        for line in lines { onRawLine?(line) }
         transcribe("prune")
         return try locked { pruneScript }.get()
     }
@@ -282,7 +273,6 @@ final class MockResticClient: ResticClient, @unchecked Sendable {
     func find(
         _ context: RepositoryContext,
         patterns: [String],
-        ignoreCase: Bool,
         snapshotIDs: [String]
     ) async throws -> [FindResult] {
         record("find")

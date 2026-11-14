@@ -335,7 +335,6 @@ extension AppModel {
             let results = try await service.find(
                 context,
                 patterns: [ResticService.globEscaped(path)],
-                ignoreCase: false,
                 snapshotIDs: unanswered.count <= Self.fileHistoryNamedLimit ? unanswered : []
             )
             // Removed meanwhile: nothing would clear these answers.
@@ -409,7 +408,6 @@ extension AppModel {
             let results = try await service.find(
                 context,
                 patterns: wanted.values.map { ResticService.globEscaped($0.path) },
-                ignoreCase: false,
                 snapshotIDs: Array(snapshotIDs)
             )
             guard self.repository(id: repositoryID) != nil else { return }

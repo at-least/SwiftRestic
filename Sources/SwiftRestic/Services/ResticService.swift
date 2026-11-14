@@ -123,13 +123,12 @@ struct ResticService: ResticClient {
     private func run(
         _ context: RepositoryContext,
         _ invocation: ResticInvocation,
-        onMessage: (@Sendable (ResticMessage) -> Void)? = nil,
-        onRawLine: (@Sendable (String) -> Void)? = nil
+        onMessage: (@Sendable (ResticMessage) -> Void)? = nil
     ) async throws -> ResticRunResult {
         var invocation = invocation
         invocation.arguments = context.globalArguments + invocation.arguments
         invocation.environment = context.environment
-        return try await runner.run(binary: binary, invocation: invocation, onMessage: onMessage, onRawLine: onRawLine)
+        return try await runner.run(binary: binary, invocation: invocation, onMessage: onMessage)
     }
 
     func version() async throws -> String {
@@ -264,21 +263,9 @@ struct ResticService: ResticClient {
     ///
     /// `--json` does not cover `prune` (restic 0.19.1): its human-readable
     /// output is returned as text, which the run's log keeps and
-    /// `pruneFreedBytes(in:)` reads. `onRawLine` gets each line as it
-    /// arrives, so a UI can show the prune is still moving.
-    func prune(
-        _ context: RepositoryContext,
-        onRawLine: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        let args = ["prune"]
-        let result = try await run(
-            context,
-            ResticInvocation(
-                arguments: args,
-                retainFullOutput: true
-            ),
-            onRawLine: onRawLine
-        )
+    /// `pruneFreedBytes(in:)` reads.
+    func prune(_ context: RepositoryContext) async throws -> String {
+        let result = try await run(context, ResticInvocation(arguments: ["prune"], retainFullOutput: true))
         return (result.stdout + result.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -418,11 +405,9 @@ struct ResticService: ResticClient {
     func find(
         _ context: RepositoryContext,
         patterns: [String],
-        ignoreCase: Bool = true,
         snapshotIDs: [String] = []
     ) async throws -> [FindResult] {
         var args = ["find", "--json", "--no-lock"]
-        if ignoreCase { args.append("--ignore-case") }
         for id in snapshotIDs { args += ["--snapshot", id] }
         // A pattern starting with "-" is a pattern, not a flag.
         args.append("--")

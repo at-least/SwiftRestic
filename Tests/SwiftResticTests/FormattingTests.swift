@@ -247,16 +247,6 @@ struct FormattingTests {
         #expect(BackupRowMoments.labels(for: [base], sectioned: true) == [base: Format.dayTime(base)])
     }
 
-    @Test("rate refuses to divide by a meaningless duration")
-    func rateGuards() {
-        #expect(Format.rate(bytes: 1_000, over: 0) == "—")
-        #expect(Format.rate(bytes: 1_000, over: 0.5) == "—")
-        #expect(Format.rate(bytes: 0, over: 60) == "—")
-        #expect(Format.rate(bytes: -5, over: 60) == "—")
-        // The per-second suffix is our own literal, not the formatter's.
-        #expect(Format.rate(bytes: 1_000, over: 2).hasSuffix("/s"))
-    }
-
     @Test("firstSentence cuts at the first real sentence boundary")
     func firstSentenceCuts() {
         #expect(

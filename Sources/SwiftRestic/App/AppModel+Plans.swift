@@ -116,7 +116,7 @@ extension AppModel {
         moved.lastSuccessAt = nil
         moved.staleAlertedFor = nil
         let others = configuration.plans.filter { $0.id != id }
-        if let reason = EditorRequirements.plan(moved, isNew: true, among: others) {
+        if let reason = EditorRequirements.plan(moved, among: others) {
             throw MessageError(message: reason)
         }
         deletePlan(id: id)

@@ -114,7 +114,7 @@ enum FirstBackupDestination: Hashable {
                let inside = EditorRequirements.backupsInside(source: source, folder: repository.resolvedLocalPath) {
                 return inside
             }
-            return EditorRequirements.plan(BackupPlan(firstBackupOf: source, into: id), isNew: true, among: plans)
+            return EditorRequirements.plan(BackupPlan(firstBackupOf: source, into: id), among: plans)
         case let .folder(folder):
             return EditorRequirements.firstBackup(
                 source: source, folder: folder, password: password,
