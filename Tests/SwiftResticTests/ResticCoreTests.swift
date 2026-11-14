@@ -11,66 +11,72 @@ struct ResticErrorTests {
         #expect(error.resticDetail == line)
     }
 
-    @Test("every documented exit code maps to an explanation")
-    func knownExitCodes() {
-        for code: Int32 in [1, 2, 3, 10, 11, 12, 130] {
-            #expect(ResticError.knownExitCodeDescription(code) != nil, "code \(code) should be documented")
-        }
-        for code: Int32 in [0, 4, 42, 99, 127] {
-            #expect(ResticError.knownExitCodeDescription(code) == nil, "code \(code) should stay unmapped")
-        }
+    @Test("a refused password says so in the app's words, and restic's own go to the copied details")
+    func refusedPasswordWords() {
+        // restic's words leave Retry, which cannot succeed, as the next step.
+        let error = ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password")
+        #expect(error.errorDescription == "The password doesn’t open this backup location.")
+        #expect(error.resticDetail == "Fatal: wrong password", "restic's own sentence should stay available for the details")
     }
 
-    @Test("a known code prefixes restic's message; an unknown code gets the raw text")
-    func commandFailedDescriptions() {
-        // Retry can never succeed here, so restic's own words go to the
-        // copied details.
-        let wrongPassword = ResticError.commandFailed(
-            exitCode: 12,
-            message: "Fatal: wrong password"
-        ).errorDescription ?? ""
-        #expect(wrongPassword == "The password doesn’t open this backup location.")
-        #expect(ResticError.commandFailed(exitCode: 12, message: "Fatal: wrong password").resticDetail == "Fatal: wrong password")
-        #expect(ResticError.commandFailed(exitCode: 12, message: "").resticDetail == nil)
+    @Test("restic's detail is its first sentence, not everything it printed")
+    func detailIsResticsFirstSentence() {
+        // restic 0.19.1 against a server that refused connections: the
+        // second line names the repository, credentials and all.
+        let printed = "Fatal: unable to open config file: Head \"http://:***@127.0.0.1:18000/app/config\": dial tcp 127.0.0.1:18000: "
+            + "connect: connection refused\nrest:http://127.0.0.1:18000/app/"
+        #expect(ResticError.commandFailed(exitCode: 1, message: printed).resticDetail
+            == "Fatal: unable to open config file: Head \"http://:***@127.0.0.1:18000/app/config\": dial tcp 127.0.0.1:18000: "
+            + "connect: connection refused",
+            "the details should carry restic's first sentence only")
+    }
 
-        // A missing repository and a lock carry their fix the same way: the
-        // banner and the notification repeat this message.
+    @Test("a failure restic gave no words for has no detail")
+    func silentFailureHasNoDetail() {
+        #expect(ResticError.commandFailed(exitCode: 12, message: "").resticDetail == nil,
+                "an empty detail would print a bare \"restic:\" line in the run's details")
+    }
+
+    @Test("backups missing from their location say where to look, whatever restic printed")
+    func missingBackupsWords() {
+        // The banner and the notification repeat this sentence.
+        let sentence = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location."
         #expect(ResticError.commandFailed(
             exitCode: 10,
             message: "Fatal: repository does not exist: unable to open config file: stat /Volumes/A/config: no such file or directory"
-        ).errorDescription == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
-        #expect(ResticError.commandFailed(exitCode: 10, message: "").errorDescription
-            == "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location.")
-        #expect(ResticError.commandFailed(
-            exitCode: 11,
-            message: "Fatal: repository is locked"
-        ).errorDescription == "The backup location is in use by another Mac or app.")
+        ).errorDescription == sentence)
+        #expect(ResticError.commandFailed(exitCode: 10, message: "").errorDescription == sentence)
+    }
 
-        let known = ResticError.commandFailed(
-            exitCode: 3,
-            message: "warning: at least one source file could not be read"
-        ).errorDescription ?? ""
-        #expect(known.contains("some data couldn’t be read"))
-        #expect(known.contains("warning: at least one source file could not be read"))
+    @Test("a locked location says another Mac or app is using it")
+    func lockedLocationWords() {
+        #expect(ResticError.commandFailed(exitCode: 11, message: "Fatal: repository is locked").errorDescription
+            == "The backup location is in use by another Mac or app.")
+    }
 
-        let bare = ResticError.commandFailed(
-            exitCode: 130,
-            message: ""
-        ).errorDescription ?? ""
-        #expect(bare == "It was interrupted.")
-        #expect(ResticError.commandFailed(exitCode: 1, message: "").errorDescription
-            == "It stopped with an error.")
-        #expect(ResticError.commandFailed(exitCode: 2, message: "").errorDescription
-            == "It stopped unexpectedly.")
+    @Test("exit 3 says some data couldn't be read, then restic's reason")
+    func unreadDataWords() {
+        #expect(ResticError.commandFailed(exitCode: 3, message: "warning: at least one source file could not be read").errorDescription
+            == "Finished, but some data couldn’t be read — warning: at least one source file could not be read")
+    }
 
-        #expect(
-            ResticError.commandFailed(exitCode: 99, message: "disk on fire")
-                .errorDescription == "disk on fire"
-        )
-        #expect(
-            ResticError.commandFailed(exitCode: 99, message: "")
-                .errorDescription == "It stopped unexpectedly."
-        )
+    @Test(
+        "a failure restic gave no words for is named by its exit code, without naming restic",
+        arguments: [
+            (1, "It stopped with an error."),
+            (2, "It stopped unexpectedly."),
+            (3, "Finished, but some data couldn’t be read."),
+            (130, "It was interrupted."),
+            (99, "It stopped unexpectedly."),
+        ] as [(Int32, String)]
+    )
+    func silentFailureWords(code: Int32, sentence: String) {
+        #expect(ResticError.commandFailed(exitCode: code, message: "").errorDescription == sentence, "exit \(code) with no message")
+    }
+
+    @Test("an exit code restic does not document shows restic's words alone")
+    func undocumentedExitCodeWords() {
+        #expect(ResticError.commandFailed(exitCode: 99, message: "disk on fire").errorDescription == "disk on fire")
     }
 
     @Test("a run's failure names its location: a refused password names it, and a disk's missing backups ask after the disk")
@@ -163,18 +169,34 @@ struct ResticErrorTests {
             == "This storage doesn’t allow deleting, so 2 of the 3 old backups stay; the other one was removed. Allow deletions on the storage.")
     }
 
-    @Test("a missing password names the location it is missing for")
-    func passwordMissingNamesTheLocation() {
+    @Test("a missing password names the location it is missing for, and says to enter it")
+    func missingPasswordWords() {
         #expect(ResticError.passwordMissing(repositoryName: "NAS").errorDescription == "No password is saved for “NAS”. Enter it to back up again.")
     }
 
-    @Test("a launch failure, an unreadable answer and an unrestored item each say what happened, without naming restic")
-    func appFailuresInTheReadersWords() {
+    @Test("a timeout says how long it ran, what restic kept retrying when that is known, and what to check")
+    func timeoutWords() {
+        #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
+            == "It took longer than 5m and was stopped — it kept retrying: connection refused. Check the location’s connection and try again.")
+        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription
+            == "It took longer than 5m and was stopped. Check the location’s connection and try again.")
+    }
+
+    @Test("a restic that could not be started says so and what to do if it keeps happening")
+    func launchFailureWords() {
         #expect(ResticError.processLaunchFailed("The file “restic” doesn’t exist").errorDescription
             == "SwiftRestic couldn’t start the backup: The file “restic” doesn’t exist. If this keeps happening, install SwiftRestic again.")
-        #expect(ResticError.malformedOutput(detail: "1 change line did not decode").errorDescription
-            == "SwiftRestic couldn’t read the result. Try again.")
-        #expect(ResticError.malformedOutput(detail: "1 change line did not decode").resticDetail == "1 change line did not decode")
+    }
+
+    @Test("an answer that could not be read says to try again, and what did not decode goes to the copied details")
+    func unreadableAnswerWords() {
+        let error = ResticError.malformedOutput(detail: "1 change line did not decode")
+        #expect(error.errorDescription == "SwiftRestic couldn’t read the result. Try again.")
+        #expect(error.resticDetail == "1 change line did not decode", "what did not decode should stay available for the details")
+    }
+
+    @Test("items a restore did not find are named, with why a name can be missing")
+    func unrestoredItemsWords() {
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt"]).errorDescription
             == "/Restored/a.txt wasn’t restored: nothing by that name is in the backup. A name written on another kind of computer can do this.")
         #expect(ResticError.notRestored(paths: ["/Restored/a.txt", "/Restored/b.txt"]).errorDescription
@@ -247,6 +269,24 @@ struct ChildEnvironmentTests {
             invocation: ResticInvocation(arguments: ["-c", #"printf '%s\n' "$HOME""#], environment: ["HOME": inherited + "/elsewhere"])
         )
         #expect(result.stdout == inherited + "/elsewhere\n", "the child saw HOME as \(result.stdout.debugDescription)")
+    }
+
+    @Test("a location, password or host name the app inherited never reaches restic")
+    func inheritedLocationAndPasswordAreStripped() async throws {
+        // restic ranks an inherited RESTIC_PASSWORD_COMMAND above the
+        // password a run passes, so a stale shell variable would win.
+        let keys = [
+            "RESTIC_REPOSITORY", "RESTIC_REPOSITORY_FILE", "RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE",
+            "RESTIC_PASSWORD_COMMAND", "RESTIC_HOST",
+        ]
+        for key in keys { setenv(key, "inherited", 1) }
+        defer { for key in keys { unsetenv(key) } }
+        let result = try await ResticRunner().run(
+            binary: URL(fileURLWithPath: "/usr/bin/env"),
+            invocation: ResticInvocation(arguments: [], timeout: 10)
+        )
+        let inherited = result.stdout.split(separator: "\n").filter { line in keys.contains { line.hasPrefix($0 + "=") } }
+        #expect(inherited.isEmpty, "the child inherited \(inherited)")
     }
 
     @Test("a child reads end-of-file at once on stdin, so a backend that prompts fails instead of hanging")

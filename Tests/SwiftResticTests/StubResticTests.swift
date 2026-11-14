@@ -815,11 +815,8 @@ struct StubResticTests {
             Issue.record("a hung command must be stopped as timed out")
         } catch let ResticError.timedOut(seconds, cause) {
             #expect(seconds == 1)
-            #expect(cause == "connection refused")
+            #expect(cause == "connection refused", "the cause should be the last retry's, not \(cause.debugDescription)")
         }
-        #expect(ResticError.timedOut(seconds: 300, cause: "connection refused").errorDescription
-            == "It took longer than 5m and was stopped — it kept retrying: connection refused. Check the location’s connection and try again.")
-        #expect(ResticError.timedOut(seconds: 300, cause: "").errorDescription == "It took longer than 5m and was stopped. Check the location’s connection and try again.")
     }
 
     @Test("a child that ignores SIGTERM is killed after the grace and still reported")
