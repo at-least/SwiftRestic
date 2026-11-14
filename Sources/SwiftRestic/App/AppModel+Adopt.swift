@@ -124,13 +124,12 @@ extension AppModel {
     /// call, no index change, no run record. Reshelve is tag-driven, so the
     /// records move under the new plan on their own.
     func adopt(draft: BackupPlan) {
-        // `upsert` is keyed by id alone: it would replace that plan silently.
         precondition(plan(id: draft.id) == nil, "adopting a UUID that already names a plan")
         guard let repositoryID = draft.repositoryID else {
             preconditionFailure("an adopt draft always names its repository")
         }
         let count = shelves(for: repositoryID).orphanPlanGroup(draft.id)?.snapshots.count ?? 0
-        upsert(plan: draft)
+        configuration.plans.append(draft)
         // A group exists only around backups, so count zero means the group
         // left while the sheet was open — the banner says that, not a count.
         post(Banner(

@@ -187,18 +187,4 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
     func dueSlot(at now: Date) -> Date? {
         schedule.nextRunDate(after: lastRunAt, now: now).flatMap { $0 <= now ? $0 : nil }
     }
-
-    /// What the model and the plan page write comes from the stored plan,
-    /// not a draft's older copy: the run stamps, the quiet-plan alert's
-    /// mark and the schedule. A new field written that way joins this
-    /// list, or a whole-plan save reverts it to the draft.
-    func merging(draft: BackupPlan) -> BackupPlan {
-        var merged = draft
-        merged.lastRunAt = lastRunAt
-        merged.lastSuccessAt = lastSuccessAt
-        merged.staleAlertedFor = staleAlertedFor
-        merged.announcesFirstBackup = announcesFirstBackup
-        merged.schedule = schedule
-        return merged
-    }
 }

@@ -59,8 +59,8 @@ extension AppModel {
         )
     }
 
-    /// Mutates only the pattern list: a whole-plan upsert from a captured copy
-    /// could undo a run's stamps.
+    /// Mutates only the pattern list: a whole plan written back from a
+    /// captured copy could undo a run's stamps.
     func exclude(paths: [String], fromPlan planID: UUID) {
         updatePlan(planID) { plan in
             for pattern in paths.map(ResticService.globEscaped) where !plan.excludePatterns.contains(pattern) {
@@ -87,14 +87,6 @@ extension AppModel {
 
     func label(of repository: Repository) -> String {
         repository.label(among: configuration.repositories)
-    }
-
-    func upsert(plan: BackupPlan) {
-        if let index = configuration.plans.firstIndex(where: { $0.id == plan.id }) {
-            configuration.plans[index] = configuration.plans[index].merging(draft: plan)
-        } else {
-            configuration.plans.append(plan)
-        }
     }
 
     func deletePlan(id: UUID) {

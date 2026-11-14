@@ -355,13 +355,10 @@ struct FirstBackupTests {
             == "It backs up again when you click Back Up Now.")
     }
 
-    @Test("a configuration saved before the announcement existed never announces, and a stored one survives an edit")
+    @Test("a configuration saved before the announcement existed never announces")
     func announcementDecodesOff() throws {
         let decoded = try JSONDecoder().decode(BackupPlan.self, from: Data(#"{"path":"/a"}"#.utf8))
         #expect(!decoded.announcesFirstBackup)
-        var stored = decoded
-        stored.announcesFirstBackup = true
-        #expect(stored.merging(draft: decoded).announcesFirstBackup)
     }
 }
 

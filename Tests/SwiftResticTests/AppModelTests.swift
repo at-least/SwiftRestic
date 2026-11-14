@@ -596,7 +596,7 @@ struct AppModelTests {
         var other = BackupPlan()
         other.repositoryID = harness.repository.id
         other.path = harness.sourceDirectory.path
-        model.upsert(plan: other)
+        model.configuration.plans.append(other)
         #expect(throws: MessageError.self) { try model.movePlan(id: newID, toPath: harness.sourceDirectory.path) }
         #expect(model.plan(id: newID) != nil)
 
@@ -1309,40 +1309,13 @@ struct NewestChainSnapshotTests {
 @Suite("Editor upsert preserves model-written stamps")
 @MainActor
 struct UpsertStampTests {
-    @Test("a stale plan draft keeps the last-run and last-success stamps, and the schedule and retention the plan page set")
-    func planStampsSurviveStaleUpsert() {
-        let model = makeModel("SwiftResticUpsert").model
-        var plan = BackupPlan()
-        plan.repositoryID = UUID()
-        plan.path = "/tmp"
-
-        model.upsert(plan: plan)
-
-        // The model stamps a finished run, the way markPlanRun does.
-        let ranAt = Date.now.addingTimeInterval(-600)
-        model.configuration.plans[0].lastRunAt = ranAt
-        model.configuration.plans[0].lastSuccessAt = ranAt
-
-        // The plan page changes How often; a draft taken before that is
-        // saved with its own edit.
-        model.configuration.plans[0].schedule.frequency = .weekly
-        var staleDraft = plan
-        staleDraft.excludePatterns = ["/tmp/cache"]
-        model.upsert(plan: staleDraft)
-
-        #expect(model.configuration.plans[0].lastRunAt == ranAt)
-        #expect(model.configuration.plans[0].lastSuccessAt == ranAt)
-        #expect(model.configuration.plans[0].schedule.frequency == .weekly, "the draft's save reverted How often from the plan page")
-        #expect(model.configuration.plans[0].excludePatterns == ["/tmp/cache"])
-    }
-
     @Test("a run that wrote a snapshot stamps the last backup; one that wrote nothing stamps only its slot")
     func markPlanRunStampsBackups() {
         let model = makeModel("SwiftResticUpsert").model
         var plan = BackupPlan()
         plan.repositoryID = UUID()
         plan.path = "/Volumes/Archive SSD/Photos"
-        model.upsert(plan: plan)
+        model.configuration.plans.append(plan)
 
         let whole = Date.now.addingTimeInterval(-3600)
         model.markPlanRun(plan.id, at: whole, wrote: .whole)
@@ -1737,7 +1710,7 @@ struct RunReporterTokenTests {
         let repository = Repository()
         var plan = BackupPlan()
         plan.repositoryID = repository.id
-        model.upsert(plan: plan)
+        model.configuration.plans.append(plan)
 
         // Run 1: a strip is installed and the engine captures its reporter.
         model.installPlanActivity(plan: plan, repository: repository)

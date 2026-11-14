@@ -115,10 +115,7 @@ struct FindMatch: Sendable, Equatable, Hashable, Identifiable, Decodable {
     func hash(into hasher: inout Hasher) { hasher.combine(path) }
 
     var node: SnapshotNode {
-        var node = SnapshotNode(name: name, type: type, path: path)
-        node.size = size
-        node.mtime = mtime
-        return node
+        SnapshotNode(name: name, type: type, path: path, size: size, mtime: mtime)
     }
 }
 

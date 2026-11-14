@@ -29,7 +29,7 @@ extension AppModel {
 
     private func newestProblemRun(for planID: UUID) -> RunRecord? {
         configuration.runs
-            .filter { $0.isBackup(ofPlan: planID) && [.failed, .completedWithErrors].contains($0.outcome) }
+            .filter { $0.isBackup(ofPlan: planID) && $0.outcome.isProblem }
             .max { $0.finishedAt < $1.finishedAt }
     }
 }

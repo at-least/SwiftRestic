@@ -5,7 +5,7 @@ extension AppModel {
     func createPlan(_ plan: BackupPlan) {
         var plan = plan
         plan.announcesFirstBackup = true
-        upsert(plan: plan)
+        configuration.plans.append(plan)
         backUpIfScheduled(plan)
     }
 

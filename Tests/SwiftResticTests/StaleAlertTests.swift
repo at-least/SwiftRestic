@@ -70,15 +70,6 @@ struct StaleAlertTests {
         #expect(text.body == "No successful backup in 8 days — the last one was \(Format.timestamp(last)).")
     }
 
-    @Test("the alert mark survives an editor save")
-    func persistence() throws {
-        var stored = plan(lastSuccessDaysAgo: 9)
-        stored.staleAlertedFor = stored.lastSuccessAt
-        var draft = stored
-        draft.staleAlertedFor = nil
-        #expect(stored.merging(draft: draft).staleAlertedFor == stored.lastSuccessAt)
-    }
-
     @Test("the mark survives the configuration file against a snapshot time as restic gives it, fraction and all")
     func markSurvivesTheFile() throws {
         var stored = plan(lastSuccessDaysAgo: nil)

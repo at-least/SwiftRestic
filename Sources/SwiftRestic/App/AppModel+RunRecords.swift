@@ -56,7 +56,8 @@ extension AppModel {
         // A continuing skip or standing failure replaces the plan's last
         // record, counting it.
         if record.outcome == .skipped || record.missingSources != nil || record.refusedShares != nil,
-           let index = configuration.runs.firstIndex(where: { $0.isBackup(ofPlan: record.planID) }),
+           let planID = record.planID,
+           let index = configuration.runs.firstIndex(where: { $0.isBackup(ofPlan: planID) }),
            let merged = record.outcome == .skipped
                ? record.continuingSkip(of: configuration.runs[index])
                : record.continuingStandingFailure(of: configuration.runs[index]) {

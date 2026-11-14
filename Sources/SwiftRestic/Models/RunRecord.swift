@@ -433,7 +433,7 @@ extension RunRecord {
 }
 
 extension RunRecord {
-    func isBackup(ofPlan planID: UUID?) -> Bool {
+    func isBackup(ofPlan planID: UUID) -> Bool {
         kind == .backup && self.planID == planID
     }
 }
