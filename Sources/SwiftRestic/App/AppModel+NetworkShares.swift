@@ -23,7 +23,7 @@ extension AppModel {
 
     /// The saved share a plan's folder is on (`RunFix.enterSharePassword`).
     func savedShare(forPlan id: UUID) -> NetworkShare? {
-        plan(id: id).flatMap { VolumePresence.volumeName(of: $0.resolvedPath) }.flatMap(networkShare(forVolume:))
+        plan(id: id)?.folderVolumeName.flatMap(networkShare(forVolume:))
     }
 
     /// Keyed by volume name: a repository and a plan on one share keep one
@@ -39,7 +39,7 @@ extension AppModel {
         }
         let repositoryIDs = Set(
             configuration.repositories.filter { $0.driveVolumeName == share.volumeName }.map(\.id)
-                + configuration.plans.filter { VolumePresence.volumeName(of: $0.resolvedPath) == share.volumeName }.compactMap(\.repositoryID)
+                + configuration.plans.filter { $0.folderVolumeName == share.volumeName }.compactMap(\.repositoryID)
         )
         for repositoryID in repositoryIDs { rerunFailedBackups(in: repositoryID) }
     }
@@ -141,7 +141,10 @@ extension AppModel {
 
 extension AppConfiguration {
     var volumesInUse: Set<String> {
-        Set(plans.compactMap { VolumePresence.volumeName(of: $0.resolvedPath) }
-            + repositories.compactMap(\.driveVolumeName))
+        Set(plans.compactMap(\.folderVolumeName) + repositories.compactMap(\.driveVolumeName))
     }
+}
+
+fileprivate extension BackupPlan {
+    var folderVolumeName: String? { VolumePresence.volumeName(of: resolvedPath) }
 }

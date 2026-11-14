@@ -241,7 +241,7 @@ extension AppModel {
     private static let resticFatalErrorCode: Int32 = 1
 
     func service() throws -> any ResticClient {
-        guard case let .ready(binary, _) = resticState else { throw ResticError.damagedInstall }
+        guard let binary else { throw ResticError.damagedInstall }
         return ResticService(runner: runner, binary: binary.url)
     }
 

@@ -3,7 +3,7 @@ import Foundation
 extension AppModel {
     /// The same `isHealed` rule as the menu bar face.
     func currentProblem(for planID: UUID) -> RunRecord? {
-        guard let problem = newestRun(for: planID, outcomeIn: [.failed, .completedWithErrors]),
+        guard let problem = newestProblemRun(for: planID),
               !OverviewMetrics.isHealed(problem, in: configuration.runs)
         else { return nil }
         return problem
@@ -29,12 +29,9 @@ extension AppModel {
 
     /// Backups only: Apply Retention Now records its forget under the
     /// plan's ID, and a failed forget is not the plan's problem.
-    private func newestRun(
-        for planID: UUID,
-        outcomeIn outcomes: Set<RunRecord.Outcome>? = nil
-    ) -> RunRecord? {
+    private func newestProblemRun(for planID: UUID) -> RunRecord? {
         configuration.runs
-            .filter { $0.isBackup(ofPlan: planID) && outcomes?.contains($0.outcome) ?? true }
+            .filter { $0.isBackup(ofPlan: planID) && [.failed, .completedWithErrors].contains($0.outcome) }
             .max { $0.finishedAt < $1.finishedAt }
     }
 }

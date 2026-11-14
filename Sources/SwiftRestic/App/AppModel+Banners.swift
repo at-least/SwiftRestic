@@ -1,14 +1,6 @@
 import Foundation
 
 extension AppModel {
-    func postBusyBanner(for repository: Repository) {
-        post(Banner(
-            title: "“\(label(of: repository))” is busy",
-            message: "A backup or other work is already using this location.",
-            level: .notice
-        ))
-    }
-
     /// Banners with a Show in Finder action stay: a restore finishing behind
     /// an open sheet would expire its button before anyone could click it.
     /// An identical staying banner is not posted again, or a repeated action

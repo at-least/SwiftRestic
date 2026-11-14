@@ -351,14 +351,14 @@ extension AppModel {
         // Finder refuses an empty provider without saying why, so the
         // banner says it at drag start.
         guard let repository = repository(id: repositoryID) else {
-            postDragImpossibleBanner(node.name, "This backup location no longer exists. Select a backup from one in the sidebar.")
+            postDragRestoreFailure(node.name, "This backup location no longer exists. Select a backup from one in the sidebar.")
             return provider
         }
         let service: any ResticClient
         do {
             service = try self.service()
         } catch {
-            postDragImpossibleBanner(node.name, error.localizedDescription)
+            postDragRestoreFailure(node.name, error.localizedDescription)
             return provider
         }
         let secrets = self.secrets
@@ -392,8 +392,7 @@ extension AppModel {
                     // main actor drains again.
                     await MainActor.run { [weak self] in
                         guard let self, !self.isShuttingDown else { return }
-                        let message = error.localizedDescription
-                        self.post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, level: .error))
+                        self.postDragRestoreFailure(itemName, error.localizedDescription)
                     }
                 }
             }
@@ -402,7 +401,7 @@ extension AppModel {
         return provider
     }
 
-    private func postDragImpossibleBanner(_ itemName: String, _ message: String) {
+    private func postDragRestoreFailure(_ itemName: String, _ message: String) {
         post(Banner(title: "Couldn’t restore “\(itemName)”", message: message, level: .error))
     }
 

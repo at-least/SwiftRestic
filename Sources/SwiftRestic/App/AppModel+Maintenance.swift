@@ -89,6 +89,14 @@ extension AppModel {
         startQueuedBackups()
     }
 
+    private func postBusyBanner(for repository: Repository) {
+        post(Banner(
+            title: "“\(label(of: repository))” is busy",
+            message: "A backup or other work is already using this location.",
+            level: .notice
+        ))
+    }
+
     func cancelMaintenance(repositoryID: UUID) {
         tasks.cancel(.maintenance(repositoryID))
     }

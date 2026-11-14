@@ -293,9 +293,8 @@ extension AppModel {
     }
 
     private func performReconcileLoginItem() async {
-        let readLoginItemState = loginItemStateReader
         let applyLoginItem = loginItemApplier
-        loginItemState = await Task.detached { readLoginItemState() }.value
+        loginItemState = await readLoginItemState()
         guard let enabled = LoginItem.change(
             hasScheduledPlan: configuration.plans.contains(where: \.isScheduled),
             state: loginItemState,
@@ -310,7 +309,7 @@ extension AppModel {
                 level: .error
             ))
         }
-        loginItemState = await Task.detached { readLoginItemState() }.value
+        loginItemState = await readLoginItemState()
         if enabled, loginItemState == .needsApproval {
             post(Banner(
                 title: "Approval needed",
@@ -323,8 +322,12 @@ extension AppModel {
     func refreshLoginItemStatus() async {
         await loginItemChanges.run { [weak self] in
             guard let self else { return }
-            let readLoginItemState = loginItemStateReader
-            loginItemState = await Task.detached { readLoginItemState() }.value
+            loginItemState = await readLoginItemState()
         }
+    }
+
+    private func readLoginItemState() async -> LoginItemState {
+        let read = loginItemStateReader
+        return await Task.detached { read() }.value
     }
 }

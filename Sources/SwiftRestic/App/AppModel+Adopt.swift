@@ -28,7 +28,7 @@ extension AppModel {
     /// The plan an orphan group's backups continue under: the group's UUID,
     /// so its tag, and its newest backup's folder, excludes and tags, on a
     /// new plan's schedule.
-    func continuingDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
+    private func continuingDraft(repositoryID: UUID, planID: UUID) -> BackupPlan? {
         shelves(for: repositoryID).orphanPlanGroup(planID).flatMap { continuingDraft(repositoryID: repositoryID, group: $0) }
     }
 

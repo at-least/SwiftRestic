@@ -378,10 +378,7 @@ struct SwiftResticApp: App {
         CommandMenu("Location") {
             let r = model.repositoryCommands(for: router.selection)
             Button("Verify Backups") {
-                if let id = r.repositoryID {
-                    router.request(.verifyBackups(id))
-                    openWindow(id: Self.mainWindowID)
-                }
+                if let id = r.repositoryID { ask(.verifyBackups(id)) }
             }
             .disabled(!r.canMaintain)
 
