@@ -390,8 +390,6 @@ struct FindDecodingTests {
         }
         #expect(changes.map(\.category) == [.modified, .added, .removed, .modified, .metadataOnly])
         #expect(changes[1].isDirectory)
-        #expect(changes[1].name == "newdir")
-        #expect(changes[0].name == "a.txt")
         // A file that became a symlink and lost its mode bits arrives as "TU":
         // the type change is what matters, and the raw flags stay readable.
         #expect(changes[3].modifier == "TU")

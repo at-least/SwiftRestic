@@ -45,24 +45,24 @@ enum ResticError: Error, LocalizedError, Equatable {
         case .damagedInstall:
             return "SwiftRestic is damaged. Install it again."
         case let .commandFailed(code, message):
-            let base: String?
             switch code {
             case Self.wrongPasswordCode:
                 // Not restic's words, which leave Retry, which cannot
                 // succeed, as the next step. A run names the location
                 // (`words(for:location:)`).
-                base = "The password doesn’t open this backup location."
-            case Self.repositoryMissingCode, Self.repositoryLockedCode:
-                // Exit 10 uses the Add Backup Location button's words. Exit
-                // 11's words show only where nothing unlocked first: a run
-                // unlocks and retries (`unlockingStaleLocks`).
-                base = code == Self.repositoryMissingCode
-                    ? Self.noRepositoryAtLocation + "."
-                    : "The backup location is in use by another Mac or app."
+                return "The password doesn’t open this backup location."
+            case Self.repositoryMissingCode:
+                // The Add Backup Location button's words.
+                return Self.noRepositoryAtLocation
+            case Self.repositoryLockedCode:
+                // Shown where nothing runs the work again unasked: a
+                // listing or a restore, which unlock nothing, and a Repair
+                // still locked after `unlockingStaleLocks`. A scheduled run
+                // says when it tries again instead (`inUseMessage`).
+                return "The backup location is in use by another Mac or app."
             default:
-                base = nil
+                break
             }
-            if let base { return base }
             if let advice = Self.sshHostKeyAdvice(message) { return advice }
             let known = Self.exitCodeWords(code)
             if message.isEmpty { return "\(known ?? "It stopped unexpectedly")." }
@@ -158,27 +158,14 @@ enum ResticError: Error, LocalizedError, Equatable {
     static let diskBackupsMissing = "Backups not found. Is the disk connected? If it moved, locate it."
 
     /// Exit 10 on a server or in the cloud, or where the location is unknown.
-    private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location"
+    private static let noRepositoryAtLocation = "The backups aren’t at this location. Put them back, or add them where they are now as a new backup location."
 
-    /// `knownExitCodeDescription` without restic as the actor.
     private static func exitCodeWords(_ code: Int32) -> String? {
         switch code {
         case 1: "It stopped with an error"
         case 2: "It stopped unexpectedly"
-        case 130: "It was interrupted"
-        default: knownExitCodeDescription(code)
-        }
-    }
-
-    static func knownExitCodeDescription(_ code: Int32) -> String? {
-        switch code {
-        case 1: "restic stopped with an error"
-        case 2: "restic stopped unexpectedly"
         case 3: "Finished, but some data couldn’t be read"
-        case repositoryMissingCode: "The backup location does not exist"
-        case repositoryLockedCode: "The backup location is locked by another process"
-        case wrongPasswordCode: "Wrong password"
-        case 130: "restic was interrupted"
+        case 130: "It was interrupted"
         default: nil
         }
     }

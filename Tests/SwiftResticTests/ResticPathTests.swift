@@ -7,24 +7,20 @@ import Testing
 /// prefix is shortened here.
 @Suite("restic diff change spelling")
 struct ResticDiffChangeSpellingTests {
-    @Test("a directory whose name ends in a Prepend character is a directory, named without its slash")
+    @Test("a directory whose name ends in a Prepend character is a directory")
     func prependDirectory() {
         let change = ResticDiffChange(path: "/src/new\u{0600}/", modifier: "+")
         // The premise: the slash is inside the last Character.
         #expect(!change.path.hasSuffix("/"))
         #expect(change.path.utf8.last == UInt8(ascii: "/"))
         #expect(change.isDirectory)
-        #expect(Array(change.name.utf8) == Array("new\u{0600}".utf8))
     }
 
-    @Test("ordinary spellings: the marker, the name, the root")
+    @Test("ordinary spellings: the marker, the root")
     func ordinarySpellings() {
         #expect(ResticDiffChange(path: "/src/sub/", modifier: "+").isDirectory)
-        #expect(ResticDiffChange(path: "/src/sub/", modifier: "+").name == "sub")
         #expect(!ResticDiffChange(path: "/src/a.txt", modifier: "M").isDirectory)
-        #expect(ResticDiffChange(path: "/src/a.txt", modifier: "M").name == "a.txt")
         #expect(ResticDiffChange(path: "/", modifier: "U").isDirectory)
-        #expect(ResticDiffChange(path: "/", modifier: "U").name == "/")
     }
 }
 

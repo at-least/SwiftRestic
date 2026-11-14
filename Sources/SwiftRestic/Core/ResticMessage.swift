@@ -156,13 +156,6 @@ struct ResticDiffChange: Sendable, Equatable, Decodable {
     /// inside the path's last Character, where `hasSuffix("/")` misses it.
     var isDirectory: Bool { ResticPath.isDirectorySpelling(path) }
 
-    /// The root reads as "/".
-    var name: String {
-        let normalized = ResticPath.normalized(path)
-        let last = ResticPath.basename(of: normalized)
-        return last.isEmpty ? normalized : last
-    }
-
     var category: Category {
         if modifier.contains("+") { return .added }
         if modifier.contains("-") { return .removed }

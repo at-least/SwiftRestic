@@ -480,7 +480,7 @@ private final class StreamReader: @unchecked Sendable {
     private let textLimit: Int
     private let retainMessages: Bool
     /// Every chunk, before line splitting.
-    private let onActivity: (@Sendable () -> Void)?
+    private let onActivity: @Sendable () -> Void
 
     /// The write end stays open for the reader's lifetime, so the signal can
     /// always be delivered.
@@ -494,7 +494,7 @@ private final class StreamReader: @unchecked Sendable {
         handle: FileHandle,
         textLimit: Int,
         retainMessages: Bool,
-        onActivity: (@Sendable () -> Void)?
+        onActivity: @escaping @Sendable () -> Void
     ) {
         self.handle = FileHandleBox(handle)
         self.textLimit = textLimit
@@ -554,7 +554,7 @@ private final class StreamReader: @unchecked Sendable {
                 let pipeFD = box.fileDescriptor
                 let wakeupFD = wakeup.fileHandleForReading.fileDescriptor
                 func absorb(_ chunk: Data) {
-                    onActivity?()
+                    onActivity()
                     buffer.append(chunk)
                     // Removed once per chunk: removing per line moves the
                     // rest of the buffer each time.
