@@ -144,7 +144,7 @@ enum SnapshotIndexSchema {
         snapshot_id  TEXT PRIMARY KEY
     ) STRICT, WITHOUT ROWID;
 
-    PRAGMA user_version = 4;
+    PRAGMA user_version = \(SnapshotIndex.schemaVersion);
     """
 
     /// Created on the pool's writer connection when the store opens. TEMP

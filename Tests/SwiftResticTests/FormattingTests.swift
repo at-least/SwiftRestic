@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+private let wednesdayMorning = newYorkCalendar().date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 10))!
+
 /// The literal branches of the shared formatters: the sentinel strings and the
 /// guards around them. The dates are spelled in `newYorkCalendar()`'s en_US;
 /// the other formatters take the machine's locale, and their pins are exact
@@ -119,7 +121,7 @@ struct FormattingTests {
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
         }
-        let now = date(2026, 9, 9, 10) // a Wednesday, mid-morning
+        let now = wednesdayMorning
 
         // A moment that has already passed is due, never a date in the past tense.
         #expect(flatSpaces(Format.tileTimestamp(date(2026, 9, 9, 8), now: now, calendar: calendar)) == "Due now")
@@ -141,7 +143,7 @@ struct FormattingTests {
     func twentyFourHourCalendar() {
         var calendar = newYorkCalendar()
         calendar.locale = Locale(identifier: "en_GB")
-        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 10))!
+        let now = wednesdayMorning
         let evening = calendar.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 21))!
         #expect(flatSpaces(Format.tileTimestamp(evening, now: now, calendar: calendar)) == "Today 21:00")
         #expect(flatSpaces(Format.pauseEnd(evening, now: now, calendar: calendar)) == "21:00")
@@ -160,7 +162,7 @@ struct FormattingTests {
         func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
             calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
         }
-        let now = date(2026, 9, 9, 10) // the tile fixture's Wednesday morning
+        let now = wednesdayMorning
 
         #expect(flatSpaces(Format.pauseEnd(date(2026, 9, 9, 15, 40), now: now, calendar: calendar)) == "3:40 PM")
         // Until Tomorrow's own end: the day, not a midnight time.

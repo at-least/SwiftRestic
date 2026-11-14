@@ -60,7 +60,7 @@ extension AppModel {
             content.title = text.title
             content.body = text.body
             deliver(UNNotificationRequest(
-                identifier: Self.quietPlanNotificationPrefix + alert.planID.uuidString,
+                identifier: NotificationRoute.plan(alert.planID).identifier,
                 content: content,
                 trigger: nil
             ))
@@ -68,7 +68,6 @@ extension AppModel {
         return alerts
     }
 
-    /// Read back by `NotificationRoute`.
     nonisolated static let quietPlanNotificationPrefix = "quiet-plan:"
 
     private func announcesFirstBackup(_ record: RunRecord) -> Bool {
@@ -112,7 +111,7 @@ extension AppModel {
         // Disarmed only once accepted: with notifications not allowed, the
         // first success after they are allowed says it instead.
         deliver(UNNotificationRequest(
-            identifier: record.id.uuidString,
+            identifier: NotificationRoute.run(record.id).identifier,
             content: content,
             trigger: nil
         ), onAccepted: { [weak self] in
@@ -211,12 +210,18 @@ extension AppModel {
     }
 }
 
-/// Identifiers: a quiet-plan alert is `quietPlanNotificationPrefix` plus
-/// the plan's ID, a run notification the run's ID alone. Kept beside the
-/// two writers above (`alertQuietPlans`, `notify`): nothing else ties them.
+/// Where a notification's click goes, written into its identifier by
+/// `identifier` and read back by `route(forIdentifier:)`.
 enum NotificationRoute: Equatable {
     case plan(UUID)
     case run(UUID)
+
+    var identifier: String {
+        switch self {
+        case let .plan(planID): AppModel.quietPlanNotificationPrefix + planID.uuidString
+        case let .run(runID): runID.uuidString
+        }
+    }
 
     static func route(forIdentifier identifier: String) -> NotificationRoute? {
         let prefix = AppModel.quietPlanNotificationPrefix

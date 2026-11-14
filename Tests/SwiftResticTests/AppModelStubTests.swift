@@ -1100,6 +1100,46 @@ struct AppModelStubTests {
         await harness.model.shutdown()
     }
 
+    @Test("deleting a repository leaves its id in none of the model's dictionaries or sets")
+    func deletingRepositoryLeavesNoRuntimeEntry() async throws {
+        let harness = try await makeHarness(mode: "snaprows")
+        defer { try? FileManager.default.removeItem(at: harness.root) }
+        let id = harness.repository.id
+        harness.model.markDriveAway(repositoryID: id)
+        harness.model.markServerAway(repositoryID: id)
+        harness.model.backupQueue[id] = [QueuedBackup(planID: harness.plan.id, askedByUser: true)]
+        let before = runtimeEntries(holding: id, in: harness.model)
+        #expect(before.contains("_snapshots") && before.contains("_maintenanceAwaitingDrive"), "the scan found only \(before)")
+
+        harness.model.deleteRepository(id: id)
+
+        #expect(runtimeEntries(holding: id, in: harness.model) == [])
+
+        await harness.model.shutdown()
+    }
+
+    /// The labels of the model's stored dictionaries and sets with `id` as a
+    /// key or member, or inside one (`fileHistoryAnswers`' key, a run
+    /// token's case). Left out: `repositoryEnvironment`, the harness's own
+    /// injection; `contextGenerations`, which outlives the repository so a
+    /// secret read begun before the removal sees its generation moved.
+    private func runtimeEntries(holding id: UUID, in model: AppModel) -> [String] {
+        let kept: Set<String> = ["repositoryEnvironment", "contextGenerations"]
+        return Mirror(reflecting: model).children.compactMap { child in
+            guard let label = child.label, !kept.contains(label) else { return nil }
+            let collection = Mirror(reflecting: child.value)
+            let keys: [Any] = switch collection.displayStyle {
+            case .dictionary: collection.children.compactMap { Mirror(reflecting: $0.value).children.first?.value }
+            case .set: collection.children.map(\.value)
+            default: []
+            }
+            let holdsID = keys.contains { key in
+                key as? UUID == id || Mirror(reflecting: key).children.contains { $0.value as? UUID == id }
+            }
+            return holdsID ? label : nil
+        }
+    }
+
     @Test("the run history is capped at its limit even when every run succeeds")
     func runHistoryIsCapped() async throws {
         let harness = try await makeHarness(mode: "default")
@@ -2733,7 +2773,7 @@ struct AppModelStubTests {
         configuration.runs = [run]
         try await ConfigStore(directory: fixture.config).save(configuration)
 
-        let old = Date(timeIntervalSince1970: 1_577_836_800) // 2020-01-01
+        let old = startOf2020
         let known = fixture.logs.appendingPathComponent("\(run.id.uuidString).log")
         let orphan = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
         let fresh = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
@@ -2770,7 +2810,7 @@ struct AppModelStubTests {
         let log = fixture.logs.appendingPathComponent("\(UUID().uuidString).log")
         try "log".write(to: log, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
-            [.modificationDate: Date(timeIntervalSince1970: 1_577_836_800)],
+            [.modificationDate: startOf2020],
             ofItemAtPath: log.path
         )
 
@@ -2802,7 +2842,7 @@ struct AppModelStubTests {
         let log = fixture.logs.appendingPathComponent("\(run.id.uuidString).log")
         try "log".write(to: log, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
-            [.modificationDate: Date(timeIntervalSince1970: 1_577_836_800)],
+            [.modificationDate: startOf2020],
             ofItemAtPath: log.path
         )
 

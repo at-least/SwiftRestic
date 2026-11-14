@@ -20,6 +20,9 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
     /// own snapshot.
     var original: String?
 
+    /// restic's `short_id`: the ID's first this-many characters.
+    static let shortIDLength = 8
+
     private enum CodingKeys: String, CodingKey {
         case id, time, paths, hostname, tags, excludes, summary, original
         case shortID = "short_id"
@@ -34,7 +37,7 @@ struct Snapshot: Sendable, Equatable, Hashable, Identifiable, Decodable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         // `short_id` is deprecated upstream, so a release may stop writing it.
-        shortID = try c.decodeIfPresent(String.self, forKey: .shortID) ?? String(id.prefix(8))
+        shortID = try c.decodeIfPresent(String.self, forKey: .shortID) ?? String(id.prefix(Snapshot.shortIDLength))
         time = try c.decode(Date.self, forKey: .time)
         paths = try c.decodeIfPresent([String].self, forKey: .paths) ?? []
         hostname = try c.decodeIfPresent(String.self, forKey: .hostname)

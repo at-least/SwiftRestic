@@ -149,8 +149,8 @@ extension AppModel {
         })
     }
 
-    /// Every per-repository runtime entry; a new dictionary keyed by
-    /// repository id joins this list, or its entry leaks forever.
+    /// Every per-repository runtime entry (a missed one fails
+    /// `deletingRepositoryLeavesNoRuntimeEntry`, if the stub fills it).
     /// `loadingSnapshots` is left to the in-flight refresh's own `defer`.
     private func clearRuntimeState(repositoryID id: UUID) {
         maintenance[id] = nil

@@ -232,7 +232,7 @@ struct RunLogTests {
         try "keep".write(to: notes, atomically: true, encoding: .utf8)
         let oddName = directory.appendingPathComponent("not-a-uuid.log")
         try "keep".write(to: oddName, atomically: true, encoding: .utf8)
-        let old = Date(timeIntervalSince1970: 1_577_836_800)
+        let old = startOf2020
         let cutoff = Date.now
         for url in [store.url(for: orphan), store.url(for: kept), notes, oddName] {
             try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)

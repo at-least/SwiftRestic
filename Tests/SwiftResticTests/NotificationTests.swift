@@ -328,4 +328,11 @@ struct NotificationRouteTests {
         #expect(NotificationRoute.route(forIdentifier: AppModel.quietPlanNotificationPrefix + "not-a-uuid") == nil)
         #expect(NotificationRoute.route(forIdentifier: "restic note") == nil)
     }
+
+    @Test("every route's identifier reads back as that route")
+    func identifierRoundTrip() {
+        for route in [NotificationRoute.plan(UUID()), .run(UUID())] {
+            #expect(NotificationRoute.route(forIdentifier: route.identifier) == route)
+        }
+    }
 }

@@ -336,10 +336,10 @@ enum IndexError: Error, Equatable {
 /// serializes them too — hence `@unchecked Sendable`. Reads run async on
 /// pool readers, beside the writer.
 final class SnapshotIndex: @unchecked Sendable {
-    /// Must equal the `user_version` `SnapshotIndexSchema.create` sets; bump
-    /// both on any change to the creation script, and a file with another
-    /// version is rebuilt.
-    private static let schemaVersion: Int32 = 4
+    /// `SnapshotIndexSchema.create` stamps it as `user_version`. Bump it on
+    /// any change to the creation script: a file with another version is
+    /// rebuilt.
+    static let schemaVersion: Int32 = 4
     /// Node ids per batched read: under SQLite's pre-3.32 variable limit of
     /// 999, whatever the system library.
     static let lookupChunk = 400

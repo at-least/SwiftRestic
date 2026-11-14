@@ -459,9 +459,9 @@ struct RunRecordPresentationTests {
         #expect(detail(failedCheck) == "Problems found")
 
         // A prune's is what it freed, as a retention run's is what it removed.
-        var cleanup = RunRecord(kind: .prune, planName: "Home NAS")
-        cleanup.detailText = "Freed 3 MB."
-        #expect(detail(cleanup) == "Freed 3 MB.", "a cleanup's Detail names what it freed")
+        var prune = RunRecord(kind: .prune, planName: "Home NAS")
+        prune.detailText = "Freed 3 MB."
+        #expect(detail(prune) == "Freed 3 MB.", "a prune's Detail names what it freed")
     }
 
     @Test("an unreadable item reads as its name, where it is and why — from the path the run stored, not restic's words taken apart")

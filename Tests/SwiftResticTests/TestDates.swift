@@ -10,6 +10,8 @@ func utcDate(_ string: String) -> Date {
     return formatter.date(from: string)!
 }
 
+let startOf2020 = utcDate("2020-01-01 00:00:00")
+
 /// New York's zone in en_US: the pins read "9:00 PM" whatever the Mac's own
 /// zone, region and 12/24-hour setting.
 func newYorkCalendar() -> Calendar {
