@@ -79,8 +79,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.newlix.SwiftResticTests
         GENERATE_INFOPLIST_FILE: YES
 
-  # Drives the real app's windows: run in a VM by Tools/ui-test.sh, not by
-  # ./build.sh test on the host.
+  # Drives the real app's windows and this Mac's desktop: run by
+  # Tools/ui-test.sh, not by ./build.sh test.
   SwiftResticUITests:
     type: bundle.ui-testing
     platform: macOS

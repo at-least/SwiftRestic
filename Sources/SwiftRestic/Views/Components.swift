@@ -125,7 +125,7 @@ struct WarningLine: View {
     }
 }
 
-/// Why a Snapshots value may read "—", in visible text: a reason only a
+/// Why a `snapshotsValue` may read "—", in visible text: a reason only a
 /// hovering mouse user can reach is no reason at all for a keyboard or
 /// VoiceOver user. A failed read's one way forward sits under its words:
 /// the known fix, or Try Again.

@@ -5,8 +5,8 @@ extension AppModel {
         configuration.settings.networkShares.first { $0.volumeName == volumeName }
     }
 
-    /// Falls back to the saved share, so one away while the sheet is open
-    /// keeps its row and its password can still be replaced. A mounted
+    /// Falls back to the saved share, so one that is away keeps its row
+    /// and its password can still be replaced. A mounted
     /// volume of another name is a stale read of a changed path.
     func shareRow(for path: String, mounted: MountedShare?) -> (share: MountedShare, isSaved: Bool)? {
         guard let volume = VolumePresence.volumeName(of: path) else { return nil }
@@ -50,8 +50,9 @@ extension AppModel {
         configuration.settings.networkShares.removeAll { $0.id == share.id }
     }
 
-    /// The editors save a share's password after the plan or location that
-    /// needs it, so a new share is already in use.
+    /// A share's password is saved after the plan or location that needs it
+    /// (the location's editor, the plan's page), so a new share is already
+    /// in use.
     func forgetNetworkShares(unusedSince before: Set<String>) async {
         let inUse = configuration.volumesInUse
         for share in configuration.settings.networkShares

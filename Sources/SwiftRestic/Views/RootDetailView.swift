@@ -14,8 +14,6 @@ struct RootDetailView: View {
     @Binding var pendingCaptureRestore: Bool
 
     let onAddPlan: (_ repositoryID: UUID?) -> Void
-    /// Opens the adopt sheet for an Other backups group; the root owns the
-    /// presenting state, as for every sheet a pane raises.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
     let onRevalidateSelection: () -> Void
 

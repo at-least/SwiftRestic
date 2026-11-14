@@ -1,6 +1,6 @@
 import Foundation
 
-/// The disabled-Save reasons the editor sheets show beside their buttons:
+/// The disabled-Save reasons the sheets show beside their buttons:
 /// the same chain the disabled state checks, in field order, which a test
 /// pins — the footer must never name a later gap while an earlier one exists.
 enum EditorRequirements {

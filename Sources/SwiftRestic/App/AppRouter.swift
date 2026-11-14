@@ -48,14 +48,13 @@ final class AppRouter {
 
     var selection: SidebarItem?
 
-    /// The pending intent, if any. One slot, not a queue: a second request
+    /// One slot, not a queue: a second request
     /// before the first was consumed replaces it — two sheets cannot present
     /// at once, so queueing would only delay a stale ask.
     private(set) var pendingIntent: Intent?
 
-    /// The run a detail surface asked Activity to land selected — the plan
-    /// page's "Last backup" value: the timestamp is the handle to its own
-    /// record. Transient, never persisted; Activity consumes and clears it.
+    /// The run Activity lands selected on (`focusRun`). Transient, never
+    /// persisted; Activity consumes and clears it.
     var activityFocusRunID: RunRecord.ID?
 
     /// An item a backup's tree should open its folders to and select when

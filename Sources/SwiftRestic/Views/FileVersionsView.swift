@@ -92,9 +92,6 @@ struct FileVersionsView: View {
         .onChange(of: chosen?.id) { previewer.end() }
     }
 
-    /// What the disk read is keyed by: the path, whether a restore is
-    /// running — its start and its end each read again — and the disk's
-    /// turn.
     private struct DiskReadKey: Equatable {
         let path: String?
         let isRestoring: Bool

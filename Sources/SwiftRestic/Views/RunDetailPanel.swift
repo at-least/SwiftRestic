@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Activity's drawer for the selected run, clean ones included: the plan
-/// page's Last backup value lands on exactly such a run.
+/// Activity's drawer for the selected run.
 ///
 /// A fixed height, scrolling inside, buttons pinned under the scroll view so
 /// the fix stays in reach. A constant per run, never a measurement:

@@ -1,8 +1,8 @@
 import AppKit
 import ScreenCaptureKit
 
-/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`), kept out of the
-/// app-entry file. Needs a logged-in, unlocked GUI session: on macOS 26 a
+/// The debug-capture machinery (`SWIFTRESTIC_CAPTURE*`). Needs a
+/// logged-in, unlocked GUI session: on macOS 26 a
 /// locked screen hid the window from this capture entirely; on macOS 27.0.1
 /// `screencapture -l` still photographed a window by its ID while locked and
 /// a region capture (`-R`) failed, this capture not tried.

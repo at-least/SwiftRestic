@@ -86,9 +86,9 @@ struct Banner: Identifiable, Equatable {
     var staysUntilDismissed: Bool { level == .error || level == .warning }
 }
 
-/// Lives beside the model because menu-bar commands must read it: a Plan
-/// menu "Back Up Now" that stays enabled over a non-plan selection is a menu
-/// that lies.
+/// Lives beside the model because menu-bar commands must read it: the
+/// Backup menu's "Back Up Now" staying enabled over a selection it cannot
+/// back up is a menu that lies.
 enum SidebarItem: Hashable {
     case plan(UUID)
     case repository(UUID)
@@ -105,8 +105,8 @@ enum SidebarItem: Hashable {
     /// selection revalidates to the repository's page once it is gone.
     case lineage(repositoryID: UUID, key: SnapshotLineage.Key)
     /// Search All Backups: a page with no row — the toolbar's search field
-    /// is its way in, and a row would be a second one — reached by Edit ▸ Find
-    /// (⌘F) and every page's search field. Not a sheet: its restores would
+    /// is its way in, and a row would be a second one — reached by Edit ▸
+    /// Search All Backups (⌘F) and every page's search field. Not a sheet: its restores would
     /// stack a second sheet on it.
     case findFiles
     case activity

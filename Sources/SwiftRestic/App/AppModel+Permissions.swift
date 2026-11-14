@@ -9,8 +9,8 @@ extension AppModel {
     /// with, even if an older probe lands on `fullDiskAccess` after it.
     ///
     /// Asked at launch, whenever the app becomes active — coming back from
-    /// System Settings is the only sign the grant changed — when Settings
-    /// appears, and as every backup is delivered.
+    /// System Settings is the only sign the grant changed — and as every
+    /// backup is delivered.
     ///
     /// Every probe that finds it granted backs up again the plans whose
     /// newest backup missed files without it

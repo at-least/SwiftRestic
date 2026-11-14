@@ -2,10 +2,6 @@ import Foundation
 import GRDB
 import Testing
 
-// No `@testable import SwiftRestic`: the test target compiles the index's
-// sources itself, so SnapshotIndex and its SQL are already right here — and
-// importing the app module adds a dependency a cold build cannot satisfy.
-
 /// The planner route of every statement the snapshot index prepares — what a
 /// green functional test cannot see. Nothing in the app ever ANALYZEs, so
 /// SQLite plans from its default cost model, and every pin here is designed

@@ -30,8 +30,6 @@ struct SidebarView: View {
     /// be a faster way around it.
     let onDeletePlan: (BackupPlan) -> Void
     let onRemoveRepository: (Repository) -> Void
-    /// Opens the adopt sheet for an adoptable group's menu. The sidebar
-    /// raises its sheets through the root, which owns the presenting state.
     let onAdoptGroup: (_ repositoryID: UUID, _ planID: UUID) -> Void
 
     var body: some View {

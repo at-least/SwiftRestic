@@ -125,8 +125,8 @@ enum PlanStatus {
             runID: run.id,
             outcome: run.outcome,
             finishedAt: run.finishedAt,
-            // A plan's problem is always a backup record (its forget and
-            // rewrite runs never are), so the noun is fixed.
+            // A plan's problem is always a backup record, so the noun is
+            // fixed.
             headline: run.outcome == .completedWithErrors ? run.outcomeName : "Backup \(run.outcomeName.lowercased())",
             message: message,
             facts: facts,

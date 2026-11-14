@@ -2,8 +2,7 @@ import Foundation
 
 /// Every in-flight task the quit path must await: named slots for runs that
 /// own an identity, and an unnamed lane for fire-and-forget work (refreshes,
-/// index reconciles, sweeps). Registering here is what keeps a task from
-/// being forgotten by the quit path.
+/// index reconciles, sweeps).
 @MainActor
 final class TaskRegistry {
     enum Slot: Hashable {

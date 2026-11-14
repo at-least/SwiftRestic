@@ -685,8 +685,8 @@ struct RestorePaneView<VersionsPane: View>: View {
     /// item, and selects and scrolls to `focus` when the walk reaches it.
     /// The first missing ancestor stops the walk: a listing that answers
     /// without it is as much an answer as a failed fetch, and the pane must
-    /// say so rather than show a shallower tree with breadcrumbs claiming
-    /// the deeper path. False when the walk stopped or was overtaken.
+    /// say so rather than show a shallower tree. False when the walk stopped
+    /// or was overtaken.
     private func walkOpen(_ spine: [String], focus: String?, record: Snapshot) async -> Bool {
         var deepest: String?
         for step in spine {
@@ -823,7 +823,7 @@ struct RestorePaneView<VersionsPane: View>: View {
 
 /// Shown while the comparison failed: what the Change column could not be
 /// compared with, and why. Its own view because it reads the plans and the
-/// lineages: a run-record or settings write re-renders this line, never the
+/// lineages: a run-record or plan write re-renders this line, never the
 /// tree beside it.
 private struct RestoreRecordHeader: View {
     @Environment(AppModel.self) private var model
@@ -1059,7 +1059,7 @@ private enum BrowserListGrammar {
     }
 
     /// The parent of an absolute path for browser ascent: nil above a
-    /// top-level item, which the caller renders as its pseudo-root.
+    /// top-level item.
     static func parent(of path: String) -> String? {
         let parent = ResticPath.parent(of: path)
         return parent == "/" ? nil : parent

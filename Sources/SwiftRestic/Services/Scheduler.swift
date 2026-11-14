@@ -191,9 +191,8 @@ enum Scheduler {
         let ago = Format.ago(newest.startedAt, now: now)
         switch newest.outcome {
         case .succeeded: return ago
-        // The record's own verdict, the Detail column's words — "2 errors —
-        // restic repair can recover some damage" — so the page spells the
-        // fact once.
+        // The record's own verdict, the Detail column's words — "2 problems
+        // found" — so the page spells the fact once.
         case .completedWithErrors: return "\(ago) · \(RunRecordPresentation.verdictClause(for: newest))"
         case .failed, .cancelled, .skipped: return "\(ago) · \(newest.outcomeName.lowercased())"
         }

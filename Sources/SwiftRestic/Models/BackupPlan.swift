@@ -88,7 +88,7 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
 
     var resolvedPath: String { ResticService.expandTilde(path) }
 
-    /// The editor's Excluded Items list. The always-applied rules are not
+    /// The plan page's Excluded Items list. The always-applied rules are not
     /// stored here; a run adds them (`excludesToPass`).
     var excludePatterns: [String] = []
     var schedule = Schedule()
@@ -175,7 +175,6 @@ struct BackupPlan: Identifiable, Codable, Sendable, Hashable {
         return trimmed.isEmpty ? "" : (ResticService.expandTilde(trimmed) as NSString).lastPathComponent
     }
 
-    /// Complete or not, unlike `runsOnSchedule`.
     var isScheduled: Bool {
         schedule.frequency != .manual
     }

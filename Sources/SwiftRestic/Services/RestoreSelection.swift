@@ -55,7 +55,6 @@ struct RestoreSelection: Sendable, Equatable {
         note = RestoreBatch.coveredNote(covered)
     }
 
-    /// One item restores as a single item always has, several together.
     var subject: RestoreSubject {
         guard sources.count > 1 else {
             return .item(name: sources[0].name, path: sources[0].path, isDirectory: sources[0].isDirectory)

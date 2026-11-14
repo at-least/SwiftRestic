@@ -248,8 +248,7 @@ extension RunRecord {
         "“\(repositoryName)” cannot be reached (\(why))."
     }
 
-    /// restic exited 3 and named nothing. The banner and the plan page's
-    /// status row share it.
+    /// restic exited 3 and named nothing.
     static let unexplainedWarningMessage = "Finished, but some items may not be backed up."
 
     /// restic keeps no such fact in the snapshot (`snapshots --json` has no

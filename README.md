@@ -21,7 +21,8 @@ macOS notifications.
   license (BSD 2-Clause) is in the About window.
 - Full Disk Access (System Settings ▸ Privacy & Security), or macOS
   withholds `~/Documents`, `~/Desktop` and the like and backups skip
-  those files. The app asks for it when you set up your first backup.
+  those files. The first-backup sheet and the plan's page say so when a
+  folder needs it.
 
 ## Build, run and test
 
@@ -54,7 +55,7 @@ and for the restic inside it.
 - Backup location passwords and storage secrets: the login Keychain.
 - The search index: one SQLite file per backup location, `index/` beside
   `config.json`. It holds the path of every file in every backup, unencrypted,
-  and is rebuilt from the location on request.
+  and is rebuilt from the location when it is missing or damaged.
 - Each run's log: `Logs/` beside `config.json`, deleted with its run record.
   It holds the restic command lines and restic's messages, never a password.
 

@@ -1637,7 +1637,7 @@ struct AppModelStubTests {
         #expect(backups.first?.skipCount == 2)
         #expect(backups.first?.problemStretch == 2)
 
-        // A share holding the plan's folders: the plan's editor.
+        // A share holding the plan's folder: the fix is the plan's.
         model.configuration.repositories[repositoryIndex].localPath = here
         let planIndex = try #require(model.configuration.plans.firstIndex { $0.id == planID })
         model.configuration.plans[planIndex].path = "/Volumes/\(volume)/Projects"

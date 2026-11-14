@@ -3,7 +3,7 @@ import SwiftUI
 /// The page of one group under a repository's Other backups: its backups,
 /// each one's files beside the list, under one line saying what they are and,
 /// where it can, Continue Backups — a new Mac's way back to its history. No
-/// search of its own, as a plan's page has: the toolbar's field searches
+/// search of its own, like a plan's page: the toolbar's field searches
 /// every backup (`allBackupsSearch`).
 struct OtherGroupView: View {
     @Environment(AppModel.self) private var model

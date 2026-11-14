@@ -106,9 +106,9 @@ enum OverviewMetrics {
         now.addingTimeInterval(-problemWindowLength)
     }
 
-    /// The one definition of "recent problem". The sidebar's badge counts
-    /// its unseen part, healed or not; the menu bar's problem line leads
-    /// with its newest entry `isHealed` has not cleared. Recency counts from
+    /// The one definition of "recent problem". Of the entries `isHealed`
+    /// has not cleared, the sidebar's badge counts the unseen ones and the
+    /// menu bar's problem line leads with the newest. Recency counts from
     /// when a run finished: a backup that ran all night and failed at dawn is
     /// this morning's news.
     static func problems(in runs: [RunRecord], since: Date) -> [RunRecord] {

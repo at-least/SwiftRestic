@@ -241,7 +241,7 @@ struct RootView: View {
         }
         // Out of any menu's tracking first: the asks come from menus too,
         // and a panel run inside one gets no keys (`FirstBackupSheet`'s
-        // Other…).
+        // Other Folder…).
         let source = $firstBackupSource
         let repositories = model.configuration.repositories
         let locations = repositories.map { BackUpAFolderPanel.Location(id: $0.id, label: model.label(of: $0)) }

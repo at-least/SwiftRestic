@@ -115,10 +115,9 @@ actor ResticRunner {
     private var isStopped = false
 
     /// - Parameter onMessage: off the main actor.
-    /// - Parameter onRawLine: every line of both streams before decoding
-    ///   (the plain-text progress `prune` prints). Off the main actor, the
-    ///   two streams concurrently and unordered. No back-pressure, so
-    ///   unbounded streams (backup, diff) must not pass it.
+    /// - Parameter onRawLine: every line of both streams before decoding.
+    ///   Off the main actor, the two streams concurrently and unordered. No
+    ///   back-pressure, so unbounded streams (backup, diff) must not pass it.
     ///
     /// A bound `RunTranscript` gets the command line, every line and the
     /// exit code; a child stopped by a cancel or a cap leaves a note

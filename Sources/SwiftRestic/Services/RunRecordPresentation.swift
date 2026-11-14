@@ -226,7 +226,7 @@ enum RunRecordPresentation {
         }
     }
 
-    /// For a row that continues a line ("22 hours ago · 2 errors found"):
+    /// For a row that continues a line ("22 hours ago · 2 problems found"):
     /// the outcome lowercased when the detail is only the outcome.
     static func verdictClause(for run: RunRecord) -> String {
         let detail = detail(for: run)

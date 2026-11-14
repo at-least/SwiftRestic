@@ -98,8 +98,6 @@ struct ResticService: ResticClient {
         Self.planTagPrefix + planID.uuidString.lowercased()
     }
 
-    /// `SnapshotLineage` tells a snapshot's plan tags from its user tags by
-    /// this prefix; this one constant keeps the two in sync.
     static let planTagPrefix = "swiftrestic-plan-"
 
     /// Accepts exactly the tags `planTag` writes, so an upper-case UUID or

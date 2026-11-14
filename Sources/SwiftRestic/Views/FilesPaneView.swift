@@ -184,12 +184,8 @@ private struct FilesPaneHeader: View {
     let node: FileNode
     let newestHolder: IndexVersion?
     let chainNewest: Snapshot?
-    /// Why the chain's newest backup lacks it, when that backup's own run
-    /// could not read it (`UnreadItems.reason`).
     let notRead: String?
-    /// Whether this Mac holds it now; nil until read.
     let isOnDisk: Bool?
-    /// A file's copy on this Mac beside its versions (`DiskFile.line`).
     let diskLine: String?
 
     var body: some View {
