@@ -110,6 +110,10 @@ actor ResticRunner {
     private static let grandchildGrace: TimeInterval = 2
 
     private var running: [UUID: ProcessBox] = [:]
+    /// Set by `terminateAll`: quit's drain must not wait on a child that a
+    /// still-running task launches after it (a listing's size read began
+    /// after `terminateAll` ran out the 300 s refresh timeout).
+    private var isStopped = false
 
     /// - Parameter onMessage: off the main actor.
     /// - Parameter onRawLine: every line of both streams before decoding
@@ -151,6 +155,10 @@ actor ResticRunner {
 
         // Before launch, so a quit racing the spawn cannot miss the child. A
         // terminate before launch is a no-op (not yet running).
+        guard !isStopped else {
+            transcript?.note("Stopped")
+            throw ResticError.cancelled
+        }
         running[handle] = box
         defer { running[handle] = nil }
 
@@ -271,7 +279,9 @@ actor ResticRunner {
         return result
     }
 
+    /// Every later `run` throws `ResticError.cancelled` without launching.
     func terminateAll() {
+        isStopped = true
         for box in running.values { box.terminate() }
     }
 

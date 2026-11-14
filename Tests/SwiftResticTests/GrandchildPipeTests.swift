@@ -121,4 +121,22 @@ struct GrandchildPipeTests {
         #expect(elapsed < 30, "cancel took \(elapsed)s to answer; the grandchild is holding the pipes")
         await runner.terminateAll()
     }
+
+    @Test("after terminateAll, a run launches nothing and answers cancelled at once")
+    func runAfterTerminateAllIsCancelled() async throws {
+        let script = try installScript("sleep 291")
+        defer {
+            try? FileManager.default.removeItem(at: script.deletingLastPathComponent())
+            killOrphan(matching: "sleep 291")
+        }
+        let runner = ResticRunner()
+        await runner.terminateAll()
+
+        let start = Date()
+        await #expect(throws: ResticError.cancelled) {
+            try await runner.run(binary: script, invocation: ResticInvocation(arguments: [], timeout: 20))
+        }
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < 5, "the run launched after quit and answered after \(elapsed)s")
+    }
 }
