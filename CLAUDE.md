@@ -1,6 +1,6 @@
 # SwiftRestic
 
-Gate: `./build.sh test` (regenerates the Xcode project, lints, builds, runs
+Gate: `./build.sh test` (regenerates the Xcode project, builds, runs
 every test against the restic the app bundles). Where codesign cannot use the
 author's Apple Development certificate the gate is
 `SWIFTRESTIC_ADHOC_SIGN=1 ./build.sh test`: on another Mac, and on air from a
