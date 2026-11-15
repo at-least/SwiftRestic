@@ -30,6 +30,10 @@ enum AccessibilityID {
         static let add = "pathList.add"
     }
 
+    enum Backups {
+        static let list = "backups.list"
+    }
+
     enum RestorePane {
         static let tree = "restorePane.tree"
         static let restore = "restorePane.restore"

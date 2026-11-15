@@ -141,6 +141,7 @@ struct BackupsBrowserView: View {
                     }
                 }
                 .listStyle(.inset)
+                .accessibilityIdentifier(AccessibilityID.Backups.list)
                 // A backup a route opened may sit a year down the list:
                 // brought into view a turn later, because the list may gain
                 // its row in this update. A click's row is in view already,
