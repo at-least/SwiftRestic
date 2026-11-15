@@ -186,10 +186,7 @@ struct RunRecord: Identifiable, Codable, Sendable, Hashable {
         exitCode = c.optional(.exitCode)
         itemErrorTally = c.optional(.itemErrorTally)
         fullDiskAccessAtRun = c.optional(.fullDiskAccessAtRun)
-        // "Cancelled" is a stop's stored word in older records; unmapped, it
-        // would show as a second message beside the outcome.
-        let storedFailure: String? = c.optional(.failureMessage)
-        failureMessage = storedFailure == "Cancelled" ? RunRecord.Outcome.cancelled.displayName : storedFailure
+        failureMessage = c.optional(.failureMessage)
         resticDetail = c.optional(.resticDetail)
         detailText = c.optional(.detailText)
         resticVersion = c.optional(.resticVersion)

@@ -651,14 +651,6 @@ struct RunRecordPresentationTests {
         #expect(!lines.contains { $0.hasPrefix("Error:") }, "details were \(lines)")
     }
 
-    @Test("a stop stored in the old word still reads as the outcome, not as a second message")
-    func oldCancelledMessageIsTheOutcome() throws {
-        let stored = #"{"kind":"backup","outcome":"cancelled","failureMessage":"Cancelled"}"#
-        let run = try JSONDecoder().decode(RunRecord.self, from: Data(stored.utf8))
-        #expect(run.outcomeName == "Stopped")
-        #expect(run.failureMessage == run.outcomeName)
-    }
-
     @Test("a copied Activity row for a failed multi-item restore names the items, the destination, the error and the count past the sample")
     func copyDetailsForAFailedMultiItemRestore() {
         let record = restore {

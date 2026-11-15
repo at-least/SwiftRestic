@@ -210,7 +210,7 @@ final class AppModel {
     /// the good generations, and two saves would lose every backup copy.
     @ObservationIgnored var isConfigurationUnreadable = false
     /// So a run `shutdown` cancels is recorded as interrupted by quitting,
-    /// not "Cancelled".
+    /// not as a stop.
     var isShuttingDown = false
     /// For bootstrap's write-back of what it loaded: a save then would make
     /// tolerant decoding's substituted defaults permanent before the user
