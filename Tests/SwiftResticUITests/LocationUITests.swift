@@ -38,7 +38,9 @@ final class LocationUITests: XCTestCase {
         let location = app.menuBars.menuBarItems["Location"]
         location.click()
         location.menuItems["Remove Location…"].click()
-        let remove = app.buttons["Remove"]
+        // The confirmation's button: the plan's page behind it has a
+        // "Remove" of its own under Excluded Items.
+        let remove = app.sheets.buttons["Remove"]
         XCTAssertTrue(remove.waitForExistence(timeout: 10))
         remove.click()
 
